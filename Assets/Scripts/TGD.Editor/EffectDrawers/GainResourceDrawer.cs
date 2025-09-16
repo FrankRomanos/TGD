@@ -11,7 +11,7 @@ namespace TGD.Editor
             EditorGUILayout.LabelField("Gain Resource", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(elem.FindPropertyRelative("resourceType"), new GUIContent("Resource Type"));
 
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Per-Level Values"))
+            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
             {
                 bool collapsed;
                 if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))
@@ -39,8 +39,7 @@ namespace TGD.Editor
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Target, "Target"))
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("target"), new GUIContent("Target"));
 
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Condition, "Trigger Condition"))
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("condition"), new GUIContent("Trigger Condition"));
+
             var cond = elem.FindPropertyRelative("condition");
             EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
             // 仅当选择 OnNextSkillSpendResource 时展示附加参数

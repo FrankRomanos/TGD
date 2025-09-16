@@ -132,14 +132,15 @@ namespace TGD.Editor
             }
             else
             {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("targetType"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("timeCostSeconds"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("targetType"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownSeconds"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownRounds"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("range"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("threat"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("shredMultiplier"));
             }
+
             var actionTypeProp = serializedObject.FindProperty("actionType");
             var actionType = (ActionType)actionTypeProp.enumValueIndex;
 
@@ -155,11 +156,7 @@ namespace TGD.Editor
 
                 // 其他依然可见：冷却、替换、范围等
             }
-            else
-            {
-                // 非 FullRound 照常显示 TimeCost
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("timeCostSeconds"));
-            }
+
 
             EditorGUILayout.PropertyField(serializedObject.FindProperty("namekey"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("descriptionKey"));
@@ -244,11 +241,11 @@ namespace TGD.Editor
                     int resolvedDuration = hasDurationProp ? (int)durationProp.floatValue : 0;
 
                     if (perLevelEnabled && hasLevelArray)
-                    {  
-                            if (perLevelUIVisible && !collapsed)
-                            {
-                                PerLevelUI.DrawIntLevels(durationLevelsProp, "Duration by Level (turns)");
-                            }
+                    {
+                        if (perLevelUIVisible && !collapsed)
+                        {
+                            PerLevelUI.DrawIntLevels(durationLevelsProp, "Duration by Level (turns)");
+                        }
 
                         PerLevelUI.EnsureSize(durationLevelsProp, 4);
                         int idx = Mathf.Clamp(currentLevel - 1, 0, 3);

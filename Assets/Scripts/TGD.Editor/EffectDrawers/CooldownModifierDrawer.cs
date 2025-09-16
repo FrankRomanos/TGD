@@ -30,8 +30,19 @@ namespace TGD.Editor
             // 触发条件（可隐藏/显示，沿用你现有的 Condition 开关）
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Condition, "Show Trigger Condition"))
             {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("condition"),
-                    new GUIContent("Trigger Condition"));
+                var cond = elem.FindPropertyRelative("condition");
+                EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
+
+                // 当条件为 OnNextSkillSpendResource 时，显示额外参数（与GainResource逻辑一致）
+                if ((EffectCondition)cond.enumValueIndex == EffectCondition.OnNextSkillSpendResource)
+                {
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
+                        new GUIContent("Cond. Resource"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
+                        new GUIContent("Min Spend"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
+                        new GUIContent("Consume Status On Trigger"));
+                }
             }
         }
     }

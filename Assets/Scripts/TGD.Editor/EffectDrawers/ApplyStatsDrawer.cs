@@ -32,8 +32,6 @@ namespace TGD.Editor
                 }
                 else
                 {
-                    if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Duration, "Duration"))
-                        EditorGUILayout.PropertyField(elem.FindPropertyRelative("duration"), new GUIContent("Duration (turns)"));
 
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                         EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));

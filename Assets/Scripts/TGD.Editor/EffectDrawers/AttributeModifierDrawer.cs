@@ -60,9 +60,6 @@ namespace TGD.Editor
                         PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("valueExprLevels"),
                             "Value Expression by Level");
 
-                        if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Duration, "Duration"))
-                            PerLevelUI.DrawIntLevels(elem.FindPropertyRelative("durationLevels"),
-                                "Duration by Level (turns)");
 
                         if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                             PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("probabilityLvls"),
@@ -82,8 +79,7 @@ namespace TGD.Editor
                         new GUIContent("Value Expression (e.g. '10', 'p', 'atk*0.5')")
                     );
 
-                    if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Duration, "Duration"))
-                        EditorGUILayout.PropertyField(elem.FindPropertyRelative("duration"), new GUIContent("Duration (turns)"));
+
 
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                         EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
@@ -97,7 +93,21 @@ namespace TGD.Editor
             }
 
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Condition, "Trigger Condition"))
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("condition"), new GUIContent("Trigger Condition"));
+            {
+                var cond = elem.FindPropertyRelative("condition");
+                EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
+
+                // 当条件为 OnNextSkillSpendResource 时，显示额外参数（与GainResource逻辑一致）
+                if ((EffectCondition)cond.enumValueIndex == EffectCondition.OnNextSkillSpendResource)
+                {
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
+                        new GUIContent("Cond. Resource"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
+                        new GUIContent("Min Spend"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
+                        new GUIContent("Consume Status On Trigger"));
+                }
+            }
         }
     }
 }
