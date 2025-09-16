@@ -78,7 +78,8 @@ ExportedObj/
 /Assets/Textmesh Pro
 /Assets/TutorialInfo
 /Assets/Project1/
-/Assets/InputSystem_Actions
+/Assets/Localization
+/Assets/Sprite
 
 # Unity3D generated meta files
 *.pidb.meta
@@ -87,7 +88,7 @@ ExportedObj/
 
 # Unity3D generated file on crash reports
 sysinfo.txt
-
+*.inputactions
 *.apk
 *.aab
 *.unitypackage
