@@ -1,0 +1,163 @@
+skillID,skillName,moduleID,variantKey,chainNextID,resetOnTurnEnd,classID,actionType,targetType,cost,timeCostSeconds,cooldownSeconds,range,threat,shredMultiplier,namekey,descriptionKey
+SK001,Discipline,Discipline,,,FALSE,CL001,Mastery,N/A,0,0,0,0,0,0,skill_SK001_name,skill_SK001_description
+SK002,Rallying,Rallying,,,FALSE,CL001,Reaction,N/A,20,2,36,10,0,0,skill_SK002_name,skill_SK002_description
+SK003,Defensive,,,,,CL001,FullRound,N/A,0,6,48,1,0,0,skill_SK003_name,skill_SK003_description
+SK004,Weak Strike,,,,,CL001,Standard,Single,50,2,48,1,100,100,skill_SK004_name,skill_SK004_description
+SK005,Shockwave,,,,,CL001,Standard,AOE,50,2,60,1,150,150,skill_SK005_name,skill_SK005_description
+SK006,Shield Bash,,,,,CL001,Standard,Single,40,2,36,1,200,200,skill_SK006_name,skill_SK006_description
+SK007,Retreat,,,,,CL001,Reaction,N/A,40,1,12,1,0,0,skill_SK007_name,skill_SK007_description
+SK008,Bull Rush,,,,,CL001,Standard,Line,40,2,36,6,150,150,skill_SK008_name,skill_SK008_description
+SK009,Desperate Dawn,,,,,CL001,Free,N/A,0,0,120,0,0,0,skill_SK009_name,skill_SK009_description
+SK010,Disciplined,,,,,CL001,State,N/A,0,0,0,0,0,0,skill_SK010_name,skill_SK010_description
+SK011,Demoralized,,,,,CL001,State,N/A,0,0,0,0,0,0,skill_SK011_name,skill_SK011_description
+SK012,Basic Attack,,,,,CL001,Standard,Single,20,2,0,1,100,100,skill_SK012_name,skill_SK012_description
+SK101,Holy Echo,,,,,CL002,Passive,N/A,0,0,0,0,0,0,skill_SK101_name,skill_SK101_description
+SK102,Shield Bash,,,,,CL002,Standard,Single,40,2,36,1,200,200,skill_SK102_name,skill_SK102_description
+SK103,Sacrifice,,,,,CL002,Standard,AOE,20,2,84,3,100,100,skill_SK103_name,skill_SK103_description
+SK104,Justice Seal,,,,,CL002,Free,N/A,0,0,60,3,0,0,skill_SK104_name,skill_SK104_description
+SK105,Baptism,,,,,CL002,Standard,Single,60,2,0,3,50,50,skill_SK105_name,skill_SK105_description
+SK106,Retreat,,,,,CL002,Reaction,N/A,40,1,12,0,0,0,skill_SK106_name,skill_SK106_description
+SK107,For My King,,,,,CL002,Free,N/A,20,0,180,0,0,0,skill_SK107_name,skill_SK107_description
+SK108,Sword of Freedom,,,,,CL002,Standard,Single,60,2,144,1,100,100,skill_SK108_name,skill_SK108_description
+SK109,Salvation,,,,,CL002,State,N/A,0,0,0,0,0,0,skill_SK109_name,skill_SK109_description
+SK110,Basic Attack,,,,,CL002,Standard,Single,20,2,0,1,1,1,skill_SK110_name,skill_SK110_description
+SK201,Tempest,,,,,CL003,Passive,N/A,0,0,0,0,0,0,skill_SK201_name,skill_SK201_description
+SK202,Shield Bash,,,,,CL003,Standard,Single,40,2,36,1,200,200,skill_SK202_name,skill_SK202_description
+SK203,Shield Slam,,,,,CL003,Standard,Single,40,1,36,1,200,200,skill_SK203_name,skill_SK203_description
+SK204,Uppercut,,,,,CL003,Standard,Single,60,2,12,1,50,50,skill_SK204_name,skill_SK204_description
+SK205,Retreat,,,,,CL003,Reaction,N/A,40,1,12,0,0,0,skill_SK205_name,skill_SK205_description
+SK206,Just Rush,,,,,CL003,Standard,AOE,80,4,0,0,50,50,skill_SK206_name,skill_SK206_description
+SK207,Focused,,,,,CL003,Free,N/A,0,0,120,0,0,0,skill_SK207_name,skill_SK207_description
+SK208,Wanderer,,,,,CL003,State,N/A,0,0,0,0,0,0,skill_SK208_name,skill_SK208_description
+SK209,Basic Attack,,,,,CL003,Standard,Single,20,2,0,1,1,1,skill_SK209_name,skill_SK209_description
+SK301,Killing Blade,,,,,CL011,Passive,N/A,0,0,0,0,0,0,skill_SK301_name,skill_SK301_description
+SK302,Thrust,,,,,CL011,Standard,Single,40,1,0,1,50,50,skill_SK302_name,skill_SK302_description
+SK303,Horizontal,,,,,CL011,Standard,Single,60,2,24,1,100,100,skill_SK303_name,skill_SK303_description
+SK304,Sheath,,,,,CL011,Standard,Single,0,2,36,1,0,0,skill_SK304_name,skill_SK304_description
+SK305,Swallow,,,,,CL011,Reaction,N/A,40,2,36,1,50,50,skill_SK305_name,skill_SK305_description
+SK306,Secret·Swallow,,,,,CL011,Reaction,N/A,40,2,36,3,50,50,skill_SK306_name,skill_SK306_description
+SK307,Iaido,,,,,CL011,Reaction,N/A,60,3,0,1,150,150,skill_SK307_name,skill_SK307_description
+SK308,Secret: Iaido,,,,,CL011,Reaction,N/A,60,3,0,3,150,150,skill_SK308_name,skill_SK308_description
+SK309,Clear Mind,,,,,CL011,Free,N/A,0,0,120,0,0,0,skill_SK309_name,skill_SK309_description
+SK310,Featherlight,,,,,CL011,State,N/A,0,0,0,0,0,0,skill_SK310_name,skill_SK310_description
+SK311,Secret·Featherlight,,,,,CL011,State,N/A,0,0,0,0,0,0,skill_SK311_name,skill_SK311_description
+SK312,Basic Attack,,,,,CL011,Standard,Single,20,2,0,1,1,1,skill_SK312_name,skill_SK312_description
+SK401,Flowing,,,,,CL012,Passive,N/A,0,0,0,0,0,0,skill_SK401_name,skill_SK401_description
+SK402,Cassock,,,,,CL012,Reaction,N/A,40,2,18,1,100,100,skill_SK402_name,skill_SK402_description
+SK403,Horizontal,,,,,CL012,Standard,Single,60,2,24,1,100,100,skill_SK403_name,skill_SK403_description
+SK404,Straight,,,,,CL012,Standard,Line,60,4,24,1,150,150,skill_SK404_name,skill_SK404_description
+SK405,Straight·Barrage,,,,,CL012,Derived,Line,30,2,0,1,200,200,skill_SK405_name,skill_SK405_description
+SK406,Full Moon,,,,,CL012,Sustained,N/A,20,0,0,0,0,0,skill_SK406_name,skill_SK406_description
+SK407,Parry,,,,,CL012,Reaction,N/A,10,1,48,0,0,0,skill_SK407_name,skill_SK407_description
+SK408,Thousand Hands,,,,,CL012,Free,N/A,0,0,120,0,0,0,skill_SK408_name,skill_SK408_description
+SK409,Thousand Hands· Finisher,,,,,CL012,Standard,Line,60,2,0,3,200,200,skill_SK409_name,skill_SK409_description
+SK410,Basic Attack,,,,,CL012,Standard,Single,20,2,0,1,1,1,skill_SK410_name,skill_SK410_description
+SK501,Niten Ichi-ryu,,,,,CL013,Passive,N/A,0,0,0,0,0,0,skill_SK501_name,skill_SK501_description
+SK502,Thrust,,,,,CL013,Standard,Single,40,1,0,1,50,50,skill_SK502_name,skill_SK502_description
+SK503,Dual Blade,,,,,CL013,Passive,N/A,0,0,0,0,0,0,skill_SK503_name,skill_SK503_description
+SK504,Cross,,,,,CL013,Standard,Line,60,2,48,1,100,100,skill_SK504_name,skill_SK504_description
+SK505,Dash,,,,,CL013,Standard,Line,40,1,48,4,50,50,skill_SK505_name,skill_SK505_description
+SK506,Water Blade,,,,,CL013,Derived,N/A,20,2,72,1,50,50,skill_SK506_name,skill_SK506_description
+SK507,Spatial Blade,,,,,CL013,Free,N/A,0,0,84,0,0,0,skill_SK507_name,skill_SK507_description
+SK508,Basic Attack,,,,,CL013,Standard,Single,20,2,0,1,0.75,0.75,skill_SK508_name,skill_SK508_description
+SK601,Rage,,,,,CL021,Passive,N/A,0,0,0,0,0,0,skill_SK601_name,skill_SK601_description
+SK602,Berserk,,,,,CL021,Passive,N/A,0,0,0,0,0,0,skill_SK602_name,skill_SK602_description
+SK603,Bloodthirsty,,,,,CL021,Passive,N/A,0,0,0,0,0,0,skill_SK603_name,skill_SK603_description
+SK604,Endure,,,,,CL021,Reaction,N/A,40,2,36,0,0,0,skill_SK604_name,skill_SK604_description
+SK605,Counterstrike,,,,,CL021,Reaction,N/A,40,2,48,2,150,150,skill_SK605_name,skill_SK605_description
+SK606,Dragon Roar,,,,,CL021,Reaction,AOE,60,3,72,3,150,150,skill_SK606_name,skill_SK606_description
+SK607,Advance Slash,,,,,CL021,Standard,Line,60,2,48,2,150,150,skill_SK607_name,skill_SK607_description
+SK608,Crescent Slash,,,,,CL021,Standard,Line,70,2,0,2,100,100,skill_SK608_name,skill_SK608_description
+SK609,Lion Slash,,,,,CL021,Standard,Line,80,2,0,4,200,200,skill_SK609_name,skill_SK609_description
+SK610,Fury,,,,,CL021,Free,N/A,0,0,180,0,0,0,skill_SK610_name,skill_SK610_description
+SK611,Rage Resonance,,,,,CL021,Passive,N/A,0,0,0,0,0,0,skill_SK611_name,skill_SK611_description
+SK612,Basic Attack,,,,,CL021,Standard,Single,30,3,0,2,1,1,skill_SK612_name,skill_SK612_description
+SK701,Versatility,,,,,CL022,Passive,N/A,0,0,0,0,0,0,skill_SK701_name,skill_SK701_description
+SK702,Weak Strike,,,,,CL022,Standard,Single,50,3,36,2,100,100,skill_SK702_name,skill_SK702_description
+SK703,Trip,,,,,CL022,Standard,Single,30,1,48,1,0,0,skill_SK703_name,skill_SK703_description
+SK704,Warer,,,,,CL022,Free,N/A,20,0,36,5,0,0,skill_SK704_name,skill_SK704_description
+SK705,Pounce,,,,,CL022,Standard,Line,20,2,36,4,0,0,skill_SK705_name,skill_SK705_description
+SK706,Explosive,,,,,CL022,Reaction,Single,50,2,24,2,150,150,skill_SK706_name,skill_SK706_description
+SK707,Battle Artist,,,,,CL022,Free,N/A,20,0,120,0,0,0,skill_SK707_name,skill_SK707_description
+SK708,Basic Attack,,,,,CL022,Standard,Single,30,3,0,2,1,1,skill_SK708_name,skill_SK708_description
+SK801,Lucky Ground,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK801_name,skill_SK801_description
+SK802,Bluff,,,,,CL031,Standard,Single,40,2,0,2,100,100,skill_SK802_name,skill_SK802_description
+SK803,Lucky Thrust,,,,,CL031,Standard,Line,80,4,60,2,100,100,skill_SK803_name,skill_SK803_description
+SK804,Treasure Box,,,,,CL031,Standard,Single,20,2,72,0,0,0,skill_SK804_name,skill_SK804_description
+SK805,Brandy,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK805_name,skill_SK805_description
+SK806,Rum,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK806_name,skill_SK806_description
+SK807,Seafood,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK807_name,skill_SK807_description
+SK808,Flag,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK808_name,skill_SK808_description
+SK809,Expired Tonic,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK809_name,skill_SK809_description
+SK810,Johnny,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK810_name,skill_SK810_description
+SK811,Junk,,,,,CL031,Passive,N/A,0,0,0,0,0,0,skill_SK811_name,skill_SK811_description
+SK812,Lucky Dice,,,,,CL031,Standard,Single,20,1,60,0,0,0,skill_SK812_name,skill_SK812_description
+SK813,Quick Draw,,,,,CL031,Reaction,Line,30,2,0,5,0,0,skill_SK813_name,skill_SK813_description
+SK814,Lucky Gun,,,,,CL031,Standard,Single,40,4,6,5,150,150,skill_SK814_name,skill_SK814_description
+SK815,Basic Attack,,,,,CL031,Standard,Single,20,2,0,1,1,1,skill_SK815_name,skill_SK815_description
+SK900,Vulnerability,,,,,CL032,Mastery,N/A,0,0,0,0,0,0,skill_SK900_name,skill_SK900_description
+SK901,Score,,,,,CL032,State,N/A,0,0,0,0,0,0,skill_SK901_name,skill_SK901_description
+SK902,Flank Attack,,,,,CL032,Standard,Line,40,2,12,2,100,100,skill_SK902_name,skill_SK902_description
+SK903,Feint,,,,,CL032,Standard,Single,20,2,60,4,0,0,skill_SK903_name,skill_SK903_description
+SK904,Echoing,,,,,CL032,Standard,Line,60,4,36,2,100,100,skill_SK904_name,skill_SK904_description
+SK905,Dual,,,,,CL032,Free,N/A,40,0,96,3,0,0,skill_SK905_name,skill_SK905_description
+SK906,Duel Stance,,,,,CL032,Standard,Single,20,2,60,0,0,0,skill_SK906_name,skill_SK906_description
+SK907,Kamusari,,,,,CL032,Reaction,Single,40,2,120,1,0,0,skill_SK907_name,skill_SK907_description
+SK908,Basic Attack,,,,,CL032,Standard,Single,20,2,0,1,1,1,skill_SK908_name,skill_SK908_description
+SK1001,Execution,,,,,CL041,Derived,Single,60,2,0,1,100,100,skill_SK1001_name,skill_SK1001_description
+SK1002,Combo,,,,,CL041,Standard,Single,20,1,0,1,100,100,skill_SK1002_name,skill_SK1002_description
+SK1003,Chain,,,,,CL041,Reaction,Single,50,1,36,5,150,150,skill_SK1003_name,skill_SK1003_description
+SK1004,Swift,,,,,CL041,Standard,Line,20,1,30,2,50,50,skill_SK1004_name,skill_SK1004_description
+SK1005,Swift II,,,,,CL041,Standard,Line,20,1,30,2,50,50,skill_SK1005_name,skill_SK1005_description
+SK1006,Killing Spree,,,,,CL041,Standard,AOE,80,4,96,3,75,75,skill_SK1006_name,skill_SK1006_description
+SK1007,Smoke Bomb,,,,,CL041,Reaction,N/A,0,2,150,1,0,0,skill_SK1007_name,skill_SK1007_description
+SK1008,Shadow,,,,,CL041,Free,N/A,40,0,180,1,0,0,skill_SK1008_name,skill_SK1008_description
+SK1009,Basic Attack,,,,,CL041,Standard,Single,20,1,0,1,100,100,skill_SK1009_name,skill_SK1009_description
+SK1101,Nerve Disruption,,,,,CL042,Passive,N/A,0,0,0,0,0,0,skill_SK1101_name,skill_SK1101_description
+SK1102,Poison Extraction,,,,,CL042,Standard,Single,40,2,36,1,100,100,skill_SK1102_name,skill_SK1102_description
+SK1103,Chronic Toxin,,,,,CL042,Standard,Single,40,2,48,1,100,100,skill_SK1103_name,skill_SK1103_description
+SK1104,Research,,,,,CL042,Standard,Single,20,1,72,3,0,0,skill_SK1104_name,skill_SK1104_description
+SK1105,Alchemical Bomb,,,,,CL042,Standard,Single,60,2,0,1,0,0,skill_SK1105_name,skill_SK1105_description
+SK1106,Hallucinogen,,,,,CL042,Free,N/A,20,0,96,3,0,0,skill_SK1106_name,skill_SK1106_description
+SK1107,Ultimate Toxin,,,,,CL042,Standard,Single,30,2,60,3,100,100,skill_SK1107_name,skill_SK1107_description
+SK1108,Basic Attack,,,,,CL042,Standard,Single,20,1,0,1,100,100,skill_SK1108_name,skill_SK1108_description
+SK1201,Energy Redirect,,,,,CL051,Passive,N/A,0,0,0,0,0,0,skill_SK1201_name,skill_SK1201_description
+SK1202,Charged Punch,,,,,CL051,Standard,Single,40,2,12,1,100,100,skill_SK1202_name,skill_SK1202_description
+SK1203,Low Kick,,,,,CL051,Reaction,Single,40,2,24,1,150,150,skill_SK1203_name,skill_SK1203_description
+SK1204,Circular Step,,,,,CL051,Standard,Single,20,2,72,1,0,0,skill_SK1204_name,skill_SK1204_description
+SK1205,Inch,,,,,CL051,Reaction,N/A,0,2,60,1,200,200,skill_SK1205_name,skill_SK1205_description
+SK1206,Bridge Perception,,,,,CL051,Reaction,N/A,20,1,108,1,0,0,skill_SK1206_name,skill_SK1206_description
+SK1207,Grand Mastery,,,,,CL051,Free,N/A,30,0,0,0,0,0,skill_SK1207_name,skill_SK1207_description
+SK1208,Rapid Punches,,,,,CL051,Standard,AOE,30,2  6  ,60,1,100,100,skill_SK1208_name,skill_SK1208_description
+SK1209,Sweeping Kick,,,,,CL051,Reaction,AOE,60,2,60,2,100,100,skill_SK1209_name,skill_SK1209_description
+SK1210,Iron Mountain Charge,,,,,CL051,Standard,Line,60,4,60,2,150,150,skill_SK1210_name,skill_SK1210_description
+SK1211,Targeted Jab,,,,,CL051,Reaction,Single,40,2,84,1,100,100,skill_SK1211_name,skill_SK1211_description
+SK1212,Wall Dash,,,,,CL051,Standard,Single,20,1,0,0,0,0,skill_SK1212_name,skill_SK1212_description
+SK1213,Basic Attack,,,,,CL051,Standard,Single,30,2,0,1,100,100,skill_SK1213_name,skill_SK1213_description
+SK1401,Heaven-Earth,,,,,CL053,Passive,N/A,0,0,0,0,0,0,skill_SK1401_name,skill_SK1401_description
+SK1402,Heavenly Fortune,,,,,CL053,State,N/A,0,0,0,0,0,0,skill_SK1402_name,skill_SK1402_description
+SK1403,Earthly Fortune,,,,,CL053,State,N/A,0,0,0,0,0,0,skill_SK1403_name,skill_SK1403_description
+SK1404,Charged Punch,,,,,CL053,Standard,Single,40,2,36,1,100,100,skill_SK1404_name,skill_SK1404_description
+SK1405,Blood Activation,,,,,CL053,State,N/A,0,0,0,0,0,0,skill_SK1405_name,skill_SK1405_description
+SK1406,Triple Palm Strike,,,,,CL053,Reaction,Single,60,2,12,1,100,100,skill_SK1406_name,skill_SK1406_description
+SK1407,Acupoint Seal,,,,,CL053,Standard,Single,60,2,36,1,150,150,skill_SK1407_name,skill_SK1407_description
+SK1408,Mist Aura,,,,,CL053,FullRound,AOE,40,6,96,5,0,0,skill_SK1408_name,skill_SK1408_description
+SK1409,Wall Dash,,,,,CL053,Standard,Single,20,1,0,0,0,0,skill_SK1409_name,skill_SK1409_description
+SK1410,Dragon's Tear,,,,,CL053,Free,Single,20,0,240,2,0,0,skill_SK1410_name,skill_SK1410_description
+SK1411,Qi Wave,,,,,CL053,Standard,AOE,20,2,0,3,0,0,skill_SK1411_name,skill_SK1411_description
+SK1412,Basic Attack,,,,,CL052,Standard,Single,30,2,0,1,100,100,skill_SK1412_name,skill_SK1412_description
+SK1501,Omen,,,,,CL071,Passive,N/A,0,0,0,0,0,0,skill_SK1501_name,skill_SK1501_description
+SK1502,Smite,,,,,CL071,Standard,Single,20,2,0,5,100,100,skill_SK1502_name,skill_SK1502_description
+SK1503,Smite·Dark,,,,,CL071,Standard,Single,20,2,0,5,100,100,skill_SK1503_name,skill_SK1503_description
+SK1504,Dark Aspect Power,,,,,CL071,State,N/A,0,0,0,0,0,0,skill_SK1504_name,skill_SK1504_description
+SK1505,Danger Sense,,,,,CL071,Standard,Single,40,2,60,5,0,0,skill_SK1505_name,skill_SK1505_description
+SK1506,Taste of Agony,,,,,CL071,Standard,Single,40,2,60,15,100,100,skill_SK1506_name,skill_SK1506_description
+SK1507,Warm Sunshine,,,,,CL071,Standard,AOE,50,2,60,15,0,0,skill_SK1507_name,skill_SK1507_description
+SK1508,Darkness Spread,,,,,CL071,Standard,AOE,50,2,48,15,100,100,skill_SK1508_name,skill_SK1508_description
+SK1509,Asceticism,,,,,CL071,Standard,Line,40,4,60,5,100,100,skill_SK1509_name,skill_SK1509_description
+SK1510,Asceticism (Dark),,,,,CL071,Standard,Line,40,4,60,5,100,100,skill_SK1510_name,skill_SK1510_description
+SK1511,Inspire,,,,,CL071,Reaction,Single,20,1,72,5,0,0,skill_SK1511_name,skill_SK1511_description
+SK1512,Lash (Dark),,,,,CL071,Reaction,Single,20,1,72,5,0,0,skill_SK1512_name,skill_SK1512_description
+SK1513,Sanctuary,,,,,CL071,Free,Single,2,0,84,7,0,0,skill_SK1513_name,skill_SK1513_description
+SK1514,Hope Barrier,,,,,CL071,FullRound,AOE,60,6,120,4,0,0,skill_SK1514_name,skill_SK1514_description
+SK1515,Despair Incarnation (Dark),,,,,CL071,Free,N/A,0,0,120,0,0,0,skill_SK1515_name,skill_SK1515_description

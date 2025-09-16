@@ -1,0 +1,18 @@
+{
+    "name": "TGD.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:752f754ba24643346b55a818fb97c1e9"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

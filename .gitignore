@@ -74,6 +74,11 @@ ExportedObj/
 *.mdb
 *.opendb
 *.VC.db
+/Assets/TreeAndWind
+/Assets/Textmesh Pro
+/Assets/TutorialInfo
+/Assets/Project1/
+/Assets/InputSystem_Actions
 
 # Unity3D generated meta files
 *.pidb.meta
@@ -99,6 +104,3 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
-/Assets/**
-!Assets/Scripts/
-!Assets/Resources/

@@ -1,0 +1,327 @@
+﻿Key,Chinese (Simplified)(zh-CN),English(en),Id
+skill_SK001_name,自律,Discipline,2.62E+11
+skill_SK001_description,普通攻击可以获得1点纪律，每点纪律提高5%护甲，战技有30%概率获得‘纪律严明’。纪律为0时，获得‘军心涣散’，持续2轮。,"Basic attacks grant 1 Discipline. Each point of Discipline increases armor by 5%. Some techniques have a 30% chance to gain 'Disciplined'. When Discipline is 0, the unit receives 'Demoralized' for 2 rounds.",2.62E+11
+skill_SK002_name,集结呐喊,Rallying,2.62E+11
+skill_SK002_description,激励队友，给予全队40%/50%/60%/70% AD 的生命护盾，纪律越高效果越强。,"Inspires allies, grants shield equal to 40%/50%/60%/70% AD to the whole team. Effect scales with Discipline.",2.62E+11
+skill_SK003_name,防御姿态,Defensive,2.62E+11
+skill_SK003_description,立即结束该回合，获得20%/25%/30%/35%伤害减免，持续三轮。普通攻击恢复2点纪律，部分技能被替换。,"End the current turn immediately, gain 20%/25%/30%/35% damage reduction for 3 rounds. Basic attacks restore 2 Discipline. Some skills change while active.",2.62E+11
+skill_SK004_name,弱点打击,Weak Strike,2.62E+11
+skill_SK004_description,针对敌人弱点发动攻击，造成160%/170%/180%/200% AD 物理伤害，并忽略20%/25%/30%/40%护甲。,"Attack the enemy's weak point, dealing 160%/170%/180%/200% AD physical damage and ignoring 20%/25%/30%/40% armor.",2.62E+11
+skill_SK005_name,震荡波,Shockwave,2.62E+11
+skill_SK005_description,盾牌猛砸地面引起冲击，造成120%/125%/130%/140% AD 伤害，并有概率眩晕目标。刷新盾牌冲击冷却并可缩短其动作时间。,"Great ground slam dealing 120%/125%/130%/140% AD damage, with a chance to stun. Refreshes Shield Bash cooldown and can reduce its cast time.",2.62E+11
+skill_SK006_name,盾牌冲击,Shield Bash,2.79E+14
+skill_SK006_description,盾牌猛击对手，造成伤害，并使削韧值与威胁翻倍。,,2.82E+14
+skill_SK007_name,后撤步,Retreat,2.79E+14
+skill_SK007_description,骑士独有的战斗技巧：先向后跳跃一格，佯装撤退，下一次盾击或攻击会突进至敌人身前最多2格，并提高50%伤害，防御姿态不可用。,,2.82E+14
+skill_SK008_name,横冲直撞,Bull Rush,2.79E+14
+skill_SK008_description,向前方冲锋，造成巨大伤害，必须至少距离2码才可使用，且路径不能被阻挡。,,2.82E+14
+skill_SK009_name,绝望曙光,Desperate Dawn,2.79E+14
+skill_SK009_description,当纪律为0时，该轮原本承受伤害改为治疗，最多持续两轮。当生命满时，会将纪律恢复至上限，持续4回合。,,2.82E+14
+skill_SK010_name,纪律严明,Disciplined,2.79E+14
+skill_SK010_description,下一个战技不消耗纪律，并且减少绝望曙光1回合冷却。,,2.82E+14
+skill_SK011_name,军心涣散,Demoralized,2.82E+14
+skill_SK011_description,受到伤害提高50%，持续2回合。,,2.82E+14
+skill_SK012_name,攻击,Basic Attack,2.82E+14
+skill_SK012_description,普通攻击。,,2.82E+14
+skill_SK101_name,圣光回响,Holy Echo,2.82E+14
+skill_SK101_description,治疗友方同时也会治疗自己%p，治疗法术在友军身上提供回响，造成的伤害会治疗回响友军0.5%p，持续3轮,,2.82E+14
+skill_SK102_name,盾牌冲击,Shield Bash,2.82E+14
+skill_SK102_description,会造成额外的削韧值，突进的盾牌冲击还会使下个技能提高50%暴击。,,2.82E+14
+skill_SK103_name,殉道者,Sacrifice,2.82E+14
+skill_SK103_description,牺牲自身50%最多生命值，激励一名三码内队友提高攻击力和伤害减免，持续2轮。洗礼对被激励队友产生50%额外效果。,,2.82E+14
+skill_SK104_name,正义烙印,Justice Seal,2.82E+14
+skill_SK104_description,给敌人提供一个持续两回合的印记，使敌人陷入措手不及。印记结束将对两回合内受伤造成20%/25%/30%/40%返伤。,,2.82E+14
+skill_SK105_name,洗礼,Baptism,2.82E+14
+skill_SK105_description,恢复3码指定单位100% AP 生命，该技能若暴击还会减少其他技能2回合冷却。,,2.82E+14
+skill_SK106_name,后撤步,Retreat,2.82E+14
+skill_SK106_description,骑士独有的战斗技巧：后撤并使洗礼可对敌人使用，造成等同治疗的伤害。,,2.82E+14
+skill_SK107_name,为了吾王,For My King,2.82E+14
+skill_SK107_description,提高全队50%速度，持续2回合。,,2.82E+14
+skill_SK108_name,自由之剑,Sword of Freedom,2.82E+14
+skill_SK108_description,对敌人造成巨大伤害，纪律提供的暴击翻倍，持续两轮。,,2.82E+14
+skill_SK109_name,救世,Salvation,2.82E+14
+skill_SK109_description,普通攻击可以获得1点纪律，每点纪律提高5%暴击率。,,2.82E+14
+skill_SK110_name,攻击,Attack,
+skill_SK110_description,普通攻击,Attack,
+skill_SK201_name,疾风骤雨,Tempest,2.82E+14
+skill_SK201_description,使用伤害型战技或攻击敌人将叠加一层buff，使 AD % 提升，最多6层，暴击额外叠加1层。满层后剑会过热无法普攻。,,2.82E+14
+skill_SK202_name,盾牌冲击,Shield Bash,2.82E+14
+skill_SK202_description,造成伤害，该技能有额外的削韧值，获得1点纪律。,,2.82E+14
+skill_SK203_name,盾牌猛击,Shield Slam,2.82E+14
+skill_SK203_description,造成伤害并获得1点纪律，如果下一个动作是普通攻击将会将动作时间缩减至1s。,,2.82E+14
+skill_SK204_name,上撩斩,Uppercut,2.82E+14
+skill_SK204_description,进行一次攻击造成70%/80%/90%/100% AD 伤害，获得1纪律，减少盾牌冲击1回合冷却。,,2.82E+14
+skill_SK205_name,后撤步,Retreat,2.82E+14
+skill_SK205_description,盾牌冲击会替换成盾牌猛击。,,2.82E+14
+skill_SK206_name,Just Rush,Just Rush,2.82E+14
+skill_SK206_description,特有剑舞，每消耗一点纪律进行一次攻击，最多6点。,,2.82E+14
+skill_SK207_name,全神贯注,Focused,2.82E+14
+skill_SK207_description,取消过热，疾风骤雨叠加上限提高到10层，自身速度提高3s，后撤步无冷却，精力上限提高100%，持续两回合。,,2.82E+14
+skill_SK208_name,流浪者,Wanderer,2.82E+14
+skill_SK208_description,流浪骑士初始纪律为0。,,2.82E+14
+skill_SK209_name,攻击,Attack,
+skill_SK209_description,普通攻击,Attack,
+skill_SK301_name,杀人剑,Killing Blade,2.82E+14
+skill_SK301_description,反应动作伤害提高%p。,,2.82E+14
+skill_SK302_name,刺,Thrust,2.82E+14
+skill_SK302_description,迅速刺向敌人，获得一点斩铁点数，暴击将重置横切冷却。,,2.82E+14
+skill_SK303_name,横切,Horizontal,2.82E+14
+skill_SK303_description,造成大量伤害并获得一点斩铁点数。,,2.82E+14
+skill_SK304_name,纳刀术,Sheath,2.82E+14
+skill_SK304_description,使下一个动作精力消耗减少50%，并视作反应动作，增加暴击率。,,2.82E+14
+skill_SK305_name,燕返,Swallow,2.82E+14
+skill_SK305_description,清空自身所有威胁值，后跳2格，并获得15%伤害减免，持续1回合。,,2.82E+14
+skill_SK306_name,秘籍·燕返,Secret·Swallow,2.82E+14
+skill_SK306_description,清空自身所有威胁值，后跳2格，闪避所有攻击，持续1回合。,,2.82E+14
+skill_SK307_name,居合,Iaido,2.82E+14
+skill_SK307_description,拔刀斩击敌人，对前方敌人造成巨大伤害。,,2.82E+14
+skill_SK308_name,秘籍·居合,Secret: Iaido,2.82E+14
+skill_SK308_description,拔刀斩击前方三格所有敌人，对前方敌人造成巨大伤害。,,2.82E+14
+skill_SK309_name,明镜止水,Clear Mind,2.82E+14
+skill_SK309_description,反应动作判定时间翻倍并返还所有消耗的精力与斩铁点数，技能变成秘籍版本，持续4回合。,,2.82E+14
+skill_SK310_name,身轻如燕,Featherlight,2.82E+14
+skill_SK310_description,15%伤害减免。,,2.82E+14
+skill_SK311_name,秘籍·身轻如燕,Secret·Featherlight,2.82E+14
+skill_SK311_description,闪避所有攻击。,,2.82E+14
+skill_SK312_name,攻击,Attack,
+skill_SK312_description,普通攻击,Attack,
+skill_SK401_name,流水剑法,Flowing,2.82E+14
+skill_SK401_description,护甲永远为0，护甲转换为生命与精力上限，架势条与生命挂钩并有特殊机制。,,2.82E+14
+skill_SK402_name,袈裟斩,Cassock,2.82E+14
+skill_SK402_description,向侧面移动一格，横切对面造成伤害，获得一点斩铁点数，并提高20%闪避。,,2.82E+14
+skill_SK403_name,横切,Horizontal,2.82E+14
+skill_SK403_description,获得一点斩铁点数，造成大量伤害。,,2.82E+14
+skill_SK404_name,一字斩,Straight,2.82E+14
+skill_SK404_description,对前方造成大量伤害并回复造成伤害的架势条，可继续派生追击，拥有额外削韧及威胁。,,2.82E+14
+skill_SK405_name,一字斩·二连,Straight·Barrage,2.82E+14
+skill_SK405_description,对前方造成大量伤害并回复架势条，仅可派生于一字斩。,,2.82E+14
+skill_SK406_name,圆月剑,Full Moon,2.82E+14
+skill_SK406_description,摆好架势，结束回合，恢复20%架势并生成剩余时间的斩铁点数。,,2.82E+14
+skill_SK407_name,见切,Parry,2.82E+14
+skill_SK407_description,根据对方动作时间消耗对应斩铁数，弹开对方攻击，格挡成功回复50%精力上限，并使下个一字斩行动时间缩减100%。,,2.82E+14
+skill_SK408_name,千手无双,Thousand Hands,2.82E+14
+skill_SK408_description,精力回复提高100%，持续6回合，并可释放终结斩。,,2.82E+14
+skill_SK409_name,千手无双·终结斩,Thousand Hands· Finisher,2.82E+14
+skill_SK409_description,巨大的伤害并结束千手无双状态。,,2.82E+14
+skill_SK410_name,攻击,Attack,
+skill_SK410_description,普通攻击,Attack,
+skill_SK501_name,两天一流,Niten Ichi-ryu,2.82E+14
+skill_SK501_description,使用双刀流攻击，普通攻击变为2连击，主手75%+副手50%伤害，并有概率获得斩铁点数。,,2.82E+14
+skill_SK502_name,刺,Thrust,2.82E+14
+skill_SK502_description,迅速刺向敌人，获得1点斩铁点数。,,2.82E+14
+skill_SK503_name,双刀流,Dual Blade,2.82E+14
+skill_SK503_description,被动：额外25%概率造成额外伤害（可暴击），并回复20点精力。,,2.82E+14
+skill_SK504_name,十字斩,Cross,2.82E+14
+skill_SK504_description,双刀同时斩击两次，提高25%暴击率。,,2.82E+14
+skill_SK505_name,冲刺斩,Dash,2.82E+14
+skill_SK505_description,冲刺前方进行攻击，并提高双刀流触发概率，持续2回合。,,2.82E+14
+skill_SK506_name,水形剑,Water Blade,2.82E+14
+skill_SK506_description,必须派生在任意战技后，旋转攻击并提高攻速，持续2回合。,,2.82E+14
+skill_SK507_name,空间斩,Spatial Blade,2.82E+14
+skill_SK507_description,本回合攻击无视护甲，并且攻击距离延长1格。,,2.82E+14
+skill_SK508_name,攻击,Attack,
+skill_SK508_description,普通攻击,Attack,
+skill_SK601_name,怒不可遏,Rage,2.82E+14
+skill_SK601_description,狂战士拥有狂怒：攻击有概率回复精力，暴击产生加成。,,2.82E+14
+skill_SK602_name,狂怒,Berserk,2.82E+14
+skill_SK602_description,当怒气超过10点进入狂怒，获得100%暴击，并将溢出暴击转为额外暴击伤害。,,2.82E+14
+skill_SK603_name,嗜血成性,Bloodthirsty,2.82E+14
+skill_SK603_description,被动：每次暴击提高力量，持续至战斗结束。,,2.82E+14
+skill_SK604_name,忍耐,Endure,2.82E+14
+skill_SK604_description,压低自身重心，做出防御姿态，获得15%伤害减免以及护盾。如果成功抵挡伤害，下次攻击必定暴击。,,2.82E+14
+skill_SK605_name,反击,Counterstrike,2.82E+14
+skill_SK605_description,获得3点怒气，对敌人造成伤害并恢复造成伤害的100%生命值。,,2.82E+14
+skill_SK606_name,巨龙怒吼,Dragon Roar,2.82E+14
+skill_SK606_description,对周围三码内所有敌人造成伤害，每名敌人获得1点怒气，被吼叫的敌人下次受到狂战士攻击必定暴击。,,2.82E+14
+skill_SK607_name,踏前斩,Advance Slash,2.82E+14
+skill_SK607_description,获得两点怒气，将巨剑砸向前方，并将技能暂时替换成新月斩，持续1回合。,,2.82E+14
+skill_SK608_name,新月斩,Crescent Slash,2.82E+14
+skill_SK608_description,获得两点怒气，横斩前方敌人，并将技能暂时替换成狮子斩，持续1回合。,,2.82E+14
+skill_SK609_name,狮子斩,Lion Slash,2.82E+14
+skill_SK609_description,获得三点怒气，终结技；若该技能暴击，将重置踏前斩冷却。,,2.82E+14
+skill_SK610_name,怒火中烧,Fury,2.82E+14
+skill_SK610_description,燃烧生命且无视怒气，进入狂怒状态，每回合扣除自身10%最大生命值，持续两轮。嗜血成性层数视作双倍，每次暴击减少1回合冷却。再次进入会延长一轮，可叠加。,,2.82E+14
+skill_SK611_name,愤怒共鸣,Rage Resonance,2.82E+14
+skill_SK611_description,（若存在）愤怒相关共鸣效果说明。,,2.82E+14
+skill_SK612_name,攻击,Attack,
+skill_SK612_description,普通攻击,Attack,
+skill_SK701_name,多才多艺,Versatility,2.82E+14
+skill_SK701_description,攻击分为体术、剑、火药三类；每使用不同类型攻击则伤害提高0.5%p，每回合开始降低4点多才多艺。,,2.82E+14
+skill_SK702_name,攻击弱点（剑）,Weak Strike,2.82E+14
+skill_SK702_description,使用巨剑攻击敌人弱点，造成90%/100%/110%/120%伤害。若拥有3点多才多艺，动作时间减少1s，最低为1s。,,2.82E+14
+skill_SK703_name,摔绊（体）,Trip,2.82E+14
+skill_SK703_description,撞击前方1格敌人并使其更容易受到暴击。,,2.82E+14
+skill_SK704_name,战争狂人,Warer,2.82E+14
+skill_SK704_description,消耗6/5/4/3点多才多艺，减少1回合其他技能冷却并提高自身速度1s。,,2.82E+14
+skill_SK705_name,猛扑（体）,Pounce,2.82E+14
+skill_SK705_description,冲向目标并提高自身攻击力，可额外叠加一层多才多艺。,,2.82E+14
+skill_SK706_name,爆炸射击（火药）,Explosive,2.82E+14
+skill_SK706_description,对目标造成爆炸伤害，每点多才多艺额外提供10%暴击率。,,2.82E+14
+skill_SK707_name,战场艺术,Battle Artist,2.82E+14
+skill_SK707_description,立刻获得4点多才多艺，并释放技能时减少其他技能（不含自身）1回合冷却；每点多才多艺减少10%精力消耗。,,2.82E+14
+skill_SK708_name,攻击,Attack,
+skill_SK708_description,普通攻击,Attack,
+skill_SK801_name,幸运宝地,Lucky Ground,2.82E+14
+skill_SK801_description,每当刺剑攻击措手不及敌人或暴击时，获得黑火药点数；每回合在 boss 2–5 码内随机生成一个幸运距离，手枪在该距离造成额外伤害。,,2.82E+14
+skill_SK802_name,虚张声势,Bluff,2.82E+14
+skill_SK802_description,造成伤害，若该次攻击被取消，则下个动作会给敌人施加措手不及。,,2.82E+14
+skill_SK803_name,幸运刺击,Lucky Thrust,2.82E+14
+skill_SK803_description,对前方敌人造成伤害，并接下来忽略对方10%–60%护甲，持续4回合。,,2.82E+14
+skill_SK804_name,百宝箱,Treasure Box,2.82E+14
+skill_SK804_description,打开百宝箱，随机获得一个道具效果。,,2.82E+14
+skill_SK805_name,白兰地,Brandy,2.82E+14
+skill_SK805_description,被动：获得35%/40%/45%/50%暴击，但移动速度减少50%，持续4回合。,,2.82E+14
+skill_SK806_name,朗姆酒,Rum,2.82E+14
+skill_SK806_description,被动：获得35%/40%/45%/50%减伤，但移动速度减少50%，持续4回合。,,2.82E+14
+skill_SK807_name,海鲜大餐,Seafood,2.82E+14
+skill_SK807_description,增加 AD 及生命值若干百分比，持续4回合。,,2.82E+14
+skill_SK808_name,海盗旗,Flag,2.82E+14
+skill_SK808_description,增加自身速度 1s/2s/3s/4s，持续4回合。,,2.82E+14
+skill_SK809_name,过期药品,Expired Tonic,2.82E+14
+skill_SK809_description,每回合回复10%生命值，持续2/4/6/8回合。,,2.82E+14
+skill_SK810_name,强尼强尼,Johnny,2.82E+14
+skill_SK810_description,召唤鹦鹉对敌人进行干扰攻击，使每回合第一次攻击额外造成25%伤害，并视作措手不及。,,2.82E+14
+skill_SK811_name,垃圾,Junk,2.82E+14
+skill_SK811_description,无实际作用的道具描述。,,2.82E+14
+skill_SK812_name,幸运骰子,Lucky Dice,2.82E+14
+skill_SK812_description,丢出幸运骰子，随机增加暴击率并对概率性技能判定两次（取最优）；1点必定最差，6点必定最好。,,2.82E+14
+skill_SK813_name,快速拔枪,Quick Draw,2.82E+14
+skill_SK813_description,开枪对前方敌人造成伤害，若敌人措手不及会额外触发百宝箱效果（持续2回合）。,,2.82E+14
+skill_SK814_name,幸运手枪,Lucky Gun,2.82E+14
+skill_SK814_description,准备特质子弹，造成10%–100%伤害；若暴击造成4倍暴击伤害。,,2.82E+14
+skill_SK815_name,攻击,Attack,
+skill_SK815_description,普通攻击,Attack,
+skill_SK900_name,破绽,Vulnerability,2.82E+14
+skill_SK900_description,每轮敌人随机出现一处破绽，击破破绽会刷新另一处，攻击破绽使决斗家得分。,,2.82E+14
+skill_SK901_name,得分,Score,2.82E+14
+skill_SK901_description,决斗家攻击造成额外流血伤害 %p * AD * ((1+分数)/2)，持续两轮。,,2.82E+14
+skill_SK902_name,侧袭,Flank Attack,2.82E+14
+skill_SK902_description,攻击敌人并自动击破前面及侧面的破绽。大师姿态：立刻触发一次流血伤害。,,2.82E+14
+skill_SK903_name,佯攻,Feint,2.82E+14
+skill_SK903_description,指定一名友军，将自身的威胁值转移给他，并提高该友军暴击率，持续两回合。大师姿态：同时提高自身暴击率。,,2.82E+14
+skill_SK904_name,回音斩,Echoing,2.82E+14
+skill_SK904_description,对前方发动刺击，并在下一轮重复这次刺击；胜利姿态：重复两次。,,2.82E+14
+skill_SK905_name,挑战,Dual,2.82E+14
+skill_SK905_description,指定一个敌人，获得额外速度并获得免费移动，但非挑战敌人受到伤害减半，持续四回合。,,2.82E+14
+skill_SK906_name,决斗姿态,Duel Stance,2.82E+14
+skill_SK906_description,提高精通，首次击破破绽视作两分，冷却独立计算。,,2.82E+14
+skill_SK907_name,神避,Kamusari,2.82E+14
+skill_SK907_description,传奇一击：立刻清空敌人韧性条。大师姿态：必定造成暴击。,,2.82E+14
+skill_SK908_name,攻击,Attack,
+skill_SK908_description,普通攻击,Attack,
+skill_SK1001_name,处决,Execution,2.82E+14
+skill_SK1001_description,处决技能为固定冷却并拥有6级技能等级，可在任意动作后派生处决动作，消耗连击点数并减少技能冷却。,,2.82E+14
+skill_SK1002_name,连击,Combo,2.82E+14
+skill_SK1002_description,攻击后若继续连击则提高5%伤害并获得一点连击点数。,,2.82E+14
+skill_SK1003_name,钩锁,Chain,2.82E+14
+skill_SK1003_description,投掷锁链钩住敌人并迅速接近，使其措手不及，获得连击点数并造成伤害。,,2.82E+14
+skill_SK1004_name,瞬步,Swift,2.82E+14
+skill_SK1004_description,快速移动并对途径敌人造成伤害，该回合可再使用一次。,,2.82E+14
+skill_SK1005_name,瞬步（2）,Swift II,2.82E+14
+skill_SK1005_description,与瞬步类似，但不可作为紧接着瞬步的下一个动作，移动并获得两点连击点数。,,2.82E+14
+skill_SK1006_name,Killing Spree,Killing Spree,2.82E+14
+skill_SK1006_description,根据连击点数对周围敌人随机造成连续斩击，次数为（连击点数+1），同时触发处决。,,2.82E+14
+skill_SK1007_name,烟雾弹,Smoke Bomb,2.82E+14
+skill_SK1007_description,使敌人完全失去目标，完全躲避连锁的下一个动作，并回复一定精力。,,2.82E+14
+skill_SK1008_name,影武者,Shadow,2.82E+14
+skill_SK1008_description,召唤影分身模仿自己的操作并重复所有标准动作，持续1轮。,,2.82E+14
+skill_SK1009_name,攻击,Basic Attack,2.82E+14
+skill_SK1009_description,普通攻击。,,2.82E+14
+skill_SK1101_name,神经紊乱,Nerve Disruption,2.82E+14
+skill_SK1101_description,毒素伤害提高%p，毒素伤害有概率额外获得科研点数，提升炼金炸弹效果。,,2.82E+14
+skill_SK1102_name,毒药萃取,Poison Extraction,2.82E+14
+skill_SK1102_description,给武器涂毒，30%概率使被攻击敌人中毒，每2s造成伤害，持续三轮。,,2.82E+14
+skill_SK1103_name,慢性毒素,Chronic Toxin,2.82E+14
+skill_SK1103_description,注入慢性毒素，使敌人每2s受伤，持续4轮。,,2.82E+14
+skill_SK1104_name,研究,Research,2.82E+14
+skill_SK1104_description,研究目标，延长毒素持续并提高毒药萃取概率，持续6回合。,,2.82E+14
+skill_SK1105_name,炼金炸弹,Alchemical Bomb,2.82E+14
+skill_SK1105_description,投掷炼金炸弹并立刻结算所有毒素伤害若干次。,,2.82E+14
+skill_SK1106_name,迷幻剂,Hallucinogen,2.82E+14
+skill_SK1106_description,给自己或友军注入迷幻剂，使部分伤害以流血形式生效，持续6轮。,,2.82E+14
+skill_SK1107_name,终极毒素,Ultimate Toxin,2.82E+14
+skill_SK1107_description,使受影响敌人持续3轮，并使炼金炸弹的伤害溅射给所有中毒单位。,,2.82E+14
+skill_SK1108_name,攻击,Basic Attack,2.82E+14
+skill_SK1108_description,普通攻击。,,2.82E+14
+skill_SK1201_name,化劲,Energy Redirect,2.82E+14
+skill_SK1201_description,武术家即便是取消的动作也能造成%p的取消动作伤害。,,2.82E+14
+skill_SK1202_name,冲拳,Charged Punch,2.82E+14
+skill_SK1202_description,向前出拳并获得一点寸劲。,,2.82E+14
+skill_SK1203_name,下段踢,Low Kick,2.82E+14
+skill_SK1203_description,攻击下段并获得寸劲；若取消上个动作则提高暴击率。,,2.82E+14
+skill_SK1204_name,圈步,Circular Step,2.82E+14
+skill_SK1204_description,消耗所有寸劲回复生命和精力，并让每点寸劲减少1回合冷却。,,2.82E+14
+skill_SK1205_name,寸拳,Inch,2.82E+14
+skill_SK1205_description,每消耗一点寸劲伤害额外提高20%。,,2.82E+14
+skill_SK1206_name,听桥,Bridge Perception,2.82E+14
+skill_SK1206_description,规避即将到来的伤害并获得寸劲。,,2.82E+14
+skill_SK1207_name,一代宗师,Grand Mastery,2.82E+14
+skill_SK1207_description,将武技变换为另一版本，冷却独立计算，回合结束恢复原版。,,2.82E+14
+skill_SK1208_name,连续冲拳,Rapid Punches,2.82E+14
+skill_SK1208_description,连续攻击2–6拳，每次暴击提供一点寸劲。,,2.82E+14
+skill_SK1209_name,扫堂腿,Sweeping Kick,2.82E+14
+skill_SK1209_description,攻击周围一圈敌人，每命中一人获得寸劲并提高他们受到暴击的几率。,,2.82E+14
+skill_SK1210_name,铁山靠,Iron Mountain Charge,2.82E+14
+skill_SK1210_description,重重倚靠敌人造成伤害。,,2.82E+14
+skill_SK1211_name,标指,Targeted Jab,2.82E+14
+skill_SK1211_description,攻击敌人薄弱处，该伤害必定暴击。,,2.82E+14
+skill_SK1212_name,飞檐走壁,Wall Dash,2.82E+14
+skill_SK1212_description,获得2/3/4/5s移动时间（爆发性移动）。,,2.82E+14
+skill_SK1213_name,攻击,Basic Attack,2.82E+14
+skill_SK1213_description,普通攻击。,,2.82E+14
+skill_SK1401_name,天时地利,Heaven-Earth,2.82E+14
+skill_SK1401_description,任意攻击/治疗动作都有概率获得天时或地利buff，持续4回合。,,2.82E+14
+skill_SK1402_name,天时,Heavenly Fortune,2.82E+14
+skill_SK1402_description,每回合回复2点真气，并增加友军增益量。,,2.82E+14
+skill_SK1403_name,地利,Earthly Fortune,2.82E+14
+skill_SK1403_description,精力回复提高100%，并增加%p暴击。,,2.82E+14
+skill_SK1404_name,冲拳,Charged Punch,2.82E+14
+skill_SK1404_description,向前出拳，可对友军提供活血化瘀效果，提升其 AD。,,2.82E+14
+skill_SK1405_name,活血化瘀,Blood Activation,2.82E+14
+skill_SK1405_description,增加攻击力（%p）。,,2.82E+14
+skill_SK1406_name,正掌三式,Triple Palm Strike,2.82E+14
+skill_SK1406_description,连续三掌造成伤害，对友军使用则恢复生命；拥有活血化淤则提高治疗量。,,2.82E+14
+skill_SK1407_name,点穴,Acupoint Seal,2.82E+14
+skill_SK1407_description,对敌人造成伤害并封锁穴道，使其伤害降低并冻结受伤结算。,,2.82E+14
+skill_SK1408_name,氤氲,Mist Aura,2.82E+14
+skill_SK1408_description,以自身为圆心召唤屏障，增加友军治疗与精力回复并提高自身精通，持续三轮。,,2.82E+14
+skill_SK1409_name,飞檐走壁,Wall Dash,2.82E+14
+skill_SK1409_description,爆发性移动速度，获得短暂移动时间。,,2.82E+14
+skill_SK1410_name,龙之泪,Dragon's Tear,2.82E+14
+skill_SK1410_description,使一名友军回复100%生命与精力并刷新技能冷却（非终极），并将技能临时提升至最大，持续1轮。,,2.82E+14
+skill_SK1411_name,真气波,Qi Wave,2.82E+14
+skill_SK1411_description,消耗真气治疗前方三格友军。,,2.82E+14
+skill_SK1412_name,攻击,Basic Attack,2.82E+14
+skill_SK1412_description,普通攻击。,,2.82E+14
+skill_SK1501_name,惩击,Smite,2.82E+14
+skill_SK1501_description,汤米独有的远程普通攻击，惩击有概率获得洞察点数。,,2.82E+14
+skill_SK1501_name,惩击,Smite,2.82E+14
+skill_SK1501_description,汤米独有的远程普通攻击，惩击有概率获得洞察点数。,,2.82E+14
+skill_SK1502_name,惩击·暗,Smite·Dark,2.82E+14
+skill_SK1502_description,发射黑暗光弹并有概率获得阴暗面之力，最多3层。,,2.82E+14
+skill_SK1503_name,阴暗面之力,Dark Aspect Power,2.82E+14
+skill_SK1503_description,增加苦修光弹数量。,,2.82E+14
+skill_SK1504_name,危险感知,Danger Sense,2.82E+14
+skill_SK1504_description,给一名友军提供护盾，吸收伤害。,,2.82E+14
+skill_SK1505_name,品尝苦痛（暗）,Taste of Agony,2.82E+14
+skill_SK1505_description,黑暗版本的危险感知，对敌人造成每回合持续伤害，持续三轮。,,2.82E+14
+skill_SK1506_name,和煦阳光,Warm Sunshine,2.82E+14
+skill_SK1506_description,回复所有友军20%/30%/40%/50%生命值。,,2.82E+14
+skill_SK1507_name,黑暗蔓延（暗）,Darkness Spread,2.82E+14
+skill_SK1507_description,黑暗版本的和煦阳光，对周围敌人造成伤害并有概率获得阴暗面之力。,,2.82E+14
+skill_SK1508_name,光与影之子,Light and Shadow,2.82E+14
+skill_SK1508_description,切换自身的阴暗面，提升洞察之眼获得概率并将技能变为黑暗版本，持续两轮。,,2.82E+14
+skill_SK1509_name,苦修,Asceticism,2.82E+14
+skill_SK1509_description,发射三枚光弹；每层阴暗面之力额外发射一枚。每枚光弹会治疗友军并扩展护盾效果。,,2.82E+14
+skill_SK1510_name,苦修（暗）,Asceticism (Dark),2.82E+14
+skill_SK1510_description,黑暗版苦修：对所有目标造成伤害且必定暴击。,,2.82E+14
+skill_SK1511_name,鼓舞,Inspire,2.82E+14
+skill_SK1511_description,为友军减少受到的伤害，持续2轮。,,2.82E+14
+skill_SK1512_name,鞭笞（暗）,Lash (Dark),2.82E+14
+skill_SK1512_description,提高友军造成与受到的伤害（暗版效果）。,,2.82E+14
+skill_SK1513_name,避难所,Sanctuary,2.82E+14
+skill_SK1513_description,使一名友军进入冻结且无敌状态，受到的治疗提高100%，行动时间为0，持续3轮（阴暗面不可用）。,,2.82E+14
+skill_SK1514_name,希望屏障,Hope Barrier,2.82E+14
+skill_SK1514_description,以自己为圆心召唤一个4码金色屏障，持续3轮，屏障内友军每回合如同被施加危险感知护盾，同时屏障内友军受到伤害减少15%，阴暗面不可用。,Create a 4‑cell golden barrier centered on self for 3 rounds. Allies inside gain a Danger Sense–like shield each round and take 15% reduced damage. Dark Aspect cannot be used while inside the barrier.,2.82E+14
+skill_SK1515_name,绝望化身（暗）,Despair Incarnation (Dark),2.82E+14
+skill_SK1515_description,汤米被阴影彻底吞噬，惩击的施法时间缩短至1s，品尝苦痛将对5码内所有敌人施加，同时苦修将对所有品尝苦痛敌人释放。,"Tommy is consumed by shadow: Smite's cast time is reduced to 1s; Taste of Agony affects all enemies within 5 cells, and Asceticism is applied to all enemies afflicted by Taste of Agony.",2.82E+14

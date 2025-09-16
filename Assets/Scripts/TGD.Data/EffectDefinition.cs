@@ -1,0 +1,214 @@
+﻿using System;
+using System.Collections.Generic;
+using UnityEngine;
+namespace TGD.Data
+{
+    public enum TargetType
+    {
+        Self,
+        Enemy,
+        Allies,
+        All
+    }
+    public enum AttributeType
+    {
+        Attack,
+        Armor,
+        Shield,
+        Speed,
+        Movement,
+        CritRate,
+        Mastery,
+        Healing,
+        ArmorPenetration,
+        DamageReduction
+    }
+
+    public enum EffectType
+    {
+        None,
+        Damage,
+        Heal,
+        GainResource,
+        ScalingBuff,      // ✅ 每点资源提升属性
+        ApplyStatus,      // Buff/Debuff（skillID 状态）
+        ConditionalEffect,
+        ReplaceSkill,
+        CooldownModifier,
+        ResetCooldown,
+        SetSkillTimeCost,
+        ModifySkillTimeCost,
+        ModifyActionDamage,   // 🔹 新增
+        AttributeModifier
+    }
+    public enum DamageSchool { Physical, Magical, True }
+    [Serializable]
+    public enum EffectCondition
+    {
+        None,
+        AfterAttack,
+        OnCriticalHit,
+        OnCooldownEnd,
+        AfterSkillUse,
+        SkillStateActive,
+        // 新增：下一次消耗指定资源时触发（当前/下一次皆可命中）
+        OnNextSkillSpendResource
+    }
+
+    [Serializable]
+    public enum ResourceType
+    {
+        HP,
+        Energy,
+        Discipline,
+        Iron,
+        Rage,
+        Versatility,
+        Gunpowder,
+        point,
+        combo,
+        punch,
+        qi,
+        vision
+    }
+
+    [Serializable]
+    public enum CompareOp
+    {
+        Equal,
+        Greater,
+        GreaterEqual,
+        Less,
+        LessEqual
+    }
+
+    [Serializable]
+    public enum ScalingAttribute
+    {
+        Attack,
+        Crit,
+        Armor,
+        HP,
+        Speed,
+        MoveSpeed
+        // 后续可以继续扩展
+    }
+    public enum ModifierType
+    {
+        Percentage,  // % 提升
+        Flat         // 固定值
+    }
+    // 在 namespace TGD.Data 里，EffectDefinition 同级位置新增：
+    [System.Flags]
+    public enum EffectFieldMask
+    {
+        None = 0,
+        Probability = 1 << 0,  // 概率
+        Duration = 1 << 1,  // 持续（回合）
+        Target = 1 << 2,  // 作用目标
+        Condition = 1 << 3,  // 触发条件
+        Crit = 1 << 4,  // 可暴击
+        School = 1 << 5,  // 伤害学派（仅 Damage 用）
+        PerLevel = 1 << 6,  // 等级分段编辑开关
+    }
+
+
+    [Serializable]
+    public class EffectDefinition
+    {
+        public EffectType effectType = EffectType.None;
+
+        // ===== 通用字段 =====
+        public TargetType target = TargetType.Self;
+        public AttributeType attributeType;
+        public ActionType targetActionType;  // ✅ 直接用已有的 ActionType
+        public ModifierType modifierType;
+        public string valueExpression;
+        public float value;            // Damage/Heal 等常规效果
+        public float duration;         // 持续时间（回合）
+        public string probability;     // 概率（字符串，允许 "p%"）
+
+        public EffectCondition condition = EffectCondition.None;
+        public EffectFieldMask visibleFields =
+    EffectFieldMask.Probability |
+    EffectFieldMask.Duration |
+    EffectFieldMask.Target |
+    EffectFieldMask.Condition |
+    EffectFieldMask.PerLevel;   // 默认全开；你可按需改默认
+
+        // —— 条件参数（仅当 condition == OnNextSkillSpendResource 时使用）——
+        public ResourceType conditionResourceType;  // 例如 Discipline
+        public int conditionMinAmount = 1;  // 最小花费（默认≥1）
+        public bool consumeStatusOnTrigger = true; // 命中后是否消耗所在的状态（一般 true）
+
+        // ====== NEW: Damage/Heal 专用的小字段（很轻量）======
+        public DamageSchool damageSchool = DamageSchool.Physical; // 仅 Damage 用
+        public bool canCrit = true;                                // Damage/Heal 都可用
+
+        // —— 按等级覆盖（用于五色技能的 1~4 级）——
+        public bool perLevel = false;                     // 勾上后，以下数组生效
+        public string[] valueExprLevels = new string[4];  // L1~L4 的“数值/公式”，如 "atk*0.6"
+        public int[] durationLevels = new int[4];     // L1~L4 的持续回合
+        public string[] probabilityLvls = new string[4];  // L1~L4 的概率（"p" 或 "35"）
+
+        // ===== Resource / Condition =====
+        public ResourceType resourceType = ResourceType.Discipline;
+        public CompareOp compareOp = CompareOp.Equal;
+        public float compareValue;
+        public List<EffectDefinition> onSuccess = new();
+
+        // ========== CooldownModifier 专用 ==========
+
+        public int cooldownChangeSeconds = 0; // 冷却变化（正数=增加，负数=减少）
+
+        // ===== Buff/Debuff =====
+        public string statusSkillID;        // 传统 Buff/Debuff 用 skillID
+
+        // ===== ReplaceSkill =====
+        public string targetSkillID;        // 原技能ID
+        public string replaceSkillID;       // 替换后技能ID
+
+        // ===== ScalingBuff 专用 =====
+        public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
+        public int maxStacks = 0;                  // 0 = unlimited
+        public ScalingAttribute scalingAttribute = ScalingAttribute.Attack;
+
+        // —— 解析当前技能等级应使用的表达式/持续/概率 ——
+        // 注意：这里返回的是 string/int/string，表达式留给你的公式求值器去算
+        public string ResolveValueExpression(SkillDefinition skill)
+        {
+            if (perLevel && valueExprLevels != null && valueExprLevels.Length >= 4)
+            {
+                int idx = Mathf.Clamp(skill.skillLevel - 1, 0, 3);
+                var s = valueExprLevels[idx];
+                if (!string.IsNullOrEmpty(s)) return s;
+            }
+            return valueExpression; // 回退到通用单值
+        }
+
+        public int ResolveDuration(SkillDefinition skill)
+        {
+            if (perLevel && durationLevels != null && durationLevels.Length >= 4)
+            {
+                int idx = Mathf.Clamp(skill.skillLevel - 1, 0, 3);
+                if (durationLevels[idx] != 0) return durationLevels[idx];
+            }
+            return (int)duration; // 回退
+        }
+
+        public string ResolveProbability(SkillDefinition skill)
+        {
+            if (perLevel && probabilityLvls != null && probabilityLvls.Length >= 4)
+            {
+                int idx = Mathf.Clamp(skill.skillLevel - 1, 0, 3);
+                var s = probabilityLvls[idx];
+                if (!string.IsNullOrEmpty(s)) return s;
+            }
+            return probability; // 回退
+        }
+
+
+
+
+    }
+}
