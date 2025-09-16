@@ -16,6 +16,7 @@ namespace TGD.Editor
             Register(EffectType.ApplyStatus, new ApplyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
             Register(EffectType.ModifyAction, new ModifyActionDrawer());
+            Register(EffectType.CooldownModifier, new CooldownModifierDrawer());
             Register(EffectType.ReplaceSkill, new ReplaceSkillDrawer());
             Register(EffectType.ConditionalEffect, new ConditionalEffectDrawer());
             // ¶µµ×

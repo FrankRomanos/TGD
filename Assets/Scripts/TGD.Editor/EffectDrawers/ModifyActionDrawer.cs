@@ -9,6 +9,19 @@ namespace TGD.Editor
         public void Draw(SerializedProperty elem)
         {
             EditorGUILayout.LabelField("Modify Action", EditorStyles.boldLabel);
+            var skillIdProp = elem.FindPropertyRelative("targetSkillID");
+            if (skillIdProp != null)
+            {
+                EditorGUILayout.PropertyField(skillIdProp, new GUIContent("Modify Skill ID"));
+                if (string.IsNullOrWhiteSpace(skillIdProp.stringValue))
+                {
+                    EditorGUILayout.HelpBox("Leave empty to affect the owning skill.", MessageType.Info);
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("'targetSkillID' property not found on effect.", MessageType.Warning);
+            }
 
             var targetActionProp = elem.FindPropertyRelative("targetActionType");
             if (targetActionProp != null)
@@ -119,6 +132,10 @@ namespace TGD.Editor
             if (type == ActionModifyType.None)
                 return;
 
+            var skillIdProp = elem.FindPropertyRelative("targetSkillID");
+            string skillId = skillIdProp != null ? skillIdProp.stringValue : string.Empty;
+            string skillLabel = string.IsNullOrWhiteSpace(skillId) ? "owning skill" : $"skill '{skillId}'";
+
             var actionFilterProp = elem.FindPropertyRelative("targetActionType");
             var actionFilter = actionFilterProp != null
                 ? (ActionType)actionFilterProp.enumValueIndex
@@ -127,41 +144,50 @@ namespace TGD.Editor
             switch (type)
             {
                 case ActionModifyType.Damage:
-                    EditorGUILayout.HelpBox(BuildDamageSummary(elem, actionFilter), MessageType.None);
+                    EditorGUILayout.HelpBox(BuildDamageSummary(elem, actionFilter, skillLabel), MessageType.None);
                     break;
                 case ActionModifyType.ActionType:
                     var overrideProp = elem.FindPropertyRelative("actionTypeOverride");
                     var newType = overrideProp != null
                         ? (ActionType)overrideProp.enumValueIndex
                         : ActionType.None;
-                    EditorGUILayout.HelpBox($"Convert {actionFilter} actions into {newType} actions.", MessageType.None);
+
+                    string actionText = DescribeActionFilter(actionFilter);
+                    string targetText = string.IsNullOrEmpty(actionText) ? skillLabel : $"{skillLabel} {actionText}";
+                    EditorGUILayout.HelpBox($"Convert {targetText} into {DescribeActionFilter(newType, fallback: "the same type")}.", MessageType.None);
                     break;
             }
         }
 
-        private string BuildDamageSummary(SerializedProperty elem, ActionType actionFilter)
+        private string BuildDamageSummary(SerializedProperty elem, ActionType actionFilter, string skillLabel)
         {
             var perLevelProp = elem.FindPropertyRelative("perLevel");
             if (perLevelProp != null && perLevelProp.boolValue)
-                return $"Adjust {actionFilter} action damage using per-level expressions.";
+                return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} using per-level expressions.";
 
             var valueProp = FieldVisibilityUI.GetProp(elem, "valueExpression", "value");
             if (valueProp == null)
-                return $"Adjust {actionFilter} action damage (value not set).";
+                return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} (value not set).";
 
             switch (valueProp.propertyType)
             {
                 case SerializedPropertyType.String:
                     return string.IsNullOrWhiteSpace(valueProp.stringValue)
-                        ? $"Adjust {actionFilter} action damage (value not set)."
-                        : $"Adjust {actionFilter} action damage by '{valueProp.stringValue}'.";
+                        ? $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} (value not set)."
+                        : $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by '{valueProp.stringValue}'.";
                 case SerializedPropertyType.Float:
-                    return $"Adjust {actionFilter} action damage by {valueProp.floatValue:0.###}.";
+                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by {valueProp.floatValue:0.###}.";
                 case SerializedPropertyType.Integer:
-                    return $"Adjust {actionFilter} action damage by {valueProp.intValue}.";
+                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by {valueProp.intValue}.";
                 default:
-                    return $"Adjust {actionFilter} action damage.";
+                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)}.";
             }
+        }
+        private string DescribeActionFilter(ActionType actionFilter, string fallback = "all actions")
+        {
+            if (actionFilter == ActionType.None)
+                return fallback;
+            return actionFilter.ToString().ToLower() + " actions";
         }
     }
 }

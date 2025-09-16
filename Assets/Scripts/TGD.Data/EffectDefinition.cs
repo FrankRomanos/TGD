@@ -38,6 +38,7 @@ namespace TGD.Data
         ReplaceSkill,
         Move,                // 统一的技能调整入口
         ModifyAction,
+        CooldownModifier,
         AttributeModifier,
         MasteryPosture
     }
@@ -223,7 +224,7 @@ namespace TGD.Data
         public string targetSkillID;        // 原技能ID/被修改技能
         public string replaceSkillID;       // 替换后技能ID
         public bool inheritReplacedCooldown = true; // 替换后是否沿用原冷却
-
+        public int cooldownChangeSeconds = 0; // CooldownModifier: 秒数改动（可正可负）
         // ===== Modify Skill =====
         public SkillModifyType skillModifyType = SkillModifyType.None;
         public SkillModifyOperation skillModifyOperation = SkillModifyOperation.Add;
