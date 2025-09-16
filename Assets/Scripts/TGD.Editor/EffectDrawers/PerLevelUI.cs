@@ -38,10 +38,14 @@ namespace TGD.Editor
         /// <summary>
         /// »­¡°Use Per-Level Values¡± + ÕÛµþ°´Å¥£»·µ»Ø£ºperLevel ÊÇ·ñ¿ªÆô¡£out collapsed£ºÊÇ·ñÕÛµþ¡£
         /// </summary>
-        public static bool BeginPerLevelBlock(SerializedProperty elem, out bool collapsed, string useLabel = "Use Per-Level Values")
+        public static bool BeginPerLevelBlock(
+        SerializedProperty elem,
+        out bool collapsed,
+        string useLabel = "Use Per-Level Values",
+        string collapseKeySuffix = "")
         {
             var perLevel = elem.FindPropertyRelative("perLevel");
-            var key = elem.propertyPath + "_collapsed";
+            var key = elem.propertyPath + "_collapsed" + collapseKeySuffix;
 
             Collapsed.TryGetValue(key, out collapsed);
 

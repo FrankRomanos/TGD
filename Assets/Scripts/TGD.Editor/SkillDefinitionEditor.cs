@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
@@ -15,7 +14,6 @@ namespace TGD.Editor
         private SerializedProperty skillLevelProp;
         private SerializedProperty skillDurationProp;
 
-        private static readonly Dictionary<string, bool> s_PerLevelDurationCollapsed = new();
 
         private static readonly SkillColor[] kLeveledColors = new[]
         {
@@ -216,7 +214,21 @@ namespace TGD.Editor
 
                     bool hasDurationProp = durationProp != null;
                     bool hasLevelArray = durationLevelsProp != null;
-                    bool perLevelEnabled = perLevelProp != null && perLevelProp.boolValue && hasLevelArray;
+                    bool hasPerLevelProp = perLevelProp != null;
+                    bool perLevelUIVisible = hasPerLevelProp && hasLevelArray &&
+                        FieldVisibilityUI.Has(element, EffectFieldMask.PerLevel);
+
+                    bool perLevelEnabled = false;
+                    bool collapsed = false;
+
+                    if (perLevelUIVisible)
+                    {
+                        perLevelEnabled = PerLevelUI.BeginPerLevelBlock(element, out collapsed, collapseKeySuffix: "_duration");
+                    }
+                    else if (hasPerLevelProp && hasLevelArray)
+                    {
+                        perLevelEnabled = perLevelProp.boolValue;
+                    }
 
                     if (hasDurationProp)
                     {
@@ -231,28 +243,12 @@ namespace TGD.Editor
                     int currentLevel = LevelContext.GetSkillLevel(element.serializedObject);
                     int resolvedDuration = hasDurationProp ? (int)durationProp.floatValue : 0;
 
-                    if (perLevelEnabled)
-                    {
-                        string collapseKey = element.propertyPath + "_durationCollapsed";
-                        s_PerLevelDurationCollapsed.TryGetValue(collapseKey, out bool collapsed);
-
-                        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-                        EditorGUILayout.LabelField("Per-Level Duration", EditorStyles.boldLabel);
-                        GUILayout.FlexibleSpace();
-                        bool newCollapsed = GUILayout.Toggle(collapsed,
-                            collapsed ? "Show Edit Fields" : "Hide Edit Fields",
-                            EditorStyles.miniButton);
-                        if (newCollapsed != collapsed)
-                        {
-                            collapsed = newCollapsed;
-                            s_PerLevelDurationCollapsed[collapseKey] = collapsed;
-                        }
-                        EditorGUILayout.EndHorizontal();
-
-                        if (!collapsed)
-                        {
-                            PerLevelUI.DrawIntLevels(durationLevelsProp, "Duration by Level (turns)");
-                        }
+                    if (perLevelEnabled && hasLevelArray)
+                    {  
+                            if (perLevelUIVisible && !collapsed)
+                            {
+                                PerLevelUI.DrawIntLevels(durationLevelsProp, "Duration by Level (turns)");
+                            }
 
                         PerLevelUI.EnsureSize(durationLevelsProp, 4);
                         int idx = Mathf.Clamp(currentLevel - 1, 0, 3);
