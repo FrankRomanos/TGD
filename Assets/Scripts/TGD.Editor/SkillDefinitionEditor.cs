@@ -204,6 +204,11 @@ namespace TGD.Editor
                 var type = (EffectType)effectTypeProp.enumValueIndex;
                 var drawer = EffectDrawerRegistry.Get(type);
                 drawer.Draw(element);
+                // Display duration field based on Skill level (if relevant for effect)
+                if (FieldVisibilityUI.Toggle(element, EffectFieldMask.Duration, "Show Duration"))
+                {
+                    EditorGUILayout.PropertyField(element.FindPropertyRelative("duration"), new GUIContent("Duration (turns)"));
+                }
 
                 if (GUILayout.Button("Remove Effect"))
                     effectsProp.DeleteArrayElementAtIndex(i);
