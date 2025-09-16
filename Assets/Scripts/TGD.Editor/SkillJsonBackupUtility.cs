@@ -211,6 +211,7 @@ namespace TGD.Editor
 
         public SkillColor skillColor;
         public int skillLevel;
+        public SkillDurationSettings skillDuration = new SkillDurationSettings();
 
         public List<EffectDefinition> effects = new();
 
@@ -246,6 +247,7 @@ namespace TGD.Editor
 
                 skillColor = s.skillColor,
                 skillLevel = s.skillLevel,
+                skillDuration = s.skillDuration != null ? new SkillDurationSettings(s.skillDuration) : new SkillDurationSettings(),
 
                 backupTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                 unityVersion = Application.unityVersion,
@@ -320,6 +322,7 @@ namespace TGD.Editor
 
             s.skillColor = skillColor;
             s.skillLevel = skillLevel;
+            s.skillDuration = skillDuration != null ? new SkillDurationSettings(skillDuration) : new SkillDurationSettings();
 
             s.effects = effects != null ? new List<EffectDefinition>(effects) : new List<EffectDefinition>();
         }

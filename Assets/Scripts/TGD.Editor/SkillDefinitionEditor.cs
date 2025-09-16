@@ -12,6 +12,7 @@ namespace TGD.Editor
 
         private SerializedProperty skillColorProp;
         private SerializedProperty skillLevelProp;
+        private SerializedProperty skillDurationProp;
 
         private static readonly SkillColor[] kLeveledColors = new[]
         {
@@ -28,6 +29,7 @@ namespace TGD.Editor
             costsProp = serializedObject.FindProperty("costs");
             skillColorProp = serializedObject.FindProperty("skillColor");
             skillLevelProp = serializedObject.FindProperty("skillLevel");
+            skillDurationProp = serializedObject.FindProperty("skillDuration");
         }
 
         public override void OnInspectorGUI()
@@ -56,6 +58,57 @@ namespace TGD.Editor
             {
                 skillLevelProp.intValue = 1; // 非五色不分级
                 EditorGUILayout.HelpBox("此技能颜色不参与 1~4 等级系统。每级数值请直接在 Effects 里按需配置（或不配置）。", MessageType.Info);
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Skill Duration", EditorStyles.boldLabel);
+
+            if (skillDurationProp != null)
+            {
+                var durationValueProp = skillDurationProp.FindPropertyRelative("duration");
+                var levelsProp = skillDurationProp.FindPropertyRelative("durationLevels");
+
+                if (durationValueProp == null)
+                {
+                    EditorGUILayout.HelpBox("'duration' property not found on skillDuration.", MessageType.Error);
+                }
+                else
+                {
+                    bool collapsed;
+                    if (PerLevelUI.BeginPerLevelBlock(skillDurationProp, out collapsed, "Use Per-Level Duration"))
+                    {
+                        if (!collapsed)
+                        {
+                            if (levelsProp != null)
+                            {
+                                PerLevelUI.DrawIntLevels(levelsProp, "Duration by Level (turns)");
+                            }
+                            else
+                            {
+                                EditorGUILayout.HelpBox("'durationLevels' property not found on skillDuration.", MessageType.Error);
+                            }
+                        }
+
+                        if (levelsProp != null)
+                        {
+                            PerLevelUI.EnsureSize(levelsProp, 4);
+                            int currentLevel = LevelContext.GetSkillLevel(serializedObject);
+                            int idx = Mathf.Clamp(currentLevel - 1, 0, 3);
+                            int value = levelsProp.GetArrayElementAtIndex(idx).intValue;
+                            if (value == 0)
+                                value = durationValueProp.intValue;
+                            EditorGUILayout.HelpBox($"Duration @L{currentLevel}: {value} turn(s)", MessageType.Info);
+                        }
+                    }
+                    else
+                    {
+                        EditorGUILayout.PropertyField(durationValueProp, new GUIContent("Duration (turns)"));
+                    }
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("'skillDuration' property not found on SkillDefinition.", MessageType.Error);
             }
 
             // 类型与通用数值（注意 Mastery 的 N/A）

@@ -188,12 +188,18 @@ namespace TGD.Data
 
         public int ResolveDuration(SkillDefinition skill)
         {
+            bool followSkillDuration = (visibleFields & EffectFieldMask.Duration) == 0;
+            if (followSkillDuration && skill != null)
+                return skill.ResolveDuration();
+
+            int level = skill != null ? skill.skillLevel : 1;
+
             if (perLevel && durationLevels != null && durationLevels.Length >= 4)
             {
-                int idx = Mathf.Clamp(skill.skillLevel - 1, 0, 3);
+                int idx = Mathf.Clamp(level - 1, 0, 3);
                 if (durationLevels[idx] != 0) return durationLevels[idx];
             }
-            return (int)duration; // 回退
+            return (int)duration; // fallback
         }
 
         public string ResolveProbability(SkillDefinition skill)

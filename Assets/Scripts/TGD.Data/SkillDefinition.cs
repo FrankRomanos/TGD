@@ -14,6 +14,48 @@ namespace TGD.Data
         public CostResourceType resourceType = CostResourceType.Energy;
         public int amount = 0;
     }
+    [System.Serializable]
+    public class SkillDurationSettings
+    {
+        public int duration = 0;
+        public bool perLevel = false;
+        public int[] durationLevels = new int[4];
+
+        public SkillDurationSettings()
+        {
+        }
+
+        public SkillDurationSettings(SkillDurationSettings other)
+        {
+            if (other == null)
+            {
+                duration = 0;
+                perLevel = false;
+                durationLevels = new int[4];
+                return;
+            }
+
+            duration = other.duration;
+            perLevel = other.perLevel;
+            durationLevels = other.durationLevels != null
+                ? (int[])other.durationLevels.Clone()
+                : new int[4];
+        }
+
+        public int Resolve(int level)
+        {
+            if (perLevel && durationLevels != null && durationLevels.Length >= 4)
+            {
+                int idx = Mathf.Clamp(level - 1, 0, 3);
+                int value = durationLevels[idx];
+                if (value != 0)
+                    return value;
+            }
+
+            return duration;
+        }
+    }
+
 
     // 技能颜色
     public enum SkillColor
@@ -62,9 +104,26 @@ namespace TGD.Data
         public SkillColor skillColor = SkillColor.None;
         [Range(1, 4)]
         public int skillLevel = 1; // 仅标记“当前等级”；真正的每级数值在 EffectDefinition 中 perLevel 填写
+        public SkillDurationSettings skillDuration = new SkillDurationSettings();
+        private void OnValidate()
+        {
+            if (skillDuration == null)
+                skillDuration = new SkillDurationSettings();
+        }
+
 
         // 技能效果
         public List<EffectDefinition> effects = new List<EffectDefinition>();
+
+        public int ResolveDuration()
+        {
+            return skillDuration != null ? skillDuration.Resolve(skillLevel) : 0;
+        }
+
+        public int ResolveDuration(int level)
+        {
+            return skillDuration != null ? skillDuration.Resolve(level) : 0;
+        }
 
         public void RecalculateDerived(int baseTurnTimeSeconds = 6)
         {
