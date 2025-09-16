@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
@@ -13,6 +14,8 @@ namespace TGD.Editor
         private SerializedProperty skillColorProp;
         private SerializedProperty skillLevelProp;
         private SerializedProperty skillDurationProp;
+
+        private static readonly Dictionary<string, bool> s_PerLevelDurationCollapsed = new();
 
         private static readonly SkillColor[] kLeveledColors = new[]
         {
@@ -205,9 +208,62 @@ namespace TGD.Editor
                 var drawer = EffectDrawerRegistry.Get(type);
                 drawer.Draw(element);
                 // Display duration field based on Skill level (if relevant for effect)
-                if (FieldVisibilityUI.Toggle(element, EffectFieldMask.Duration, "Show Duration"))
+                if (FieldVisibilityUI.Toggle(element, EffectFieldMask.Duration, "Duration"))
                 {
-                    EditorGUILayout.PropertyField(element.FindPropertyRelative("duration"), new GUIContent("Duration (turns)"));
+                    var durationProp = element.FindPropertyRelative("duration");
+                    var perLevelProp = element.FindPropertyRelative("perLevel");
+                    var durationLevelsProp = element.FindPropertyRelative("durationLevels");
+
+                    bool hasDurationProp = durationProp != null;
+                    bool hasLevelArray = durationLevelsProp != null;
+                    bool perLevelEnabled = perLevelProp != null && perLevelProp.boolValue && hasLevelArray;
+
+                    if (hasDurationProp)
+                    {
+                        string label = perLevelEnabled ? "Default Duration (turns)" : "Duration (turns)";
+                        EditorGUILayout.PropertyField(durationProp, new GUIContent(label));
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("'duration' property not found on effect.", MessageType.Warning);
+                    }
+
+                    int currentLevel = LevelContext.GetSkillLevel(element.serializedObject);
+                    int resolvedDuration = hasDurationProp ? (int)durationProp.floatValue : 0;
+
+                    if (perLevelEnabled)
+                    {
+                        string collapseKey = element.propertyPath + "_durationCollapsed";
+                        s_PerLevelDurationCollapsed.TryGetValue(collapseKey, out bool collapsed);
+
+                        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                        EditorGUILayout.LabelField("Per-Level Duration", EditorStyles.boldLabel);
+                        GUILayout.FlexibleSpace();
+                        bool newCollapsed = GUILayout.Toggle(collapsed,
+                            collapsed ? "Show Edit Fields" : "Hide Edit Fields",
+                            EditorStyles.miniButton);
+                        if (newCollapsed != collapsed)
+                        {
+                            collapsed = newCollapsed;
+                            s_PerLevelDurationCollapsed[collapseKey] = collapsed;
+                        }
+                        EditorGUILayout.EndHorizontal();
+
+                        if (!collapsed)
+                        {
+                            PerLevelUI.DrawIntLevels(durationLevelsProp, "Duration by Level (turns)");
+                        }
+
+                        PerLevelUI.EnsureSize(durationLevelsProp, 4);
+                        int idx = Mathf.Clamp(currentLevel - 1, 0, 3);
+                        int levelValue = durationLevelsProp.GetArrayElementAtIndex(idx).intValue;
+                        if (levelValue != 0)
+                        {
+                            resolvedDuration = levelValue;
+                        }
+                    }
+
+                    EditorGUILayout.HelpBox($"Duration @L{currentLevel}: {resolvedDuration} turn(s)", MessageType.Info);
                 }
 
                 if (GUILayout.Button("Remove Effect"))
