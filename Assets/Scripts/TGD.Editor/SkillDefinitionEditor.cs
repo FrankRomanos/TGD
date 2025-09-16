@@ -134,6 +134,7 @@ namespace TGD.Editor
             {
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("timeCostSeconds"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("targetType"));
+
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownSeconds"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownRounds"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("range"));

@@ -12,9 +12,10 @@ namespace TGD.Editor
         {
             // 在这里注册所有 Drawer
             Register(EffectType.GainResource, new GainResourceDrawer());
+            Register(EffectType.ModifySkill, new ModifySkillDrawer());
             Register(EffectType.ApplyStatus, new ApplyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
-            Register(EffectType.ModifyActionDamage, new ModifyActionDamageDrawer());
+
             Register(EffectType.ReplaceSkill, new ReplaceSkillDrawer());
             Register(EffectType.ConditionalEffect, new ConditionalEffectDrawer());
             // 兜底
@@ -22,10 +23,11 @@ namespace TGD.Editor
             // 同时作为 Default
             Register((EffectType)(-1), new DefaultEffectDrawer());
             // 直接将注册放到 EffectDrawerRegistry 中
-            Register(EffectType.CooldownModifier, new CooldownModifierDrawer());
+
             Register(EffectType.AttributeModifier, new AttributeModifierDrawer());
             Register(EffectType.Damage, new DamageDrawer());
             Register(EffectType.Heal, new HealDrawer());
+            Register(EffectType.Move, new MoveDrawer());
 
 
         }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using static UnityEngine.UI.CanvasScaler;
 namespace TGD.Data
 {
     public enum TargetType
@@ -33,14 +34,14 @@ namespace TGD.Data
         ScalingBuff,      // ✅ 每点资源提升属性
         ApplyStatus,      // Buff/Debuff（skillID 状态）
         ConditionalEffect,
+        ModifySkill,
         ReplaceSkill,
-        CooldownModifier,
-        ResetCooldown,
-        SetSkillTimeCost,
-        ModifySkillTimeCost,
+        Move,                // 统一的技能调整入口
         ModifyActionDamage,   // 🔹 新增
         AttributeModifier
     }
+
+
     public enum DamageSchool { Physical, Magical, True }
     [Serializable]
     public enum EffectCondition
@@ -98,7 +99,51 @@ namespace TGD.Data
         Percentage,  // % 提升
         Flat         // 固定值
     }
-    // 在 namespace TGD.Data 里，EffectDefinition 同级位置新增：
+
+    public enum SkillModifyType
+    {
+        None,
+        Range,
+        CooldownModify,
+        CooldownReset,
+        TimeCost,
+        Damage,
+        Heal,
+        ResourceCost
+    }
+
+    public enum SkillModifyOperation
+    {
+        Add,
+        Override,
+        Multiply
+    }
+
+    public enum MoveSubject
+    {
+        Caster,
+        PrimaryTarget,
+        SecondaryTarget
+    }
+
+    public enum MoveDirection
+    {
+        Forward,
+        Backward,
+        Left,
+        Right,
+        TowardTarget,
+        AwayFromTarget,
+        AbsoluteOffset
+    }
+
+    public enum MoveExecution
+    {
+        Step,
+        Dash,
+        Teleport
+    }
+
     [System.Flags]
     public enum EffectFieldMask
     {
@@ -157,16 +202,33 @@ namespace TGD.Data
         public float compareValue;
         public List<EffectDefinition> onSuccess = new();
 
-        // ========== CooldownModifier 专用 ==========
 
-        public int cooldownChangeSeconds = 0; // 冷却变化（正数=增加，负数=减少）
 
         // ===== Buff/Debuff =====
         public string statusSkillID;        // 传统 Buff/Debuff 用 skillID
-
-        // ===== ReplaceSkill =====
-        public string targetSkillID;        // 原技能ID
+        // ===== Skill References =====
+        public string targetSkillID;        // 原技能ID/被修改技能
         public string replaceSkillID;       // 替换后技能ID
+        public bool inheritReplacedCooldown = true; // 替换后是否沿用原冷却
+
+        // ===== Modify Skill =====
+        public SkillModifyType skillModifyType = SkillModifyType.None;
+        public SkillModifyOperation skillModifyOperation = SkillModifyOperation.Add;
+        public bool modifyAffectsAllCosts = true;
+        public CostResourceType modifyCostResource = CostResourceType.Energy;
+        public bool resetCooldownToMax = true; // ModifySkill: 冷却重置时是否刷新为全新冷却
+
+        // ===== Move Effect =====
+        public MoveSubject moveSubject = MoveSubject.Caster;
+        public MoveExecution moveExecution = MoveExecution.Step;
+        public MoveDirection moveDirection = MoveDirection.Forward;
+        public int moveDistance = 1;
+        public int moveMaxDistance = 0;
+        public Vector2Int moveOffset = Vector2Int.zero;
+        public bool forceMovement = true;
+        public bool allowPartialMove = false;
+        public bool moveIgnoreObstacles = false;
+        public bool moveStopAdjacentToTarget = true;
 
         // ===== ScalingBuff 专用 =====
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
@@ -212,9 +274,6 @@ namespace TGD.Data
             }
             return probability; // 回退
         }
-
-
-
 
     }
 }
