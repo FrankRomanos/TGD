@@ -15,6 +15,9 @@ namespace TGD.Core
         // 能量/职业资源
         public int Energy, MaxEnergy, EnergyRegenPer2s;
 
+        // Posture (class exclusive resource)
+        public int Posture, MaxPosture;
+
         // 防御/暴击
         public int Armor;
         public int Crit;            // 30 点 = 1% 暴击

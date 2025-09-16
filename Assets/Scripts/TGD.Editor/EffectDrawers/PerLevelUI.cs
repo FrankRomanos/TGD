@@ -65,15 +65,19 @@ namespace TGD.Editor
 
         /// <summary>只读预览：展示当前技能等级会用到的值。</summary>
         public static void DrawPreviewForCurrentLevel(
-            SerializedProperty elem, int level, bool showDuration, bool showProb)
+             SerializedProperty elem, int level, bool showDuration, bool showProb, bool showStacks = false)
         {
             var vals = elem.FindPropertyRelative("valueExprLevels");
             var durs = elem.FindPropertyRelative("durationLevels");
             var probs = elem.FindPropertyRelative("probabilityLvls");
+            var stacks = showStacks ? elem.FindPropertyRelative("stackCountLevels") : null;
 
             EnsureSize(vals, 4);
             EnsureSize(durs, 4);
             EnsureSize(probs, 4);
+            if (stacks != null)
+                EnsureSize(stacks, 4);
+
 
             int idx = Mathf.Clamp(level - 1, 0, 3);
 
@@ -94,6 +98,23 @@ namespace TGD.Editor
             {
                 var p = probs.GetArrayElementAtIndex(idx).stringValue;
                 EditorGUILayout.LabelField($"Probability @L{level}", string.IsNullOrEmpty(p) ? "(empty)" : p);
+            }
+
+            if (showStacks)
+            {
+                int stackValue = 0;
+                if (stacks != null)
+                    stackValue = stacks.GetArrayElementAtIndex(idx).intValue;
+
+                if (stackValue == 0)
+                {
+                    var stackDefault = elem.FindPropertyRelative("stackCount");
+                    if (stackDefault != null)
+                        stackValue = stackDefault.intValue;
+                }
+
+                string stackLabel = stackValue > 0 ? stackValue.ToString() : "(default)";
+                EditorGUILayout.LabelField($"Stacks @L{level}", stackLabel);
             }
 
             EditorGUI.indentLevel--;

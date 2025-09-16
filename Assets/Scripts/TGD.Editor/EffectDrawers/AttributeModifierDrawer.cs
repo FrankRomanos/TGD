@@ -64,12 +64,16 @@ namespace TGD.Editor
                         if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                             PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("probabilityLvls"),
                                 "Probability by Level (%)");
+
+                        if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Stacks, "Stacks"))
+                            PerLevelUI.DrawIntLevels(elem.FindPropertyRelative("stackCountLevels"),
+                                "Stacks by Level");
                     }
 
                     int curLv = LevelContext.GetSkillLevel(elem.serializedObject);
                     bool showD = FieldVisibilityUI.Has(elem, EffectFieldMask.Duration);
                     bool showP = FieldVisibilityUI.Has(elem, EffectFieldMask.Probability);
-                    PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showD, showP);
+                    PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showD, showP, FieldVisibilityUI.Has(elem, EffectFieldMask.Stacks));
                 }
                 else
                 {
@@ -79,10 +83,11 @@ namespace TGD.Editor
                         new GUIContent("Value Expression (e.g. '10', 'p', 'atk*0.5')")
                     );
 
-
-
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                         EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
+
+                    if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Stacks, "Stacks"))
+                        DrawStackCountField(elem);
                 }
             }
 
@@ -108,6 +113,20 @@ namespace TGD.Editor
                         new GUIContent("Consume Status On Trigger"));
                 }
             }
+        }
+
+        private void DrawStackCountField(SerializedProperty elem)
+        {
+            var stacksProp = elem.FindPropertyRelative("stackCount");
+            if (stacksProp == null)
+            {
+                EditorGUILayout.HelpBox("'stackCount' property not found on effect.", MessageType.Warning);
+                return;
+            }
+
+            EditorGUILayout.PropertyField(stacksProp, new GUIContent("Stack Count"));
+            if (stacksProp.intValue < 1)
+                stacksProp.intValue = 1;
         }
     }
 }

@@ -15,7 +15,7 @@ namespace TGD.Editor
             Register(EffectType.ModifySkill, new ModifySkillDrawer());
             Register(EffectType.ApplyStatus, new ApplyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
-
+            Register(EffectType.ModifyAction, new ModifyActionDrawer());
             Register(EffectType.ReplaceSkill, new ReplaceSkillDrawer());
             Register(EffectType.ConditionalEffect, new ConditionalEffectDrawer());
             // ¶µµ×
@@ -28,7 +28,7 @@ namespace TGD.Editor
             Register(EffectType.Damage, new DamageDrawer());
             Register(EffectType.Heal, new HealDrawer());
             Register(EffectType.Move, new MoveDrawer());
-
+            Register(EffectType.MasteryPosture, new MasteryPostureDrawer());
 
         }
 

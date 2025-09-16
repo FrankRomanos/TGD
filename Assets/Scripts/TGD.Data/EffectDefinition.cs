@@ -37,8 +37,9 @@ namespace TGD.Data
         ModifySkill,
         ReplaceSkill,
         Move,                // 统一的技能调整入口
-        ModifyActionDamage,   // 🔹 新增
-        AttributeModifier
+        ModifyAction,
+        AttributeModifier,
+        MasteryPosture
     }
 
 
@@ -70,7 +71,8 @@ namespace TGD.Data
         combo,
         punch,
         qi,
-        vision
+        vision,
+        posture
     }
 
     [Serializable]
@@ -98,6 +100,12 @@ namespace TGD.Data
     {
         Percentage,  // % 提升
         Flat         // 固定值
+    }
+    public enum ActionModifyType
+    {
+        None,
+        Damage,
+        ActionType
     }
 
     public enum SkillModifyType
@@ -155,6 +163,7 @@ namespace TGD.Data
         Crit = 1 << 4,  // 可暴击
         School = 1 << 5,  // 伤害学派（仅 Damage 用）
         PerLevel = 1 << 6,  // 等级分段编辑开关
+        Stacks = 1 << 7,    // Buff 层数
     }
 
 
@@ -168,6 +177,8 @@ namespace TGD.Data
         public AttributeType attributeType;
         public ActionType targetActionType;  // ✅ 直接用已有的 ActionType
         public ModifierType modifierType;
+        public ActionModifyType actionModifyType = ActionModifyType.None;
+        public ActionType actionTypeOverride = ActionType.None;
         public string valueExpression;
         public float value;            // Damage/Heal 等常规效果
         public float duration;         // 持续时间（回合）
@@ -195,6 +206,8 @@ namespace TGD.Data
         public string[] valueExprLevels = new string[4];  // L1~L4 的“数值/公式”，如 "atk*0.6"
         public int[] durationLevels = new int[4];     // L1~L4 的持续回合
         public string[] probabilityLvls = new string[4];  // L1~L4 的概率（"p" 或 "35"）
+        public int[] stackCountLevels = new int[4];       // L1~L4 的层数
+        public int stackCount = 1;
 
         // ===== Resource / Condition =====
         public ResourceType resourceType = ResourceType.Discipline;
@@ -234,6 +247,9 @@ namespace TGD.Data
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
         public int maxStacks = 0;                  // 0 = unlimited
         public ScalingAttribute scalingAttribute = ScalingAttribute.Attack;
+
+        // ===== Mastery: Posture Engine =====
+        public MasteryPostureSettings masteryPosture = new MasteryPostureSettings();
 
         // —— 解析当前技能等级应使用的表达式/持续/概率 ——
         // 注意：这里返回的是 string/int/string，表达式留给你的公式求值器去算
