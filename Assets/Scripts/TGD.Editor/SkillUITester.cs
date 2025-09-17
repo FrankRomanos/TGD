@@ -23,7 +23,7 @@ namespace TGD.UI
         private GUIStyle effectTitleStyle;       // Effect标题样式（如"Effect 1"）
         private GUIStyle effectItemContainerStyle;// 单个Effect容器样式（背景、边框宽度）
         private GUIStyle effectContentStyle;      // Effect内容文本样式（字体大小、颜色）
-
+        private readonly Dictionary<SkillColor, GUIStyle> skillColorTextStyles = new();
         [MenuItem("Tools/Skill/简化版UI测试窗口")]
         public static void OpenTestWindow()
         {
@@ -132,9 +132,15 @@ namespace TGD.UI
 
                 // 原有：技能名称/描述/属性
                 GUILayout.Label("技能名称：");
-                EditorGUILayout.TextArea(GetLocalizedDesc(selectedSkill.namekey), GUILayout.Height(40));
+                EditorGUILayout.TextArea(
+     GetLocalizedDesc(selectedSkill.namekey),
+     GetSkillTextStyle(selectedSkill.skillColor),
+     GUILayout.Height(40));
                 GUILayout.Label("技能描述：");
-                EditorGUILayout.TextArea(GetLocalizedDesc(selectedSkill.descriptionKey), GUILayout.Height(50));
+                EditorGUILayout.TextArea(
+            GetLocalizedDesc(selectedSkill.descriptionKey),
+            GetSkillTextStyle(selectedSkill.skillColor),
+            GUILayout.Height(50));
                 GUILayout.Label("基础属性：", EditorStyles.miniBoldLabel);
                 GUILayout.Label($"职业：{selectedSkill.classID}");
                 GUILayout.Label($"动作类型：{selectedSkill.actionType}");
@@ -217,6 +223,47 @@ namespace TGD.UI
                 effectContentStyle.wordWrap = true; // 自动换行
                 effectContentStyle.padding = new RectOffset(0, 0, 3, 0); // 优化行间距
                 effectContentStyle.normal.textColor = new Color(0.8f, 0.7f, 0.3f);
+            }
+        }
+        private GUIStyle GetSkillTextStyle(SkillColor color)
+        {
+            if (color == SkillColor.None)
+            {
+                return EditorStyles.textArea;
+            }
+
+            if (!skillColorTextStyles.TryGetValue(color, out GUIStyle style))
+            {
+                style = new GUIStyle(EditorStyles.textArea);
+                Color resolvedColor = ResolveSkillColor(color);
+                style.normal.textColor = resolvedColor;
+                style.focused.textColor = resolvedColor;
+                style.hover.textColor = resolvedColor;
+                style.active.textColor = resolvedColor;
+                skillColorTextStyles[color] = style;
+            }
+
+            return style;
+        }
+
+        private Color ResolveSkillColor(SkillColor color)
+        {
+            switch (color)
+            {
+                case SkillColor.DeepBlue:
+                    return new Color(0.2f, 0.55f, 0.95f);
+                case SkillColor.DarkYellow:
+                    return new Color(0.86f, 0.67f, 0.2f);
+                case SkillColor.Green:
+                    return new Color(0.35f, 0.78f, 0.38f);
+                case SkillColor.Purple:
+                    return new Color(0.7f, 0.45f, 0.9f);
+                case SkillColor.LightBlue:
+                    return new Color(0.45f, 0.85f, 1f);
+                case SkillColor.Red:
+                    return new Color(0.94f, 0.37f, 0.37f);
+                default:
+                    return EditorStyles.textArea.normal.textColor;
             }
         }
 
