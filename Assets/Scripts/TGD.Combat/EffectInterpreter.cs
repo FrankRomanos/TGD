@@ -27,6 +27,7 @@ namespace TGD.Combat
                     ConditionOnCrit = workingContext.ConditionOnCrit,
                     ConditionOnCooldownEnd = workingContext.ConditionOnCooldownEnd,
                     ConditionAfterSkillUse = workingContext.ConditionAfterSkillUse,
+                    LastSkillUsedID = workingContext.LastSkillUsedID,
                     ConditionSkillStateActive = workingContext.ConditionSkillStateActive,
                     ConditionOnResourceSpend = workingContext.ConditionOnResourceSpend,
                     LastResourceSpendAmount = workingContext.LastResourceSpendAmount,
@@ -493,7 +494,14 @@ namespace TGD.Combat
                 case EffectCondition.OnCooldownEnd:
                     return context.ConditionOnCooldownEnd;
                 case EffectCondition.AfterSkillUse:
-                    return context.ConditionAfterSkillUse;
+                    if (!context.ConditionAfterSkillUse)
+                        return false;
+                    string requiredSkill = effect.conditionSkillUseID;
+                    if (string.IsNullOrWhiteSpace(requiredSkill) || string.Equals(requiredSkill, "any", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    string lastSkill = context.LastSkillUsedID;
+                    return !string.IsNullOrWhiteSpace(lastSkill) &&
+                           string.Equals(requiredSkill, lastSkill, StringComparison.OrdinalIgnoreCase);
                 case EffectCondition.SkillStateActive:
                     return context.ConditionSkillStateActive;
                 case EffectCondition.OnNextSkillSpendResource:

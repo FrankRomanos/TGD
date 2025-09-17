@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
@@ -51,6 +52,41 @@ namespace TGD.Editor
                 if (p != null) return p;
             }
             return null;
+        }
+
+        public static void DrawConditionFields(SerializedProperty elem, SerializedProperty conditionProp = null)
+        {
+            if (elem == null)
+                return;
+
+            var condProp = conditionProp ?? elem.FindPropertyRelative("condition");
+            if (condProp == null)
+                return;
+
+            var condition = (EffectCondition)condProp.enumValueIndex;
+            switch (condition)
+            {
+                case EffectCondition.AfterSkillUse:
+                    var skillProp = elem.FindPropertyRelative("conditionSkillUseID");
+                    if (skillProp != null)
+                    {
+                        EditorGUILayout.PropertyField(skillProp, new GUIContent("Skill Use ID"));
+                        if (string.IsNullOrWhiteSpace(skillProp.stringValue) ||
+                            string.Equals(skillProp.stringValue, "any", StringComparison.OrdinalIgnoreCase))
+                        {
+                            EditorGUILayout.HelpBox("Leave empty or enter 'any' to react to any skill usage.", MessageType.Info);
+                        }
+                    }
+                    break;
+                case EffectCondition.OnNextSkillSpendResource:
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
+                        new GUIContent("Cond. Resource"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
+                        new GUIContent("Min Spend"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
+                        new GUIContent("Consume Status On Trigger"));
+                    break;
+            }
         }
     }
 }

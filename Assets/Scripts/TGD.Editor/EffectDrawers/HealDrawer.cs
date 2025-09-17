@@ -39,7 +39,11 @@ namespace TGD.Editor
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("target"), new GUIContent("Target"));
 
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Condition, "Trigger Condition"))
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("condition"), new GUIContent("Trigger Condition"));
+            {
+                var conditionProp = elem.FindPropertyRelative("condition");
+                EditorGUILayout.PropertyField(conditionProp, new GUIContent("Trigger Condition"));
+                FieldVisibilityUI.DrawConditionFields(elem, conditionProp);
+            }
         }
     }
 }

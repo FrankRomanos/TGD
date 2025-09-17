@@ -74,6 +74,7 @@ namespace TGD.Combat
         public bool ConditionOnCrit { get; set; }
         public bool ConditionOnCooldownEnd { get; set; }
         public bool ConditionAfterSkillUse { get; set; }
+        public string LastSkillUsedID { get; set; }
         public bool ConditionSkillStateActive { get; set; }
         public bool ConditionOnResourceSpend { get; set; }
         public ResourceType? LastResourceSpendType { get; set; }
@@ -120,6 +121,7 @@ namespace TGD.Combat
                 ConditionOnCrit = ConditionOnCrit,
                 ConditionOnCooldownEnd = ConditionOnCooldownEnd,
                 ConditionAfterSkillUse = ConditionAfterSkillUse,
+                LastSkillUsedID = LastSkillUsedID,
                 ConditionSkillStateActive = ConditionSkillStateActive,
                 ConditionOnResourceSpend = ConditionOnResourceSpend,
                 LastResourceSpendType = LastResourceSpendType,

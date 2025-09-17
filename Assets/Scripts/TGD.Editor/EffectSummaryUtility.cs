@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Globalization;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -590,14 +591,27 @@ namespace TGD.Editor
             sb.Append("Condition: ");
             sb.Append(condition);
 
-            if (condition == EffectCondition.OnNextSkillSpendResource)
+            switch (condition)
             {
-                string resource = GetEnumName(effectProp.FindPropertyRelative("conditionResourceType"), ResourceType.Discipline);
-                int minAmount = effectProp.FindPropertyRelative("conditionMinAmount")?.intValue ?? 1;
-                bool consume = effectProp.FindPropertyRelative("consumeStatusOnTrigger")?.boolValue ?? true;
-                sb.Append($" (resource: {resource}, ≥{minAmount}");
-                if (consume) sb.Append(", consumes status");
-                sb.Append(')');
+                case EffectCondition.AfterSkillUse:
+                    string skillId = effectProp.FindPropertyRelative("conditionSkillUseID")?.stringValue;
+                    if (string.IsNullOrWhiteSpace(skillId) || string.Equals(skillId, "any", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sb.Append(" (skill: any)");
+                    }
+                    else
+                    {
+                        sb.Append($" (skill: '{skillId}')");
+                    }
+                    break;
+                case EffectCondition.OnNextSkillSpendResource:
+                    string resource = GetEnumName(effectProp.FindPropertyRelative("conditionResourceType"), ResourceType.Discipline);
+                    int minAmount = effectProp.FindPropertyRelative("conditionMinAmount")?.intValue ?? 1;
+                    bool consume = effectProp.FindPropertyRelative("consumeStatusOnTrigger")?.boolValue ?? true;
+                    sb.Append($" (resource: {resource}, ≥{minAmount}");
+                    if (consume) sb.Append(", consumes status");
+                    sb.Append(')');
+                    break;
             }
 
             return sb.ToString();

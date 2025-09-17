@@ -199,6 +199,9 @@ namespace TGD.Data
     EffectFieldMask.Condition |
     EffectFieldMask.PerLevel;   // 默认全开；你可按需改默认
 
+
+        // —— 条件参数 ——
+        public string conditionSkillUseID;  // AfterSkillUse: 指定触发的技能ID（空/any = 任意技能）
         // —— 条件参数（仅当 condition == OnNextSkillSpendResource 时使用）——
         public ResourceType conditionResourceType;  // 例如 Discipline
         public int conditionMinAmount = 1;  // 最小花费（默认≥1）

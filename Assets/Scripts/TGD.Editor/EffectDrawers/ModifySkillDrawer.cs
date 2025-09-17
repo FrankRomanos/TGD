@@ -152,15 +152,7 @@ namespace TGD.Editor
             var condProp = elem.FindPropertyRelative("condition");
             EditorGUILayout.PropertyField(condProp, new GUIContent("Trigger Condition"));
 
-            if ((EffectCondition)condProp.enumValueIndex == EffectCondition.OnNextSkillSpendResource)
-            {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
-                    new GUIContent("Cond. Resource"));
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
-                    new GUIContent("Min Spend"));
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
-                    new GUIContent("Consume Status On Trigger"));
-            }
+            FieldVisibilityUI.DrawConditionFields(elem, condProp);
         }
 
         private void DrawSummary(SerializedProperty elem, SkillModifyType type)

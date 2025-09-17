@@ -13,7 +13,9 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(elem.FindPropertyRelative("target"), new UnityEngine.GUIContent("Target"));
             EditorGUILayout.PropertyField(elem.FindPropertyRelative("statusSkillID"), new UnityEngine.GUIContent("Status Skill ID"));
             EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new UnityEngine.GUIContent("Probability (%)"));
-            EditorGUILayout.PropertyField(elem.FindPropertyRelative("condition"), new UnityEngine.GUIContent("Trigger Condition"));
+            var conditionProp = elem.FindPropertyRelative("condition");
+            EditorGUILayout.PropertyField(conditionProp, new UnityEngine.GUIContent("Trigger Condition"));
+            FieldVisibilityUI.DrawConditionFields(elem, conditionProp);
         }
     }
 }

@@ -1,5 +1,4 @@
-// Assets/Scripts/TGD.Editor/EffectDrawers/AttributeModifierDrawer.cs
-using UnityEditor;
+ï»¿using UnityEditor;
 using UnityEngine;
 using TGD.Data;
 
@@ -19,36 +18,36 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(attrProp, new GUIContent("Attribute"));
             AttributeType attr = (AttributeType)attrProp.enumValueIndex;
 
-            // ====== NEW: DamageReduction ×¨ÓÃ UI Ô¼Êø ======
+            // ====== NEW: DamageReduction ×¨ UI Ô¼ ======
             bool isDamageReduction = (attr == AttributeType.DamageReduction);
 
             if (isDamageReduction)
             {
-                // ModifierType ¹Ì¶¨Îª Percentage
+                // ModifierType å›ºå®šä¸º Percentage
                 if (modProp != null) modProp.enumValueIndex = (int)ModifierType.Percentage;
                 EditorGUI.BeginDisabledGroup(true);
                 EditorGUILayout.PropertyField(modProp, new GUIContent("Modifier Type (fixed as Percentage)"));
                 EditorGUI.EndDisabledGroup();
 
-                // Target ¹Ì¶¨Îª Self
+                // Target å›ºå®šä¸º Self
                 if (tgtProp != null) tgtProp.enumValueIndex = (int)TargetType.Self;
                 EditorGUI.BeginDisabledGroup(true);
                 EditorGUILayout.EnumPopup(new GUIContent("Target (fixed)"), TargetType.Self);
                 EditorGUI.EndDisabledGroup();
 
-                // ËµÃ÷
+                // è¯´æ˜
                 EditorGUILayout.HelpBox(
-                    "Damage Reduction: ×îÖÕ³ĞÉË°´ (1 - value) ½áËã£»ÀıÈç 0.25 = 25%¼õÉË¡£\n" +
-                    "½¨Òé°Ñ Duration ÉèÎª -1£¨Ëæ×´Ì¬´æĞø£©£¬»ò¾ßÌå»ØºÏÊı¡£",
+                    "Damage Reduction: æœ€ç»ˆæ‰¿ä¼¤æŒ‰ (1 - value) ç»“ç®—ï¼›ä¾‹å¦‚ 0.25 = 25%å‡ä¼¤ã€‚\n" +
+                    "å»ºè®®æŠŠ Duration è®¾ä¸º -1ï¼ˆéšçŠ¶æ€å­˜ç»­ï¼‰ï¼Œæˆ–å…·ä½“å›åˆæ•°ã€‚",
                     MessageType.Info);
             }
             else
             {
-                // ·Ç DamageReduction Õı³£ÏÔÊ¾ ModifierType
+                // é DamageReduction æ­£å¸¸æ˜¾ç¤º ModifierType
                 EditorGUILayout.PropertyField(modProp, new GUIContent("Modifier Type"));
             }
 
-            // ====== Per-Level Öµ & Ô¤ÀÀ ======
+            // ====== Per-Level å€¼ & é¢„è§ˆ ======
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Per-Level Values"))
             {
                 bool collapsed;
@@ -73,25 +72,27 @@ namespace TGD.Editor
                     int curLv = LevelContext.GetSkillLevel(elem.serializedObject);
                     bool showD = FieldVisibilityUI.Has(elem, EffectFieldMask.Duration);
                     bool showP = FieldVisibilityUI.Has(elem, EffectFieldMask.Probability);
-                    PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showD, showP, FieldVisibilityUI.Has(elem, EffectFieldMask.Stacks));
+                    PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showD, showP,
+         FieldVisibilityUI.Has(elem, EffectFieldMask.Stacks));
                 }
                 else
                 {
-                    // per-level OFF ¡ú µ¥Öµ
+                    // per-level OFF â†’ å•å€¼
                     EditorGUILayout.PropertyField(
                         elem.FindPropertyRelative("valueExpression"),
                         new GUIContent("Value Expression (e.g. '10', 'p', 'atk*0.5')")
                     );
 
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
-                        EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
+                        EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"),
+                         new GUIContent("Probability (%)"));
 
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Stacks, "Stacks"))
                         DrawStackCountField(elem);
                 }
             }
 
-            // Target£ºDamageReduction ÒÑ¾­¹Ì¶¨Îª Self£¬²»ÔÙÏÔÊ¾¿ª¹Ø£»ÆäËûÊôĞÔÕÕ³£¿ÉÑ¡
+            // Targetï¼šDamageReduction å·²ç»å›ºå®šä¸º Selfï¼Œä¸å†æ˜¾ç¤ºå¼€å…³ï¼›å…¶ä»–å±æ€§ç…§å¸¸å¯é€‰
             if (!isDamageReduction && FieldVisibilityUI.Toggle(elem, EffectFieldMask.Target, "Target"))
             {
                 EditorGUILayout.PropertyField(tgtProp, new GUIContent("Target"));
@@ -102,16 +103,7 @@ namespace TGD.Editor
                 var cond = elem.FindPropertyRelative("condition");
                 EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
 
-                // µ±Ìõ¼şÎª OnNextSkillSpendResource Ê±£¬ÏÔÊ¾¶îÍâ²ÎÊı£¨ÓëGainResourceÂß¼­Ò»ÖÂ£©
-                if ((EffectCondition)cond.enumValueIndex == EffectCondition.OnNextSkillSpendResource)
-                {
-                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
-                        new GUIContent("Cond. Resource"));
-                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
-                        new GUIContent("Min Spend"));
-                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
-                        new GUIContent("Consume Status On Trigger"));
-                }
+                FieldVisibilityUI.DrawConditionFields(elem, cond);
             }
         }
 

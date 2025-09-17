@@ -43,15 +43,7 @@ namespace TGD.Editor
             var cond = elem.FindPropertyRelative("condition");
             EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
             // 仅当选择 OnNextSkillSpendResource 时展示附加参数
-            if ((EffectCondition)cond.enumValueIndex == EffectCondition.OnNextSkillSpendResource)
-            {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
-                    new GUIContent("Cond. Resource"));
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionMinAmount"),
-                    new GUIContent("Min Spend"));
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
-                    new GUIContent("Consume Status On Trigger"));
-            }
+            FieldVisibilityUI.DrawConditionFields(elem, cond);
         }
     }
 }
