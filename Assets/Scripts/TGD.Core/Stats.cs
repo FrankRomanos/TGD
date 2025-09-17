@@ -17,6 +17,7 @@ namespace TGD.Core
 
         // Posture (class exclusive resource)
         public int Posture, MaxPosture;
+        public int Strength, Agility;
 
         // ·ÀÓù/±©»÷
         public int Armor;
