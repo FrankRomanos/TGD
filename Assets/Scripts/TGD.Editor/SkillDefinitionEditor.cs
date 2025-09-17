@@ -1,4 +1,4 @@
-using UnityEditor;
+ï»¿using UnityEditor;
 using UnityEngine;
 using TGD.Data;
 
@@ -37,7 +37,7 @@ namespace TGD.Editor
         {
             serializedObject.Update();
 
-            // »ù´¡ĞÅÏ¢
+            // åŸºç¡€ä¿¡æ¯
             EditorGUILayout.PropertyField(serializedObject.FindProperty("skillID"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("skillName"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("icon"));
@@ -47,7 +47,7 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(serializedObject.FindProperty("chainNextID"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("resetOnTurnEnd"));
 
-            // ÑÕÉ« + µÈ¼¶
+            // é¢œè‰² + ç­‰çº§
             EditorGUILayout.PropertyField(skillColorProp, new GUIContent("Skill Color"));
 
             bool leveled = IsLeveledColor((SkillColor)skillColorProp.enumValueIndex);
@@ -57,8 +57,8 @@ namespace TGD.Editor
             }
             else
             {
-                skillLevelProp.intValue = 1; // ·ÇÎåÉ«²»·Ö¼¶
-                EditorGUILayout.HelpBox("´Ë¼¼ÄÜÑÕÉ«²»²ÎÓë 1~4 µÈ¼¶ÏµÍ³¡£Ã¿¼¶ÊıÖµÇëÖ±½ÓÔÚ Effects Àï°´ĞèÅäÖÃ£¨»ò²»ÅäÖÃ£©¡£", MessageType.Info);
+                skillLevelProp.intValue = 1; // éäº”è‰²ä¸åˆ†çº§
+                EditorGUILayout.HelpBox("æ­¤æŠ€èƒ½é¢œè‰²ä¸å‚ä¸ 1~4 ç­‰çº§ç³»ç»Ÿã€‚æ¯çº§æ•°å€¼è¯·ç›´æ¥åœ¨ Effects é‡ŒæŒ‰éœ€é…ç½®ï¼ˆæˆ–ä¸é…ç½®ï¼‰ã€‚", MessageType.Info);
             }
 
             EditorGUILayout.Space();
@@ -112,7 +112,7 @@ namespace TGD.Editor
                 EditorGUILayout.HelpBox("'skillDuration' property not found on SkillDefinition.", MessageType.Error);
             }
 
-            // ÀàĞÍÓëÍ¨ÓÃÊıÖµ£¨×¢Òâ Mastery µÄ N/A£©
+            // ç±»å‹ä¸é€šç”¨æ•°å€¼ï¼ˆæ³¨æ„ Mastery çš„ N/Aï¼‰
             EditorGUILayout.PropertyField(serializedObject.FindProperty("skillType"), new GUIContent("Skill Type"));
             var skillTypeProp = serializedObject.FindProperty("skillType");
 
@@ -128,7 +128,7 @@ namespace TGD.Editor
                 serializedObject.FindProperty("threat").floatValue = 0f;
                 serializedObject.FindProperty("shredMultiplier").floatValue = 0f;
 
-                EditorGUILayout.HelpBox("Mastery/Passive ²»ĞèÒª Target/TimeCost/Cooldown/Threat/Shred£¬ÒÑ×Ô¶¯ÉèÎª N/A¡£", MessageType.Info);
+                EditorGUILayout.HelpBox("Mastery/Passive ä¸éœ€è¦ Target/TimeCost/Cooldown/Threat/Shredï¼Œå·²è‡ªåŠ¨è®¾ä¸º N/Aã€‚", MessageType.Info);
             }
             else
             {
@@ -147,7 +147,7 @@ namespace TGD.Editor
 
             if (actionType == ActionType.FullRound)
             {
-                // Ç¿ÖÆĞ´ÉÚ±øÖµ -1£¬²¢Òş²Ø TimeCost ±à¼­
+                // å¼ºåˆ¶å†™å“¨å…µå€¼ -1ï¼Œå¹¶éšè— TimeCost ç¼–è¾‘
                 var timeProp = serializedObject.FindProperty("timeCostSeconds");
                 timeProp.intValue = -1;
 
@@ -155,7 +155,7 @@ namespace TGD.Editor
                     "Full Round: Consumes all remaining time this turn and ends the turn immediately. (Time Cost set to -1)",
                     MessageType.Info);
 
-                // ÆäËûÒÀÈ»¿É¼û£ºÀäÈ´¡¢Ìæ»»¡¢·¶Î§µÈ
+                // å…¶ä»–ä¾ç„¶å¯è§ï¼šå†·å´ã€æ›¿æ¢ã€èŒƒå›´ç­‰
             }
 
 
@@ -180,8 +180,44 @@ namespace TGD.Editor
                 if (GUILayout.Button("Add Cost"))
                     costsProp.InsertArrayElementAtIndex(costsProp.arraySize);
             }
+            // Use Conditions
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Use Conditions", EditorStyles.boldLabel);
+            var useConditionsProp = serializedObject.FindProperty("useConditions");
+            if (useConditionsProp != null)
+            {
+                for (int i = 0; i < useConditionsProp.arraySize; i++)
+                {
+                    var condElem = useConditionsProp.GetArrayElementAtIndex(i);
+                    EditorGUILayout.BeginVertical("box");
 
-            // Effects£¨½»ÓÉ Drawer äÖÈ¾£©
+                    EditorGUILayout.BeginHorizontal();
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("resourceType"), new GUIContent("Resource"));
+                    if (GUILayout.Button("Remove", GUILayout.Width(70)))
+                    {
+                        useConditionsProp.DeleteArrayElementAtIndex(i);
+                        EditorGUILayout.EndHorizontal();
+                        EditorGUILayout.EndVertical();
+                        break;
+                    }
+                    EditorGUILayout.EndHorizontal();
+
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareOp"), new GUIContent("Compare"));
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareValue"), new GUIContent("Value"));
+                    EditorGUILayout.HelpBox("Example: resource Discipline == 0 satisfies the condition.", MessageType.None);
+
+                    EditorGUILayout.EndVertical();
+                }
+
+                if (GUILayout.Button("Add Condition"))
+                    useConditionsProp.InsertArrayElementAtIndex(useConditionsProp.arraySize);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("'useConditions' property not found on SkillDefinition.", MessageType.Warning);
+            }
+
+            // Effectsï¼ˆäº¤ç”± Drawer æ¸²æŸ“ï¼‰
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Effects", EditorStyles.boldLabel);
 
@@ -207,7 +243,13 @@ namespace TGD.Editor
                 if (FieldVisibilityUI.Toggle(element, EffectFieldMask.Duration, "Duration"))
                 {
                     var durationProp = element.FindPropertyRelative("duration");
-                    var perLevelProp = element.FindPropertyRelative("perLevel");
+                    string perLevelPropertyName = "perLevelDuration";
+                    var perLevelProp = element.FindPropertyRelative(perLevelPropertyName);
+                    if (perLevelProp == null)
+                    {
+                        perLevelPropertyName = "perLevel";
+                        perLevelProp = element.FindPropertyRelative(perLevelPropertyName);
+                    }
                     var durationLevelsProp = element.FindPropertyRelative("durationLevels");
 
                     bool hasDurationProp = durationProp != null;
@@ -221,7 +263,10 @@ namespace TGD.Editor
 
                     if (perLevelUIVisible)
                     {
-                        perLevelEnabled = PerLevelUI.BeginPerLevelBlock(element, out collapsed, collapseKeySuffix: "_duration");
+                        perLevelEnabled = PerLevelUI.BeginPerLevelBlock(element, out collapsed,
+               useLabel: "Use Per-Level Duration",
+               collapseKeySuffix: "_duration",
+               perLevelPropertyName: perLevelPropertyName);
                     }
                     else if (hasPerLevelProp && hasLevelArray)
                     {

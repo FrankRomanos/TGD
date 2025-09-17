@@ -23,6 +23,7 @@ namespace TGD.Combat
                 {
                     ProfessionScaling = workingContext.ProfessionScaling,
                     IncomingDamage = workingContext.IncomingDamage,
+                    IncomingDamageMitigated = workingContext.IncomingDamageMitigated,
                     ConditionAfterAttack = workingContext.ConditionAfterAttack,
                     ConditionOnCrit = workingContext.ConditionOnCrit,
                     ConditionOnCooldownEnd = workingContext.ConditionOnCooldownEnd,
@@ -30,6 +31,8 @@ namespace TGD.Combat
                     LastSkillUsedID = workingContext.LastSkillUsedID,
                     ConditionSkillStateActive = workingContext.ConditionSkillStateActive,
                     ConditionOnResourceSpend = workingContext.ConditionOnResourceSpend,
+                    ConditionOnEffectEnd = workingContext.ConditionOnEffectEnd,
+                    ConditionOnDamageTaken = workingContext.ConditionOnDamageTaken,
                     LastResourceSpendAmount = workingContext.LastResourceSpendAmount,
                     LastResourceSpendType = workingContext.LastResourceSpendType,
                     SkillResolver = workingContext.SkillResolver,
@@ -45,6 +48,10 @@ namespace TGD.Combat
                 workingContext.ResourceValues.Clear();
                 foreach (var kvp in context?.ResourceValues ?? new Dictionary<ResourceType, float>())
                     workingContext.ResourceValues[kvp.Key] = kvp.Value;
+
+                workingContext.ResourceMaxValues.Clear();
+                foreach (var kvp in context?.ResourceMaxValues ?? new Dictionary<ResourceType, float>())
+                    workingContext.ResourceMaxValues[kvp.Key] = kvp.Value;
 
                 workingContext.ResourceSpent.Clear();
                 foreach (var kvp in context?.ResourceSpent ?? new Dictionary<ResourceType, float>())
@@ -85,6 +92,21 @@ namespace TGD.Combat
                     return result;
                 }
                 visited.Add(skillId);
+            }
+
+            if (context.Skill?.useConditions != null)
+            {
+                foreach (var condition in context.Skill.useConditions)
+                {
+                    var preview = new SkillUseConditionPreview
+                    {
+                        Resource = condition.resourceType,
+                        Comparison = condition.compareOp,
+                        CompareValue = condition.compareValue
+                    };
+                    result.SkillUseConditions.Add(preview);
+                    result.AddLog($"Use condition: {condition.resourceType} {condition.compareOp} {condition.compareValue}.");
+                }
             }
 
             foreach (var effect in context.Skill.effects)
@@ -214,9 +236,12 @@ namespace TGD.Combat
                 targets.Add(context.PrimaryTarget ?? context.Caster);
 
             string expression = ResolveValueExpression(effect, context);
+            bool fillToMax = IsMaxExpression(expression);
             foreach (var target in targets)
             {
-                float amount = EvaluateExpression(expression, context, target, effect.value);
+                float amount = fillToMax
+    ? CalculateMaxFillAmount(effect.resourceType, context, target)
+    : EvaluateExpression(expression, context, target, effect.value);
                 float probability = ResolveProbabilityValue(effect, context, target);
                 result.ResourceChanges.Add(new ResourceChangePreview
                 {
@@ -225,9 +250,17 @@ namespace TGD.Combat
                     Amount = amount,
                     Probability = probability,
                     Expression = expression,
-                    Condition = effect.condition
+                    Condition = effect.condition,
+                    FillToMax = fillToMax
                 });
-                result.AddLog($"Gain {amount:0.##} {effect.resourceType} for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                if (fillToMax)
+                {
+                    result.AddLog($"Restore {effect.resourceType} to max for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                }
+                else
+                {
+                    result.AddLog($"Gain {amount:0.##} {effect.resourceType} for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                }
             }
         }
 
@@ -513,6 +546,10 @@ namespace TGD.Combat
                     context.LastResourceSpendType = effect.conditionResourceType;
                     context.LastResourceSpendAmount = spent;
                     return true;
+                case EffectCondition.OnEffectEnd:
+                    return context.ConditionOnEffectEnd;
+                case EffectCondition.OnDamageTaken:
+                    return context.ConditionOnDamageTaken;
                 default:
                     return true;
             }
@@ -635,7 +672,7 @@ namespace TGD.Combat
             }
 
             int level = context.ResolveSkillLevel(context.Skill);
-            if (effect.perLevel && effect.durationLevels != null && effect.durationLevels.Length >= level)
+            if (UsesPerLevelDuration(effect) && effect.durationLevels != null && effect.durationLevels.Length >= level)
             {
                 int idx = Mathf.Clamp(level - 1, 0, effect.durationLevels.Length - 1);
                 int candidate = effect.durationLevels[idx];
@@ -675,6 +712,8 @@ namespace TGD.Combat
 
             map["p"] = context.ProfessionScaling;
             map["damage"] = context.IncomingDamage;
+            map["damage_pre"] = context.IncomingDamage;
+            map["damage_post"] = context.IncomingDamageMitigated;
             map["spent"] = context.LastResourceSpendAmount;
 
             if (context.LastResourceSpendType.HasValue)
@@ -694,6 +733,13 @@ namespace TGD.Combat
                 string key = kvp.Key.ToString().ToLowerInvariant();
                 map[key] = kvp.Value;
             }
+
+            foreach (var kvp in context.ResourceMaxValues)
+            {
+                string key = kvp.Key.ToString().ToLowerInvariant() + "_max";
+                map[key] = kvp.Value;
+            }
+
 
             map["skillLevel"] = context.ResolveSkillLevel(context.Skill);
             return map;
@@ -719,6 +765,58 @@ namespace TGD.Combat
             map[prefix + "maxposture"] = stats.MaxPosture;
         }
 
+        private static bool IsMaxExpression(string expression)
+        {
+            return !string.IsNullOrWhiteSpace(expression) &&
+                   string.Equals(expression.Trim(), "max", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static float CalculateMaxFillAmount(ResourceType resourceType, EffectContext context, Unit target)
+        {
+            float current = GetResourceValue(resourceType, context, target);
+            float max = GetResourceMaxValue(resourceType, context, target);
+            if (max <= 0f)
+                return 0f;
+            return Mathf.Max(0f, max - current);
+        }
+
+        private static float GetResourceValue(ResourceType resourceType, EffectContext context, Unit target)
+        {
+            if (target?.Stats != null)
+            {
+                switch (resourceType)
+                {
+                    case ResourceType.HP:
+                        return target.Stats.HP;
+                    case ResourceType.Energy:
+                        return target.Stats.Energy;
+                    case ResourceType.posture:
+                        return target.Stats.Posture;
+                }
+            }
+
+            return context.GetResourceAmount(resourceType);
+        }
+
+        private static float GetResourceMaxValue(ResourceType resourceType, EffectContext context, Unit target)
+        {
+            if (target?.Stats != null)
+            {
+                switch (resourceType)
+                {
+                    case ResourceType.HP:
+                        return target.Stats.MaxHP;
+                    case ResourceType.Energy:
+                        return target.Stats.MaxEnergy;
+                    case ResourceType.posture:
+                        return target.Stats.MaxPosture;
+                }
+            }
+
+            return context.GetResourceMax(resourceType);
+        }
+
+
         private static string GetSkillIdOrSelf(EffectDefinition effect, EffectContext context)
         {
             if (!string.IsNullOrWhiteSpace(effect.targetSkillID))
@@ -736,7 +834,25 @@ namespace TGD.Combat
                 return unit.UnitId;
             return "target";
         }
+        private static bool UsesPerLevelDuration(EffectDefinition effect)
+        {
+            if (effect == null)
+                return false;
 
+            if (effect.perLevelDuration)
+                return true;
+
+            if (!effect.perLevel || effect.durationLevels == null)
+                return false;
+
+            for (int i = 0; i < effect.durationLevels.Length; i++)
+            {
+                if (effect.durationLevels[i] != 0)
+                    return true;
+            }
+
+            return false;
+        }
         private static bool EvaluateComparison(float current, float compareValue, CompareOp op)
         {
             switch (op)

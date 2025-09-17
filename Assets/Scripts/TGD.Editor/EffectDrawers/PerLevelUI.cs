@@ -42,10 +42,18 @@ namespace TGD.Editor
         SerializedProperty elem,
         out bool collapsed,
         string useLabel = "Use Per-Level Values",
-        string collapseKeySuffix = "")
+               string collapseKeySuffix = "",
+        string perLevelPropertyName = "perLevel")
         {
-            var perLevel = elem.FindPropertyRelative("perLevel");
-            var key = elem.propertyPath + "_collapsed" + collapseKeySuffix;
+            var perLevel = elem.FindPropertyRelative(perLevelPropertyName);
+            if (perLevel == null)
+            {
+                collapsed = false;
+                EditorGUILayout.HelpBox($"'{perLevelPropertyName}' property not found on element.", MessageType.Warning);
+                return false;
+            }
+
+            var key = elem.propertyPath + "_collapsed_" + perLevelPropertyName + collapseKeySuffix;
 
             Collapsed.TryGetValue(key, out collapsed);
 

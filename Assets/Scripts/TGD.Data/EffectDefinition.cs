@@ -61,7 +61,9 @@ namespace TGD.Data
         AfterSkillUse,
         SkillStateActive,
         // 新增：下一次消耗指定资源时触发（当前/下一次皆可命中）
-        OnNextSkillSpendResource
+        OnNextSkillSpendResource,
+        OnDamageTaken,
+        OnEffectEnd
     }
 
     [Serializable]
@@ -212,7 +214,8 @@ namespace TGD.Data
         public bool canCrit = true;                                // Damage/Heal 都可用
 
         // —— 按等级覆盖（用于五色技能的 1~4 级）——
-        public bool perLevel = false;                     // 勾上后，以下数组生效
+        public bool perLevel = false;                     // 勾上后，以下数值/概率数组生效
+        public bool perLevelDuration = true;              // 控制持续回合是否按等级拆分（默认保持旧逻辑为 true）
         public string[] valueExprLevels = new string[4];  // L1~L4 的“数值/公式”，如 "atk*0.6"
         public int[] durationLevels = new int[4];     // L1~L4 的持续回合
         public string[] probabilityLvls = new string[4];  // L1~L4 的概率（"p" 或 "35"）
@@ -283,7 +286,7 @@ namespace TGD.Data
 
             int level = skill != null ? skill.skillLevel : 1;
 
-            if (perLevel && durationLevels != null && durationLevels.Length >= 4)
+            if (ShouldUsePerLevelDuration() && durationLevels != null && durationLevels.Length >= 4)
             {
                 int idx = Mathf.Clamp(level - 1, 0, 3);
                 if (durationLevels[idx] != 0) return durationLevels[idx];
@@ -300,6 +303,25 @@ namespace TGD.Data
                 if (!string.IsNullOrEmpty(s)) return s;
             }
             return probability; // 回退
+        }
+        /// <summary>
+        /// 兼容旧数据：若显式关闭 <see cref="perLevelDuration"/> 则不再读取等级数组。
+        /// </summary>
+        private bool ShouldUsePerLevelDuration()
+        {
+            if (perLevelDuration)
+                return true;
+
+            if (!perLevel || durationLevels == null)
+                return false;
+
+            for (int i = 0; i < durationLevels.Length; i++)
+            {
+                if (durationLevels[i] != 0)
+                    return true;
+            }
+
+            return false;
         }
 
     }

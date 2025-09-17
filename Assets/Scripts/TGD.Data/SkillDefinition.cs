@@ -15,6 +15,13 @@ namespace TGD.Data
         public int amount = 0;
     }
     [System.Serializable]
+    public class SkillUseCondition
+    {
+        public ResourceType resourceType = ResourceType.Discipline;   // Resource type to evaluate
+        public CompareOp compareOp = CompareOp.Equal;                  // Comparison operator
+        public float compareValue = 0f;                                // Threshold value
+    }
+    [System.Serializable]
     public class SkillDurationSettings
     {
         public int duration = 0;
@@ -90,7 +97,7 @@ namespace TGD.Data
         public SkillTargetType targetType = SkillTargetType.None;
 
         public List<SkillCost> costs = new();
-
+        public List<SkillUseCondition> useConditions = new();
         public int timeCostSeconds = 0;
         public int cooldownSeconds = 0;
         public int cooldownRounds = 0; // ”… RecalculateDerived º∆À„

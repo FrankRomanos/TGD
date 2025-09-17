@@ -27,7 +27,9 @@ namespace TGD.Editor
                 {
                     var valExpr = FieldVisibilityUI.GetProp(elem, "valueExpression", "value");
                     if (valExpr != null)
-                        EditorGUILayout.PropertyField(valExpr, new GUIContent("Value (formula, e.g. '1', 'p', 'atk*0.1')"));
+                    {
+                        EditorGUILayout.HelpBox("Enter 'max' to restore the resource to its maximum.", MessageType.Info);
+                    }
                     else
                         EditorGUILayout.HelpBox("Missing 'valueExpression' (or legacy 'value') field.", MessageType.Warning);
 

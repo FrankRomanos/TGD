@@ -516,7 +516,7 @@ namespace TGD.Editor
             }
 
             int level = GetSkillLevel(owningSkill);
-            bool perLevel = effectProp.FindPropertyRelative("perLevel")?.boolValue ?? false;
+            bool perLevel = UsesPerLevelDuration(effectProp);
 
             if (perLevel)
             {
@@ -612,6 +612,12 @@ namespace TGD.Editor
                     if (consume) sb.Append(", consumes status");
                     sb.Append(')');
                     break;
+                case EffectCondition.OnDamageTaken:
+                    sb.Append(" (trigger: when damage is taken)");
+                    break;
+                case EffectCondition.OnEffectEnd:
+                    sb.Append(" (trigger: when the effect ends)");
+                    break;
             }
 
             return sb.ToString();
@@ -664,6 +670,13 @@ namespace TGD.Editor
             if (action == ActionType.None)
                 return "All actions";
             return action.ToString();
+        }
+        private static bool UsesPerLevelDuration(SerializedProperty effectProp)
+        {
+            var perLevelDurationProp = effectProp.FindPropertyRelative("perLevelDuration");
+            if (perLevelDurationProp != null)
+                return perLevelDurationProp.boolValue;
+            return effectProp.FindPropertyRelative("perLevel")?.boolValue ?? false;
         }
 
         private static int GetSkillLevel(SkillDefinition owningSkill)
@@ -726,8 +739,8 @@ namespace TGD.Editor
             }
 
             int level = GetSkillLevel(owningSkill);
-            bool perLevel = effectProp.FindPropertyRelative("perLevel")?.boolValue ?? false;
 
+            bool perLevel = UsesPerLevelDuration(effectProp);
             if (perLevel)
             {
                 int perLevelValue = GetIntFromArray(effectProp.FindPropertyRelative("durationLevels"), level);

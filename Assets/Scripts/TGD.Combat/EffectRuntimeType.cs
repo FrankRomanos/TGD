@@ -47,6 +47,7 @@ namespace TGD.Combat
             Enemies = new List<Unit>();
             ResourceValues = new Dictionary<ResourceType, float>();
             ResourceSpent = new Dictionary<ResourceType, float>();
+            ResourceMaxValues = new Dictionary<ResourceType, float>();
             CustomVariables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
             ProfessionScaling = 1f;
 
@@ -56,6 +57,9 @@ namespace TGD.Combat
                 ResourceValues[ResourceType.HP] = caster.Stats.HP;
                 ResourceValues[ResourceType.Energy] = caster.Stats.Energy;
                 ResourceValues[ResourceType.posture] = caster.Stats.Posture;
+                ResourceMaxValues[ResourceType.HP] = caster.Stats.MaxHP;
+                ResourceMaxValues[ResourceType.Energy] = caster.Stats.MaxEnergy;
+                ResourceMaxValues[ResourceType.posture] = caster.Stats.MaxPosture;
             }
         }
 
@@ -67,16 +71,20 @@ namespace TGD.Combat
         public List<Unit> Enemies { get; }
         public Dictionary<ResourceType, float> ResourceValues { get; }
         public Dictionary<ResourceType, float> ResourceSpent { get; }
+        public Dictionary<ResourceType, float> ResourceMaxValues { get; }
         public Dictionary<string, float> CustomVariables { get; }
         public float ProfessionScaling { get; set; }
         public float IncomingDamage { get; set; }
         public bool ConditionAfterAttack { get; set; }
+        public float IncomingDamageMitigated { get; set; }
         public bool ConditionOnCrit { get; set; }
         public bool ConditionOnCooldownEnd { get; set; }
         public bool ConditionAfterSkillUse { get; set; }
         public string LastSkillUsedID { get; set; }
         public bool ConditionSkillStateActive { get; set; }
         public bool ConditionOnResourceSpend { get; set; }
+        public bool ConditionOnEffectEnd { get; set; }
+        public bool ConditionOnDamageTaken { get; set; }
         public ResourceType? LastResourceSpendType { get; set; }
         public float LastResourceSpendAmount { get; set; }
         public ISkillResolver SkillResolver { get; set; }
@@ -103,6 +111,10 @@ namespace TGD.Combat
         {
             return ResourceValues.TryGetValue(type, out var value) ? value : 0f;
         }
+        public float GetResourceMax(ResourceType type)
+        {
+            return ResourceMaxValues.TryGetValue(type, out var value) ? value : 0f;
+        }
 
         public float GetResourceSpent(ResourceType type)
         {
@@ -117,6 +129,7 @@ namespace TGD.Combat
                 SecondaryTarget = SecondaryTarget,
                 ProfessionScaling = ProfessionScaling,
                 IncomingDamage = IncomingDamage,
+                IncomingDamageMitigated = IncomingDamageMitigated,
                 ConditionAfterAttack = ConditionAfterAttack,
                 ConditionOnCrit = ConditionOnCrit,
                 ConditionOnCooldownEnd = ConditionOnCooldownEnd,
@@ -124,6 +137,8 @@ namespace TGD.Combat
                 LastSkillUsedID = LastSkillUsedID,
                 ConditionSkillStateActive = ConditionSkillStateActive,
                 ConditionOnResourceSpend = ConditionOnResourceSpend,
+                ConditionOnEffectEnd = ConditionOnEffectEnd,
+                ConditionOnDamageTaken = ConditionOnDamageTaken,
                 LastResourceSpendType = LastResourceSpendType,
                 LastResourceSpendAmount = LastResourceSpendAmount,
                 SkillResolver = SkillResolver
@@ -137,6 +152,10 @@ namespace TGD.Combat
             clone.ResourceValues.Clear();
             foreach (var kvp in ResourceValues)
                 clone.ResourceValues[kvp.Key] = kvp.Value;
+
+            clone.ResourceMaxValues.Clear();
+            foreach (var kvp in ResourceMaxValues)
+                clone.ResourceMaxValues[kvp.Key] = kvp.Value;
 
             clone.ResourceSpent.Clear();
             foreach (var kvp in ResourceSpent)
@@ -168,6 +187,7 @@ namespace TGD.Combat
         public List<ScalingBuffPreview> ScalingBuffs { get; } = new();
         public List<MovePreview> Moves { get; } = new();
         public List<MasteryPosturePreview> MasteryPosture { get; } = new();
+        public List<SkillUseConditionPreview> SkillUseConditions { get; } = new();
         public List<string> Logs { get; } = new();
 
         public void Append(EffectInterpretationResult other)
@@ -187,6 +207,7 @@ namespace TGD.Combat
             ScalingBuffs.AddRange(other.ScalingBuffs);
             Moves.AddRange(other.Moves);
             MasteryPosture.AddRange(other.MasteryPosture);
+            SkillUseConditions.AddRange(other.SkillUseConditions);
             Logs.AddRange(other.Logs);
         }
 
@@ -228,6 +249,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool FillToMax { get; set; }
     }
 
     public class StatusApplicationPreview
@@ -249,6 +271,12 @@ namespace TGD.Combat
         public float CompareValue { get; set; }
         public float CurrentValue { get; set; }
         public bool Succeeded { get; set; }
+    }
+    public class SkillUseConditionPreview
+    {
+        public ResourceType Resource { get; set; }
+        public CompareOp Comparison { get; set; }
+        public float CompareValue { get; set; }
     }
 
     public class SkillModificationPreview
