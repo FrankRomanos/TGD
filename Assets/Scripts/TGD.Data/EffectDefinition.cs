@@ -42,6 +42,12 @@ namespace TGD.Data
         AttributeModifier,
         MasteryPosture
     }
+    public enum CooldownTargetScope
+    {
+        Self,
+        All,
+        ExceptRed
+    }
 
 
     public enum DamageSchool { Physical, Magical, True }
@@ -225,6 +231,7 @@ namespace TGD.Data
         public string replaceSkillID;       // 替换后技能ID
         public bool inheritReplacedCooldown = true; // 替换后是否沿用原冷却
         public int cooldownChangeSeconds = 0; // CooldownModifier: 秒数改动（可正可负）
+        public CooldownTargetScope cooldownTargetScope = CooldownTargetScope.Self; // CooldownModifier: 影响范围
         // ===== Modify Skill =====
         public SkillModifyType skillModifyType = SkillModifyType.None;
         public SkillModifyOperation skillModifyOperation = SkillModifyOperation.Add;

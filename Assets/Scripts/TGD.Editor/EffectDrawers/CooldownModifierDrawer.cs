@@ -14,18 +14,17 @@ namespace TGD.Editor
         {
             EditorGUILayout.LabelField("Cooldown Modifier", EditorStyles.boldLabel);
 
-            var skillIdProp = elem.FindPropertyRelative("targetSkillID");
-            if (skillIdProp != null)
+            var scopeProp = elem.FindPropertyRelative("cooldownTargetScope");
+            if (scopeProp != null)
             {
-                EditorGUILayout.PropertyField(skillIdProp, new GUIContent("Target Skill ID"));
-                if (string.IsNullOrWhiteSpace(skillIdProp.stringValue))
-                {
-                    EditorGUILayout.HelpBox("Leave empty to affect the owning skill.", MessageType.Info);
-                }
+                EditorGUILayout.PropertyField(scopeProp, new GUIContent("Target Scope"));
+                EditorGUILayout.HelpBox(
+                    "Self: affects the casting skill only. All: affects every skill. ExceptRed: affects every skill except Red (ultimate) skills.",
+                    MessageType.Info);
             }
             else
             {
-                EditorGUILayout.HelpBox("'targetSkillID' property not found on effect.", MessageType.Warning);
+                EditorGUILayout.HelpBox("'cooldownTargetScope' property not found on effect.", MessageType.Warning);
             }
 
             var changeProp = elem.FindPropertyRelative("cooldownChangeSeconds");

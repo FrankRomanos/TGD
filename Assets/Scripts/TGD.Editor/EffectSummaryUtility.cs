@@ -373,8 +373,8 @@ namespace TGD.Editor
 
         private static string BuildCooldownModifierSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
         {
-            string skillLabel = GetSkillLabel(effectProp, owningSkill, "targetSkillID");
-            var sb = CreateHeader($"Cooldown Modifier ({skillLabel})");
+            var sb = CreateHeader("Cooldown Modifier");
+            AddBullet(sb, $"Scope: {DescribeCooldownScope(effectProp, owningSkill)}");
 
             int seconds = effectProp.FindPropertyRelative("cooldownChangeSeconds")?.intValue ?? 0;
             int rounds = 0;
@@ -430,6 +430,26 @@ namespace TGD.Editor
             AddBullet(sb, DescribeDuration(effectProp, owningSkill));
             AddBullet(sb, DescribeProbability(effectProp, owningSkill));
             AddBullet(sb, DescribeCondition(effectProp));
+        }
+        private static string DescribeCooldownScope(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var scopeProp = effectProp.FindPropertyRelative("cooldownTargetScope");
+            CooldownTargetScope scope = scopeProp != null
+                ? (CooldownTargetScope)scopeProp.enumValueIndex
+                : CooldownTargetScope.Self;
+
+            switch (scope)
+            {
+                case CooldownTargetScope.All:
+                    return "All skills";
+                case CooldownTargetScope.ExceptRed:
+                    return "All non-ultimate (non-Red) skills";
+                default:
+                    string displayName = GetSkillDisplayName(owningSkill);
+                    return string.IsNullOrEmpty(displayName)
+                        ? "Self"
+                        : $"Self ({displayName})";
+            }
         }
 
         private static string DescribeValue(SerializedProperty effectProp, SkillDefinition owningSkill, string label)
@@ -604,6 +624,23 @@ namespace TGD.Editor
             return "owning skill";
         }
 
+        private static string GetSkillDisplayName(SkillDefinition skill)
+        {
+            if (skill == null)
+                return string.Empty;
+
+            bool hasName = !string.IsNullOrWhiteSpace(skill.skillName);
+            bool hasId = !string.IsNullOrWhiteSpace(skill.skillID);
+
+            if (hasName && hasId)
+                return $"{skill.skillName} [{skill.skillID}]";
+            if (hasName)
+                return skill.skillName;
+            if (hasId)
+                return skill.skillID;
+
+            return string.Empty;
+        }
         private static string DescribeActionFilter(SerializedProperty actionProp)
         {
             if (actionProp == null)

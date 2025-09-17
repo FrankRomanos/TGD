@@ -448,7 +448,6 @@ namespace TGD.Combat
 
         private static void ApplyCooldownModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
-            string targetSkill = GetSkillIdOrSelf(effect, context);
             int seconds = effect.cooldownChangeSeconds;
             int rounds = 0;
             if (seconds != 0)
@@ -459,16 +458,26 @@ namespace TGD.Combat
             }
 
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
+            string selfSkillId = context.Skill != null ? context.Skill.skillID : string.Empty;
+            var scope = effect.cooldownTargetScope;
             result.CooldownModifications.Add(new CooldownModificationPreview
             {
-                TargetSkillID = targetSkill,
+                Scope = scope,
+                SelfSkillID = selfSkillId,
                 Seconds = seconds,
                 Rounds = rounds,
                 Probability = probability,
                 Condition = effect.condition
             });
 
-            result.AddLog($"Modify cooldown on '{targetSkill}' by {seconds:+#;-#;0}s ({rounds:+#;-#;0} rounds).");
+            string scopeDescription = scope switch
+            {
+                CooldownTargetScope.All => "all skills",
+                CooldownTargetScope.ExceptRed => "all non-ultimate (non-Red) skills",
+                _ => !string.IsNullOrWhiteSpace(selfSkillId) ? $"skill '{selfSkillId}'" : "own skill"
+            };
+
+            result.AddLog($"Modify cooldown for {scopeDescription} by {seconds:+#;-#;0}s ({rounds:+#;-#;0} rounds).");
         }
 
         private static bool CheckCondition(EffectDefinition effect, EffectContext context)

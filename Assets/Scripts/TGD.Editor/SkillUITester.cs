@@ -1,119 +1,120 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using System.IO;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
+using TGD.Editor;
 
 namespace TGD.UI
 {
 
     public class SkillUITester_Simple : EditorWindow
     {
-        // ĞÂÔö£º±¾µØ»¯×Öµä£¨key ¡ú Êµ¼ÊÃèÊöÎÄ±¾£©
+        // æ–°å¢ï¼šæœ¬åœ°åŒ–å­—å…¸ï¼ˆkey â†’ å®é™…æè¿°æ–‡æœ¬ï¼‰
         private Dictionary<string, string> localizationDict = new Dictionary<string, string>();
-        // ĞÂÔö£º±¾µØ»¯ÎÄ¼şÂ·¾¶£¨±ØĞë¸Ä¶Ô£¡£©
+        // æ–°å¢ï¼šæœ¬åœ°åŒ–æ–‡ä»¶è·¯å¾„ï¼ˆå¿…é¡»æ”¹å¯¹ï¼ï¼‰
         private string localizationFilePath = "Assets/Localization/Localization_Skills.csv";
         private List<SkillDefinition> allSkillDatas = new List<SkillDefinition>();
         private SkillDefinition selectedSkill;
         private Vector2 scrollPos;
-        // ×Ô¶¨ÒåÑ¡ÖĞ×´Ì¬µÄĞ¡ĞÍ°´Å¥ÑùÊ½£¨Ìæ´ú²»´æÔÚµÄminiButtonSelected£©
+        private Vector2 effectScrollPos;
         private GUIStyle selectedMiniButton;
 
-        [MenuItem("Tools/Skill/¼ò»¯°æUI²âÊÔ´°¿Ú")]
+        [MenuItem("Tools/Skill/ç®€åŒ–ç‰ˆUIæµ‹è¯•çª—å£")]
         public static void OpenTestWindow()
         {
-            GetWindow<SkillUITester_Simple>("¼¼ÄÜUI²âÊÔ£¨¼ò»¯°æ£©").minSize = new Vector2(500, 350);
+            GetWindow<SkillUITester_Simple>("æŠ€èƒ½UIæµ‹è¯•ï¼ˆç®€åŒ–ç‰ˆï¼‰").minSize = new Vector2(500, 350);
         }
 
         private void OnEnable()
         {
-            // ³õÊ¼»¯×Ô¶¨ÒåÑ¡ÖĞÑùÊ½£¨Ñ¡ÖĞÊ±±³¾°±äÇ³»Ò£¬ºÍÎ´Ñ¡ÖĞÇø·Ö£©
+            // åˆå§‹åŒ–è‡ªå®šä¹‰é€‰ä¸­æ ·å¼ï¼ˆé€‰ä¸­æ—¶èƒŒæ™¯å˜æµ…ç°ï¼Œå’Œæœªé€‰ä¸­åŒºåˆ†ï¼‰
             selectedMiniButton = new GUIStyle(EditorStyles.miniButton);
             selectedMiniButton.normal.background = EditorStyles.toolbarButton.active.background;
 
             LoadLocalizationData();
 
-            // ¼ÓÔØSkillData£¨Ìæ»»³ÉÄãµÄÊµ¼ÊÂ·¾¶£¬Èç"SkillDatas"£©
+            // åŠ è½½SkillDataï¼ˆæ›¿æ¢æˆä½ çš„å®é™…è·¯å¾„ï¼Œå¦‚"SkillDatas"ï¼‰
             string skillDataPath = "SkillData";
             SkillDefinition[] loadedSkills = Resources.LoadAll<SkillDefinition>(skillDataPath);
             allSkillDatas.Clear();
             allSkillDatas.AddRange(loadedSkills);
             allSkillDatas.Sort((a, b) =>
             {
-                // ³¢ÊÔ½« skillID ×ª³ÉÊı×Ö±È½Ï
+                // å°è¯•å°† skillID è½¬æˆæ•°å­—æ¯”è¾ƒ
                 if (int.TryParse(a.skillID, out int idA) && int.TryParse(b.skillID, out int idB))
                 {
-                    return idA.CompareTo(idB); // Êı×ÖÉıĞò£¨1¡ú2¡ú3£©
+                    return idA.CompareTo(idB); // æ•°å­—å‡åºï¼ˆ1â†’2â†’3ï¼‰
                 }
-                // Çé¿ö2£ºskillID ´øÇ°×º£¨Èç SK1¡¢SK2¡¢SK10£©£¬ÏÈÌáÈ¡Êı×ÖÔÙ±È½Ï
+                // æƒ…å†µ2ï¼šskillID å¸¦å‰ç¼€ï¼ˆå¦‚ SK1ã€SK2ã€SK10ï¼‰ï¼Œå…ˆæå–æ•°å­—å†æ¯”è¾ƒ
                 else
                 {
                     int numA = ExtractNumberFromSkillID(a.skillID);
                     int numB = ExtractNumberFromSkillID(b.skillID);
-                    return numA.CompareTo(numB); // °´ÌáÈ¡µÄÊı×ÖÉıĞò
+                    return numA.CompareTo(numB); // æŒ‰æå–çš„æ•°å­—å‡åº
                 }
             });
             if (allSkillDatas.Count > 0) selectedSkill = allSkillDatas[0];
         }
-        // ĞÂÔö£º¼ÓÔØlocalization_skill.csvµ½×Öµä
+        // æ–°å¢ï¼šåŠ è½½localization_skill.csvåˆ°å­—å…¸
         private void LoadLocalizationData()
         {
-            localizationDict.Clear(); // Çå¿Õ¾ÉÊı¾İ
+            localizationDict.Clear(); // æ¸…ç©ºæ—§æ•°æ®
 
-            // ¼ì²éÎÄ¼şÊÇ·ñ´æÔÚ
+            // æ£€æŸ¥æ–‡ä»¶æ˜¯å¦å­˜åœ¨
             if (!File.Exists(localizationFilePath))
             {
-                Debug.LogError("±¾µØ»¯ÎÄ¼şÕÒ²»µ½£¡Â·¾¶£º" + localizationFilePath);
+                Debug.LogError("æœ¬åœ°åŒ–æ–‡ä»¶æ‰¾ä¸åˆ°ï¼è·¯å¾„ï¼š" + localizationFilePath);
                 return;
             }
 
-            // ¶ÁÈ¡CSVËùÓĞĞĞ
+            // è¯»å–CSVæ‰€æœ‰è¡Œ
             string[] allLines = File.ReadAllLines(localizationFilePath);
-            if (allLines.Length < 2) // ÖÁÉÙĞèÒª1ĞĞ±íÍ·+1ĞĞÊı¾İ
+            if (allLines.Length < 2) // è‡³å°‘éœ€è¦1è¡Œè¡¨å¤´+1è¡Œæ•°æ®
             {
-                Debug.LogError("±¾µØ»¯ÎÄ¼şÄÚÈİÎª¿Õ»ò¸ñÊ½´íÎó£¡");
+                Debug.LogError("æœ¬åœ°åŒ–æ–‡ä»¶å†…å®¹ä¸ºç©ºæˆ–æ ¼å¼é”™è¯¯ï¼");
                 return;
             }
 
-            // ½âÎöÃ¿ĞĞÊı¾İ£¨Ìø¹ı±íÍ·ĞĞ£¬´ÓµÚ2ĞĞ¿ªÊ¼£©
+            // è§£ææ¯è¡Œæ•°æ®ï¼ˆè·³è¿‡è¡¨å¤´è¡Œï¼Œä»ç¬¬2è¡Œå¼€å§‹ï¼‰
             for (int i = 1; i < allLines.Length; i++)
             {
                 string line = allLines[i].Trim();
                 if (string.IsNullOrEmpty(line)) continue;
 
-                // ·Ö¸îCSVĞĞ£¨¼òµ¥´¦Àí£º°´¶ººÅ·Ö¸î£¬ÊÊºÏÎŞ¶ººÅµÄÎÄ±¾£©
+                // åˆ†å‰²CSVè¡Œï¼ˆç®€å•å¤„ç†ï¼šæŒ‰é€—å·åˆ†å‰²ï¼Œé€‚åˆæ— é€—å·çš„æ–‡æœ¬ï¼‰
                 string[] parts = line.Split(',');
-                if (parts.Length >= 2) // È·±£ÖÁÉÙÓĞkeyºÍÃèÊöÁ½ÁĞ
+                if (parts.Length >= 2) // ç¡®ä¿è‡³å°‘æœ‰keyå’Œæè¿°ä¸¤åˆ—
                 {
-                    string key = parts[0].Trim(); // µÚ1ÁĞÊÇkey
-                    string desc = parts[1].Trim(); // µÚ2ÁĞÊÇÖĞÎÄÃèÊö£¨¸ù¾İÄãµÄCSVµ÷ÕûÁĞË÷Òı£©
+                    string key = parts[0].Trim(); // ç¬¬1åˆ—æ˜¯key
+                    string desc = parts[1].Trim(); // ç¬¬2åˆ—æ˜¯ä¸­æ–‡æè¿°ï¼ˆæ ¹æ®ä½ çš„CSVè°ƒæ•´åˆ—ç´¢å¼•ï¼‰
                     if (!localizationDict.ContainsKey(key))
                     {
-                        localizationDict.Add(key, desc); // ´æÈë×Öµä
+                        localizationDict.Add(key, desc); // å­˜å…¥å­—å…¸
                     }
                 }
             }
 
-            Debug.Log("±¾µØ»¯Êı¾İ¼ÓÔØÍê³É£¬¹²" + localizationDict.Count + "Ìõ");
+            Debug.Log("æœ¬åœ°åŒ–æ•°æ®åŠ è½½å®Œæˆï¼Œå…±" + localizationDict.Count + "æ¡");
         }
 
         private void OnGUI()
         {
-            GUILayout.Label("¼¼ÄÜUI²âÊÔ£¨Í¼±ê+»ù´¡ĞÅÏ¢£©", EditorStyles.boldLabel);
+            GUILayout.Label("æŠ€èƒ½UIæµ‹è¯•ï¼ˆå›¾æ ‡+åŸºç¡€ä¿¡æ¯ï¼‰", EditorStyles.boldLabel);
             GUILayout.Space(10);
 
-            // ×óÓÒ·ÖÀ¸£º×ó²àÑ¡¼¼ÄÜ£¬ÓÒ²à¿´ÏêÇé
+            // å·¦å³åˆ†æ ï¼šå·¦ä¾§é€‰æŠ€èƒ½ï¼Œå³ä¾§çœ‹è¯¦æƒ…
             GUILayout.BeginHorizontal();
 
-            // ×ó²à£º¼¼ÄÜÁĞ±í£¨ĞŞ¸´ÑùÊ½±¨´í£©
+            // å·¦ä¾§ï¼šæŠ€èƒ½åˆ—è¡¨ï¼ˆä¿®å¤æ ·å¼æŠ¥é”™ï¼‰
             GUILayout.BeginVertical(GUILayout.Width(280));
-            GUILayout.Label("¼¼ÄÜÁĞ±í", EditorStyles.miniBoldLabel);
+            GUILayout.Label("æŠ€èƒ½åˆ—è¡¨", EditorStyles.miniBoldLabel);
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Height(400));
 
             foreach (var skill in allSkillDatas)
             {
-                // ¹Ø¼üĞŞ¸´£ºÓÃ×Ô¶¨ÒåµÄselectedMiniButtonÌæ´úminiButtonSelected
+                // å…³é”®ä¿®å¤ï¼šç”¨è‡ªå®šä¹‰çš„selectedMiniButtonæ›¿ä»£miniButtonSelected
                 if (GUILayout.Button(
                     $"ID:{skill.skillID} | {skill.skillName}",
                     selectedSkill == skill ? selectedMiniButton : EditorStyles.miniButton))
@@ -125,57 +126,85 @@ namespace TGD.UI
             GUILayout.EndVertical();
             GUILayout.Space(40);
 
-            // ÓÒ²à£º¼¼ÄÜÏêÇé£¨ÎŞĞŞ¸Ä£¬±£³ÖÔ­Ñù£©
+            // å³ä¾§ï¼šæŠ€èƒ½è¯¦æƒ…ï¼ˆæ— ä¿®æ”¹ï¼Œä¿æŒåŸæ ·ï¼‰
             GUILayout.BeginVertical(GUILayout.Width(200));
-            GUILayout.Label("¼¼ÄÜÏêÇé", EditorStyles.miniBoldLabel);
+            GUILayout.Label("æŠ€èƒ½è¯¦æƒ…", EditorStyles.miniBoldLabel);
             GUILayout.Space(5);
 
             if (selectedSkill != null)
             {
-                // ÏÔÊ¾Í¼±ê
-                GUILayout.Label("¼¼ÄÜÍ¼±ê£º", EditorStyles.miniLabel);
+                // æ˜¾ç¤ºå›¾æ ‡
+                GUILayout.Label("æŠ€èƒ½å›¾æ ‡ï¼š", EditorStyles.miniLabel);
                 if (selectedSkill.icon != null)
                 {
-                    // ½«Sprite×ª³ÉTexture2D£¬ÓÃÓÚLabelÏÔÊ¾
+                    // å°†Spriteè½¬æˆTexture2Dï¼Œç”¨äºLabelæ˜¾ç¤º
                     Texture2D iconTexture = selectedSkill.icon.texture;
-                    // ÓÃLabel»æÖÆÍ¼±ê£¬¹Ì¶¨¿í¸ß£¬ÎŞ¶àÓà°´Å¥
+                    // ç”¨Labelç»˜åˆ¶å›¾æ ‡ï¼Œå›ºå®šå®½é«˜ï¼Œæ— å¤šä½™æŒ‰é’®
                     GUILayout.Label(
                         new GUIContent(iconTexture),
-                        GUILayout.Width(80),  // Í¼±ê¿í¶È£¨ºÍÖ®Ç°Ò»ÖÂ£©
-                        GUILayout.Height(80)  // Í¼±ê¸ß¶È£¨ºÍÖ®Ç°Ò»ÖÂ£©
+                        GUILayout.Width(80),  // å›¾æ ‡å®½åº¦ï¼ˆå’Œä¹‹å‰ä¸€è‡´ï¼‰
+                        GUILayout.Height(80)  // å›¾æ ‡é«˜åº¦ï¼ˆå’Œä¹‹å‰ä¸€è‡´ï¼‰
                     );
                 }
                 else
                 {
-                    // Í¼±êÎª¿ÕÊ±£¬ÏÔÊ¾¡°ÎŞÍ¼±ê¡±ÌáÊ¾£¨±ÜÃâ¿ÕÇøÓò£©
+                    // å›¾æ ‡ä¸ºç©ºæ—¶ï¼Œæ˜¾ç¤ºâ€œæ— å›¾æ ‡â€æç¤ºï¼ˆé¿å…ç©ºåŒºåŸŸï¼‰
                     GUILayout.Label(
-                        "ÎŞÍ¼±ê",
+                        "æ— å›¾æ ‡",
                         EditorStyles.helpBox,
                         GUILayout.Width(100),
                         GUILayout.Height(100)
                     );
                 }
 
-                // ÏÔÊ¾Ãû³Æ¡¢ÃèÊö¡¢ÊôĞÔ
-                GUILayout.Label("¼¼ÄÜÃû³Æ£º");
+                // æ˜¾ç¤ºåç§°ã€æè¿°ã€å±æ€§
+                GUILayout.Label("æŠ€èƒ½åç§°ï¼š");
                 EditorGUILayout.TextArea(GetLocalizedDesc(selectedSkill.namekey),
                 GUILayout.Height(40));
 
 
 
-                GUILayout.Label("¼¼ÄÜÃèÊö£º");
+                GUILayout.Label("æŠ€èƒ½æè¿°ï¼š");
                 EditorGUILayout.TextArea(GetLocalizedDesc(selectedSkill.descriptionKey),
                 GUILayout.Height(50));
 
-                GUILayout.Label("»ù´¡ÊôĞÔ£º", EditorStyles.miniLabel);
-                GUILayout.Label($"Ö°Òµ£º{selectedSkill.classID}");
-                GUILayout.Label($"¶¯×÷ÀàĞÍ£º{selectedSkill.actionType}");
-                GUILayout.Label($"ÀäÈ´Ê±¼ä£º{selectedSkill.cooldownSeconds}Ãë");
-                GUILayout.Label($"ÀäÈ´Ê±¼ä£º{selectedSkill.cooldownRounds}»ØºÏ");
+                GUILayout.Label("åŸºç¡€å±æ€§ï¼š", EditorStyles.miniLabel);
+                GUILayout.Label($"èŒä¸šï¼š{selectedSkill.classID}");
+                GUILayout.Label($"åŠ¨ä½œç±»å‹ï¼š{selectedSkill.actionType}");
+                GUILayout.Label($"å†·å´æ—¶é—´ï¼š{selectedSkill.cooldownSeconds}ç§’");
+                GUILayout.Label($"å†·å´æ—¶é—´ï¼š{selectedSkill.cooldownRounds}å›åˆ");
+                GUILayout.Space(10);
+                GUILayout.Label("Effect Preview", EditorStyles.miniBoldLabel);
+
+                using (var serializedSkill = new SerializedObject(selectedSkill))
+                {
+                    serializedSkill.Update();
+                    SerializedProperty effectsProp = serializedSkill.FindProperty("effects");
+                    if (effectsProp != null && effectsProp.isArray && effectsProp.arraySize > 0)
+                    {
+                        effectScrollPos = EditorGUILayout.BeginScrollView(effectScrollPos, GUILayout.Height(160));
+                        for (int i = 0; i < effectsProp.arraySize; i++)
+                        {
+                            SerializedProperty effectProp = effectsProp.GetArrayElementAtIndex(i);
+                            string summary = EffectSummaryUtility.BuildSummary(effectProp, selectedSkill);
+                            if (string.IsNullOrWhiteSpace(summary))
+                                continue;
+
+                            EditorGUILayout.LabelField($"Effect {i + 1}", EditorStyles.boldLabel);
+                            EditorGUILayout.HelpBox(summary, MessageType.None);
+                            GUILayout.Space(4);
+                        }
+                        EditorGUILayout.EndScrollView();
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("No effects configured for this skill.", MessageType.Info);
+                    }
+                }
             }
             else
             {
-                GUILayout.Label("Çë´Ó×ó²àÑ¡ÔñÒ»¸ö¼¼ÄÜ", EditorStyles.helpBox);
+                GUILayout.Label("è¯·ä»å·¦ä¾§é€‰æ‹©ä¸€ä¸ªæŠ€èƒ½", EditorStyles.helpBox);
             }
 
             GUILayout.EndVertical();
@@ -184,19 +213,19 @@ namespace TGD.UI
         private string GetLocalizedDesc(string key)
         {
             if (string.IsNullOrEmpty(key))
-                return "¡¾ÃèÊöKeyÎª¿Õ¡¿";
+                return "ã€æè¿°Keyä¸ºç©ºã€‘";
 
-            // ´Ó×ÖµäÖĞ²éÕÒ£¬ÕÒµ½·µ»ØÃèÊö£¬ÕÒ²»µ½·µ»ØÌáÊ¾
+            // ä»å­—å…¸ä¸­æŸ¥æ‰¾ï¼Œæ‰¾åˆ°è¿”å›æè¿°ï¼Œæ‰¾ä¸åˆ°è¿”å›æç¤º
             if (localizationDict.TryGetValue(key, out string desc))
                 return desc;
             else
-                return "¡¾Î´ÕÒµ½ÃèÊö£ºkey=" + key + "¡¿";
+                return "ã€æœªæ‰¾åˆ°æè¿°ï¼škey=" + key + "ã€‘";
         }
-        // ¸¨Öú·½·¨£º´Ó skillID ÖĞÌáÈ¡Êı×Ö£¨Ö§³Ö SK1¡¢Skill2¡¢ID3 µÈ¸ñÊ½£©
+        // è¾…åŠ©æ–¹æ³•ï¼šä» skillID ä¸­æå–æ•°å­—ï¼ˆæ”¯æŒ SK1ã€Skill2ã€ID3 ç­‰æ ¼å¼ï¼‰
         private int ExtractNumberFromSkillID(string skillID)
         {
             if (string.IsNullOrEmpty(skillID)) return 0;
-            // ÓÃÕıÔò±í´ïÊ½ÌáÈ¡ËùÓĞÊı×Ö×Ö·û£¬ÔÙ×ª³Éint
+            // ç”¨æ­£åˆ™è¡¨è¾¾å¼æå–æ‰€æœ‰æ•°å­—å­—ç¬¦ï¼Œå†è½¬æˆint
             string numberStr = System.Text.RegularExpressions.Regex.Replace(skillID, @"[^0-9]", "");
             return int.TryParse(numberStr, out int num) ? num : 0;
         }

@@ -285,7 +285,8 @@ namespace TGD.Combat
 
     public class CooldownModificationPreview
     {
-        public string TargetSkillID { get; set; }
+        public CooldownTargetScope Scope { get; set; }
+        public string SelfSkillID { get; set; }
         public int Seconds { get; set; }
         public int Rounds { get; set; }
         public float Probability { get; set; }
