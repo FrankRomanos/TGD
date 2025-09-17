@@ -47,8 +47,8 @@ namespace TGD.Editor
                 EditorGUILayout.PropertyField(modProp, new GUIContent("Modifier Type"));
             }
 
-            // ====== Per-Level 值 & 预览 ======
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Per-Level Values"))
+
+            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
             {
                 bool collapsed;
                 if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))

@@ -11,7 +11,7 @@ namespace TGD.Editor
             EditorGUILayout.LabelField("Apply Status (Buff/Debuff)", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(elem.FindPropertyRelative("statusSkillID"), new GUIContent("Status Skill ID"));
 
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Per-Level Values"))
+            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
             {
                 bool collapsed;
                 if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))

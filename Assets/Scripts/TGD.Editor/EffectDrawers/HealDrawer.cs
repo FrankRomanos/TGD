@@ -13,7 +13,7 @@ namespace TGD.Editor
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Crit, "Critical"))
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("canCrit"), new GUIContent("Can Crit"));
 
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Per-Level Values"))
+            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
             {
                 bool collapsed;
                 if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))
