@@ -73,7 +73,7 @@ namespace TGD.Editor
 
         /// <summary>只读预览：展示当前技能等级会用到的值。</summary>
         public static void DrawPreviewForCurrentLevel(
-             SerializedProperty elem, int level, bool showDuration, bool showProb, bool showStacks = false)
+            SerializedProperty elem, int level, bool showDuration, bool showProb, bool showStacks = false, bool showValue = true)
         {
             var vals = elem.FindPropertyRelative("valueExprLevels");
             var durs = elem.FindPropertyRelative("durationLevels");
@@ -93,13 +93,17 @@ namespace TGD.Editor
             EditorGUILayout.HelpBox($"Preview (Use Skill Level {level})", MessageType.Info);
             EditorGUI.indentLevel++;
 
-            var v = vals.GetArrayElementAtIndex(idx).stringValue;
-            EditorGUILayout.LabelField($"Value @L{level}", string.IsNullOrEmpty(v) ? "(empty)" : v);
+            if (showValue)
+            {
+                var v = vals.GetArrayElementAtIndex(idx).stringValue;
+                EditorGUILayout.LabelField($"Value @L{level}", string.IsNullOrEmpty(v) ? "(empty)" : v);
+            }
+
 
             if (showDuration)
             {
                 var d = durs.GetArrayElementAtIndex(idx).intValue;
-                EditorGUILayout.LabelField($"Duration @L{level}", d.ToString());
+                EditorGUILayout.LabelField($"Duration @L{level}", FormatDurationPreview(d));
             }
 
             if (showProb)
@@ -123,9 +127,29 @@ namespace TGD.Editor
 
                 string stackLabel = stackValue > 0 ? stackValue.ToString() : "(default)";
                 EditorGUILayout.LabelField($"Stacks @L{level}", stackLabel);
+                var maxStacksProp = elem.FindPropertyRelative("maxStacks");
+                if (maxStacksProp != null)
+                {
+                    int maxStacks = maxStacksProp.intValue;
+                    string maxLabel = maxStacks > 0 ? maxStacks.ToString() : "Unlimited";
+                    EditorGUILayout.LabelField("Max Stacks", maxLabel);
+                }
             }
 
             EditorGUI.indentLevel--;
+        }
+
+        private static string FormatDurationPreview(int duration)
+        {
+            if (duration > 0)
+                return duration.ToString();
+            if (duration == -1)
+                return "Instant";
+            if (duration == -2)
+                return "Permanent";
+            if (duration == 0)
+                return "(n/a)";
+            return duration.ToString();
         }
     }
 }

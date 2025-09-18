@@ -27,7 +27,8 @@ namespace TGD.Core
         public int MaxPosture;
         public int Strength;
         public int Agility;
-        // General damage amplification collected from gear / buffs.
+        // General damage amplification from gear / buffs (multiplicative with other sources,
+        // stacks additively only when coming from the same skill ID).
         public float DamageIncrease;
 
         // Defensive layer.

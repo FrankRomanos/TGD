@@ -90,13 +90,14 @@ namespace TGD.Editor
             var sb = CreateHeader("Scaling Buff", GetTargetLabel(effectProp));
             string resource = GetEnumName(effectProp.FindPropertyRelative("resourceType"), ResourceType.Discipline);
             string attribute = GetEnumName(effectProp.FindPropertyRelative("scalingAttribute"), ScalingAttribute.Attack);
-
+            string operation = GetEnumName(effectProp.FindPropertyRelative("scalingOperation"), SkillModifyOperation.Add);
             string value = FormatSimpleString(effectProp.FindPropertyRelative("scalingValuePerResource"));
             AddBullet(sb, string.IsNullOrEmpty(value)
                 ? "Value per resource: (not set)"
                 : $"Value per resource: {value}");
             AddBullet(sb, $"Resource: {resource}");
             AddBullet(sb, $"Attribute: {attribute}");
+            AddBullet(sb, $"Operation: {operation}");
 
             var maxStacksProp = effectProp.FindPropertyRelative("maxStacks");
             if (maxStacksProp != null)
@@ -119,15 +120,17 @@ namespace TGD.Editor
             int? duration = ResolveDurationValue(effectProp, owningSkill);
             if (duration.HasValue)
             {
-                if (duration.Value == -1)
-                    AddBullet(sb, "Instant trigger (fires status effects immediately)");
-                else
-                    AddBullet(sb, $"Duration: {duration.Value} turn(s)");
+                string durationText = FormatDurationBullet(duration.Value, "Duration", forInstantTrigger: true);
+                if (!string.IsNullOrEmpty(durationText))
+                    AddBullet(sb, durationText);
             }
 
             string stacks = DescribeStacks(effectProp, owningSkill);
             if (!string.IsNullOrEmpty(stacks))
                 AddBullet(sb, stacks);
+            var maxStacksProp = effectProp.FindPropertyRelative("maxStacks");
+            if (maxStacksProp != null && maxStacksProp.intValue > 0)
+                AddBullet(sb, $"Max stacks: {maxStacksProp.intValue}");
 
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();
@@ -643,8 +646,9 @@ namespace TGD.Editor
                 if (owningSkill != null)
                 {
                     int resolved = owningSkill.ResolveDuration(GetSkillLevel(owningSkill));
-                    if (resolved > 0)
-                        return $"Duration: follows skill ({resolved} turn(s))";
+                    string resolvedLabel = FormatDurationLabel(resolved);
+                    if (!string.IsNullOrEmpty(resolvedLabel))
+                        return $"Duration: follows skill ({resolvedLabel})";
                 }
                 return string.Empty;
             }
@@ -656,20 +660,49 @@ namespace TGD.Editor
             {
                 var perLevelArray = effectProp.FindPropertyRelative("durationLevels");
                 int perLevelValue = GetIntFromArray(perLevelArray, level);
-                if (perLevelValue != 0)
-                    return $"Duration @L{level}: {perLevelValue} turn(s)";
+                string perLevelLabel = FormatDurationLabel(perLevelValue);
+                if (!string.IsNullOrEmpty(perLevelLabel))
+                    return $"Duration @L{level}: {perLevelLabel}";
             }
 
             var durationProp = effectProp.FindPropertyRelative("duration");
             if (durationProp != null)
             {
-                int resolved = durationProp.propertyType == SerializedPropertyType.Integer
-                    ? durationProp.intValue
+                int rawValue = durationProp.propertyType == SerializedPropertyType.Integer
+                   ? durationProp.intValue
                     : Mathf.RoundToInt(durationProp.floatValue);
-                return $"Duration: {resolved} turn(s)";
+                string label = FormatDurationLabel(rawValue);
+                if (!string.IsNullOrEmpty(label))
+                    return $"Duration: {label}";
             }
 
             return string.Empty;
+        }
+
+        private static string FormatDurationBullet(int duration, string prefix, bool forInstantTrigger = false)
+        {
+            if (duration > 0)
+                return $"{prefix}: {duration} turn(s)";
+            if (duration == -1)
+                return forInstantTrigger ? "Instant trigger (fires status effects immediately)" : $"{prefix}: Instant";
+            if (duration == -2)
+                return $"{prefix}: Permanent";
+            if (duration == 0)
+                return string.Empty;
+            return $"{prefix}: {duration}";
+        }
+
+        private static string FormatDurationLabel(int duration)
+        {
+            if (duration > 0)
+                return $"{duration} turn(s)";
+            if (duration == -1)
+                return "Instant";
+            if (duration == -2)
+                return "Permanent";
+            if (duration == 0)
+                return string.Empty;
+            return duration.ToString();
         }
 
         private static string DescribeProbability(SerializedProperty effectProp, SkillDefinition owningSkill)

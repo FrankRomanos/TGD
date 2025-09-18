@@ -271,7 +271,9 @@ namespace TGD.Combat
         public string StatusSkillID { get; set; }
         public int Duration { get; set; }
         public bool IsInstant { get; set; }
+        public bool IsPermanent { get; set; }
         public int StackCount { get; set; }
+        public int MaxStacks { get; set; }
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
@@ -356,6 +358,7 @@ namespace TGD.Combat
         public string ValuePerResource { get; set; }
         public int MaxStacks { get; set; }
         public ScalingAttribute Attribute { get; set; }
+        public SkillModifyOperation Operation { get; set; }
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }

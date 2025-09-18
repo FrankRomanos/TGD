@@ -300,11 +300,16 @@ namespace TGD.Combat
                 ValuePerResource = string.IsNullOrWhiteSpace(effect.scalingValuePerResource) ? string.Empty : effect.scalingValuePerResource,
                 MaxStacks = effect.maxStacks,
                 Attribute = effect.scalingAttribute,
+                Operation = effect.scalingOperation,
                 Target = effect.target,
                 Probability = probability,
                 Condition = effect.condition
             });
-            result.AddLog($"Scaling buff: {effect.scalingAttribute} per {effect.resourceType} ({effect.scalingValuePerResource}).");
+            string opLabel = effect.scalingOperation.ToString();
+            string valueLabel = string.IsNullOrWhiteSpace(effect.scalingValuePerResource)
+                ? "(missing value)"
+                : effect.scalingValuePerResource;
+            result.AddLog($"Scaling buff [{opLabel}]: {effect.scalingAttribute} per {effect.resourceType} ({valueLabel}).");
         }
 
         private static void ApplyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
@@ -314,6 +319,7 @@ namespace TGD.Combat
             int duration = ResolveDuration(effect, context);
             int stacks = ResolveStackCount(effect, context);
             bool isInstant = duration == -1;
+            bool isPermanent = duration == -2;
 
             var preview = new StatusApplicationPreview
             {
@@ -321,6 +327,8 @@ namespace TGD.Combat
                 Duration = duration,
                 StackCount = stacks,
                 IsInstant = isInstant,
+                IsPermanent = isPermanent,
+                MaxStacks = effect.maxStacks,
                 Target = effect.target,
                 Probability = probability,
                 Condition = effect.condition
@@ -343,7 +351,21 @@ namespace TGD.Combat
 
             result.StatusApplications.Add(preview);
             string action = isInstant ? "Trigger" : "Apply";
-            result.AddLog($"{action} status '{effect.statusSkillID}' ({stacks} stack(s)) for {duration} turn(s) ({probability:0.##}% chance).");
+            
+            string stackLabel = stacks > 0 ? $"{stacks} stack(s)" : "(no stacks)";
+            if (effect.maxStacks > 0)
+                stackLabel += $" (max {effect.maxStacks})";
+
+            string durationLabel = string.Empty;
+            if (isInstant)
+                durationLabel = "instantly";
+            else if (isPermanent)
+                durationLabel = "permanently";
+            else if (duration > 0)
+                durationLabel = $"for {duration} turn(s)";
+
+            string durationSuffix = string.IsNullOrEmpty(durationLabel) ? string.Empty : $" {durationLabel}";
+            result.AddLog($"{action} status '{effect.statusSkillID}' ({stackLabel}){durationSuffix} ({probability:0.##}% chance).");
         }
 
         private static void ApplyConditional(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)

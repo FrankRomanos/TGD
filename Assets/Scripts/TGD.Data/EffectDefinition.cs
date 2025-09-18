@@ -344,8 +344,9 @@ namespace TGD.Data
 
         // ===== ScalingBuff 专用 =====
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
-        public int maxStacks = 0;                  // 0 = unlimited
+        public int maxStacks = 0;                  // 0 = unlimited (shared by effects that support stacking caps)
         public ScalingAttribute scalingAttribute = ScalingAttribute.Attack;
+        public SkillModifyOperation scalingOperation = SkillModifyOperation.Add;
 
         // ===== Mastery: Posture Engine =====
         public MasteryPostureSettings masteryPosture = new MasteryPostureSettings();
