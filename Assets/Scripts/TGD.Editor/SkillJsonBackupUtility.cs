@@ -202,7 +202,7 @@ namespace TGD.Editor
 
         public int timeCostSeconds;
         public int cooldownSeconds;
-        public int cooldownRounds;
+        public int cooldownTurns;
         public int range;
         public float threat;
         public float shredMultiplier;
@@ -238,7 +238,7 @@ namespace TGD.Editor
 
                 timeCostSeconds = s.timeCostSeconds,
                 cooldownSeconds = s.cooldownSeconds,
-                cooldownRounds = s.cooldownRounds,
+                cooldownTurns = s.cooldownTurns,
                 range = s.range,
                 threat = s.threat,
                 shredMultiplier = s.shredMultiplier,
@@ -313,7 +313,7 @@ namespace TGD.Editor
 
             s.timeCostSeconds = timeCostSeconds;
             s.cooldownSeconds = cooldownSeconds;
-            s.cooldownRounds = cooldownRounds; // 会在 RecalculateDerived 覆盖
+            s.cooldownTurns = cooldownTurns; // 会在 RecalculateSecondToTurn
             s.range = range;
             s.threat = threat;
             s.shredMultiplier = shredMultiplier;

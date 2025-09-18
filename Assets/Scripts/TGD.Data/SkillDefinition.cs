@@ -100,7 +100,7 @@ namespace TGD.Data
         public List<SkillUseCondition> useConditions = new();
         public int timeCostSeconds = 0;
         public int cooldownSeconds = 0;
-        public int cooldownRounds = 0; // 由 RecalculateDerived 计算
+        public int cooldownTurns = 0; // 由 RecalculateDerived 计算
         public int range = 0;
         public float threat;
         public float shredMultiplier;
@@ -135,7 +135,7 @@ namespace TGD.Data
         public void RecalculateCooldownSecondToTurn(int baseTurnTimeSeconds = 6)
         {
             if (baseTurnTimeSeconds <= 0) baseTurnTimeSeconds = 6;
-            cooldownRounds = Mathf.CeilToInt((float)cooldownSeconds / baseTurnTimeSeconds);
+            cooldownTurns = Mathf.CeilToInt((float)cooldownSeconds / baseTurnTimeSeconds);
         }
     }
 }
