@@ -34,7 +34,7 @@ namespace TGD.Editor
 
                     if (GUILayout.Button("Remove Outcome"))
                     {
-                        outcomes.DeleteArrayElementAtIndex(i);
+                        NestedEffectListDrawer.RemoveArrayElement(outcomes, i);
                         EditorGUILayout.EndVertical();
                         break;
                     }
@@ -88,8 +88,7 @@ namespace TGD.Editor
             var effects = entry.FindPropertyRelative("effects");
             if (effects != null && effects.isArray)
             {
-                while (effects.arraySize > 0)
-                    effects.DeleteArrayElementAtIndex(effects.arraySize - 1);
+                NestedEffectListDrawer.ClearArray(effects);
             }
         }
     }

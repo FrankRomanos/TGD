@@ -42,11 +42,12 @@ namespace TGD.Editor
                 if (effectProp == null)
                     continue;
 
+                EnsureEffectPropertyInitialized(effectProp);
                 EditorGUILayout.BeginVertical("box");
                 DrawSingleEffect(effectProp, depth + 1);
                 if (GUILayout.Button("Remove", GUILayout.Width(70)))
                 {
-                    listProp.DeleteArrayElementAtIndex(i);
+                    RemoveArrayElement(listProp, i);
                     EditorGUILayout.EndVertical();
                     break;
                 }
@@ -59,6 +60,7 @@ namespace TGD.Editor
                 int newIndex = listProp.arraySize;
                 listProp.InsertArrayElementAtIndex(newIndex);
                 var newElem = listProp.GetArrayElementAtIndex(newIndex);
+                EnsureEffectPropertyInitialized(newElem);
                 ResetEffectProperty(newElem);
             }
 
@@ -67,27 +69,39 @@ namespace TGD.Editor
 
         private static void DrawSingleEffect(SerializedProperty effectProp, int depth)
         {
+            EnsureEffectPropertyInitialized(effectProp);
             var typeProp = effectProp.FindPropertyRelative("effectType");
+            if (typeProp == null)
+            {
+                EditorGUILayout.HelpBox("Effect entry is not initialized.", MessageType.Error);
+                return;
+            }
             EditorGUILayout.PropertyField(typeProp, new GUIContent("Effect Type"));
 
             var drawer = EffectDrawerRegistry.Get((EffectType)typeProp.enumValueIndex);
-            using (new EditorGUI.IndentLevelScope())
+            if (drawer == null)
             {
-                drawer.Draw(effectProp);
+                EditorGUILayout.HelpBox($"No drawer registered for effect type {(EffectType)typeProp.enumValueIndex}.", MessageType.Error);
+            }
+            else
+            {
+                using (new EditorGUI.IndentLevelScope())
+                {
+                    drawer.Draw(effectProp);
+                }
             }
         }
-
         private static void ResetEffectProperty(SerializedProperty effectProp)
         {
             if (effectProp == null)
                 return;
 
+            EnsureEffectPropertyInitialized(effectProp);
             SetEnumValue(effectProp.FindPropertyRelative("effectType"), EffectType.None);
             SetEnumValue(effectProp.FindPropertyRelative("condition"), EffectCondition.None);
             SetEnumValue(effectProp.FindPropertyRelative("target"), TargetType.Self);
             SetEnumValue(effectProp.FindPropertyRelative("attributeType"), AttributeType.Attack);
             SetEnumValue(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
-
             SetString(effectProp.FindPropertyRelative("valueExpression"), string.Empty);
             SetString(effectProp.FindPropertyRelative("probability"), string.Empty);
             SetString(effectProp.FindPropertyRelative("statusSkillID"), string.Empty);
@@ -149,13 +163,38 @@ namespace TGD.Editor
             prop.boolValue = value;
         }
 
-        private static void ClearArray(SerializedProperty prop)
+        internal static void ClearArray(SerializedProperty prop)
         {
             if (prop == null || !prop.isArray)
                 return;
 
-            while (prop.arraySize > 0)
-                prop.DeleteArrayElementAtIndex(prop.arraySize - 1);
+            for (int i = prop.arraySize - 1; i >= 0; i--)
+                RemoveArrayElement(prop, i);
+        }
+
+        internal static void RemoveArrayElement(SerializedProperty array, int index)
+        {
+            if (array == null || !array.isArray || index < 0 || index >= array.arraySize)
+                return;
+
+            array.DeleteArrayElementAtIndex(index);
+            if (array.arraySize > index)
+            {
+                var element = array.GetArrayElementAtIndex(index);
+                if (element != null && element.propertyType == SerializedPropertyType.ManagedReference && element.managedReferenceValue == null)
+                    array.DeleteArrayElementAtIndex(index);
+            }
+        }
+
+        private static void EnsureEffectPropertyInitialized(SerializedProperty effectProp)
+        {
+            if (effectProp == null)
+                return;
+
+            if (effectProp.propertyType == SerializedPropertyType.ManagedReference && effectProp.managedReferenceValue == null)
+            {
+                effectProp.managedReferenceValue = new EffectDefinition();
+            }
         }
     }
 }

@@ -229,6 +229,7 @@ namespace TGD.Data
         public string description;
         public int weight = 1;
         public ProbabilityModifierMode probabilityMode = ProbabilityModifierMode.None;
+        [SerializeReference]
         public List<EffectDefinition> effects = new List<EffectDefinition>();
     }
 
@@ -283,6 +284,7 @@ namespace TGD.Data
         public ResourceType resourceType = ResourceType.Discipline;
         public CompareOp compareOp = CompareOp.Equal;
         public float compareValue;
+        [SerializeReference]
         public List<EffectDefinition> onSuccess = new();
 
         // ===== Random Outcome =====
@@ -297,6 +299,7 @@ namespace TGD.Data
         public ResourceType repeatResourceType = ResourceType.Discipline;
         public bool repeatConsumeResource = true;
         public int repeatMaxCount = 0;
+        [SerializeReference]
         public List<EffectDefinition> repeatEffects = new List<EffectDefinition>();
 
         // ===== Probability Modifier =====
@@ -309,6 +312,7 @@ namespace TGD.Data
         public int dotHotTriggerCount = 1;
         public bool dotHotAffectsAllies = false;
         public bool dotHotAffectsEnemies = true;
+        [SerializeReference]
         public List<EffectDefinition> dotHotAdditionalEffects = new List<EffectDefinition>();
 
         // ===== Buff/Debuff =====

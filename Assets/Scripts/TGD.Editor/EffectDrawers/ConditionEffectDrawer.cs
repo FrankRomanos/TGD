@@ -22,25 +22,11 @@ namespace TGD.Editor
             var onSuccess = elem.FindPropertyRelative("onSuccess");
             if (onSuccess != null)
             {
-                for (int i = 0; i < onSuccess.arraySize; i++)
-                {
-                    var sub = onSuccess.GetArrayElementAtIndex(i);
-                    EditorGUILayout.BeginVertical("box");
-
-                    var subTypeProp = sub.FindPropertyRelative("effectType");
-                    EditorGUILayout.PropertyField(subTypeProp, new UnityEngine.GUIContent("Effect Type"));
-
-                    var drawer = EffectDrawerRegistry.Get((TGD.Data.EffectType)subTypeProp.enumValueIndex);
-                    drawer.Draw(sub);
-
-                    if (GUILayout.Button("Remove Success Effect"))
-                        onSuccess.DeleteArrayElementAtIndex(i);
-
-                    EditorGUILayout.EndVertical();
-                }
-
-                if (GUILayout.Button("Add Success Effect"))
-                    onSuccess.InsertArrayElementAtIndex(onSuccess.arraySize);
+                NestedEffectListDrawer.DrawEffectsList(onSuccess, elem.depth + 1, "On Success Effects");
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("'onSuccess' property not found on effect.", MessageType.Warning);
             }
         }
     }
