@@ -67,6 +67,25 @@ namespace TGD.Combat
                         workingContext.ActiveSkillStates.Add(state);
                 }
 
+                workingContext.ActiveDotHotStatuses.Clear();
+                if (context != null)
+                {
+                    foreach (var status in context.ActiveDotHotStatuses)
+                    {
+                        if (status == null)
+                            continue;
+                        workingContext.ActiveDotHotStatuses.Add(new DotHotStatusSnapshot
+                        {
+                            SkillID = status.SkillID,
+                            Target = status.Target,
+                            Stacks = status.Stacks,
+                            IsHot = status.IsHot
+                        });
+                    }
+                }
+
+                workingContext.ConditionDotStacks = context?.ConditionDotStacks ?? 0f;
+
                 if (context != null && context.HasSkillLevelOverride)
                     workingContext.OverrideSkillLevel(context.ResolveSkillLevel(context.Skill));
             }
@@ -495,19 +514,40 @@ namespace TGD.Combat
         {
             string targetSkill = GetSkillIdOrSelf(effect, context);
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
+            DamageSchoolModifyType modifyType = effect.damageSchoolModifyType;
+            bool useFilter = effect.damageSchoolFilterEnabled;
+            string filterLabel = useFilter ? effect.damageSchoolFilter.ToString() : string.Empty;
+            string expression = modifyType == DamageSchoolModifyType.Damage
+                ? ResolveValueExpression(effect, context)
+                : string.Empty;
             var preview = new DamageSchoolModificationPreview
             {
                 TargetSkillID = targetSkill,
-                School = effect.damageSchool,
+                ModifyType = modifyType,
+                TargetSchool = effect.damageSchool,
                 Operation = effect.skillModifyOperation,
                 ModifierType = effect.modifierType,
-                ValueExpression = ResolveValueExpression(effect, context),
+                ValueExpression = expression,
+                UseFilter = useFilter,
+                Filter = effect.damageSchoolFilter,
                 Probability = probability,
                 Condition = effect.condition
             };
 
             result.DamageSchoolModifications.Add(preview);
-            result.AddLog($"Modify {effect.damageSchool} damage on '{targetSkill}' ({effect.skillModifyOperation}).");
+            string filterSuffix = useFilter ? $" (filter: {filterLabel})" : string.Empty;
+            switch (modifyType)
+            {
+                case DamageSchoolModifyType.Damage:
+                    {
+                        string valueSuffix = string.IsNullOrWhiteSpace(expression) ? string.Empty : $" by '{expression}'";
+                        result.AddLog($"Modify {effect.damageSchool} damage on '{targetSkill}'{filterSuffix} ({effect.skillModifyOperation}, {effect.modifierType}){valueSuffix}.");
+                        break;
+                    }
+                case DamageSchoolModifyType.DamageSchoolType:
+                    result.AddLog($"Convert damage on '{targetSkill}'{filterSuffix} to {effect.damageSchool}.");
+                    break;
+            }
         }
 
         private static void ApplyAttributeModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -770,7 +810,9 @@ namespace TGD.Combat
                 CanCrit = effect.canCrit,
                 Target = effect.target,
                 Probability = probability,
-                Condition = effect.condition
+                Condition = effect.condition,
+                SupportsStacks = effect.dotHotShowStacks,
+                MaxStacks = effect.dotHotShowStacks ? effect.dotHotMaxStacks : 1
             };
 
             if (effect.dotHotAdditionalEffects != null && effect.dotHotAdditionalEffects.Count > 0)
@@ -797,19 +839,20 @@ namespace TGD.Combat
             string triggerFormulaLabel = baseTriggerCount == 0 ? "default6" : baseTriggerCount.ToString();
             string expressionLabel = string.IsNullOrWhiteSpace(expression) ? "(no tick expression)" : expression;
             string valueLabel = hasExpression ? evaluatedValue.ToString("0.##") : "--";
+            string stackLabel = effect.dotHotShowStacks ? (effect.dotHotMaxStacks < 0 ? "stacks: unlimited" : $"stacks: max {effect.dotHotMaxStacks}") : "stacks: disabled";
             switch (effect.dotHotOperation)
             {
                 case DotHotOperation.None:
-                    result.AddLog($"DoT/HoT modifier (no direct damage) targeting {effect.target} | base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%.");
+                    result.AddLog($"DoT/HoT modifier (no direct damage) targeting {effect.target} | base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}% ({stackLabel}).");
                     break;
                 case DotHotOperation.TriggerDots:
-                    result.AddLog($"Trigger DoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
+                    result.AddLog($"Trigger DoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
                 case DotHotOperation.TriggerHots:
-                    result.AddLog($"Trigger HoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
+                    result.AddLog($"Trigger HoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
                 case DotHotOperation.ConvertDamageToDot:
-                    result.AddLog($"Convert damage into DoT for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
+                    result.AddLog($"Convert damage into DoT for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
             }
         }
@@ -881,6 +924,52 @@ namespace TGD.Combat
                             return true;
                     }
                     return false;
+                case EffectCondition.OnDotHotActive:
+                    context.ConditionDotStacks = 0f;
+                    if (context.ActiveDotHotStatuses == null || context.ActiveDotHotStatuses.Count == 0)
+                        return false;
+
+                    TargetType dotTarget = effect.conditionDotTarget;
+                    var skillList = effect.conditionDotSkillIDs;
+                    bool matchAnySkill = skillList == null || skillList.Count == 0;
+                    int matchedEntries = 0;
+                    int totalStacks = 0;
+
+                    foreach (var status in context.ActiveDotHotStatuses)
+                    {
+                        if (status == null)
+                            continue;
+
+                        if (dotTarget != TargetType.All && status.Target != dotTarget)
+                            continue;
+
+                        bool skillMatch = matchAnySkill;
+                        if (!skillMatch && !string.IsNullOrWhiteSpace(status.SkillID))
+                        {
+                            foreach (var id in skillList)
+                            {
+                                if (!string.IsNullOrWhiteSpace(id) && string.Equals(id, status.SkillID, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    skillMatch = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!skillMatch)
+                            continue;
+
+                        matchedEntries++;
+                        int stacks = Mathf.Max(0, status.Stacks);
+                        if (effect.conditionDotUseStacks)
+                            totalStacks += stacks <= 0 ? 1 : stacks;
+                    }
+
+                    if (matchedEntries == 0)
+                        return false;
+
+                    context.ConditionDotStacks = effect.conditionDotUseStacks ? Mathf.Max(0, totalStacks) : matchedEntries;
+                    return true;
                 case EffectCondition.OnNextSkillSpendResource:
                     if (!context.ConditionOnResourceSpend)
                         return false;
@@ -1145,6 +1234,10 @@ namespace TGD.Combat
 
             foreach (var kvp in context.CustomVariables)
                 map[kvp.Key] = kvp.Value;
+
+            if (!map.ContainsKey("dotStacks"))
+                map["dotStacks"] = context.ConditionDotStacks;
+
 
             if (context.Caster != null)
             {

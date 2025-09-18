@@ -89,6 +89,23 @@ namespace TGD.Editor
                         }
                     }
                     break;
+                case EffectCondition.OnDotHotActive:
+                    var targetProp = elem.FindPropertyRelative("conditionDotTarget");
+                    if (targetProp != null)
+                        EditorGUILayout.PropertyField(targetProp, new GUIContent("Effect Target"));
+
+                    var dotList = elem.FindPropertyRelative("conditionDotSkillIDs");
+                    if (dotList != null)
+                    {
+                        EditorGUILayout.PropertyField(dotList, new GUIContent("DoT Skill IDs"), includeChildren: true);
+                        if (dotList.isArray && dotList.arraySize == 0)
+                            EditorGUILayout.HelpBox("Leave empty to react to any DoT/HoT skill.", MessageType.Info);
+                    }
+
+                    var stackProp = elem.FindPropertyRelative("conditionDotUseStacks");
+                    if (stackProp != null)
+                        EditorGUILayout.PropertyField(stackProp, new GUIContent("Use Stack Count"));
+                    break;
                 case EffectCondition.OnNextSkillSpendResource:
                     EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
                         new GUIContent("Cond. Resource"));

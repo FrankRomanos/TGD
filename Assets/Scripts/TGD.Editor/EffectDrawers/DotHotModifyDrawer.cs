@@ -22,6 +22,17 @@ namespace TGD.Editor
                 if (maskProp != null)
                     maskProp.intValue |= (int)EffectFieldMask.Duration;
             }
+            var showStacksProp = elem.FindPropertyRelative("dotHotShowStacks");
+            if (showStacksProp != null)
+            {
+                EditorGUILayout.PropertyField(showStacksProp, new GUIContent("Allow Stacks"));
+                if (showStacksProp.boolValue)
+                {
+                    var maxStacksProp = elem.FindPropertyRelative("dotHotMaxStacks");
+                    if (maxStacksProp != null)
+                        EditorGUILayout.PropertyField(maxStacksProp, new GUIContent("Max Stacks (-1 = unlimited)"));
+                }
+            }
 
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Target, "Target"))
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("target"), new GUIContent("Target"));

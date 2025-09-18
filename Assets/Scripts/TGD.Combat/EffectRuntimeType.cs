@@ -37,6 +37,14 @@ namespace TGD.Combat
         }
     }
 
+    public class DotHotStatusSnapshot
+    {
+        public string SkillID { get; set; }
+        public TargetType Target { get; set; }
+        public int Stacks { get; set; }
+        public bool IsHot { get; set; }
+    }
+
     public class EffectContext
     {
         public EffectContext(Unit caster, SkillDefinition skill)
@@ -50,6 +58,7 @@ namespace TGD.Combat
             ResourceMaxValues = new Dictionary<ResourceType, float>();
             CustomVariables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
             ActiveSkillStates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            ActiveDotHotStatuses = new List<DotHotStatusSnapshot>();
 
             if (caster != null)
             {
@@ -75,6 +84,7 @@ namespace TGD.Combat
         public Dictionary<string, float> CustomVariables { get; }
         public float IncomingDamage { get; set; }
         public HashSet<string> ActiveSkillStates { get; }
+        public List<DotHotStatusSnapshot> ActiveDotHotStatuses { get; }
         public bool ConditionAfterAttack { get; set; }
         public float IncomingDamageMitigated { get; set; }
         public bool ConditionOnCrit { get; set; }
@@ -88,7 +98,7 @@ namespace TGD.Combat
         public ResourceType? LastResourceSpendType { get; set; }
         public float LastResourceSpendAmount { get; set; }
         public ISkillResolver SkillResolver { get; set; }
-
+        public float ConditionDotStacks { get; set; }
         private int skillLevelOverride;
 
         public bool HasSkillLevelOverride => skillLevelOverride > 0;
@@ -168,9 +178,25 @@ namespace TGD.Combat
             foreach (var state in ActiveSkillStates)
                 clone.ActiveSkillStates.Add(state);
 
+            clone.ActiveDotHotStatuses.Clear();
+            foreach (var status in ActiveDotHotStatuses)
+            {
+                if (status == null)
+                    continue;
+                clone.ActiveDotHotStatuses.Add(new DotHotStatusSnapshot
+                {
+                    SkillID = status.SkillID,
+                    Target = status.Target,
+                    Stacks = status.Stacks,
+                    IsHot = status.IsHot
+                });
+            }
+
+
             if (inheritSkillLevelOverride && HasSkillLevelOverride)
                 clone.skillLevelOverride = skillLevelOverride;
-
+            
+            clone.ConditionDotStacks = ConditionDotStacks;
             return clone;
         }
     }
@@ -340,7 +366,10 @@ namespace TGD.Combat
     public class DamageSchoolModificationPreview
     {
         public string TargetSkillID { get; set; }
-        public DamageSchool School { get; set; }
+        public DamageSchoolModifyType ModifyType { get; set; }
+        public DamageSchool TargetSchool { get; set; }
+        public bool UseFilter { get; set; }
+        public DamageSchool Filter { get; set; }
         public SkillModifyOperation Operation { get; set; }
         public ModifierType ModifierType { get; set; }
         public string ValueExpression { get; set; }
@@ -450,7 +479,10 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
         public EffectInterpretationResult AdditionalEffects { get; set; }
+        public bool SupportsStacks { get; set; }
+        public int MaxStacks { get; set; }
     }
+
     public class MasteryPosturePreview
     {
         public bool LockArmorToZero { get; set; }

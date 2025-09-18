@@ -316,18 +316,41 @@ namespace TGD.Editor
             string skillLabel = GetSkillLabel(effectProp, owningSkill, "targetSkillID");
             var sb = CreateHeader($"Modify Damage School ({skillLabel})");
 
-            string school = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
-            AddBullet(sb, $"School: {school}");
+            var modifyTypeProp = effectProp.FindPropertyRelative("damageSchoolModifyType");
+            DamageSchoolModifyType modifyType = modifyTypeProp != null
+                ? (DamageSchoolModifyType)modifyTypeProp.enumValueIndex
+                : DamageSchoolModifyType.Damage;
+            AddBullet(sb, $"Mode: {modifyType}");
 
-            var modifierProp = effectProp.FindPropertyRelative("modifierType");
-            if (modifierProp != null)
-                AddBullet(sb, $"Modifier: {((ModifierType)modifierProp.enumValueIndex)}");
+            bool useFilter = effectProp.FindPropertyRelative("damageSchoolFilterEnabled")?.boolValue ?? false;
+            if (useFilter)
+            {
+                string filter = GetEnumName(effectProp.FindPropertyRelative("damageSchoolFilter"), DamageSchool.Physical);
+                AddBullet(sb, $"Filter: {filter}");
+            }
 
-            var opProp = effectProp.FindPropertyRelative("skillModifyOperation");
-            if (opProp != null)
-                AddBullet(sb, $"Operation: {((SkillModifyOperation)opProp.enumValueIndex)}");
+            switch (modifyType)
+            {
+                case DamageSchoolModifyType.Damage:
+                    string school = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
+                    AddBullet(sb, $"School: {school}");
 
-            AddValueLine(sb, effectProp, owningSkill, "Modifier");
+                    var modifierProp = effectProp.FindPropertyRelative("modifierType");
+                    if (modifierProp != null)
+                        AddBullet(sb, $"Modifier: {((ModifierType)modifierProp.enumValueIndex)}");
+                    var opProp = effectProp.FindPropertyRelative("skillModifyOperation");
+                    if (opProp != null)
+                        AddBullet(sb, $"Operation: {((SkillModifyOperation)opProp.enumValueIndex)}");
+
+                    AddValueLine(sb, effectProp, owningSkill, "Modifier");
+                    break;
+                case DamageSchoolModifyType.DamageSchoolType:
+                    string newSchool = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
+                    AddBullet(sb, $"Convert to: {newSchool}");
+                    break;
+            }
+
+
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();
         }
@@ -513,6 +536,14 @@ namespace TGD.Editor
 
             if (operation != DotHotOperation.None)
                 AddValueLine(sb, effectProp, owningSkill, "Tick Value");
+            bool showStacks = effectProp.FindPropertyRelative("dotHotShowStacks")?.boolValue ?? false;
+            if (showStacks)
+            {
+                int maxStacks = effectProp.FindPropertyRelative("dotHotMaxStacks")?.intValue ?? 1;
+                string stackLabel = maxStacks < 0 ? "Unlimited" : maxStacks.ToString();
+                AddBullet(sb, $"Stacks: {stackLabel}");
+            }
+
 
             int mask = effectProp.FindPropertyRelative("visibleFields")?.intValue ?? 0;
             bool showSchool = (mask & (int)EffectFieldMask.School) != 0;
@@ -785,6 +816,19 @@ namespace TGD.Editor
                     else
                         sb.Append($" (state: '{stateSkillId}')");
                     break;
+                case EffectCondition.OnDotHotActive:
+                    string dotTarget = GetEnumName(effectProp.FindPropertyRelative("conditionDotTarget"), TargetType.Enemy);
+                    string dotSkills = DescribeStringList(effectProp.FindPropertyRelative("conditionDotSkillIDs"));
+                    bool useStacks = effectProp.FindPropertyRelative("conditionDotUseStacks")?.boolValue ?? false;
+                    sb.Append($" (target: {dotTarget}");
+                    if (string.IsNullOrWhiteSpace(dotSkills))
+                        sb.Append(", skills: any");
+                    else
+                        sb.Append($", skills: {dotSkills}");
+                    if (useStacks)
+                        sb.Append(", uses stacks");
+                    sb.Append(')');
+                    break;
                 case EffectCondition.OnNextSkillSpendResource:
                     string resource = GetEnumName(effectProp.FindPropertyRelative("conditionResourceType"), ResourceType.Discipline);
                     int minAmount = effectProp.FindPropertyRelative("conditionMinAmount")?.intValue ?? 1;
@@ -888,7 +932,29 @@ namespace TGD.Editor
         {
             return prop == null ? string.Empty : prop.stringValue;
         }
+        private static string DescribeStringList(SerializedProperty listProp)
+        {
+            if (listProp == null || !listProp.isArray || listProp.arraySize == 0)
+                return string.Empty;
 
+            var sb = new StringBuilder();
+            for (int i = 0; i < listProp.arraySize; i++)
+            {
+                var element = listProp.GetArrayElementAtIndex(i);
+                if (element.propertyType != SerializedPropertyType.String)
+                    continue;
+
+                string value = element.stringValue;
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                if (sb.Length > 0)
+                    sb.Append(", ");
+                sb.Append(value.Trim());
+            }
+
+            return sb.ToString();
+        }
         private static string GetStringFromArray(SerializedProperty arrayProp, int level)
         {
             if (arrayProp == null || !arrayProp.isArray || arrayProp.arraySize == 0)

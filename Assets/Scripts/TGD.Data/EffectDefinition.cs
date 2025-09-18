@@ -82,7 +82,7 @@ namespace TGD.Data
         OnCooldownEnd,
         AfterSkillUse,
         SkillStateActive,
-        // 新增：下一次消耗指定资源时触发（当前/下一次皆可命中）
+        OnDotHotActive,
         OnNextSkillSpendResource,
         OnDamageTaken,
         OnEffectEnd
@@ -125,7 +125,6 @@ namespace TGD.Data
         HP,
         Speed,
         MoveSpeed
-        // 后续可以继续扩展
     }
     public enum ModifierType
     {
@@ -137,6 +136,11 @@ namespace TGD.Data
         None,
         Damage,
         ActionType
+    }
+    public enum DamageSchoolModifyType
+    {
+        Damage,
+        DamageSchoolType
     }
 
     public enum SkillModifyType
@@ -268,6 +272,9 @@ namespace TGD.Data
         // —— 条件参数 ——
         public string conditionSkillStateID; // SkillStateActive: 指定需要激活的状态 skillID
         public string conditionSkillUseID;  // AfterSkillUse: 指定触发的技能ID（空/any = 任意技能）
+        public TargetType conditionDotTarget = TargetType.Enemy;
+        public List<string> conditionDotSkillIDs = new();
+        public bool conditionDotUseStacks = false;
         // —— 条件参数（仅当 condition == OnNextSkillSpendResource 时使用）——
         public ResourceType conditionResourceType;  // 例如 Discipline
         public int conditionMinAmount = 1;  // 最小花费（默认≥1）
@@ -318,6 +325,8 @@ namespace TGD.Data
         public int dotHotTriggerCount = 1;
         public bool dotHotAffectsAllies = false;
         public bool dotHotAffectsEnemies = true;
+        public bool dotHotShowStacks = false;
+        public int dotHotMaxStacks = 1;
         [SerializeReference]
         public List<EffectDefinition> dotHotAdditionalEffects = new List<EffectDefinition>();
 
@@ -335,6 +344,11 @@ namespace TGD.Data
         public bool modifyAffectsAllCosts = true;
         public CostResourceType modifyCostResource = CostResourceType.Energy;
         public bool resetCooldownToMax = true; // ModifySkill: 冷却重置时是否刷新为全新冷却
+
+        // ===== Modify Damage School =====
+        public DamageSchoolModifyType damageSchoolModifyType = DamageSchoolModifyType.Damage;
+        public bool damageSchoolFilterEnabled = false;
+        public DamageSchool damageSchoolFilter = DamageSchool.Physical;
 
         // ===== Move Effect =====
         public MoveSubject moveSubject = MoveSubject.Caster;
