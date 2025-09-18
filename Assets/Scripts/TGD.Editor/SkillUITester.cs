@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
-using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
@@ -11,18 +11,19 @@ namespace TGD.UI
     public class SkillUITester_Simple : EditorWindow
     {
         // 原有：本地化与技能数据变量
-        private Dictionary<string, string> localizationDict = new Dictionary<string, string>();
+        // Cached localization entries loaded from CSV (reused between refreshes).
+        private readonly Dictionary<string, string> localizationDict = new Dictionary<string, string>();
         private string localizationFilePath = "Assets/Localization/Localization_Skills.csv";
-        private List<SkillDefinition> allSkillDatas = new List<SkillDefinition>();
+        private readonly List<SkillDefinition> allSkillDatas = new List<SkillDefinition>();
         private SkillDefinition selectedSkill;
         private Vector2 scrollPos;
         private Vector2 effectScrollPos;
         private GUIStyle selectedMiniButton;
 
-        // 新增：Effect样式变量
-        private GUIStyle effectTitleStyle;       // Effect标题样式（如"Effect 1"）
-        private GUIStyle effectItemContainerStyle;// 单个Effect容器样式（背景、边框宽度）
-        private GUIStyle effectContentStyle;      // Effect内容文本样式（字体大小、颜色）
+        // Lazily created styles used to render effect previews in a consistent manner.
+        private GUIStyle effectTitleStyle;
+        private GUIStyle effectItemContainerStyle;
+        private GUIStyle effectContentStyle;
         private readonly Dictionary<SkillColor, GUIStyle> skillColorTextStyles = new();
         [MenuItem("Tools/Skill/简化版UI测试窗口")]
         public static void OpenTestWindow()
@@ -38,19 +39,58 @@ namespace TGD.UI
 
             // 原有：加载本地化与技能数据
             LoadLocalizationData();
+            LoadSkillDefinitions();
+        }
+
+
+        private void LoadSkillDefinitions()
+        {
             string skillDataPath = "SkillData";
-            SkillDefinition[] loadedSkills = Resources.LoadAll<SkillDefinition>(skillDataPath);
             allSkillDatas.Clear();
-            allSkillDatas.AddRange(loadedSkills);
-            allSkillDatas.Sort((a, b) =>
+            SkillDefinition[] loadedSkills = Resources.LoadAll<SkillDefinition>(skillDataPath);
+            if (loadedSkills != null)
             {
-                if (int.TryParse(a.skillID, out int idA) && int.TryParse(b.skillID, out int idB))
-                    return idA.CompareTo(idB);
-                int numA = ExtractNumberFromSkillID(a.skillID);
-                int numB = ExtractNumberFromSkillID(b.skillID);
-                return numA.CompareTo(numB);
-            });
-            if (allSkillDatas.Count > 0) selectedSkill = allSkillDatas[0];
+                foreach (var skill in loadedSkills)
+                {
+                    if (skill == null)
+                    {
+                        Debug.LogWarning("SkillUITester_Simple: Encountered null SkillDefinition while loading resources.");
+                        continue;
+                    }
+
+                    if (skill.skillDuration == null)
+                        skill.skillDuration = new SkillDurationSettings();
+
+                    allSkillDatas.Add(skill);
+                }
+            }
+
+            allSkillDatas.Sort(CompareSkills);
+
+            if (allSkillDatas.Count > 0)
+                selectedSkill = allSkillDatas[0];
+            else
+                selectedSkill = null;
+        }
+
+        private int CompareSkills(SkillDefinition a, SkillDefinition b)
+        {
+            if (a == null && b == null) return 0;
+            if (a == null) return 1;
+            if (b == null) return -1;
+
+            bool parsedA = int.TryParse(a.skillID, out int idA);
+            bool parsedB = int.TryParse(b.skillID, out int idB);
+            if (parsedA && parsedB)
+                return idA.CompareTo(idB);
+
+            int numA = ExtractNumberFromSkillID(a.skillID);
+            int numB = ExtractNumberFromSkillID(b.skillID);
+            int compare = numA.CompareTo(numB);
+            if (compare != 0)
+                return compare;
+
+            return string.Compare(a.skillID, b.skillID, StringComparison.OrdinalIgnoreCase);
         }
 
         // 原有：加载本地化数据
@@ -101,8 +141,13 @@ namespace TGD.UI
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Height(400));
             foreach (var skill in allSkillDatas)
             {
+                if (skill == null)
+                    continue;
+
+                string idDisplay = string.IsNullOrWhiteSpace(skill.skillID) ? "--" : skill.skillID;
+                string nameDisplay = string.IsNullOrWhiteSpace(skill.skillName) ? "(Unnamed)" : skill.skillName;
                 if (GUILayout.Button(
-                    $"ID:{skill.skillID} | {skill.skillName}",
+                    $"ID:{idDisplay} | {nameDisplay}",
                     selectedSkill == skill ? selectedMiniButton : EditorStyles.miniButton))
                 {
                     selectedSkill = skill;
@@ -121,7 +166,7 @@ namespace TGD.UI
             {
                 // 原有：技能图标
                 GUILayout.Label("技能图标：", EditorStyles.miniLabel);
-                if (selectedSkill.icon != null)
+                if (selectedSkill.icon != null && selectedSkill.icon.texture != null)
                 {
                     GUILayout.Label(new GUIContent(selectedSkill.icon.texture), GUILayout.Width(80), GUILayout.Height(80));
                 }
@@ -161,7 +206,16 @@ namespace TGD.UI
                         for (int i = 0; i < effectsProp.arraySize; i++)
                         {
                             SerializedProperty effectProp = effectsProp.GetArrayElementAtIndex(i);
-                            string summary = EffectSummaryUtility.BuildSummary(effectProp, selectedSkill);
+                            string summary;
+                            try
+                            {
+                                summary = EffectSummaryUtility.BuildSummary(effectProp, selectedSkill);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"SkillUITester_Simple: Failed to build effect summary for {selectedSkill?.skillID}: {ex.Message}");
+                                continue;
+                            }
                             if (string.IsNullOrWhiteSpace(summary)) continue;
 
                             // 单个Effect条目（最小高度120像素）
@@ -270,7 +324,10 @@ namespace TGD.UI
         // 辅助：生成纯色纹理（用于容器背景）
         private Texture2D CreateSolidTexture(Color color)
         {
-            Texture2D texture = new Texture2D(1, 1);
+            Texture2D texture = new Texture2D(1, 1)
+            {
+                hideFlags = HideFlags.HideAndDontSave
+            };
             texture.SetPixel(0, 0, color);
             texture.Apply();
             return texture;

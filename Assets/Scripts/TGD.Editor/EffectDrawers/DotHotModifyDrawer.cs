@@ -77,7 +77,10 @@ namespace TGD.Editor
 
             var extra = elem.FindPropertyRelative("dotHotAdditionalEffects");
             if (extra != null)
-                EditorGUILayout.PropertyField(extra, new GUIContent("Additional Effects"), includeChildren: true);
+            {
+                // Show nested effect list with proper depth tracking so designers can edit entries safely.
+                NestedEffectListDrawer.DrawEffectsList(extra, elem.depth + 1, "Additional Effects");
+            }
             else
                 EditorGUILayout.HelpBox("'dotHotAdditionalEffects' property not found on effect.", MessageType.Warning);
 

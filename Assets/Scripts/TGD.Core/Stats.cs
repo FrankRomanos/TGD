@@ -1,48 +1,108 @@
+using System;
+
 namespace TGD.Core
 {
-    /// <summary>最小属性面板（整数化，避免小数漂移）。</summary>
+    /// <summary>
+    /// Aggregates the base stats for a combat unit.
+    /// </summary>
     public class Stats
     {
         public int Level;
 
-        // 生命/恢复
-        public int MaxHP, HP;
+        // Vital resources.
+        public int MaxHP;
+        public int HP;
         public int Stamina;
 
-        // 攻击
+        // Base offensive power.
         public int Attack;
 
-        // 能量/职业资源
-        public int Energy, MaxEnergy, EnergyRegenPer2s;
+        // Class resources.
+        public int Energy;
+        public int MaxEnergy;
+        public int EnergyRegenPer2s;
 
-        // Posture (class exclusive resource)
-        public int Posture, MaxPosture;
-        public int Strength, Agility;
-        public int DamageIncrease;   
+        // Posture (class exclusive resource).
+        public int Posture;
+        public int MaxPosture;
+        public int Strength;
+        public int Agility;
+        // General damage amplification collected from gear / buffs.
+        public float DamageIncrease;
 
-        // 防御/暴击
+        // Defensive layer.
         public int Armor;
-        public int Crit;            // 30 点 = 1% 暴击
-        public int CritDamage = 200; // %，基线200%
 
-        // 职业精通
-        public int Mastery;
+        // Ratings converted to normalized ratios. Example: 0.325f => 32.5% crit chance.
+        public float Crit;
+        public float CritDamage = 200f; // Stored as percentage bonus. 200 => +200% crit damage.
 
-        // 速度（秒，影响回合时长；冷却不受影响）
+        // Mastery is exposed as `p` inside formulas.
+        public float Mastery;
+
+        // Turn speed (seconds) and movement speed.
         public int Speed;
-
-        // 移速（格/秒）
         public int MoveSpeed;
-        //增加威胁值，削韧倍率
-        public int Threat;
-        public int Shred;
+
+        // Bonus threat / shred multipliers (0.15f => +15%).
+        public float Threat;
+        public float Shred;
 
         public void Clamp()
         {
             if (HP > MaxHP) HP = MaxHP;
             if (HP < 0) HP = 0;
+
             if (Energy > MaxEnergy) Energy = MaxEnergy;
             if (Energy < 0) Energy = 0;
+
+            NormalizeDecimalStats();
+        }
+
+        /// <summary>
+        /// Ensures decimal based ratings keep the agreed three-decimal precision.
+        /// </summary>
+        public void NormalizeDecimalStats()
+        {
+            Crit = RoundToThreeDecimals(Crit);
+            Mastery = RoundToThreeDecimals(Mastery);
+            DamageIncrease = RoundToThreeDecimals(DamageIncrease);
+            Threat = RoundToThreeDecimals(Threat);
+            Shred = RoundToThreeDecimals(Shred);
+        }
+
+        /// <summary>
+        /// Returns the crit chance formatted as a percentage (three decimals precision).
+        /// </summary>
+        public float GetCritPercent() => RoundToThreeDecimals(Crit * 100f);
+
+        /// <summary>
+        /// Returns the mastery value formatted as a percentage (three decimals precision).
+        /// </summary>
+        public float GetMasteryPercent() => RoundToThreeDecimals(Mastery * 100f);
+
+        /// <summary>
+        /// Returns the threat multiplier ready for UI display (percentage form).
+        /// </summary>
+        public float GetThreatPercent() => RoundToThreeDecimals(NormalizePercent(Threat) * 100f);
+
+        /// <summary>
+        /// Returns the shred multiplier ready for UI display (percentage form).
+        /// </summary>
+        public float GetShredPercent() => RoundToThreeDecimals(NormalizePercent(Shred) * 100f);
+
+        private static float RoundToThreeDecimals(float value)
+        {
+            return (float)Math.Round(value, 3, MidpointRounding.AwayFromZero);
+        }
+
+        private static float NormalizePercent(float value)
+        {
+            if (value > 1f)
+                return value / 100f;
+            if (value < 0f)
+                return 0f;
+            return value;
         }
     }
 }

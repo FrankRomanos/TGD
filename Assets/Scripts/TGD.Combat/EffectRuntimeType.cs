@@ -234,6 +234,14 @@ namespace TGD.Combat
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
         public ImmunityScope ImmunityScope { get; set; }
+        public float ExpectedNormalDamage { get; set; }
+        public float ExpectedCriticalDamage { get; set; }
+        public float ExpectedThreat { get; set; }
+        public float ExpectedCriticalThreat { get; set; }
+        public float ExpectedShred { get; set; }
+        public float ExpectedCriticalShred { get; set; }
+        public float CriticalMultiplier { get; set; }
+        public float AttributeScalingMultiplier { get; set; }
     }
 
     public class HealPreview

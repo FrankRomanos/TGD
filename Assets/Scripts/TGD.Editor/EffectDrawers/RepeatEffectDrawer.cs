@@ -37,7 +37,10 @@ namespace TGD.Editor
 
             var effectsProp = elem.FindPropertyRelative("repeatEffects");
             if (effectsProp != null)
-                EditorGUILayout.PropertyField(effectsProp, new GUIContent("Repeated Effects"), includeChildren: true);
+            {
+                // Ensure nested repeat payloads use the shared UI helper to avoid recursion depth issues.
+                NestedEffectListDrawer.DrawEffectsList(effectsProp, elem.depth + 1, "Repeated Effects");
+            }
             else
                 EditorGUILayout.HelpBox("'repeatEffects' property not found on effect.", MessageType.Warning);
 

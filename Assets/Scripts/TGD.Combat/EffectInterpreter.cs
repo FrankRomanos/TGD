@@ -200,7 +200,7 @@ namespace TGD.Combat
             {
                 float amount = EvaluateExpression(expression, context, target, effect.value);
                 float probability = ResolveProbabilityValue(effect, context, target);
-                result.Damage.Add(new DamagePreview
+                var preview = new DamagePreview
                 {
                     Source = context.Caster,
                     Target = target,
@@ -210,8 +210,24 @@ namespace TGD.Combat
                     Probability = probability,
                     Expression = expression,
                     Condition = effect.condition
-                });
-                result.AddLog($"Damage {DescribeUnit(target)} for {amount:0.##} {effect.damageSchool} ({probability:0.##}% chance).");
+                };
+
+                PopulateDamagePreview(preview, effect, context, target);
+                result.Damage.Add(preview);
+
+                string log = $"Damage {DescribeUnit(target)} for {amount:0.##} {effect.damageSchool} ({probability:0.##}% chance).";
+                if (preview.ExpectedNormalDamage > 0f)
+                {
+                    log += $" Preview: {preview.ExpectedNormalDamage:0.##}";
+                    if (preview.CanCrit)
+                        log += $" / Crit: {preview.ExpectedCriticalDamage:0.##}";
+                }
+                if (preview.ExpectedThreat > 0f || preview.ExpectedCriticalThreat > 0f)
+                    log += $" | Threat: {preview.ExpectedThreat:0.##}";
+                if (preview.ExpectedShred > 0f || preview.ExpectedCriticalShred > 0f)
+                    log += $" | Shred: {preview.ExpectedShred:0.##}";
+
+                result.AddLog(log);
             }
         }
 
@@ -868,7 +884,61 @@ namespace TGD.Combat
 
             return fallback;
         }
+        private static void PopulateDamagePreview(DamagePreview preview, EffectDefinition effect, EffectContext context, Unit target)
+        {
+            if (preview == null || context?.Caster?.Stats == null)
+                return;
 
+            var stats = context.Caster.Stats;
+            float primaryAttribute = ResolvePrimaryOffensiveStat(stats);
+            float additionalMultiplier = ResolveCustomVariable(context, "damageincrease1");
+            float situationalMultiplier = ResolveCustomVariable(context, "damageincrease2");
+            float damageReduction = ResolveCustomVariable(context, "damagereduction");
+
+            string mitigationKey = effect.damageSchool.ToString().ToLowerInvariant() + "_mitigation";
+            float armorMultiplier = ResolveCustomVariable(context, mitigationKey);
+            if (armorMultiplier <= 0f)
+                armorMultiplier = 1f;
+
+            float skillThreat = context.Skill != null ? context.Skill.threat : 0f;
+            float skillShred = context.Skill != null ? context.Skill.shredMultiplier : 0f;
+
+            var input = new CombatFormula.DamageInput
+            {
+                SkillDamage = preview.Amount,
+                IsCritical = false,
+                PrimaryAttributeValue = primaryAttribute,
+                AdditionalDamageMultiplier = additionalMultiplier,
+                SituationalDamageMultiplier = situationalMultiplier,
+                DamageReduction = damageReduction,
+                ArmorMitigationMultiplier = armorMultiplier,
+                SkillThreatMultiplier = skillThreat,
+                SkillShredMultiplier = skillShred
+            };
+
+            var normal = CombatFormula.CalculateDamage(input, stats);
+            preview.ExpectedNormalDamage = normal.Damage;
+            preview.ExpectedThreat = normal.Threat;
+            preview.ExpectedShred = normal.Shred;
+            preview.AttributeScalingMultiplier = normal.AttributeMultiplier;
+            preview.CriticalMultiplier = 1f;
+
+            if (preview.CanCrit)
+            {
+                input.IsCritical = true;
+                var critical = CombatFormula.CalculateDamage(input, stats);
+                preview.ExpectedCriticalDamage = critical.Damage;
+                preview.ExpectedCriticalThreat = critical.Threat;
+                preview.ExpectedCriticalShred = critical.Shred;
+                preview.CriticalMultiplier = critical.CritMultiplier;
+            }
+            else
+            {
+                preview.ExpectedCriticalDamage = preview.ExpectedNormalDamage;
+                preview.ExpectedCriticalThreat = preview.ExpectedThreat;
+                preview.ExpectedCriticalShred = preview.ExpectedShred;
+            }
+        }
         private static float ResolveProbabilityValue(EffectDefinition effect, EffectContext context, Unit target)
         {
             string expr = ResolveProbabilityExpression(effect, context);
@@ -905,6 +975,24 @@ namespace TGD.Combat
             }
 
             return effect.probability;
+        }
+        private static float ResolveCustomVariable(EffectContext context, string key)
+        {
+            if (context == null || string.IsNullOrWhiteSpace(key))
+                return 0f;
+
+            if (context.CustomVariables != null && context.CustomVariables.TryGetValue(key, out float value))
+                return value;
+
+            return 0f;
+        }
+
+        private static float ResolvePrimaryOffensiveStat(Stats stats)
+        {
+            if (stats == null)
+                return 0f;
+            // Skills currently pick the higher of Strength or Agility for preview scaling.
+            return Math.Max(stats.Strength, stats.Agility);
         }
 
         private static int ResolveDuration(EffectDefinition effect, EffectContext context)
