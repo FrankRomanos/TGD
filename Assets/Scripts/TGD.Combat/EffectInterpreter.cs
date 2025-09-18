@@ -60,6 +60,13 @@ namespace TGD.Combat
                 foreach (var kvp in context?.CustomVariables ?? new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase))
                     workingContext.CustomVariables[kvp.Key] = kvp.Value;
 
+                workingContext.ActiveSkillStates.Clear();
+                if (context != null)
+                {
+                    foreach (var state in context.ActiveSkillStates)
+                        workingContext.ActiveSkillStates.Add(state);
+                }
+
                 if (context != null && context.HasSkillLevelOverride)
                     workingContext.OverrideSkillLevel(context.ResolveSkillLevel(context.Skill));
             }
@@ -161,6 +168,9 @@ namespace TGD.Combat
                     break;
                 case EffectType.ModifyAction:
                     ApplyModifyAction(effect, context, result);
+                    break;
+                case EffectType.ModifyDamageSchool:
+                    ApplyModifyDamageSchool(effect, context, result);
                     break;
                 case EffectType.AttributeModifier:
                     ApplyAttributeModifier(effect, context, result);
@@ -481,6 +491,25 @@ namespace TGD.Combat
             result.AddLog($"Modify actions on '{targetSkill}' ({effect.actionModifyType}).");
         }
 
+        private static void ApplyModifyDamageSchool(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            string targetSkill = GetSkillIdOrSelf(effect, context);
+            float probability = ResolveProbabilityValue(effect, context, context.Caster);
+            var preview = new DamageSchoolModificationPreview
+            {
+                TargetSkillID = targetSkill,
+                School = effect.damageSchool,
+                Operation = effect.skillModifyOperation,
+                ModifierType = effect.modifierType,
+                ValueExpression = ResolveValueExpression(effect, context),
+                Probability = probability,
+                Condition = effect.condition
+            };
+
+            result.DamageSchoolModifications.Add(preview);
+            result.AddLog($"Modify {effect.damageSchool} damage on '{targetSkill}' ({effect.skillModifyOperation}).");
+        }
+
         private static void ApplyAttributeModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
@@ -539,12 +568,27 @@ namespace TGD.Combat
         private static void ApplyCooldownModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
             int seconds = effect.cooldownChangeSeconds;
-            int rounds = 0;
+            int turns = 0;
             if (seconds != 0)
             {
-                int abs = Mathf.CeilToInt(Mathf.Abs(seconds) / (float)CombatClock.BaseTurnSeconds);
-                abs = Mathf.Max(abs, 1);
-                rounds = seconds > 0 ? abs : -abs;
+                int baseTurnSeconds = CombatClock.BaseTurnSeconds; // 每回合基础秒数（如6秒）
+                if (seconds > 0)
+                {
+                    // 冷却增加：不足1回合也向上取整（原逻辑正确）
+                    int abs = Mathf.CeilToInt((float)seconds / baseTurnSeconds);
+                    turns = Mathf.Max(abs, 1); // 至少增加1回合
+                }
+                else
+                {
+                    // 冷却减少：仅当减少的秒数 ≥ 1回合时才生效，否则不减少
+                    int reduceSeconds = Mathf.Abs(seconds); // 取减少的秒数绝对值
+                    if (reduceSeconds >= baseTurnSeconds)
+                    {
+                        // 减少的秒数足够1回合，按实际回合数计算（向下取整，避免多减）
+                        turns = -Mathf.FloorToInt((float)reduceSeconds / baseTurnSeconds);
+                    }
+                    // 否则（reduceSeconds < baseTurnSeconds），turns保持0（不减少）
+                }
             }
 
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
@@ -555,7 +599,7 @@ namespace TGD.Combat
                 Scope = scope,
                 SelfSkillID = selfSkillId,
                 Seconds = seconds,
-                Rounds = rounds,
+                turns = turns,
                 Probability = probability,
                 Condition = effect.condition
             });
@@ -567,7 +611,7 @@ namespace TGD.Combat
                 _ => !string.IsNullOrWhiteSpace(selfSkillId) ? $"skill '{selfSkillId}'" : "own skill"
             };
 
-            result.AddLog($"Modify cooldown for {scopeDescription} by {seconds:+#;-#;0}s ({rounds:+#;-#;0} rounds).");
+            result.AddLog($"Modify cooldown for {scopeDescription} by {seconds:+#;-#;0}s ({turns:+#;-#;0} turns).");
         }
         private static void ApplyRandomOutcome(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
@@ -742,7 +786,7 @@ namespace TGD.Combat
 
             string durationLabel = duration switch
             {
-                > 0 => $"{duration} turn(s)",
+                > 0 => $"{duration} round(s)",
                 -1 => "instant",
                 -2 => "permanent",
                 0 => "skill default",
@@ -750,7 +794,7 @@ namespace TGD.Combat
             };
 
             string triggerLabel = baseTriggerCount == 0 ? "default (6s)" : baseTriggerCount.ToString();
-            string triggerFormulaLabel = baseTriggerCount == 0 ? "默认6" : baseTriggerCount.ToString();
+            string triggerFormulaLabel = baseTriggerCount == 0 ? "default6" : baseTriggerCount.ToString();
             string expressionLabel = string.IsNullOrWhiteSpace(expression) ? "(no tick expression)" : expression;
             string valueLabel = hasExpression ? evaluatedValue.ToString("0.##") : "--";
             switch (effect.dotHotOperation)
@@ -824,7 +868,19 @@ namespace TGD.Combat
                     return !string.IsNullOrWhiteSpace(lastSkill) &&
                            string.Equals(requiredSkill, lastSkill, StringComparison.OrdinalIgnoreCase);
                 case EffectCondition.SkillStateActive:
-                    return context.ConditionSkillStateActive;
+                    if (!context.ConditionSkillStateActive)
+                        return false;
+
+                    string requiredState = effect.conditionSkillStateID;
+                    if (string.IsNullOrWhiteSpace(requiredState))
+                        return true;
+
+                    foreach (var state in context.ActiveSkillStates)
+                    {
+                        if (string.Equals(state, requiredState, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    return false;
                 case EffectCondition.OnNextSkillSpendResource:
                     if (!context.ConditionOnResourceSpend)
                         return false;
@@ -921,8 +977,34 @@ namespace TGD.Combat
             float situationalMultiplier = ResolveCustomVariable(context, "damageincrease2");
             float damageReduction = ResolveCustomVariable(context, "damagereduction");
 
-            string mitigationKey = effect.damageSchool.ToString().ToLowerInvariant() + "_mitigation";
-            float armorMultiplier = ResolveCustomVariable(context, mitigationKey);
+            string mitigationKey;
+            float armorMultiplier = 1f;
+            switch (effect.damageSchool)
+            {
+                case DamageSchool.Poison:
+                    mitigationKey = DamageSchool.Physical.ToString().ToLowerInvariant() + "_mitigation";
+                    break;
+                case DamageSchool.Bleed:
+                    mitigationKey = string.Empty;
+                    armorMultiplier = 1f;
+                    break;
+                case DamageSchool.Frost:
+                    mitigationKey = "magical_mitigation";
+                    break;
+                // 新增：火焰伤害使用魔法减免
+                case DamageSchool.Fire:
+                    mitigationKey = "magical_mitigation";
+                    break;
+                default:
+                    mitigationKey = effect.damageSchool.ToString().ToLowerInvariant() + "_mitigation";
+                    break;
+            }
+
+            if (!string.IsNullOrEmpty(mitigationKey))
+            {
+                armorMultiplier = ResolveCustomVariable(context, mitigationKey);
+            }
+
             if (armorMultiplier <= 0f)
                 armorMultiplier = 1f;
 
@@ -1126,6 +1208,7 @@ namespace TGD.Combat
             map[prefix + "stamina"] = stats.Stamina;
             map[prefix + "energy"] = stats.Energy;
             map[prefix + "maxenergy"] = stats.MaxEnergy;
+            map[prefix + "energyregen"] = stats.EnergyRegenPer2s;
             map[prefix + "mastery"] = stats.Mastery;
             map[prefix + "posture"] = stats.Posture;
             map[prefix + "maxposture"] = stats.MaxPosture;
@@ -1134,6 +1217,7 @@ namespace TGD.Combat
             map[prefix + "agility"] = stats.Agility;
             map[prefix + "agi"] = stats.Agility;
             map[prefix + "damageincrease"] = stats.DamageIncrease;
+            map[prefix + "healincrease"] = stats.HealIncrease;
             map[prefix + "dmginc"] = stats.DamageIncrease;
             map[prefix + "threat"] = stats.Threat;
             map[prefix + "shred"] = stats.Shred;

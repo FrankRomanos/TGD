@@ -49,6 +49,7 @@ namespace TGD.Combat
             ResourceSpent = new Dictionary<ResourceType, float>();
             ResourceMaxValues = new Dictionary<ResourceType, float>();
             CustomVariables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+            ActiveSkillStates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (caster != null)
             {
@@ -73,6 +74,7 @@ namespace TGD.Combat
         public Dictionary<ResourceType, float> ResourceMaxValues { get; }
         public Dictionary<string, float> CustomVariables { get; }
         public float IncomingDamage { get; set; }
+        public HashSet<string> ActiveSkillStates { get; }
         public bool ConditionAfterAttack { get; set; }
         public float IncomingDamageMitigated { get; set; }
         public bool ConditionOnCrit { get; set; }
@@ -162,6 +164,10 @@ namespace TGD.Combat
             foreach (var kvp in CustomVariables)
                 clone.CustomVariables[kvp.Key] = kvp.Value;
 
+            clone.ActiveSkillStates.Clear();
+            foreach (var state in ActiveSkillStates)
+                clone.ActiveSkillStates.Add(state);
+
             if (inheritSkillLevelOverride && HasSkillLevelOverride)
                 clone.skillLevelOverride = skillLevelOverride;
 
@@ -179,6 +185,7 @@ namespace TGD.Combat
         public List<SkillModificationPreview> SkillModifications { get; } = new();
         public List<SkillReplacementPreview> SkillReplacements { get; } = new();
         public List<ActionModificationPreview> ActionModifications { get; } = new();
+        public List<DamageSchoolModificationPreview> DamageSchoolModifications { get; } = new();
         public List<CooldownModificationPreview> CooldownModifications { get; } = new();
         public List<AttributeModifierPreview> AttributeModifiers { get; } = new();
         public List<ScalingBuffPreview> ScalingBuffs { get; } = new();
@@ -203,6 +210,7 @@ namespace TGD.Combat
             SkillModifications.AddRange(other.SkillModifications);
             SkillReplacements.AddRange(other.SkillReplacements);
             ActionModifications.AddRange(other.ActionModifications);
+            DamageSchoolModifications.AddRange(other.DamageSchoolModifications);
             CooldownModifications.AddRange(other.CooldownModifications);
             AttributeModifiers.AddRange(other.AttributeModifiers);
             ScalingBuffs.AddRange(other.ScalingBuffs);
@@ -329,12 +337,24 @@ namespace TGD.Combat
         public EffectCondition Condition { get; set; }
     }
 
+    public class DamageSchoolModificationPreview
+    {
+        public string TargetSkillID { get; set; }
+        public DamageSchool School { get; set; }
+        public SkillModifyOperation Operation { get; set; }
+        public ModifierType ModifierType { get; set; }
+        public string ValueExpression { get; set; }
+        public float Probability { get; set; }
+        public EffectCondition Condition { get; set; }
+    }
+
     public class CooldownModificationPreview
     {
         public CooldownTargetScope Scope { get; set; }
         public string SelfSkillID { get; set; }
         public int Seconds { get; set; }
         public int Rounds { get; set; }
+        public int turns {  get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
     }

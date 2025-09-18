@@ -80,7 +80,7 @@ namespace TGD.Editor
             bool forceDuration = operation == DotHotOperation.ConvertDamageToDot;
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Duration, "Duration") || forceDuration)
             {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("duration"), new GUIContent("Duration (Turns)"));
+                EditorGUILayout.PropertyField(elem.FindPropertyRelative("duration"), new GUIContent("Duration (Rounds)"));
             }
 
             var extra = elem.FindPropertyRelative("dotHotAdditionalEffects");
@@ -96,8 +96,16 @@ namespace TGD.Editor
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Condition, "Trigger Condition"))
             {
                 var cond = elem.FindPropertyRelative("condition");
+                var maskProp = elem.FindPropertyRelative("visibleFields");
+                int originalMask = maskProp != null ? maskProp.intValue : 0;
+
+                if (maskProp != null)
+                    maskProp.intValue = originalMask & ~(int)EffectFieldMask.Duration;
+
                 EditorGUILayout.PropertyField(cond, new GUIContent("Trigger Condition"));
                 FieldVisibilityUI.DrawConditionFields(elem, cond);
+                if (maskProp != null)
+                    maskProp.intValue = originalMask;
             }
         }
     }

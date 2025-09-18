@@ -36,6 +36,7 @@ namespace TGD.Editor
                 EffectType.ReplaceSkill => BuildReplaceSkillSummary(effectProp, owningSkill),
                 EffectType.Move => BuildMoveSummary(effectProp, owningSkill),
                 EffectType.ModifyAction => BuildModifyActionSummary(effectProp, owningSkill),
+                EffectType.ModifyDamageSchool => BuildModifyDamageSchoolSummary(effectProp, owningSkill),
                 EffectType.AttributeModifier => BuildAttributeModifierSummary(effectProp, owningSkill),
                 EffectType.MasteryPosture => BuildMasteryPostureSummary(effectProp, owningSkill),
                 EffectType.CooldownModifier => BuildCooldownModifierSummary(effectProp, owningSkill),
@@ -310,6 +311,27 @@ namespace TGD.Editor
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();
         }
+        private static string BuildModifyDamageSchoolSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            string skillLabel = GetSkillLabel(effectProp, owningSkill, "targetSkillID");
+            var sb = CreateHeader($"Modify Damage School ({skillLabel})");
+
+            string school = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
+            AddBullet(sb, $"School: {school}");
+
+            var modifierProp = effectProp.FindPropertyRelative("modifierType");
+            if (modifierProp != null)
+                AddBullet(sb, $"Modifier: {((ModifierType)modifierProp.enumValueIndex)}");
+
+            var opProp = effectProp.FindPropertyRelative("skillModifyOperation");
+            if (opProp != null)
+                AddBullet(sb, $"Operation: {((SkillModifyOperation)opProp.enumValueIndex)}");
+
+            AddValueLine(sb, effectProp, owningSkill, "Modifier");
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
 
         private static string BuildAttributeModifierSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
         {
@@ -512,7 +534,7 @@ namespace TGD.Editor
             if (extras != null)
                 AddBullet(sb, $"Additional effects: {extras.arraySize}");
 
-            AppendCommonLines(sb, effectProp, owningSkill);
+            AppendCommonLines(sb, effectProp, owningSkill, durationInRounds: true);
             return sb.ToString().TrimEnd();
         }
 
@@ -549,9 +571,9 @@ namespace TGD.Editor
                 AddBullet(sb, value);
         }
 
-        private static void AppendCommonLines(StringBuilder sb, SerializedProperty effectProp, SkillDefinition owningSkill)
+        private static void AppendCommonLines(StringBuilder sb, SerializedProperty effectProp, SkillDefinition owningSkill, bool durationInRounds = false)
         {
-            AddBullet(sb, DescribeDuration(effectProp, owningSkill));
+            AddBullet(sb, DescribeDuration(effectProp, owningSkill, durationInRounds));
             AddBullet(sb, DescribeProbability(effectProp, owningSkill));
             AddBullet(sb, DescribeCondition(effectProp));
         }
@@ -622,7 +644,7 @@ namespace TGD.Editor
             return string.Empty;
         }
 
-        private static string DescribeDuration(SerializedProperty effectProp, SkillDefinition owningSkill)
+        private static string DescribeDuration(SerializedProperty effectProp, SkillDefinition owningSkill, bool useRounds = false)
         {
             int mask = effectProp.FindPropertyRelative("visibleFields")?.intValue ?? 0;
             bool useCustom = (mask & (int)EffectFieldMask.Duration) != 0;
@@ -632,7 +654,7 @@ namespace TGD.Editor
                 if (owningSkill != null)
                 {
                     int resolved = owningSkill.ResolveDuration(GetSkillLevel(owningSkill));
-                    string resolvedLabel = FormatDurationLabel(resolved);
+                    string resolvedLabel = FormatDurationLabel(resolved, useRounds);
                     if (!string.IsNullOrEmpty(resolvedLabel))
                         return $"Duration: follows skill ({resolvedLabel})";
                 }
@@ -646,9 +668,8 @@ namespace TGD.Editor
             {
                 var perLevelArray = effectProp.FindPropertyRelative("durationLevels");
                 int perLevelValue = GetIntFromArray(perLevelArray, level);
-                string perLevelLabel = FormatDurationLabel(perLevelValue);
-                if (!string.IsNullOrEmpty(perLevelLabel))
-                    return $"Duration @L{level}: {perLevelLabel}";
+                string perLevelLabel = FormatDurationLabel(perLevelValue, useRounds);
+                return $"Duration @L{level}: {perLevelLabel}";
             }
 
             var durationProp = effectProp.FindPropertyRelative("duration");
@@ -657,7 +678,7 @@ namespace TGD.Editor
                 int rawValue = durationProp.propertyType == SerializedPropertyType.Integer
                    ? durationProp.intValue
                     : Mathf.RoundToInt(durationProp.floatValue);
-                string label = FormatDurationLabel(rawValue);
+                string label = FormatDurationLabel(rawValue, useRounds);
                 if (!string.IsNullOrEmpty(label))
                     return $"Duration: {label}";
             }
@@ -665,10 +686,10 @@ namespace TGD.Editor
             return string.Empty;
         }
 
-        private static string FormatDurationBullet(int duration, string prefix, bool forInstantTrigger = false)
+        private static string FormatDurationBullet(int duration, string prefix, bool forInstantTrigger = false, bool useRounds = false)
         {
             if (duration > 0)
-                return $"{prefix}: {duration} turn(s)";
+                return $"{prefix}: {duration} {(useRounds ? "round(s)" : "turn(s)")}";
             if (duration == -1)
                 return forInstantTrigger ? "Instant trigger (fires status effects immediately)" : $"{prefix}: Instant";
             if (duration == -2)
@@ -678,7 +699,7 @@ namespace TGD.Editor
             return $"{prefix}: {duration}";
         }
 
-        private static string FormatDurationLabel(int duration)
+        private static string FormatDurationLabel(int duration, bool useRounds = false)
         {
             if (duration > 0)
                 return $"{duration} turn(s)";
@@ -756,6 +777,13 @@ namespace TGD.Editor
                     {
                         sb.Append($" (skill: '{skillId}')");
                     }
+                    break;
+                case EffectCondition.SkillStateActive:
+                    string stateSkillId = effectProp.FindPropertyRelative("conditionSkillStateID")?.stringValue;
+                    if (string.IsNullOrWhiteSpace(stateSkillId))
+                        sb.Append(" (state: any)");
+                    else
+                        sb.Append($" (state: '{stateSkillId}')");
                     break;
                 case EffectCondition.OnNextSkillSpendResource:
                     string resource = GetEnumName(effectProp.FindPropertyRelative("conditionResourceType"), ResourceType.Discipline);

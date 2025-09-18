@@ -39,6 +39,8 @@ namespace TGD.Editor
                 case SkillModifyType.Damage:
                 case SkillModifyType.Heal:
                 case SkillModifyType.ResourceCost:
+                case SkillModifyType.Duration:
+                case SkillModifyType.BuffPower:
                     DrawValueBlock(elem, modifyType);
                     break;
                 case SkillModifyType.CooldownReset:
@@ -64,7 +66,9 @@ namespace TGD.Editor
                                     type == SkillModifyType.Damage ||
                                     type == SkillModifyType.Heal ||
                                     type == SkillModifyType.ResourceCost ||
-                                    type == SkillModifyType.CooldownModify;
+                                    type == SkillModifyType.CooldownModify ||
+                                    type == SkillModifyType.Duration ||
+                                    type == SkillModifyType.BuffPower;
 
             if (showModifierType)
             {
@@ -133,6 +137,14 @@ namespace TGD.Editor
                     EditorGUILayout.HelpBox("Flat values change resource amount. Percentage values scale the original cost.",
                         MessageType.Info);
                     break;
+                case SkillModifyType.Duration:
+                    EditorGUILayout.HelpBox("Duration changes are measured in turns. Use negative values to shorten effects.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.BuffPower:
+                    EditorGUILayout.HelpBox("Scales healing and buff outputs produced by the target skill.",
+                        MessageType.Info);
+                    break;
             }
         }
 
@@ -198,6 +210,10 @@ namespace TGD.Editor
                         ? "all costs"
                         : $"{((CostResourceType)elem.FindPropertyRelative("modifyCostResource").enumValueIndex)} cost";
                     return $"{verb} {target} for '{skillId}' {connector} {valueText}.";
+                case SkillModifyType.Duration:
+                    return $"{verb} duration of '{skillId}' {connector} {valueText}.";
+                case SkillModifyType.BuffPower:
+                    return $"{verb} buff potency of '{skillId}' {connector} {valueText}.";
                 default:
                     return string.Empty;
             }
@@ -259,6 +275,10 @@ namespace TGD.Editor
                     return "Heal Modifier (expression)";
                 case SkillModifyType.ResourceCost:
                     return "Cost Change (expression)";
+                case SkillModifyType.Duration:
+                    return "Duration Change (turns / expression)";
+                case SkillModifyType.BuffPower:
+                    return "Buff Power Modifier (expression)";
                 default:
                     return "Value / Expression";
             }

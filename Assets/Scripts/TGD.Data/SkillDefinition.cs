@@ -132,7 +132,7 @@ namespace TGD.Data
             return skillDuration != null ? skillDuration.Resolve(level) : 0;
         }
 
-        public void RecalculateDerived(int baseTurnTimeSeconds = 6)
+        public void RecalculateCooldownSecondToTurn(int baseTurnTimeSeconds = 6)
         {
             if (baseTurnTimeSeconds <= 0) baseTurnTimeSeconds = 6;
             cooldownRounds = Mathf.CeilToInt((float)cooldownSeconds / baseTurnTimeSeconds);

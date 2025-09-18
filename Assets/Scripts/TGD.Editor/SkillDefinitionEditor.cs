@@ -124,7 +124,7 @@ namespace TGD.Editor
                 serializedObject.FindProperty("targetType").enumValueIndex = (int)SkillTargetType.None;
                 serializedObject.FindProperty("timeCostSeconds").intValue = 0;
                 serializedObject.FindProperty("cooldownSeconds").intValue = 0;
-                serializedObject.FindProperty("cooldownRounds").intValue = 0;
+                serializedObject.FindProperty("cooldownTurns").intValue = 0;
                 serializedObject.FindProperty("threat").floatValue = 0f;
                 serializedObject.FindProperty("shredMultiplier").floatValue = 0f;
 
@@ -136,7 +136,7 @@ namespace TGD.Editor
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("targetType"));
 
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownSeconds"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownRounds"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownTurns"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("range"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("threat"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("shredMultiplier"));

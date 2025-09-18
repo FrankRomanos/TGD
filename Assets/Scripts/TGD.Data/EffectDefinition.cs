@@ -47,6 +47,7 @@ namespace TGD.Data
         Move,                // 统一的技能调整入口
         ModifyAction,
         CooldownModifier,
+        ModifyDamageSchool,
         AttributeModifier,
         MasteryPosture,
         RandomOutcome,
@@ -62,7 +63,16 @@ namespace TGD.Data
     }
 
 
-    public enum DamageSchool { Physical, Magical, True }
+    public enum DamageSchool 
+    { 
+        Physical, 
+        Magical, 
+        True,
+        Poison,
+        Bleed,
+        Fire,
+        Frost
+    }
     [Serializable]
     public enum EffectCondition
     {
@@ -138,7 +148,9 @@ namespace TGD.Data
         TimeCost,
         Damage,
         Heal,
-        ResourceCost
+        ResourceCost,
+        Duration,
+        BuffPower
     }
 
     public enum SkillModifyOperation
@@ -254,6 +266,7 @@ namespace TGD.Data
 
 
         // —— 条件参数 ——
+        public string conditionSkillStateID; // SkillStateActive: 指定需要激活的状态 skillID
         public string conditionSkillUseID;  // AfterSkillUse: 指定触发的技能ID（空/any = 任意技能）
         // —— 条件参数（仅当 condition == OnNextSkillSpendResource 时使用）——
         public ResourceType conditionResourceType;  // 例如 Discipline

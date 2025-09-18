@@ -30,6 +30,7 @@ namespace TGD.Core
         // General damage amplification from gear / buffs (multiplicative with other sources,
         // stacks additively only when coming from the same skill ID).
         public float DamageIncrease;
+        public float HealIncrease;
 
         // Defensive layer.
         public int Armor;
@@ -68,6 +69,7 @@ namespace TGD.Core
             Crit = RoundToThreeDecimals(Crit);
             Mastery = RoundToThreeDecimals(Mastery);
             DamageIncrease = RoundToThreeDecimals(DamageIncrease);
+            HealIncrease = RoundToThreeDecimals(HealIncrease);
             Threat = RoundToThreeDecimals(Threat);
             Shred = RoundToThreeDecimals(Shred);
         }

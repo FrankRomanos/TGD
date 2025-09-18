@@ -133,7 +133,7 @@ namespace TGD.Editor
                 dto.ApplyToAsset(asset);
 
                 // 重新计算派生字段
-                asset.RecalculateDerived(6);
+                asset.RecalculateCooldownSecondToTurn(6);
                 EditorUtility.SetDirty(asset);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();

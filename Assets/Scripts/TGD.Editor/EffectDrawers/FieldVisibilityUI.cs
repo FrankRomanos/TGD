@@ -78,6 +78,17 @@ namespace TGD.Editor
                         }
                     }
                     break;
+                case EffectCondition.SkillStateActive:
+                    var stateProp = elem.FindPropertyRelative("conditionSkillStateID");
+                    if (stateProp != null)
+                    {
+                        EditorGUILayout.PropertyField(stateProp, new GUIContent("State Skill ID"));
+                        if (string.IsNullOrWhiteSpace(stateProp.stringValue))
+                        {
+                            EditorGUILayout.HelpBox("Leave empty to react to any active state.", MessageType.Info);
+                        }
+                    }
+                    break;
                 case EffectCondition.OnNextSkillSpendResource:
                     EditorGUILayout.PropertyField(elem.FindPropertyRelative("conditionResourceType"),
                         new GUIContent("Cond. Resource"));
