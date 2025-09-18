@@ -49,7 +49,6 @@ namespace TGD.Combat
             ResourceSpent = new Dictionary<ResourceType, float>();
             ResourceMaxValues = new Dictionary<ResourceType, float>();
             CustomVariables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-            ProfessionScaling = 1f;
 
             if (caster != null)
             {
@@ -73,7 +72,6 @@ namespace TGD.Combat
         public Dictionary<ResourceType, float> ResourceSpent { get; }
         public Dictionary<ResourceType, float> ResourceMaxValues { get; }
         public Dictionary<string, float> CustomVariables { get; }
-        public float ProfessionScaling { get; set; }
         public float IncomingDamage { get; set; }
         public bool ConditionAfterAttack { get; set; }
         public float IncomingDamageMitigated { get; set; }
@@ -127,7 +125,6 @@ namespace TGD.Combat
             {
                 PrimaryTarget = PrimaryTarget,
                 SecondaryTarget = SecondaryTarget,
-                ProfessionScaling = ProfessionScaling,
                 IncomingDamage = IncomingDamage,
                 IncomingDamageMitigated = IncomingDamageMitigated,
                 ConditionAfterAttack = ConditionAfterAttack,
@@ -187,6 +184,10 @@ namespace TGD.Combat
         public List<ScalingBuffPreview> ScalingBuffs { get; } = new();
         public List<MovePreview> Moves { get; } = new();
         public List<MasteryPosturePreview> MasteryPosture { get; } = new();
+        public List<RandomOutcomePreview> RandomOutcomes { get; } = new();
+        public List<RepeatEffectPreview> RepeatEffects { get; } = new();
+        public List<ProbabilityModifierPreview> ProbabilityModifiers { get; } = new();
+        public List<DotHotModifierPreview> DotHotModifiers { get; } = new();
         public List<SkillUseConditionPreview> SkillUseConditions { get; } = new();
         public List<string> Logs { get; } = new();
 
@@ -207,6 +208,10 @@ namespace TGD.Combat
             ScalingBuffs.AddRange(other.ScalingBuffs);
             Moves.AddRange(other.Moves);
             MasteryPosture.AddRange(other.MasteryPosture);
+            RandomOutcomes.AddRange(other.RandomOutcomes);
+            RepeatEffects.AddRange(other.RepeatEffects);
+            ProbabilityModifiers.AddRange(other.ProbabilityModifiers);
+            DotHotModifiers.AddRange(other.DotHotModifiers);
             SkillUseConditions.AddRange(other.SkillUseConditions);
             Logs.AddRange(other.Logs);
         }
@@ -228,6 +233,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
+        public ImmunityScope ImmunityScope { get; set; }
     }
 
     public class HealPreview
@@ -333,6 +339,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public ImmunityScope ImmunityScope { get; set; }
     }
 
     public class ScalingBuffPreview
@@ -362,7 +369,59 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
     }
+    public class RandomOutcomeOptionPreview
+    {
+        public string Label { get; set; }
+        public string Description { get; set; }
+        public float Probability { get; set; }
+        public int Weight { get; set; }
+        public ProbabilityModifierMode ProbabilityMode { get; set; }
+        public EffectInterpretationResult Result { get; set; }
+    }
 
+    public class RandomOutcomePreview
+    {
+        public int RollCount { get; set; }
+        public bool AllowDuplicates { get; set; }
+        public List<RandomOutcomeOptionPreview> Options { get; } = new();
+        public EffectCondition Condition { get; set; }
+    }
+
+    public class RepeatEffectPreview
+    {
+        public RepeatCountSource CountSource { get; set; }
+        public int Count { get; set; }
+        public int MaxCount { get; set; }
+        public string CountExpression { get; set; }
+        public ResourceType ResourceType { get; set; }
+        public bool ConsumeResource { get; set; }
+        public EffectCondition Condition { get; set; }
+        public EffectInterpretationResult Result { get; set; }
+    }
+
+    public class ProbabilityModifierPreview
+    {
+        public ProbabilityModifierMode Mode { get; set; }
+        public EffectCondition Condition { get; set; }
+        public TargetType Target { get; set; }
+    }
+
+    public class DotHotModifierPreview
+    {
+        public DotHotOperation Operation { get; set; }
+        public DotHotCategory Category { get; set; }
+        public string CustomTag { get; set; }
+        public int TriggerCount { get; set; }
+        public string ValueExpression { get; set; }
+        public float EvaluatedValue { get; set; }
+        public int Duration { get; set; }
+        public DamageSchool DamageSchool { get; set; }
+        public bool CanCrit { get; set; }
+        public bool AffectsAllies { get; set; }
+        public bool AffectsEnemies { get; set; }
+        public EffectCondition Condition { get; set; }
+        public EffectInterpretationResult AdditionalEffects { get; set; }
+    }
     public class MasteryPosturePreview
     {
         public bool LockArmorToZero { get; set; }

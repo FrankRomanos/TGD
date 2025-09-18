@@ -39,6 +39,10 @@ namespace TGD.Editor
                 EffectType.AttributeModifier => BuildAttributeModifierSummary(effectProp, owningSkill),
                 EffectType.MasteryPosture => BuildMasteryPostureSummary(effectProp, owningSkill),
                 EffectType.CooldownModifier => BuildCooldownModifierSummary(effectProp, owningSkill),
+                EffectType.RandomOutcome => BuildRandomOutcomeSummary(effectProp, owningSkill),
+                EffectType.Repeat => BuildRepeatSummary(effectProp, owningSkill),
+                EffectType.ProbabilityModifier => BuildProbabilityModifierSummary(effectProp, owningSkill),
+                EffectType.DotHotModifier => BuildDotHotSummary(effectProp, owningSkill),
                 _ => BuildDefaultSummary(effectProp, owningSkill, effectType)
             };
         }
@@ -388,6 +392,136 @@ namespace TGD.Editor
             string secondsText = seconds >= 0 ? $"+{seconds}" : seconds.ToString();
             string roundsText = rounds >= 0 ? $"+{rounds}" : rounds.ToString();
             AddBullet(sb, $"Change: {secondsText}s ({roundsText} round(s))");
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+        private static string BuildRandomOutcomeSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("Random Outcome", GetTargetLabel(effectProp));
+            int rollCount = effectProp.FindPropertyRelative("randomRollCount")?.intValue ?? 1;
+            bool allowDuplicates = effectProp.FindPropertyRelative("randomAllowDuplicates")?.boolValue ?? true;
+            AddBullet(sb, $"Roll count: {rollCount}");
+            AddBullet(sb, $"Allow duplicates: {(allowDuplicates ? "Yes" : "No")}");
+
+            var outcomes = effectProp.FindPropertyRelative("randomOutcomes");
+            if (outcomes != null)
+            {
+                int count = outcomes.arraySize;
+                AddBullet(sb, $"Options: {count}");
+                for (int i = 0; i < count; i++)
+                {
+                    var entry = outcomes.GetArrayElementAtIndex(i);
+                    string label = FormatSimpleString(entry.FindPropertyRelative("label"));
+                    if (string.IsNullOrEmpty(label))
+                        label = $"Option {i + 1}";
+                    int weight = entry.FindPropertyRelative("weight")?.intValue ?? 0;
+                    string mode = GetEnumName(entry.FindPropertyRelative("probabilityMode"), ProbabilityModifierMode.None);
+                    AddBullet(sb, $"{label} (Weight {weight}, Mode {mode})");
+                }
+            }
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildRepeatSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("Repeat Effects", GetTargetLabel(effectProp));
+            var sourceProp = effectProp.FindPropertyRelative("repeatCountSource");
+            RepeatCountSource source = sourceProp != null
+                ? (RepeatCountSource)sourceProp.enumValueIndex
+                : RepeatCountSource.Fixed;
+            AddBullet(sb, $"Count source: {source}");
+
+            int baseCount = effectProp.FindPropertyRelative("repeatCount")?.intValue ?? 0;
+            AddBullet(sb, $"Base count: {baseCount}");
+
+            if (source == RepeatCountSource.Expression)
+            {
+                string expr = FormatSimpleString(effectProp.FindPropertyRelative("repeatCountExpression"));
+                if (!string.IsNullOrEmpty(expr))
+                    AddBullet(sb, $"Expression: {expr}");
+            }
+
+            if (source == RepeatCountSource.ResourceValue || source == RepeatCountSource.ResourceSpent)
+            {
+                string resource = GetEnumName(effectProp.FindPropertyRelative("repeatResourceType"), ResourceType.Discipline);
+                AddBullet(sb, $"Resource: {resource}");
+            }
+
+            bool consume = effectProp.FindPropertyRelative("repeatConsumeResource")?.boolValue ?? true;
+            AddBullet(sb, $"Consume resource: {(consume ? "Yes" : "No")}");
+
+            int maxCount = effectProp.FindPropertyRelative("repeatMaxCount")?.intValue ?? 0;
+            if (maxCount > 0)
+                AddBullet(sb, $"Max count: {maxCount}");
+
+            var nested = effectProp.FindPropertyRelative("repeatEffects");
+            if (nested != null)
+                AddBullet(sb, $"Nested effects: {nested.arraySize}");
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildProbabilityModifierSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("Probability Modifier", GetTargetLabel(effectProp));
+            string mode = GetEnumName(effectProp.FindPropertyRelative("probabilityModifierMode"), ProbabilityModifierMode.None);
+            AddBullet(sb, $"Mode: {mode}");
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildDotHotSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("DoT / HoT Modifier", GetTargetLabel(effectProp));
+            DotHotOperation operation = effectProp.FindPropertyRelative("dotHotOperation") != null
+                ? (DotHotOperation)effectProp.FindPropertyRelative("dotHotOperation").enumValueIndex
+                : DotHotOperation.TriggerDots;
+            AddBullet(sb, $"Operation: {operation}");
+
+            var categoryProp = effectProp.FindPropertyRelative("dotHotCategory");
+            DotHotCategory category = categoryProp != null
+                ? (DotHotCategory)categoryProp.enumValueIndex
+                : DotHotCategory.All;
+            string categoryLabel = category.ToString();
+            if (category == DotHotCategory.Custom)
+            {
+                string tag = FormatSimpleString(effectProp.FindPropertyRelative("dotHotCustomTag"));
+                if (!string.IsNullOrEmpty(tag))
+                    categoryLabel = $"Custom ({tag})";
+            }
+            AddBullet(sb, $"Category: {categoryLabel}");
+
+            if (operation != DotHotOperation.ConvertDamageToDot)
+            {
+                int trigger = effectProp.FindPropertyRelative("dotHotTriggerCount")?.intValue ?? 0;
+                AddBullet(sb, $"Base trigger count: {trigger}");
+            }
+
+            AddValueLine(sb, effectProp, owningSkill, "Value");
+
+            if (operation == DotHotOperation.ConvertDamageToDot)
+            {
+                int? duration = ResolveDurationValue(effectProp, owningSkill);
+                if (duration.HasValue)
+                    AddBullet(sb, $"Duration: {duration.Value} turn(s)");
+                string school = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
+                bool canCrit = effectProp.FindPropertyRelative("canCrit")?.boolValue ?? false;
+                AddBullet(sb, $"Damage school: {school}");
+                AddBullet(sb, $"Can crit: {(canCrit ? "Yes" : "No")}");
+            }
+
+            bool affectsAllies = effectProp.FindPropertyRelative("dotHotAffectsAllies")?.boolValue ?? false;
+            bool affectsEnemies = effectProp.FindPropertyRelative("dotHotAffectsEnemies")?.boolValue ?? true;
+            AddBullet(sb, $"Affects allies: {(affectsAllies ? "Yes" : "No")}");
+            AddBullet(sb, $"Affects enemies: {(affectsEnemies ? "Yes" : "No")}");
+
+            var extras = effectProp.FindPropertyRelative("dotHotAdditionalEffects");
+            if (extras != null)
+                AddBullet(sb, $"Additional effects: {extras.arraySize}");
 
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();

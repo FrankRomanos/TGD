@@ -29,9 +29,13 @@ namespace TGD.Editor
                     if (valExpr != null)
                     {
                         EditorGUILayout.HelpBox("Enter 'max' to restore the resource to its maximum.", MessageType.Info);
+                        EditorGUILayout.PropertyField(valExpr, new GUIContent("Value / Expression"));
                     }
-                    else
+                    else 
+                    {
                         EditorGUILayout.HelpBox("Missing 'valueExpression' (or legacy 'value') field.", MessageType.Warning);
+                    }
+
 
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                         EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));

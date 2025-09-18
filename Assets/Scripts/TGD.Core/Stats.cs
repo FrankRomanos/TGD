@@ -18,6 +18,7 @@ namespace TGD.Core
         // Posture (class exclusive resource)
         public int Posture, MaxPosture;
         public int Strength, Agility;
+        public int DamageIncrease;   
 
         // 防御/暴击
         public int Armor;
@@ -32,6 +33,9 @@ namespace TGD.Core
 
         // 移速（格/秒）
         public int MoveSpeed;
+        //增加威胁值，削韧倍率
+        public int Threat;
+        public int Shred;
 
         public void Clamp()
         {

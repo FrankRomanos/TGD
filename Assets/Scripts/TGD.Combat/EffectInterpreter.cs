@@ -21,7 +21,6 @@ namespace TGD.Combat
             {
                 workingContext = new EffectContext(caster, skill)
                 {
-                    ProfessionScaling = workingContext.ProfessionScaling,
                     IncomingDamage = workingContext.IncomingDamage,
                     IncomingDamageMitigated = workingContext.IncomingDamageMitigated,
                     ConditionAfterAttack = workingContext.ConditionAfterAttack,
@@ -171,6 +170,18 @@ namespace TGD.Combat
                     break;
                 case EffectType.CooldownModifier:
                     ApplyCooldownModifier(effect, context, result);
+                    break;
+                case EffectType.RandomOutcome:
+                    ApplyRandomOutcome(effect, context, result, visited);
+                    break;
+                case EffectType.Repeat:
+                    ApplyRepeat(effect, context, result, visited);
+                    break;
+                case EffectType.ProbabilityModifier:
+                    ApplyProbabilityModifier(effect, context, result);
+                    break;
+                case EffectType.DotHotModifier:
+                    ApplyDotHotModifier(effect, context, result, visited);
                     break;
                 default:
                     result.AddLog($"No interpreter implemented for {effect.effectType}.");
@@ -439,7 +450,7 @@ namespace TGD.Combat
             int stacks = ResolveStackCount(effect, context);
             string expression = ResolveValueExpression(effect, context);
 
-            result.AttributeModifiers.Add(new AttributeModifierPreview
+            var preview = new AttributeModifierPreview
             {
                 Attribute = effect.attributeType,
                 ModifierType = effect.modifierType,
@@ -448,9 +459,16 @@ namespace TGD.Combat
                 StackCount = stacks,
                 Target = effect.target,
                 Probability = probability,
-                Condition = effect.condition
-            });
-            result.AddLog($"Attribute modifier {effect.attributeType} ({expression}).");
+                Condition = effect.condition,
+                ImmunityScope = effect.immunityScope
+            };
+
+            result.AttributeModifiers.Add(preview);
+
+            if (effect.attributeType == AttributeType.Immune)
+                result.AddLog($"Attribute modifier {effect.attributeType} ({effect.immunityScope}).");
+            else
+                result.AddLog($"Attribute modifier {effect.attributeType} ({expression}).");
         }
 
         private static void ApplyMasteryPosture(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -513,7 +531,235 @@ namespace TGD.Combat
 
             result.AddLog($"Modify cooldown for {scopeDescription} by {seconds:+#;-#;0}s ({rounds:+#;-#;0} rounds).");
         }
+        private static void ApplyRandomOutcome(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
+        {
+            if (effect.randomOutcomes == null || effect.randomOutcomes.Count == 0)
+            {
+                result.AddLog("RandomOutcome effect has no options configured.");
+                return;
+            }
 
+            int rollCount = Mathf.Max(1, effect.randomRollCount);
+            bool allowDuplicates = effect.randomAllowDuplicates;
+
+            int weightedSum = 0;
+            int configuredOptions = 0;
+            foreach (var entry in effect.randomOutcomes)
+            {
+                if (entry == null)
+                    continue;
+                configuredOptions++;
+                weightedSum += Mathf.Max(0, entry.weight);
+            }
+
+            bool useUniformWeights = weightedSum <= 0;
+            if (useUniformWeights)
+                weightedSum = Mathf.Max(1, configuredOptions);
+            else if (weightedSum <= 0)
+                weightedSum = 1;
+
+            var preview = new RandomOutcomePreview
+            {
+                RollCount = rollCount,
+                AllowDuplicates = allowDuplicates,
+                Condition = effect.condition
+            };
+
+            int optionIndex = 0;
+            foreach (var entry in effect.randomOutcomes)
+            {
+                if (entry == null)
+                    continue;
+
+                optionIndex++;
+                int weight = Mathf.Max(0, entry.weight);
+                if (useUniformWeights || weight == 0)
+                    weight = 1;
+                float probability = weightedSum > 0 ? (weight / (float)weightedSum) * 100f : 0f;
+                string label = !string.IsNullOrWhiteSpace(entry.label) ? entry.label : $"Option {optionIndex}";
+
+                var optionPreview = new RandomOutcomeOptionPreview
+                {
+                    Label = label,
+                    Description = entry.description,
+                    Probability = probability,
+                    Weight = weight,
+                    ProbabilityMode = entry.probabilityMode
+                };
+
+                if (entry.effects != null && entry.effects.Count > 0)
+                {
+                    var nested = new EffectInterpretationResult();
+                    foreach (var nestedEffect in entry.effects)
+                        InterpretEffect(nestedEffect, context, nested, visited);
+                    optionPreview.Result = nested;
+                }
+
+                preview.Options.Add(optionPreview);
+            }
+
+            result.RandomOutcomes.Add(preview);
+            result.AddLog($"Random outcome: {preview.Options.Count} option(s), roll {rollCount} time(s).");
+        }
+
+        private static void ApplyRepeat(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
+        {
+            string expression = GetRepeatCountExpression(effect, context);
+            int count = EvaluateRepeatCount(effect, context, expression);
+            if (effect.repeatMaxCount > 0)
+                count = Mathf.Min(count, effect.repeatMaxCount);
+            count = Mathf.Max(0, count);
+
+            var preview = new RepeatEffectPreview
+            {
+                CountSource = effect.repeatCountSource,
+                Count = count,
+                MaxCount = effect.repeatMaxCount,
+                CountExpression = expression,
+                ResourceType = effect.repeatResourceType,
+                ConsumeResource = effect.repeatConsumeResource,
+                Condition = effect.condition
+            };
+
+            if (effect.repeatEffects != null && effect.repeatEffects.Count > 0 && count > 0)
+            {
+                var aggregate = new EffectInterpretationResult();
+                for (int i = 0; i < count; i++)
+                {
+                    foreach (var nested in effect.repeatEffects)
+                        InterpretEffect(nested, context, aggregate, visited);
+                }
+
+                preview.Result = aggregate;
+                result.Append(aggregate);
+            }
+            else if (effect.repeatEffects == null || effect.repeatEffects.Count == 0)
+            {
+                result.AddLog("Repeat effect has no nested effects configured.");
+            }
+
+            result.RepeatEffects.Add(preview);
+
+            string sourceDescription = effect.repeatCountSource switch
+            {
+                RepeatCountSource.ResourceValue => $"based on {effect.repeatResourceType} value",
+                RepeatCountSource.ResourceSpent => $"based on {effect.repeatResourceType} spent",
+                RepeatCountSource.Expression => string.IsNullOrWhiteSpace(expression) ? "expression" : $"expression '{expression}'",
+                _ => $"fixed {Mathf.Max(0, effect.repeatCount)}"
+            };
+
+            result.AddLog($"Repeat nested effects {count} time(s) ({sourceDescription}).");
+        }
+
+        private static void ApplyProbabilityModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            var preview = new ProbabilityModifierPreview
+            {
+                Mode = effect.probabilityModifierMode,
+                Condition = effect.condition,
+                Target = effect.target
+            };
+
+            result.ProbabilityModifiers.Add(preview);
+            result.AddLog($"Probability modifier: {effect.probabilityModifierMode}.");
+        }
+
+        private static void ApplyDotHotModifier(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
+        {
+            string expression = ResolveValueExpression(effect, context);
+            float evaluatedValue = 0f;
+            bool hasExpression = !string.IsNullOrWhiteSpace(expression);
+            if (hasExpression)
+                evaluatedValue = EvaluateExpression(expression, context, context.PrimaryTarget ?? context.Caster, effect.value);
+
+            int triggerCount = effect.dotHotTriggerCount;
+            if (effect.dotHotOperation != DotHotOperation.ConvertDamageToDot)
+            {
+                if (hasExpression)
+                    triggerCount = Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(0f, evaluatedValue)));
+                else
+                    triggerCount = Mathf.Max(0, triggerCount);
+            }
+
+            int duration = ResolveDuration(effect, context);
+
+            var preview = new DotHotModifierPreview
+            {
+                Operation = effect.dotHotOperation,
+                Category = effect.dotHotCategory,
+                CustomTag = effect.dotHotCustomTag,
+                TriggerCount = triggerCount,
+                ValueExpression = expression,
+                EvaluatedValue = evaluatedValue,
+                Duration = duration,
+                DamageSchool = effect.damageSchool,
+                CanCrit = effect.canCrit,
+                AffectsAllies = effect.dotHotAffectsAllies,
+                AffectsEnemies = effect.dotHotAffectsEnemies,
+                Condition = effect.condition
+            };
+
+            if (effect.dotHotAdditionalEffects != null && effect.dotHotAdditionalEffects.Count > 0)
+            {
+                var additional = new EffectInterpretationResult();
+                foreach (var nested in effect.dotHotAdditionalEffects)
+                    InterpretEffect(nested, context, additional, visited);
+                preview.AdditionalEffects = additional;
+                result.Append(additional);
+            }
+
+            result.DotHotModifiers.Add(preview);
+
+            string category = effect.dotHotCategory == DotHotCategory.Custom && !string.IsNullOrWhiteSpace(effect.dotHotCustomTag)
+                ? effect.dotHotCustomTag
+                : effect.dotHotCategory.ToString();
+
+            switch (effect.dotHotOperation)
+            {
+                case DotHotOperation.TriggerDots:
+                    result.AddLog($"Trigger {category} DoT {triggerCount} time(s).");
+                    break;
+                case DotHotOperation.TriggerHots:
+                    result.AddLog($"Trigger {category} HoT {triggerCount} time(s).");
+                    break;
+                case DotHotOperation.ConvertDamageToDot:
+                    result.AddLog($"Convert damage into {category} over {duration} turn(s) (value: {evaluatedValue:0.##}).");
+                    break;
+            }
+        }
+
+        private static string GetRepeatCountExpression(EffectDefinition effect, EffectContext context)
+        {
+            if (effect.repeatCountSource != RepeatCountSource.Expression)
+                return string.Empty;
+            if (!string.IsNullOrWhiteSpace(effect.repeatCountExpression))
+                return effect.repeatCountExpression;
+            return ResolveValueExpression(effect, context);
+        }
+
+        private static int EvaluateRepeatCount(EffectDefinition effect, EffectContext context, string expression)
+        {
+            int fallback = Mathf.Max(0, effect.repeatCount);
+            switch (effect.repeatCountSource)
+            {
+                case RepeatCountSource.Fixed:
+                    return fallback;
+                case RepeatCountSource.Expression:
+                    if (string.IsNullOrWhiteSpace(expression))
+                        return fallback;
+                    float exprValue = EvaluateExpression(expression, context, context.PrimaryTarget ?? context.Caster, fallback);
+                    return Mathf.Max(0, Mathf.FloorToInt(exprValue));
+                case RepeatCountSource.ResourceValue:
+                    return Mathf.Max(0, Mathf.FloorToInt(context.GetResourceAmount(effect.repeatResourceType)));
+                case RepeatCountSource.ResourceSpent:
+                    float spent = context.GetResourceSpent(effect.repeatResourceType);
+                    if (spent <= 0f && context.LastResourceSpendType == effect.repeatResourceType)
+                        spent = context.LastResourceSpendAmount;
+                    return Mathf.Max(0, Mathf.FloorToInt(spent));
+                default:
+                    return fallback;
+            }
+        }
         private static bool CheckCondition(EffectDefinition effect, EffectContext context)
         {
             switch (effect.condition)
@@ -705,12 +951,18 @@ namespace TGD.Combat
                 map[kvp.Key] = kvp.Value;
 
             if (context.Caster != null)
+            {
                 AddStats(map, context.Caster.Stats, string.Empty);
+                map["p"] = context.Caster.Stats?.Mastery ?? 0f;
+            }
+            else
+            {
+                map["p"] = 0f;
+            }
 
             if (target != null)
                 AddStats(map, target.Stats, "target_");
 
-            map["p"] = context.ProfessionScaling;
             map["damage"] = context.IncomingDamage;
             map["damage_pre"] = context.IncomingDamage;
             map["damage_post"] = context.IncomingDamageMitigated;
@@ -763,6 +1015,14 @@ namespace TGD.Combat
             map[prefix + "mastery"] = stats.Mastery;
             map[prefix + "posture"] = stats.Posture;
             map[prefix + "maxposture"] = stats.MaxPosture;
+            map[prefix + "strength"] = stats.Strength;
+            map[prefix + "str"] = stats.Strength;
+            map[prefix + "agility"] = stats.Agility;
+            map[prefix + "agi"] = stats.Agility;
+            map[prefix + "damageincrease"] = stats.DamageIncrease;
+            map[prefix + "dmginc"] = stats.DamageIncrease;
+            map[prefix + "threat"] = stats.Threat;
+            map[prefix + "shred"] = stats.Shred;
         }
 
         private static bool IsMaxExpression(string expression)

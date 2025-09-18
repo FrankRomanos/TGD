@@ -22,7 +22,14 @@ namespace TGD.Data
         Mastery,
         Healing,
         ArmorPenetration,
-        DamageReduction
+        DamageReduction, 
+        Strength,
+        Agility,
+        DamageIncrease,
+        CritDamage,
+        Threat,
+        ThreatShred,
+        Immune
     }
 
     public enum EffectType
@@ -40,7 +47,11 @@ namespace TGD.Data
         ModifyAction,
         CooldownModifier,
         AttributeModifier,
-        MasteryPosture
+        MasteryPosture,
+        RandomOutcome,
+        Repeat,
+        ProbabilityModifier,
+        DotHotModifier
     }
     public enum CooldownTargetScope
     {
@@ -174,7 +185,52 @@ namespace TGD.Data
         PerLevel = 1 << 6,  // 等级分段编辑开关
         Stacks = 1 << 7,    // Buff 层数
     }
+    public enum ImmunityScope
+    {
+        All,
+        DamageOnly
+    }
 
+    public enum ProbabilityModifierMode
+    {
+        None,
+        DoubleRollBest,
+        DoubleRollWorst
+    }
+
+    public enum RepeatCountSource
+    {
+        Fixed,
+        Expression,
+        ResourceValue,
+        ResourceSpent
+    }
+
+    public enum DotHotOperation
+    {
+        TriggerDots,
+        TriggerHots,
+        ConvertDamageToDot
+    }
+
+    public enum DotHotCategory
+    {
+        All,
+        Poison,
+        Bleed,
+        Burn,
+        Custom
+    }
+
+    [Serializable]
+    public class RandomOutcomeEntry
+    {
+        public string label;
+        public string description;
+        public int weight = 1;
+        public ProbabilityModifierMode probabilityMode = ProbabilityModifierMode.None;
+        public List<EffectDefinition> effects = new List<EffectDefinition>();
+    }
 
     [Serializable]
     public class EffectDefinition
@@ -184,6 +240,7 @@ namespace TGD.Data
         // ===== 通用字段 =====
         public TargetType target = TargetType.Self;
         public AttributeType attributeType;
+        public ImmunityScope immunityScope = ImmunityScope.All;
         public ActionType targetActionType;  // ✅ 直接用已有的 ActionType
         public ModifierType modifierType;
         public ActionModifyType actionModifyType = ActionModifyType.None;
@@ -228,7 +285,31 @@ namespace TGD.Data
         public float compareValue;
         public List<EffectDefinition> onSuccess = new();
 
+        // ===== Random Outcome =====
+        public int randomRollCount = 1;
+        public bool randomAllowDuplicates = true;
+        public List<RandomOutcomeEntry> randomOutcomes = new List<RandomOutcomeEntry>();
 
+        // ===== Repeat Effect =====
+        public RepeatCountSource repeatCountSource = RepeatCountSource.Fixed;
+        public int repeatCount = 1;
+        public string repeatCountExpression;
+        public ResourceType repeatResourceType = ResourceType.Discipline;
+        public bool repeatConsumeResource = true;
+        public int repeatMaxCount = 0;
+        public List<EffectDefinition> repeatEffects = new List<EffectDefinition>();
+
+        // ===== Probability Modifier =====
+        public ProbabilityModifierMode probabilityModifierMode = ProbabilityModifierMode.None;
+
+        // ===== DoT / HoT Modifier =====
+        public DotHotOperation dotHotOperation = DotHotOperation.TriggerDots;
+        public DotHotCategory dotHotCategory = DotHotCategory.All;
+        public string dotHotCustomTag;
+        public int dotHotTriggerCount = 1;
+        public bool dotHotAffectsAllies = false;
+        public bool dotHotAffectsEnemies = true;
+        public List<EffectDefinition> dotHotAdditionalEffects = new List<EffectDefinition>();
 
         // ===== Buff/Debuff =====
         public string statusSkillID;        // 传统 Buff/Debuff 用 skillID

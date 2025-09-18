@@ -30,7 +30,10 @@ namespace TGD.Editor
             Register(EffectType.Heal, new HealDrawer());
             Register(EffectType.Move, new MoveDrawer());
             Register(EffectType.MasteryPosture, new MasteryPostureDrawer());
-
+            Register(EffectType.RandomOutcome, new RandomOutcomeDrawer());
+            Register(EffectType.Repeat, new RepeatEffectDrawer());
+            Register(EffectType.ProbabilityModifier, new ProbabilityModifierDrawer());
+            Register(EffectType.DotHotModifier, new DotHotModifierDrawer());
         }
 
         public static void Register(EffectType type, IEffectDrawer drawer)

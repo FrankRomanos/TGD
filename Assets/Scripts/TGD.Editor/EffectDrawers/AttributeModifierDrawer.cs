@@ -18,8 +18,9 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(attrProp, new GUIContent("Attribute"));
             AttributeType attr = (AttributeType)attrProp.enumValueIndex;
 
-            // ====== NEW: DamageReduction ר UI Լ ======
+            // ====== Specialized UI for certain attribute types ======
             bool isDamageReduction = (attr == AttributeType.DamageReduction);
+            bool isImmune = (attr == AttributeType.Immune);
 
             if (isDamageReduction)
             {
@@ -40,6 +41,19 @@ namespace TGD.Editor
                     "Damage Reduction: 最终承伤按 (1 - value) 结算；例如 0.25 = 25%减伤。\n" +
                     "建议把 Duration 设为 -1（随状态存续），或具体回合数。",
                     MessageType.Info);
+            }
+            else if (isImmune)
+            {
+                if (modProp != null) modProp.enumValueIndex = (int)ModifierType.Flat;
+                EditorGUI.BeginDisabledGroup(true);
+                EditorGUILayout.PropertyField(modProp, new GUIContent("Modifier Type (fixed as Flat)"));
+                EditorGUI.EndDisabledGroup();
+
+                var scopeProp = elem.FindPropertyRelative("immunityScope");
+                if (scopeProp != null)
+                    EditorGUILayout.PropertyField(scopeProp, new GUIContent("Immune Scope"));
+
+                EditorGUILayout.HelpBox("Immune: 根据选择决定免疫所有效果，或仅免疫伤害。", MessageType.Info);
             }
             else
             {
