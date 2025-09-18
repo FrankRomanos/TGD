@@ -6,14 +6,42 @@ using UnityEngine;
 using TGD.Data;
 using TGD.Editor;
 
+// ====== 新增 using（只为读取 Localization 表，不改变 UI 逻辑）======
+using UnityEngine.Localization;
+using UnityEngine.Localization.Settings;
+using UnityEngine.Localization.Tables;
+#if UNITY_EDITOR
+using UnityEditor.Localization;
+
+#endif
+// ================================================================
+
 namespace TGD.UI
 {
     public class SkillUITester_Simple : EditorWindow
     {
-        // 原有：本地化与技能数据变量
-        // Cached localization entries loaded from CSV (reused between refreshes).
-        private readonly Dictionary<string, string> localizationDict = new Dictionary<string, string>();
-        private string localizationFilePath = "Assets/Localization/Localization_Skills.csv";
+        // 原有：本地化与技能数据变量（CSV -> Localization）
+        // ✅ 移除 CSV 字典与路径；改为 Localization 缓存
+        // private readonly Dictionary<string, string> localizationDict = new Dictionary<string, string>();
+        // private string localizationFilePath = "Assets/Localization/Localization_Skills.csv";
+
+#if UNITY_EDITOR
+        // ✅ 你的 Localization 字符串表集合名（已按你要求设置为 SkillDiscription）
+        private const string StringTableCollectionName = "SkillDiscription";
+
+        // 缓存：集合、当前语言表、项目语言
+        private StringTableCollection stringTableCollection;
+        private StringTable currentStringTable;
+        private Locale projectLocale;
+#endif
+#if UNITY_EDITOR
+        // —— 调试工具（默认收起）——
+        private bool _showLocDebugFoldout = false;
+        private List<Locale> _debugLocales = new List<Locale>();
+        private int _debugLocaleIndex = -1;  // 调试选择的 Locale 索引（仅影响本窗口）
+        private string _debugKey = "";       // Key 快速定位输入
+        private string _debugKeyPreview = ""; // 读取到的值预览
+#endif
         private readonly List<SkillDefinition> allSkillDatas = new List<SkillDefinition>();
         private SkillDefinition selectedSkill;
         private Vector2 scrollPos;
@@ -25,6 +53,7 @@ namespace TGD.UI
         private GUIStyle effectItemContainerStyle;
         private GUIStyle effectContentStyle;
         private readonly Dictionary<SkillColor, GUIStyle> skillColorTextStyles = new();
+
         [MenuItem("Tools/Skill/简化版UI测试窗口")]
         public static void OpenTestWindow()
         {
@@ -37,11 +66,79 @@ namespace TGD.UI
             selectedMiniButton = new GUIStyle(EditorStyles.miniButton);
             selectedMiniButton.normal.background = EditorStyles.toolbarButton.active.background;
 
-            // 原有：加载本地化与技能数据
-            LoadLocalizationData();
+            // ✅ Localization 初始化（只读，不改变 UI）
+#if UNITY_EDITOR
+            InitializeLocalizationReadonly();
+#if UNITY_EDITOR
+            // ……你原有的 InitializeLocalizationReadonly() 里最后面加上：
+            var all = LocalizationEditorSettings.GetLocales();
+            _debugLocales.Clear();
+            if (all != null) _debugLocales.AddRange(all);
+
+            // 调试用默认选中：跟随 projectLocale
+            _debugLocaleIndex = (_debugLocales.Count > 0 && projectLocale != null)
+                ? _debugLocales.IndexOf(projectLocale)
+                : (_debugLocales.Count > 0 ? 0 : -1);
+#endif
+
+#endif
+
+            // 原有：加载技能数据
             LoadSkillDefinitions();
         }
 
+#if UNITY_EDITOR
+        // 只读初始化：拿到集合、项目 Locale，并解析当前语言表
+        private void InitializeLocalizationReadonly()
+        {
+            try
+            {
+                // 取集合
+                stringTableCollection = LocalizationEditorSettings.GetStringTableCollection(StringTableCollectionName);
+                if (stringTableCollection == null)
+                {
+                    Debug.LogError($"[Localization] 未找到 StringTableCollection：{StringTableCollectionName}。请在 Window > Asset Management > Localization Tables 中确认集合存在。");
+                    currentStringTable = null;
+                    return;
+                }
+
+                // 取项目 Locale（编辑器环境）
+                projectLocale = LocalizationSettings.ProjectLocale;
+                if (projectLocale == null)
+                {
+                    // 如果未设置 Project Locale，也不报错，改为提示并尝试用第一个 Locale
+                    var locales = LocalizationEditorSettings.GetLocales();
+                    if (locales != null && locales.Count > 0)
+                        projectLocale = locales[0];
+                    if (projectLocale == null)
+                        Debug.LogWarning("[Localization] Project Locale 未设置，且项目中没有可用 Locale。将无法从表中读取文本。");
+                }
+
+                ResolveCurrentStringTable();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[Localization] 初始化失败：" + ex.Message);
+                currentStringTable = null;
+            }
+        }
+
+        private void ResolveCurrentStringTable()
+        {
+            currentStringTable = null;
+            if (stringTableCollection == null || projectLocale == null)
+                return;
+
+            // 根据集合与项目语言，取该语言的 StringTable
+            currentStringTable = stringTableCollection.GetTable(projectLocale.Identifier) as StringTable;
+
+            if (currentStringTable == null)
+            {
+                // 不创建，不改资源，只提示
+                Debug.LogWarning($"[Localization] 集合 \"{StringTableCollectionName}\" 下未找到 Locale \"{projectLocale.Identifier.Code}\" 对应的 StringTable。读取将返回占位提示。");
+            }
+        }
+#endif
 
         private void LoadSkillDefinitions()
         {
@@ -93,42 +190,22 @@ namespace TGD.UI
             return string.Compare(a.skillID, b.skillID, StringComparison.OrdinalIgnoreCase);
         }
 
-        // 原有：加载本地化数据
+        // ====== 保留原签名：LoadLocalizationData（现在不再读 CSV，仅为兼容留空）======
         private void LoadLocalizationData()
         {
-            localizationDict.Clear();
-            if (!File.Exists(localizationFilePath))
-            {
-                Debug.LogError("本地化文件找不到！路径：" + localizationFilePath);
-                return;
-            }
-            string[] allLines = File.ReadAllLines(localizationFilePath);
-            if (allLines.Length < 2)
-            {
-                Debug.LogError("本地化文件内容为空或格式错误！");
-                return;
-            }
-            for (int i = 1; i < allLines.Length; i++)
-            {
-                string line = allLines[i].Trim();
-                if (string.IsNullOrEmpty(line)) continue;
-                string[] parts = line.Split(',');
-                if (parts.Length >= 2)
-                {
-                    string key = parts[0].Trim();
-                    string desc = parts[1].Trim();
-                    if (!localizationDict.ContainsKey(key))
-                        localizationDict.Add(key, desc);
-                }
-            }
-            Debug.Log("本地化数据加载完成，共" + localizationDict.Count + "条");
+            // 已改为通过 Unity Localization 读取，不再需要预读 CSV。
+            // 保留空实现以兼容原调用点（不改变 UI 逻辑）。
         }
+        // ====================================================================
+
 
         private void OnGUI()
         {
             // 初始化Effect相关样式（修复边框颜色错误）
             InitEffectStyles();
-
+#if UNITY_EDITOR
+            DrawLocalizationDebugToolbar();
+#endif
             GUILayout.Label("技能UI测试（图标+基础信息）", EditorStyles.boldLabel);
             GUILayout.Space(10);
 
@@ -175,17 +252,17 @@ namespace TGD.UI
                     GUILayout.Label("无图标", EditorStyles.helpBox, GUILayout.Width(100), GUILayout.Height(100));
                 }
 
-                // 原有：技能名称/描述/属性
+                // 原有：技能名称/描述/属性 —— 仅“取值来源”改为 Localization
                 GUILayout.Label("技能名称：");
                 EditorGUILayout.TextArea(
-     GetLocalizedDesc(selectedSkill.namekey),
-     GetSkillTextStyle(selectedSkill.skillColor),
-     GUILayout.Height(40));
+                    GetLocalizedDesc(selectedSkill.namekey),
+                    GetSkillTextStyle(selectedSkill.skillColor),
+                    GUILayout.Height(40));
                 GUILayout.Label("技能描述：");
                 EditorGUILayout.TextArea(
-            GetLocalizedDesc(selectedSkill.descriptionKey),
-            GetSkillTextStyle(selectedSkill.skillColor),
-            GUILayout.Height(50));
+                    GetLocalizedDesc(selectedSkill.descriptionKey),
+                    GetSkillTextStyle(selectedSkill.skillColor),
+                    GUILayout.Height(50));
                 GUILayout.Label("基础属性：", EditorStyles.miniBoldLabel);
                 GUILayout.Label($"职业：{selectedSkill.classID}");
                 GUILayout.Label($"技能类型：{selectedSkill.skillType}");
@@ -281,6 +358,7 @@ namespace TGD.UI
                 effectContentStyle.normal.textColor = new Color(0.8f, 0.7f, 0.3f);
             }
         }
+
         private GUIStyle GetSkillTextStyle(SkillColor color)
         {
             if (color == SkillColor.None)
@@ -334,6 +412,7 @@ namespace TGD.UI
             texture.Apply();
             return texture;
         }
+
         private static string FormatSkillDurationLabel(int duration)
         {
             if (duration > 0)
@@ -347,15 +426,125 @@ namespace TGD.UI
             return duration.ToString();
         }
 
-        // 原有：获取本地化描述
+        // ✅ 改为读取 Localization 表（仅读，不创建、不写入）
         private string GetLocalizedDesc(string key)
         {
             if (string.IsNullOrEmpty(key))
                 return "【描述Key为空】";
-            if (localizationDict.TryGetValue(key, out string desc))
-                return desc;
-            return "【未找到描述：key=" + key + "】";
+
+#if UNITY_EDITOR
+            if (stringTableCollection == null)
+                return $"【未找到集合：{StringTableCollectionName}】";
+
+            if (currentStringTable == null)
+                return $"【未找到当前语言表：{(LocalizationSettings.ProjectLocale != null ? LocalizationSettings.ProjectLocale.Identifier.Code : "未设置")}】";
+
+            try
+            {
+                var entry = currentStringTable.GetEntry(key);
+                if (entry != null && entry.Value != null)
+                    return entry.Value;
+
+                return $"【未找到描述：key={key}】";
+            }
+            catch (Exception ex)
+            {
+                return $"【读取本地化失败：{ex.Message}】";
+            }
+#else
+            // 运行时一般不会开这个 EditorWindow，这里返回 key 以免报错
+            return key;
+#endif
         }
+#if UNITY_EDITOR
+        private void DrawLocalizationDebugToolbar()
+        {
+            // 折叠栏标题（完全独立，不影响你现有 UI）
+            _showLocDebugFoldout = EditorGUILayout.Foldout(_showLocDebugFoldout, "调试工具（Localization）", true);
+            if (!_showLocDebugFoldout) return;
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                // —— 语言快速切换（只刷新本窗口读取的表，不改工程 Project Settings）——
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("阅读语言（本窗口）", GUILayout.Width(140));
+                    string[] options = _debugLocales.ConvertAll(l => l != null ? l.Identifier.Code : "(null)").ToArray();
+                    int newIndex = EditorGUILayout.Popup(_debugLocaleIndex, options);
+                    if (newIndex != _debugLocaleIndex && newIndex >= 0 && newIndex < _debugLocales.Count)
+                    {
+                        _debugLocaleIndex = newIndex;
+                        var picked = _debugLocales[_debugLocaleIndex];
+                        if (picked != null)
+                        {
+                            // 仅更新本窗口使用的 projectLocale 引用，并重新解析表
+                            projectLocale = picked;
+                            ResolveCurrentStringTable();
+                            // 清理一次预览缓存
+                            _debugKeyPreview = string.Empty;
+                            Repaint();
+                        }
+                    }
+
+                    if (GUILayout.Button("刷新表", GUILayout.Width(90)))
+                    {
+                        ResolveCurrentStringTable();
+                        _debugKeyPreview = string.Empty;
+                    }
+                }
+
+                EditorGUILayout.Space(6);
+
+                // —— Key 快速定位 —— 
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("Key", GUILayout.Width(140));
+                    _debugKey = EditorGUILayout.TextField(_debugKey);
+
+                    using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(_debugKey)))
+                    {
+                        if (GUILayout.Button("读取值", GUILayout.Width(90)))
+                        {
+                            _debugKeyPreview = GetLocalizedDesc(_debugKey);
+                        }
+
+                        if (GUILayout.Button("定位技能", GUILayout.Width(90)))
+                        {
+                            // 在当前技能数据里查找 namekey/descriptionKey 命中该 key 的技能并选中第一个
+                            SkillDefinition found = null;
+                            foreach (var s in allSkillDatas)
+                            {
+                                if (s == null) continue;
+                                if (string.Equals(s.namekey, _debugKey, StringComparison.OrdinalIgnoreCase) ||
+                                    string.Equals(s.descriptionKey, _debugKey, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    found = s; break;
+                                }
+                            }
+                            if (found != null)
+                            {
+                                selectedSkill = found;
+                                // 让左侧列表滚动条有机会回到顶部（不强求）
+                                scrollPos = Vector2.zero;
+                            }
+                            else
+                            {
+                                Debug.Log($"[定位技能] 未找到使用 Key \"{_debugKey}\" 的技能（会在 namekey/descriptionKey 中匹配）。");
+                            }
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(_debugKeyPreview))
+                {
+                    EditorGUILayout.Space(4);
+                    EditorGUILayout.LabelField("当前语言读取结果：", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.HelpBox(_debugKeyPreview, MessageType.None);
+                }
+            }
+        }
+#endif
+
 
         // 原有：提取技能ID中的数字
         private int ExtractNumberFromSkillID(string skillID)
