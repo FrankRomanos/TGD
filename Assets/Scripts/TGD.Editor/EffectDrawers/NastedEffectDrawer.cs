@@ -107,19 +107,16 @@ namespace TGD.Editor
             SetString(effectProp.FindPropertyRelative("statusSkillID"), string.Empty);
             SetString(effectProp.FindPropertyRelative("targetSkillID"), string.Empty);
             SetString(effectProp.FindPropertyRelative("repeatCountExpression"), string.Empty);
-            SetString(effectProp.FindPropertyRelative("dotHotCustomTag"), string.Empty);
-
             SetInt(effectProp.FindPropertyRelative("stackCount"), 1);
             SetFloat(effectProp.FindPropertyRelative("value"), 0f);
             SetFloat(effectProp.FindPropertyRelative("duration"), 0f);
             SetInt(effectProp.FindPropertyRelative("repeatCount"), 1);
             SetInt(effectProp.FindPropertyRelative("repeatMaxCount"), 0);
-            SetInt(effectProp.FindPropertyRelative("dotHotTriggerCount"), 1);
+            SetInt(effectProp.FindPropertyRelative("dotHotBaseTriggerCount"), 0);
 
             SetBool(effectProp.FindPropertyRelative("perLevel"), false);
             SetBool(effectProp.FindPropertyRelative("perLevelDuration"), true);
-            SetBool(effectProp.FindPropertyRelative("dotHotAffectsAllies"), false);
-            SetBool(effectProp.FindPropertyRelative("dotHotAffectsEnemies"), true);
+
             SetBool(effectProp.FindPropertyRelative("repeatConsumeResource"), true);
 
             ClearArray(effectProp.FindPropertyRelative("onSuccess"));

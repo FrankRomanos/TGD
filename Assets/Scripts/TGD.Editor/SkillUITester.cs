@@ -188,8 +188,10 @@ namespace TGD.UI
             GUILayout.Height(50));
                 GUILayout.Label("基础属性：", EditorStyles.miniBoldLabel);
                 GUILayout.Label($"职业：{selectedSkill.classID}");
+                GUILayout.Label($"技能类型：{selectedSkill.skillType}");
                 GUILayout.Label($"动作类型：{selectedSkill.actionType}");
                 GUILayout.Label($"冷却时间：{selectedSkill.cooldownSeconds}秒 / {selectedSkill.cooldownRounds}回合");
+                GUILayout.Label($"技能持续：{FormatSkillDurationLabel(selectedSkill.ResolveDuration())}");
                 GUILayout.Space(10);
 
                 // Effect标题
@@ -331,6 +333,18 @@ namespace TGD.UI
             texture.SetPixel(0, 0, color);
             texture.Apply();
             return texture;
+        }
+        private static string FormatSkillDurationLabel(int duration)
+        {
+            if (duration > 0)
+                return $"{duration} 回合";
+            if (duration == -1)
+                return "瞬间";
+            if (duration == -2)
+                return "永久";
+            if (duration == 0)
+                return "无持续";
+            return duration.ToString();
         }
 
         // 原有：获取本地化描述

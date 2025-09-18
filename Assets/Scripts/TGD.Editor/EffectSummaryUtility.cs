@@ -485,42 +485,28 @@ namespace TGD.Editor
                 : DotHotOperation.TriggerDots;
             AddBullet(sb, $"Operation: {operation}");
 
-            var categoryProp = effectProp.FindPropertyRelative("dotHotCategory");
-            DotHotCategory category = categoryProp != null
-                ? (DotHotCategory)categoryProp.enumValueIndex
-                : DotHotCategory.All;
-            string categoryLabel = category.ToString();
-            if (category == DotHotCategory.Custom)
-            {
-                string tag = FormatSimpleString(effectProp.FindPropertyRelative("dotHotCustomTag"));
-                if (!string.IsNullOrEmpty(tag))
-                    categoryLabel = $"Custom ({tag})";
-            }
-            AddBullet(sb, $"Category: {categoryLabel}");
+            int trigger = effectProp.FindPropertyRelative("dotHotBaseTriggerCount")?.intValue ?? 0;
+            string triggerLabel = trigger == 0 ? "default (6s baseline)" : trigger.ToString();
+            AddBullet(sb, $"Base trigger count: {triggerLabel}");
 
-            if (operation != DotHotOperation.ConvertDamageToDot)
-            {
-                int trigger = effectProp.FindPropertyRelative("dotHotTriggerCount")?.intValue ?? 0;
-                AddBullet(sb, $"Base trigger count: {trigger}");
-            }
+            if (operation != DotHotOperation.None)
+                AddValueLine(sb, effectProp, owningSkill, "Tick Value");
 
-            AddValueLine(sb, effectProp, owningSkill, "Value");
+            int mask = effectProp.FindPropertyRelative("visibleFields")?.intValue ?? 0;
+            bool showSchool = (mask & (int)EffectFieldMask.School) != 0;
+            bool showCrit = (mask & (int)EffectFieldMask.Crit) != 0;
 
-            if (operation == DotHotOperation.ConvertDamageToDot)
+            if (showSchool && (operation == DotHotOperation.TriggerDots || operation == DotHotOperation.ConvertDamageToDot))
             {
-                int? duration = ResolveDurationValue(effectProp, owningSkill);
-                if (duration.HasValue)
-                    AddBullet(sb, $"Duration: {duration.Value} turn(s)");
                 string school = GetEnumName(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
-                bool canCrit = effectProp.FindPropertyRelative("canCrit")?.boolValue ?? false;
                 AddBullet(sb, $"Damage school: {school}");
+            }
+
+            if (showCrit && operation != DotHotOperation.None)
+            {
+                bool canCrit = effectProp.FindPropertyRelative("canCrit")?.boolValue ?? false;
                 AddBullet(sb, $"Can crit: {(canCrit ? "Yes" : "No")}");
             }
-
-            bool affectsAllies = effectProp.FindPropertyRelative("dotHotAffectsAllies")?.boolValue ?? false;
-            bool affectsEnemies = effectProp.FindPropertyRelative("dotHotAffectsEnemies")?.boolValue ?? true;
-            AddBullet(sb, $"Affects allies: {(affectsAllies ? "Yes" : "No")}");
-            AddBullet(sb, $"Affects enemies: {(affectsEnemies ? "Yes" : "No")}");
 
             var extras = effectProp.FindPropertyRelative("dotHotAdditionalEffects");
             if (extras != null)

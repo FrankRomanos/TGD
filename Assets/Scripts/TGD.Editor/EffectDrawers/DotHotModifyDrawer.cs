@@ -23,42 +23,59 @@ namespace TGD.Editor
                     maskProp.intValue |= (int)EffectFieldMask.Duration;
             }
 
-            var categoryProp = elem.FindPropertyRelative("dotHotCategory");
-            EditorGUILayout.PropertyField(categoryProp, new GUIContent("Category"));
-            if (categoryProp != null && (DotHotCategory)categoryProp.enumValueIndex == DotHotCategory.Custom)
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("dotHotCustomTag"), new GUIContent("Custom Tag"));
+            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Target, "Target"))
+                EditorGUILayout.PropertyField(elem.FindPropertyRelative("target"), new GUIContent("Target"));
 
-            if (operation != DotHotOperation.ConvertDamageToDot)
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("dotHotTriggerCount"), new GUIContent("Base Trigger Count"));
-
-            if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
+            if (operation == DotHotOperation.TriggerDots || operation == DotHotOperation.ConvertDamageToDot)
             {
-                bool collapsed;
-                if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))
-                {
-                    if (!collapsed)
-                    {
-                        PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("valueExprLevels"), "Value Expression by Level");
-                        if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
-                            PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("probabilityLvls"), "Probability by Level (%)");
-                    }
+                if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.School, "Damage School"))
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("damageSchool"), new GUIContent("School"));
+            }
 
-                    int curLv = LevelContext.GetSkillLevel(elem.serializedObject);
-                    bool showDuration = FieldVisibilityUI.Has(elem, EffectFieldMask.Duration);
-                    bool showProbability = FieldVisibilityUI.Has(elem, EffectFieldMask.Probability);
-                    PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showDuration, showProbability);
+            if (operation != DotHotOperation.None)
+            {
+                if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Crit, "Critical"))
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("canCrit"), new GUIContent("Can Crit"));
+
+
+                if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.PerLevel, "Values"))
+                {
+                    bool collapsed;
+                    if (PerLevelUI.BeginPerLevelBlock(elem, out collapsed))
+                    {
+                        if (!collapsed)
+                            PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("valueExprLevels"), "Tick Value Expression by Level");
+
+                        bool showProbabilityLevels = FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability");
+                        if (!collapsed && showProbabilityLevels)
+                            PerLevelUI.DrawStringLevels(elem.FindPropertyRelative("probabilityLvls"), "Probability by Level (%)");
+
+                        int curLv = LevelContext.GetSkillLevel(elem.serializedObject);
+                        bool showDurationPreview = FieldVisibilityUI.Has(elem, EffectFieldMask.Duration);
+                        bool showProbabilityPreview = FieldVisibilityUI.Has(elem, EffectFieldMask.Probability);
+                        PerLevelUI.DrawPreviewForCurrentLevel(elem, curLv, showDurationPreview, showProbabilityPreview);
+                    }
+                    else
+                    {
+                        EditorGUILayout.PropertyField(elem.FindPropertyRelative("valueExpression"), new GUIContent("Tick Value Expression"));
+                        if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
+                            EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
+                    }
                 }
                 else
                 {
-                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("valueExpression"), new GUIContent("Value Expression"));
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("valueExpression"), new GUIContent("Tick Value Expression"));
                     if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
                         EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
                 }
             }
             else
             {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("valueExpression"), new GUIContent("Value Expression"));
+                if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Probability, "Probability"))
+                    EditorGUILayout.PropertyField(elem.FindPropertyRelative("probability"), new GUIContent("Probability (%)"));
             }
+            EditorGUILayout.PropertyField(elem.FindPropertyRelative("dotHotBaseTriggerCount"), new GUIContent("Base Trigger Count"));
+            EditorGUILayout.HelpBox("Base trigger count defines the tick interval. 0 uses the default 6-second round length when calculating DoT/HoT outcomes.", MessageType.Info);
 
             bool forceDuration = operation == DotHotOperation.ConvertDamageToDot;
             if (FieldVisibilityUI.Toggle(elem, EffectFieldMask.Duration, "Duration") || forceDuration)
@@ -66,20 +83,12 @@ namespace TGD.Editor
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("duration"), new GUIContent("Duration (Turns)"));
             }
 
-            if (operation == DotHotOperation.ConvertDamageToDot)
-            {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("damageSchool"), new GUIContent("Damage School"));
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("canCrit"), new GUIContent("Can Crit"));
-            }
-
-            EditorGUILayout.PropertyField(elem.FindPropertyRelative("dotHotAffectsAllies"), new GUIContent("Affects Allies"));
-            EditorGUILayout.PropertyField(elem.FindPropertyRelative("dotHotAffectsEnemies"), new GUIContent("Affects Enemies"));
-
             var extra = elem.FindPropertyRelative("dotHotAdditionalEffects");
             if (extra != null)
             {
                 // Show nested effect list with proper depth tracking so designers can edit entries safely.
                 NestedEffectListDrawer.DrawEffectsList(extra, elem.depth + 1, "Additional Effects");
+                EditorGUILayout.HelpBox("Additional effects trigger alongside each tick. Configure their durations inside each nested effect entry as needed.", MessageType.Info);
             }
             else
                 EditorGUILayout.HelpBox("'dotHotAdditionalEffects' property not found on effect.", MessageType.Warning);

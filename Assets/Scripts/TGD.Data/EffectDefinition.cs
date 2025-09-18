@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using static UnityEngine.UI.CanvasScaler;
 namespace TGD.Data
 {
@@ -208,18 +209,10 @@ namespace TGD.Data
 
     public enum DotHotOperation
     {
-        TriggerDots,
-        TriggerHots,
-        ConvertDamageToDot
-    }
-
-    public enum DotHotCategory
-    {
-        All,
-        Poison,
-        Bleed,
-        Burn,
-        Custom
+        TriggerDots = 0,
+        TriggerHots = 1,
+        ConvertDamageToDot = 2,
+        None = 3
     }
 
     [Serializable]
@@ -307,8 +300,8 @@ namespace TGD.Data
 
         // ===== DoT / HoT Modifier =====
         public DotHotOperation dotHotOperation = DotHotOperation.TriggerDots;
-        public DotHotCategory dotHotCategory = DotHotCategory.All;
-        public string dotHotCustomTag;
+        [FormerlySerializedAs("dotHotTriggerCount")]
+        public int dotHotBaseTriggerCount = 0;
         public int dotHotTriggerCount = 1;
         public bool dotHotAffectsAllies = false;
         public bool dotHotAffectsEnemies = true;

@@ -420,16 +420,14 @@ namespace TGD.Combat
     public class DotHotModifierPreview
     {
         public DotHotOperation Operation { get; set; }
-        public DotHotCategory Category { get; set; }
-        public string CustomTag { get; set; }
-        public int TriggerCount { get; set; }
+        public int BaseTriggerCount { get; set; }
         public string ValueExpression { get; set; }
         public float EvaluatedValue { get; set; }
         public int Duration { get; set; }
         public DamageSchool DamageSchool { get; set; }
         public bool CanCrit { get; set; }
-        public bool AffectsAllies { get; set; }
-        public bool AffectsEnemies { get; set; }
+        public TargetType Target { get; set; }
+        public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
         public EffectInterpretationResult AdditionalEffects { get; set; }
     }

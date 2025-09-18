@@ -707,33 +707,25 @@ namespace TGD.Combat
             string expression = ResolveValueExpression(effect, context);
             float evaluatedValue = 0f;
             bool hasExpression = !string.IsNullOrWhiteSpace(expression);
+            var referenceUnit = context.PrimaryTarget ?? context.Caster;
             if (hasExpression)
-                evaluatedValue = EvaluateExpression(expression, context, context.PrimaryTarget ?? context.Caster, effect.value);
+                evaluatedValue = EvaluateExpression(expression, context, referenceUnit, effect.value);
 
-            int triggerCount = effect.dotHotTriggerCount;
-            if (effect.dotHotOperation != DotHotOperation.ConvertDamageToDot)
-            {
-                if (hasExpression)
-                    triggerCount = Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(0f, evaluatedValue)));
-                else
-                    triggerCount = Mathf.Max(0, triggerCount);
-            }
-
+            int baseTriggerCount = Mathf.Max(0, effect.dotHotBaseTriggerCount);
             int duration = ResolveDuration(effect, context);
+            float probability = ResolveProbabilityValue(effect, context, referenceUnit);
 
             var preview = new DotHotModifierPreview
             {
                 Operation = effect.dotHotOperation,
-                Category = effect.dotHotCategory,
-                CustomTag = effect.dotHotCustomTag,
-                TriggerCount = triggerCount,
+                BaseTriggerCount = baseTriggerCount,
                 ValueExpression = expression,
                 EvaluatedValue = evaluatedValue,
                 Duration = duration,
                 DamageSchool = effect.damageSchool,
                 CanCrit = effect.canCrit,
-                AffectsAllies = effect.dotHotAffectsAllies,
-                AffectsEnemies = effect.dotHotAffectsEnemies,
+                Target = effect.target,
+                Probability = probability,
                 Condition = effect.condition
             };
 
@@ -748,20 +740,32 @@ namespace TGD.Combat
 
             result.DotHotModifiers.Add(preview);
 
-            string category = effect.dotHotCategory == DotHotCategory.Custom && !string.IsNullOrWhiteSpace(effect.dotHotCustomTag)
-                ? effect.dotHotCustomTag
-                : effect.dotHotCategory.ToString();
+            string durationLabel = duration switch
+            {
+                > 0 => $"{duration} turn(s)",
+                -1 => "instant",
+                -2 => "permanent",
+                0 => "skill default",
+                _ => duration.ToString()
+            };
 
+            string triggerLabel = baseTriggerCount == 0 ? "default (6s)" : baseTriggerCount.ToString();
+            string triggerFormulaLabel = baseTriggerCount == 0 ? "默认6" : baseTriggerCount.ToString();
+            string expressionLabel = string.IsNullOrWhiteSpace(expression) ? "(no tick expression)" : expression;
+            string valueLabel = hasExpression ? evaluatedValue.ToString("0.##") : "--";
             switch (effect.dotHotOperation)
             {
+                case DotHotOperation.None:
+                    result.AddLog($"DoT/HoT modifier (no direct damage) targeting {effect.target} | base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%.");
+                    break;
                 case DotHotOperation.TriggerDots:
-                    result.AddLog($"Trigger {category} DoT {triggerCount} time(s).");
+                    result.AddLog($"Trigger DoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
                 case DotHotOperation.TriggerHots:
-                    result.AddLog($"Trigger {category} HoT {triggerCount} time(s).");
+                    result.AddLog($"Trigger HoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
                 case DotHotOperation.ConvertDamageToDot:
-                    result.AddLog($"Convert damage into {category} over {duration} turn(s) (value: {evaluatedValue:0.##}).");
+                    result.AddLog($"Convert damage into DoT for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}). Formula: ((6s+速度时间)/{triggerFormulaLabel})*(持续回合/2)*数值.");
                     break;
             }
         }
