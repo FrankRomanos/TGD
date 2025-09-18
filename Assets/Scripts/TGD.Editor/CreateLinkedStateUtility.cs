@@ -47,7 +47,6 @@ namespace TGD.Editor
             state.costs.Clear();
             state.timeCostSeconds = 0;
             state.cooldownSeconds = 0;
-            state.cooldownRounds = 0;
             state.range = 0;
             state.threat = 0;
             state.shredMultiplier = 0;

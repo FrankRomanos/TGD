@@ -190,7 +190,7 @@ namespace TGD.UI
                 GUILayout.Label($"职业：{selectedSkill.classID}");
                 GUILayout.Label($"技能类型：{selectedSkill.skillType}");
                 GUILayout.Label($"动作类型：{selectedSkill.actionType}");
-                GUILayout.Label($"冷却时间：{selectedSkill.cooldownSeconds}秒 / {selectedSkill.cooldownRounds}回合");
+                GUILayout.Label($"冷却时间：{selectedSkill.cooldownSeconds}秒 / {selectedSkill.cooldownSeconds}回合");
                 GUILayout.Label($"技能持续：{FormatSkillDurationLabel(selectedSkill.ResolveDuration())}");
                 GUILayout.Space(10);
 

@@ -113,43 +113,56 @@ namespace TGD.Editor
             }
 
             // 类型与通用数值（注意 Mastery 的 N/A）
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("skillType"), new GUIContent("Skill Type"));
             var skillTypeProp = serializedObject.FindProperty("skillType");
+            DrawPropertyField(skillTypeProp, nameof(SkillDefinition.skillType), new GUIContent("Skill Type"));
 
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("actionType"), new GUIContent("Action Type"));
-            SkillType skillType = (SkillType)skillTypeProp.enumValueIndex;
+            var timeCostSecondsProp = serializedObject.FindProperty("timeCostSeconds");
+            var targetTypeProp = serializedObject.FindProperty("targetType");
+            var cooldownSecondsProp = serializedObject.FindProperty("cooldownSeconds");
+            var cooldownTurnsProp = serializedObject.FindProperty("cooldownTurns");
+            var rangeProp = serializedObject.FindProperty("range");
+            var threatProp = serializedObject.FindProperty("threat");
+            var shredMultiplierProp = serializedObject.FindProperty("shredMultiplier");
+
+            SkillType skillType = skillTypeProp != null ? (SkillType)skillTypeProp.enumValueIndex : SkillType.None;
 
             if (skillType == SkillType.Mastery)
             {
-                serializedObject.FindProperty("targetType").enumValueIndex = (int)SkillTargetType.None;
-                serializedObject.FindProperty("timeCostSeconds").intValue = 0;
-                serializedObject.FindProperty("cooldownSeconds").intValue = 0;
-                serializedObject.FindProperty("cooldownTurns").intValue = 0;
-                serializedObject.FindProperty("threat").floatValue = 0f;
-                serializedObject.FindProperty("shredMultiplier").floatValue = 0f;
+                if (targetTypeProp != null)
+                    targetTypeProp.enumValueIndex = (int)SkillTargetType.None;
+                if (timeCostSecondsProp != null)
+                    timeCostSecondsProp.intValue = 0;
+                if (cooldownSecondsProp != null)
+                    cooldownSecondsProp.intValue = 0;
+                if (cooldownTurnsProp != null)
+                    cooldownTurnsProp.intValue = 0;
+                if (threatProp != null)
+                    threatProp.floatValue = 0f;
+                if (shredMultiplierProp != null)
+                    shredMultiplierProp.floatValue = 0f;
 
                 EditorGUILayout.HelpBox("Mastery/Passive 不需要 Target/TimeCost/Cooldown/Threat/Shred，已自动设为 N/A。", MessageType.Info);
             }
             else
             {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("timeCostSeconds"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("targetType"));
+                DrawPropertyField(timeCostSecondsProp, nameof(SkillDefinition.timeCostSeconds));
+                DrawPropertyField(targetTypeProp, nameof(SkillDefinition.targetType));
 
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownSeconds"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldownTurns"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("range"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("threat"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("shredMultiplier"));
+                DrawPropertyField(cooldownSecondsProp, nameof(SkillDefinition.cooldownSeconds));
+                DrawPropertyField(cooldownTurnsProp, nameof(SkillDefinition.cooldownTurns));
+                DrawPropertyField(rangeProp, nameof(SkillDefinition.range));
+                DrawPropertyField(threatProp, nameof(SkillDefinition.threat));
+                DrawPropertyField(shredMultiplierProp, nameof(SkillDefinition.shredMultiplier));
             }
-
             var actionTypeProp = serializedObject.FindProperty("actionType");
-            var actionType = (ActionType)actionTypeProp.enumValueIndex;
+            DrawPropertyField(actionTypeProp, nameof(SkillDefinition.actionType), new GUIContent("Action Type"));
+            var actionType = actionTypeProp != null ? (ActionType)actionTypeProp.enumValueIndex : ActionType.None;
 
             if (actionType == ActionType.FullRound)
             {
                 // 强制写哨兵值 -1，并隐藏 TimeCost 编辑
-                var timeProp = serializedObject.FindProperty("timeCostSeconds");
-                timeProp.intValue = -1;
+                if (timeCostSecondsProp != null)
+                    timeCostSecondsProp.intValue = -1;
 
                 EditorGUILayout.HelpBox(
                     "Full Round: Consumes all remaining time this turn and ends the turn immediately. (Time Cost set to -1)",
@@ -315,6 +328,21 @@ namespace TGD.Editor
                 effectsProp.InsertArrayElementAtIndex(effectsProp.arraySize);
 
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private static void DrawPropertyField(SerializedProperty property, string propertyName, GUIContent label = null)
+        {
+            if (property != null)
+            {
+                if (label != null)
+                    EditorGUILayout.PropertyField(property, label);
+                else
+                    EditorGUILayout.PropertyField(property);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox($"'{propertyName}' property not found on SkillDefinition.", MessageType.Error);
+            }
         }
 
         private static bool IsLeveledColor(SkillColor color)
