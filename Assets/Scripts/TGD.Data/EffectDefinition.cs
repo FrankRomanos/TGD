@@ -35,26 +35,29 @@ namespace TGD.Data
 
     public enum EffectType
     {
-        None,
-        Damage,
-        Heal,
-        GainResource,
-        ScalingBuff,      // ✅ 每点资源提升属性
-        ApplyStatus,      // Buff/Debuff（skillID 状态）
-        ModifyStatus,
-        ConditionalEffect,
-        ModifySkill,
-        ReplaceSkill,
-        Move,                // 统一的技能调整入口
-        ModifyAction,
-        CooldownModifier,
-        ModifyDamageSchool,
-        AttributeModifier,
-        MasteryPosture,
-        RandomOutcome,
-        Repeat,
-        ProbabilityModifier,
-        DotHotModifier
+        None = 0,
+        Damage = 1,
+        Heal = 2,
+        GainResource = 3,
+        ScalingBuff = 4,      // ✅ 每点资源提升属性
+        ModifyStatus = 6,
+        ConditionalEffect = 7,
+        ModifySkill = 8,
+        ReplaceSkill = 9,
+        Move = 10,                // 统一的技能调整入口
+        ModifyAction = 11,
+        CooldownModifier = 12,
+        ModifyDamageSchool = 13,
+        AttributeModifier = 14,
+        MasteryPosture = 15,
+        RandomOutcome = 16,
+        Repeat = 17,
+        ProbabilityModifier = 18,
+        DotHotModifier = 19
+    }
+    public static class EffectTypeLegacy
+    {
+        public const int ApplyStatus = 5;
     }
     public enum CooldownTargetScope
     {

@@ -13,7 +13,6 @@ namespace TGD.Editor
             // 在这里注册所有 Drawer
             Register(EffectType.GainResource, new GainResourceDrawer());
             Register(EffectType.ModifySkill, new ModifySkillDrawer());
-            Register(EffectType.ApplyStatus, new ApplyStatusDrawer());
             Register(EffectType.ModifyStatus, new ModifyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
             Register(EffectType.ModifyAction, new ModifyActionDrawer());
@@ -46,6 +45,12 @@ namespace TGD.Editor
         public static IEffectDrawer Get(EffectType type)
         {
             if (_map.TryGetValue(type, out var d)) return d;
+            if ((int)type == EffectTypeLegacy.ApplyStatus &&
+         _map.TryGetValue(EffectType.ModifyStatus, out var legacyDrawer))
+            {
+                return legacyDrawer;
+            }
+
             return _map[(EffectType)(-1)];
         }
     }

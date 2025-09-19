@@ -273,7 +273,17 @@ namespace TGD.Editor
                 var effectTypeProp = element.FindPropertyRelative("effectType");
                 EditorGUILayout.PropertyField(effectTypeProp, new GUIContent("Effect Type"));
 
-                var type = (EffectType)effectTypeProp.enumValueIndex;
+                int effectTypeValue = effectTypeProp.enumValueIndex;
+                if (effectTypeValue == EffectTypeLegacy.ApplyStatus)
+                {
+                    effectTypeProp.enumValueIndex = (int)EffectType.ModifyStatus;
+                    var modifyTypeProp = element.FindPropertyRelative("statusModifyType");
+                    if (modifyTypeProp != null)
+                        modifyTypeProp.enumValueIndex = (int)StatusModifyType.ApplyStatus;
+                    effectTypeValue = effectTypeProp.enumValueIndex;
+                }
+
+                var type = (EffectType)effectTypeValue;
                 var drawer = EffectDrawerRegistry.Get(type);
                 drawer.Draw(element);
                 // Display duration field based on Skill level (if relevant for effect)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using UnityEditor;
@@ -24,13 +25,19 @@ namespace TGD.Editor
                 return string.Empty;
 
             var effectType = (EffectType)typeProp.enumValueIndex;
+            if ((int)effectType == EffectTypeLegacy.ApplyStatus)
+            {
+                return BuildModifyStatusSummary(effectProp, owningSkill, treatLegacyApply: true);
+            }
+
+
             return effectType switch
             {
                 EffectType.Damage => BuildDamageSummary(effectProp, owningSkill),
                 EffectType.Heal => BuildHealSummary(effectProp, owningSkill),
                 EffectType.GainResource => BuildGainResourceSummary(effectProp, owningSkill),
                 EffectType.ScalingBuff => BuildScalingBuffSummary(effectProp, owningSkill),
-                EffectType.ApplyStatus => BuildApplyStatusSummary(effectProp, owningSkill),
+                EffectType.ModifyStatus => BuildModifyStatusSummary(effectProp, owningSkill),
                 EffectType.ConditionalEffect => BuildConditionalSummary(effectProp),
                 EffectType.ModifySkill => BuildModifySkillSummary(effectProp, owningSkill),
                 EffectType.ReplaceSkill => BuildReplaceSkillSummary(effectProp, owningSkill),
@@ -112,11 +119,36 @@ namespace TGD.Editor
             return sb.ToString().TrimEnd();
         }
 
-        private static string BuildApplyStatusSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        private static string BuildModifyStatusSummary(SerializedProperty effectProp, SkillDefinition owningSkill, bool treatLegacyApply = false)
         {
-            string statusId = FormatSimpleString(effectProp.FindPropertyRelative("statusSkillID"));
-            string title = string.IsNullOrEmpty(statusId) ? "Apply Status" : $"Apply Status '{statusId}'";
-            var sb = CreateHeader(title, GetTargetLabel(effectProp));
+            var modifyTypeProp = effectProp.FindPropertyRelative("statusModifyType");
+            StatusModifyType modifyType = modifyTypeProp != null
+                ? (StatusModifyType)modifyTypeProp.enumValueIndex
+                : StatusModifyType.ApplyStatus;
+
+            if (treatLegacyApply)
+                modifyType = StatusModifyType.ApplyStatus;
+
+            return modifyType switch
+            {
+                StatusModifyType.ReplaceStatus => BuildModifyStatusReplaceSummary(effectProp, owningSkill),
+                StatusModifyType.DeleteStatus => BuildModifyStatusDeleteSummary(effectProp, owningSkill),
+                _ => BuildModifyStatusApplySummary(effectProp, owningSkill)
+            };
+        }
+
+        private static string BuildModifyStatusApplySummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var statusIds = CollectStatusSkillIds(effectProp);
+            string headerSuffix = statusIds.Count == 1 ? $" '{statusIds[0]}'" : string.Empty;
+            var sb = CreateHeader($"Apply Status{headerSuffix}", GetTargetLabel(effectProp));
+
+            if (statusIds.Count != 1)
+            {
+                AddBullet(sb, statusIds.Count > 0
+                    ? $"Statuses: {string.Join(", ", statusIds)}"
+                    : "Statuses: (auto)");
+            }
 
             int? duration = ResolveDurationValue(effectProp, owningSkill);
             if (duration.HasValue)
@@ -136,7 +168,50 @@ namespace TGD.Editor
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();
         }
+        private static string BuildModifyStatusReplaceSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var statusIds = CollectStatusSkillIds(effectProp);
+            string headerSuffix = statusIds.Count == 1 ? $" '{statusIds[0]}'" : string.Empty;
+            var sb = CreateHeader($"Replace Status{headerSuffix}", GetTargetLabel(effectProp));
 
+            if (statusIds.Count > 1)
+                AddBullet(sb, $"Statuses: {string.Join(", ", statusIds)}");
+            else if (statusIds.Count == 0)
+                AddBullet(sb, "Statuses: (auto)");
+
+            string replacement = FormatSimpleString(effectProp.FindPropertyRelative("statusModifyReplacementSkillID"));
+            AddBullet(sb, string.IsNullOrEmpty(replacement)
+                ? "Replacement: (missing ID)"
+                : $"Replacement: {replacement}");
+
+            string stackInfo = DescribeModifyStackInfo(effectProp);
+            if (!string.IsNullOrEmpty(stackInfo))
+                AddBullet(sb, stackInfo);
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildModifyStatusDeleteSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var statusIds = CollectStatusSkillIds(effectProp);
+            string headerSuffix = statusIds.Count == 1 ? $" '{statusIds[0]}'" : string.Empty;
+            var sb = CreateHeader($"Delete Status{headerSuffix}", GetTargetLabel(effectProp));
+
+            if (statusIds.Count != 1)
+            {
+                AddBullet(sb, statusIds.Count > 0
+                    ? $"Statuses: {string.Join(", ", statusIds)}"
+                    : "Statuses: (auto)");
+            }
+
+            string stackInfo = DescribeModifyStackInfo(effectProp);
+            if (!string.IsNullOrEmpty(stackInfo))
+                AddBullet(sb, stackInfo);
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
         private static string BuildConditionalSummary(SerializedProperty effectProp)
         {
             var sb = CreateHeader("Conditional Effect");
@@ -931,6 +1006,45 @@ namespace TGD.Editor
         private static string FormatSimpleString(SerializedProperty prop)
         {
             return prop == null ? string.Empty : prop.stringValue;
+        }
+        private static string DescribeModifyStackInfo(SerializedProperty effectProp)
+        {
+            var showStacksProp = effectProp.FindPropertyRelative("statusModifyShowStacks");
+            if (showStacksProp == null || !showStacksProp.boolValue)
+                return string.Empty;
+
+            int stackCount = effectProp.FindPropertyRelative("statusModifyStacks")?.intValue ?? 0;
+            int maxStacks = effectProp.FindPropertyRelative("statusModifyMaxStacks")?.intValue ?? -1;
+            string maxLabel = maxStacks < 0 ? "Unlimited" : maxStacks.ToString();
+            return $"Stacks: {stackCount} (max {maxLabel})";
+        }
+
+        private static List<string> CollectStatusSkillIds(SerializedProperty effectProp)
+        {
+            var result = new List<string>();
+            var listProp = effectProp.FindPropertyRelative("statusModifySkillIDs");
+            if (listProp != null && listProp.isArray)
+            {
+                for (int i = 0; i < listProp.arraySize; i++)
+                {
+                    var element = listProp.GetArrayElementAtIndex(i);
+                    if (element.propertyType != SerializedPropertyType.String)
+                        continue;
+
+                    string value = element.stringValue;
+                    if (!string.IsNullOrWhiteSpace(value))
+                        result.Add(value.Trim());
+                }
+            }
+
+            if (result.Count == 0)
+            {
+                string fallback = FormatSimpleString(effectProp.FindPropertyRelative("statusSkillID"));
+                if (!string.IsNullOrWhiteSpace(fallback))
+                    result.Add(fallback.Trim());
+            }
+
+            return result;
         }
         private static string DescribeStringList(SerializedProperty listProp)
         {

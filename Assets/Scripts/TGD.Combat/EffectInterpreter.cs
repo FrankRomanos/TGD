@@ -1,4 +1,4 @@
-using System;
+Ôªøusing System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
@@ -305,6 +305,8 @@ namespace TGD.Combat
                 result.AddLog($"Condition {effect.condition} not met for {effect.effectType}.");
                 return;
             }
+            int effectTypeValue = (int)effect.effectType;
+  
 
             switch (effect.effectType)
             {
@@ -320,11 +322,8 @@ namespace TGD.Combat
                 case EffectType.ScalingBuff:
                     ApplyScalingBuff(effect, context, result);
                     break;
-                case EffectType.ApplyStatus:
-                    ApplyStatus(effect, context, result, visited);
-                    break;
                 case EffectType.ModifyStatus:
-                    ApplyModifyStatus(effect, context, result);
+                    ApplyModifyStatus(effect, context, result, visited);
                     break;
                 case EffectType.ConditionalEffect:
                     ApplyConditional(effect, context, result, visited);
@@ -494,7 +493,22 @@ namespace TGD.Combat
             result.AddLog($"Scaling buff [{opLabel}]: {effect.scalingAttribute} per {effect.resourceType} ({valueLabel}).");
         }
 
-        private static void ApplyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
+        private static void InterpretApplyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited, IReadOnlyList<string> explicitSkillIds = null)
+        {
+            var skillIds = GatherStatusSkillIds(effect, explicitSkillIds);
+            if (skillIds.Count == 0)
+            {
+                result.AddLog("ModifyStatus apply effect is missing status skill IDs.");
+                return;
+            }
+
+            foreach (var statusSkillId in skillIds)
+            {
+                InterpretApplyStatusForSkill(effect, context, result, visited, statusSkillId);
+            }
+        }
+
+        private static void InterpretApplyStatusForSkill(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited, string statusSkillId)
         {
             var targets = ResolveTargets(effect.target, context);
             float probability = ResolveProbabilityValue(effect, context, targets.Count > 0 ? targets[0] : context.PrimaryTarget);
@@ -505,7 +519,7 @@ namespace TGD.Combat
 
             var preview = new StatusApplicationPreview
             {
-                StatusSkillID = effect.statusSkillID,
+                StatusSkillID = statusSkillId,
                 Duration = duration,
                 StackCount = stacks,
                 IsInstant = isInstant,
@@ -516,9 +530,9 @@ namespace TGD.Combat
                 Condition = effect.condition
             };
 
-            if (isInstant && !string.IsNullOrWhiteSpace(effect.statusSkillID) && context.SkillResolver != null)
+            if (isInstant && !string.IsNullOrWhiteSpace(statusSkillId) && context.SkillResolver != null)
             {
-                var statusSkill = context.SkillResolver.FindSkill(effect.statusSkillID);
+                var statusSkill = context.SkillResolver.FindSkill(statusSkillId);
                 if (statusSkill != null)
                 {
                     var childContext = context.CloneForSkill(statusSkill, inheritSkillLevelOverride: false);
@@ -527,7 +541,7 @@ namespace TGD.Combat
                 }
                 else
                 {
-                    result.AddLog($"Status skill '{effect.statusSkillID}' not found for ApplyStatus effect.");
+                    result.AddLog($"Status skill '{statusSkillId}' not found for ModifyStatus apply effect.");
                 }
             }
 
@@ -547,9 +561,39 @@ namespace TGD.Combat
                 durationLabel = $"for {duration} turn(s)";
 
             string durationSuffix = string.IsNullOrEmpty(durationLabel) ? string.Empty : $" {durationLabel}";
-            result.AddLog($"{action} status '{effect.statusSkillID}' ({stackLabel}){durationSuffix} ({probability:0.##}% chance).");
+            result.AddLog($"{action} status '{statusSkillId}' ({stackLabel}){durationSuffix} ({probability:0.##}% chance).");
         }
-        private static void ApplyModifyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        private static List<string> GatherStatusSkillIds(EffectDefinition effect, IReadOnlyList<string> explicitSkillIds)
+        {
+            var ids = new List<string>();
+
+            if (explicitSkillIds != null)
+            {
+                foreach (var id in explicitSkillIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                        ids.Add(id);
+                }
+            }
+
+            if (ids.Count == 0 && effect.statusModifySkillIDs != null)
+            {
+                foreach (var id in effect.statusModifySkillIDs)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                        ids.Add(id);
+                }
+            }
+
+            if (ids.Count == 0 && !string.IsNullOrWhiteSpace(effect.statusSkillID))
+            {
+                ids.Add(effect.statusSkillID);
+            }
+
+            return ids;
+        }
+
+        private static void ApplyModifyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
             float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
             var preview = new StatusModificationPreview
@@ -566,9 +610,13 @@ namespace TGD.Combat
 
             if (effect.statusModifySkillIDs != null && effect.statusModifySkillIDs.Count > 0)
             {
-                preview.SkillIDs.AddRange(effect.statusModifySkillIDs);
+                foreach (var id in effect.statusModifySkillIDs)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                        preview.SkillIDs.Add(id);
+                }
             }
-            else if (!string.IsNullOrWhiteSpace(effect.statusSkillID))
+            if (preview.SkillIDs.Count == 0 && !string.IsNullOrWhiteSpace(effect.statusSkillID))
             {
                 preview.SkillIDs.Add(effect.statusSkillID);
             }
@@ -586,8 +634,9 @@ namespace TGD.Combat
             switch (effect.statusModifyType)
             {
                 case StatusModifyType.ApplyStatus:
+                    InterpretApplyStatus(effect, context, result, visited, preview.SkillIDs);
                     result.AddLog($"Modify status: apply {skillsLabel}{stackInfo} to {effect.target}.");
-                    break;
+                    return;
                 case StatusModifyType.ReplaceStatus:
                     result.AddLog($"Modify status: replace {skillsLabel} with {effect.statusModifyReplacementSkillID} on {effect.target}{stackInfo}.");
                     break;
@@ -962,23 +1011,25 @@ namespace TGD.Combat
             int turns = 0;
             if (seconds != 0)
             {
-                int baseTurnSeconds = CombatClock.BaseTurnSeconds; // √øªÿ∫œª˘¥°√Î ˝£®»Á6√Î£©
+                int baseTurnSeconds = CombatClock.BaseTurnSeconds; // ÊØèÂõûÂêàÂü∫Á°ÄÁßíÊï∞ÔºàÂ¶Ç6ÁßíÔºâ
                 if (seconds > 0)
                 {
-                    // ¿‰»¥‘ˆº”£∫≤ª◊„1ªÿ∫œ“≤œÚ…œ»°’˚£®‘≠¬ﬂº≠’˝»∑£©
+                    // ÂÜ∑Âç¥Â¢ûÂä†Ôºö‰∏çË∂≥1ÂõûÂêà‰πüÂêë‰∏äÂèñÊï¥
                     int abs = Mathf.CeilToInt((float)seconds / baseTurnSeconds);
-                    turns = Mathf.Max(abs, 1); // ÷¡…Ÿ‘ˆº”1ªÿ∫œ
+                    turns = Mathf.Max(abs, 1); //Ëá≥Â∞ëÂ¢ûÂä†1ÂõûÂêà
                 }
                 else
                 {
-                    // ¿‰»¥ºı…Ÿ£∫Ωˆµ±ºı…Ÿµƒ√Î ˝ °› 1ªÿ∫œ ±≤≈…˙–ß£¨∑Ò‘Ú≤ªºı…Ÿ
-                    int reduceSeconds = Mathf.Abs(seconds); // »°ºı…Ÿµƒ√Î ˝æ¯∂‘÷µ
+                    // ÂÜ∑Âç¥ÂáèÂ∞ëÔºö‰ªÖÂΩìÂáèÂ∞ëÁöÑÁßíÊï∞ ‚â• 1ÂõûÂêàÊó∂ÊâçÁîüÊïàÔºåÂê¶Âàô‰∏çÂáèÂ∞ë
+                    int reduceSeconds = Mathf.Abs(seconds); // ÂèñÂáèÂ∞ëÁöÑÁßíÊï∞ÁªùÂØπÂÄº
                     if (reduceSeconds >= baseTurnSeconds)
                     {
-                        // ºı…Ÿµƒ√Î ˝◊„πª1ªÿ∫œ£¨∞¥ µº ªÿ∫œ ˝º∆À„£®œÚœ¬»°’˚£¨±‹√‚∂‡ºı£©
+                        // Ÿµ„πª1ÿ∫œ£ µ ªÿ∫„£®»°
+                        // ÂáèÂ∞ëÁöÑÁßíÊï∞Ë∂≥Â§ü1ÂõûÂêàÔºåÊåâÂÆûÈôÖÂõûÂêàÊï∞ËÆ°ÁÆóÔºàÂêë‰∏ãÂèñÊï¥ÔºåÈÅøÂÖçÂ§öÂáèÔºâ
                         turns = -Mathf.FloorToInt((float)reduceSeconds / baseTurnSeconds);
                     }
-                    // ∑Ò‘Ú£®reduceSeconds < baseTurnSeconds£©£¨turns±£≥÷0£®≤ªºı…Ÿ£©
+                    // reduceSeconds < baseTurnSecondsturns0Ÿ£
+                    // Âê¶ÂàôÔºàreduceSeconds < baseTurnSecondsÔºâÔºåturns‰øùÊåÅ0Ôºà‰∏çÂáèÂ∞ëÔºâ
                 }
             }
 
@@ -1197,13 +1248,13 @@ namespace TGD.Combat
                     result.AddLog($"DoT/HoT modifier (no direct damage) targeting {effect.target} | base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}% ({stackLabel}).");
                     break;
                 case DotHotOperation.TriggerDots:
-                    result.AddLog($"Trigger DoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÀŸ∂» ±º‰)/{triggerFormulaLabel})*(≥÷–¯ªÿ∫œ/2)* ˝÷µ.");
+                    result.AddLog($"Trigger DoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÈÄüÂ∫¶Êó∂Èó¥)/{triggerFormulaLabel})*(ÊåÅÁª≠ÂõûÂêà/2)*Êï∞ÂÄº.");
                     break;
                 case DotHotOperation.TriggerHots:
-                    result.AddLog($"Trigger HoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÀŸ∂» ±º‰)/{triggerFormulaLabel})*(≥÷–¯ªÿ∫œ/2)* ˝÷µ.");
+                    result.AddLog($"Trigger HoT ticks for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÈÄüÂ∫¶Êó∂Èó¥)/{triggerFormulaLabel})*(ÊåÅÁª≠ÂõûÂêà/2)*Êï∞ÂÄº.");
                     break;
                 case DotHotOperation.ConvertDamageToDot:
-                    result.AddLog($"Convert damage into DoT for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÀŸ∂» ±º‰)/{triggerFormulaLabel})*(≥÷–¯ªÿ∫œ/2)* ˝÷µ.");
+                    result.AddLog($"Convert damage into DoT for {effect.target}: base trigger {triggerLabel}, duration {durationLabel}, probability {probability:0.##}%, tick value {valueLabel} (expr: {expressionLabel}).  ({stackLabel}).Formula: ((6s+ÈÄüÂ∫¶Êó∂Èó¥)/{triggerFormulaLabel})*(ÊåÅÁª≠ÂõûÂêà/2)*Êï∞ÂÄº.");
                     break;
             }
         }
@@ -1437,7 +1488,7 @@ namespace TGD.Combat
                 case DamageSchool.Frost:
                     mitigationKey = "magical_mitigation";
                     break;
-                // –¬‘ˆ£∫ª—Ê…À∫¶ π”√ƒß∑®ºı√‚
+                // Êñ∞Â¢ûÔºöÁÅ´ÁÑ∞‰º§ÂÆ≥‰ΩøÁî®È≠îÊ≥ïÂáèÂÖç
                 case DamageSchool.Fire:
                     mitigationKey = "magical_mitigation";
                     break;
