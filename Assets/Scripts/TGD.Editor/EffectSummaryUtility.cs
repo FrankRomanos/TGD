@@ -24,11 +24,13 @@ namespace TGD.Editor
             if (typeProp == null)
                 return string.Empty;
 
-            var effectType = (EffectType)typeProp.enumValueIndex;
-            if ((int)effectType == EffectTypeLegacy.ApplyStatus)
+            int effectTypeValue = typeProp.intValue;
+            if (effectTypeValue == EffectTypeLegacy.ApplyStatus)
             {
                 return BuildModifyStatusSummary(effectProp, owningSkill, treatLegacyApply: true);
             }
+
+            var effectType = (EffectType)effectTypeValue;
 
 
             return effectType switch

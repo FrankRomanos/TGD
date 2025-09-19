@@ -273,14 +273,14 @@ namespace TGD.Editor
                 var effectTypeProp = element.FindPropertyRelative("effectType");
                 EditorGUILayout.PropertyField(effectTypeProp, new GUIContent("Effect Type"));
 
-                int effectTypeValue = effectTypeProp.enumValueIndex;
+                int effectTypeValue = effectTypeProp.intValue;
                 if (effectTypeValue == EffectTypeLegacy.ApplyStatus)
                 {
-                    effectTypeProp.enumValueIndex = (int)EffectType.ModifyStatus;
+                    effectTypeProp.intValue = (int)EffectType.ModifyStatus;
                     var modifyTypeProp = element.FindPropertyRelative("statusModifyType");
                     if (modifyTypeProp != null)
-                        modifyTypeProp.enumValueIndex = (int)StatusModifyType.ApplyStatus;
-                    effectTypeValue = effectTypeProp.enumValueIndex;
+                        modifyTypeProp.intValue = (int)StatusModifyType.ApplyStatus;
+                    effectTypeValue = effectTypeProp.intValue;
                 }
 
                 var type = (EffectType)effectTypeValue;

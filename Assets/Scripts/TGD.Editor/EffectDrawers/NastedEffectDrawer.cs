@@ -78,10 +78,11 @@ namespace TGD.Editor
             }
             EditorGUILayout.PropertyField(typeProp, new GUIContent("Effect Type"));
 
-            var drawer = EffectDrawerRegistry.Get((EffectType)typeProp.enumValueIndex);
+            var effectTypeValue = typeProp.intValue;
+            var drawer = EffectDrawerRegistry.Get((EffectType)effectTypeValue);
             if (drawer == null)
             {
-                EditorGUILayout.HelpBox($"No drawer registered for effect type {(EffectType)typeProp.enumValueIndex}.", MessageType.Error);
+                EditorGUILayout.HelpBox($"No drawer registered for effect type {(EffectType)effectTypeValue}.", MessageType.Error);
             }
             else
             {
@@ -129,7 +130,8 @@ namespace TGD.Editor
         {
             if (prop == null)
                 return;
-            prop.enumValueIndex = Convert.ToInt32(value);
+            if (prop.propertyType == SerializedPropertyType.Enum)
+                prop.intValue = Convert.ToInt32(value);
         }
 
         private static void SetString(SerializedProperty prop, string value)
