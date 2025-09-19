@@ -123,14 +123,9 @@ namespace TGD.Combat
             {
                 foreach (var condition in context.Skill.useConditions)
                 {
-                    var preview = new SkillUseConditionPreview
-                    {
-                        Resource = condition.resourceType,
-                        Comparison = condition.compareOp,
-                        CompareValue = condition.compareValue
-                    };
+                    var preview = EvaluateSkillUseCondition(condition, context);
                     result.SkillUseConditions.Add(preview);
-                    result.AddLog($"Use condition: {condition.resourceType} {condition.compareOp} {condition.compareValue}.");
+                    result.AddLog(BuildSkillUseConditionLog(preview));
                 }
             }
 
@@ -144,7 +139,162 @@ namespace TGD.Combat
 
             return result;
         }
+        private static SkillUseConditionPreview EvaluateSkillUseCondition(SkillUseCondition condition, EffectContext context)
+        {
+            var preview = new SkillUseConditionPreview
+            {
+                ConditionType = condition?.conditionType ?? SkillCostConditionType.Resource,
+                Target = condition?.target ?? ConditionTarget.Caster,
+                Resource = condition?.resourceType ?? ResourceType.Discipline,
+                Comparison = condition?.compareOp ?? CompareOp.Equal,
+                CompareValue = condition?.compareValue ?? 0f,
+                CompareExpression = condition?.compareValueExpression
+            };
 
+            switch (preview.ConditionType)
+            {
+                case SkillCostConditionType.Resource:
+                    {
+                        var referenceUnit = ResolveConditionTarget(preview.Target, context);
+                        float compareValue = EvaluateConditionValue(condition, context, referenceUnit);
+                        preview.CompareValue = compareValue;
+                        float maxValue;
+                        preview.CurrentValue = ResolveConditionResourceValue(condition, context, referenceUnit, out maxValue);
+                        preview.MaxValue = maxValue;
+                        preview.Succeeded = EvaluateComparison(preview.CurrentValue, compareValue, preview.Comparison);
+                        break;
+                    }
+                case SkillCostConditionType.Distance:
+                    {
+                        preview.MinDistance = condition?.minDistance ?? 0;
+                        preview.MaxDistance = condition?.maxDistance ?? 0;
+                        preview.RequireLineOfSight = condition?.requireLineOfSight ?? false;
+                        preview.Distance = context?.GetDistance(preview.Target) ?? 0f;
+                        preview.PathBlocked = preview.RequireLineOfSight && (context?.IsPathBlocked(preview.Target) ?? false);
+                        bool meetsMin = preview.Distance >= preview.MinDistance;
+                        bool meetsMax = preview.MaxDistance <= 0 || preview.Distance <= preview.MaxDistance;
+                        bool meetsPath = !preview.RequireLineOfSight || !preview.PathBlocked;
+                        preview.Succeeded = meetsMin && meetsMax && meetsPath;
+                        break;
+                    }
+                case SkillCostConditionType.PerformHeal:
+                    preview.Succeeded = context?.ConditionOnPerformHeal ?? false;
+                    break;
+                case SkillCostConditionType.PerformAttack:
+                    preview.Succeeded = context?.ConditionOnPerformAttack ?? false;
+                    break;
+            }
+
+            return preview;
+        }
+        private static string BuildSkillUseConditionLog(SkillUseConditionPreview preview)
+        {
+            if (preview == null)
+                return "Use condition: (invalid).";
+
+            switch (preview.ConditionType)
+            {
+                case SkillCostConditionType.Resource:
+                    {
+                        string valueLabel = !string.IsNullOrWhiteSpace(preview.CompareExpression)
+                            ? preview.CompareExpression
+                            : preview.CompareValue.ToString("0.##", CultureInfo.InvariantCulture);
+                        return $"Use condition [Resource] ({preview.Resource}) on {DescribeConditionTarget(preview.Target)} {preview.Comparison} {valueLabel}. Current {preview.CurrentValue:0.##} / Max {preview.MaxValue:0.##} => {(preview.Succeeded ? "met" : "failed")}.";
+                    }
+                case SkillCostConditionType.Distance:
+                    {
+                        string maxLabel = preview.MaxDistance > 0 ? preview.MaxDistance.ToString(CultureInfo.InvariantCulture) : "inf";
+                        string losLabel = preview.RequireLineOfSight ? (preview.PathBlocked ? "blocked" : "clear") : "ignored";
+                        return $"Use condition [Distance] to {DescribeConditionTarget(preview.Target)}: {preview.Distance:0.##} (min {preview.MinDistance}, max {maxLabel}, path {losLabel}) => {(preview.Succeeded ? "met" : "failed")}.";
+                    }
+                case SkillCostConditionType.PerformHeal:
+                    return $"Use condition [Perform Heal] on {DescribeConditionTarget(preview.Target)} => {(preview.Succeeded ? "met" : "failed")}.";
+                case SkillCostConditionType.PerformAttack:
+                    return $"Use condition [Perform Attack] on {DescribeConditionTarget(preview.Target)} => {(preview.Succeeded ? "met" : "failed")}.";
+                default:
+                    return "Use condition evaluated.";
+            }
+        }
+
+        private static Unit ResolveConditionTarget(ConditionTarget target, EffectContext context)
+        {
+            return target switch
+            {
+                ConditionTarget.Caster => context?.Caster,
+                ConditionTarget.PrimaryTarget => context?.PrimaryTarget,
+                ConditionTarget.SecondaryTarget => context?.SecondaryTarget,
+                _ => context?.PrimaryTarget ?? context?.Caster
+            };
+        }
+
+        private static float EvaluateConditionValue(SkillUseCondition condition, EffectContext context, Unit referenceUnit)
+        {
+            if (condition == null)
+                return 0f;
+
+            string expression = condition.compareValueExpression;
+            if (!string.IsNullOrWhiteSpace(expression))
+                return EvaluateExpression(expression, context, referenceUnit, condition.compareValue);
+
+            return condition.compareValue;
+        }
+
+        private static float ResolveConditionResourceValue(SkillUseCondition condition, EffectContext context, Unit referenceUnit, out float maxValue)
+        {
+            maxValue = 0f;
+            if (condition == null)
+                return 0f;
+
+            float current = context?.GetResourceAmount(condition.resourceType) ?? 0f;
+            maxValue = context?.GetResourceMax(condition.resourceType) ?? 0f;
+
+            var stats = referenceUnit?.Stats;
+            if (stats != null)
+            {
+                switch (condition.resourceType)
+                {
+                    case ResourceType.HP:
+                        current = stats.HP;
+                        maxValue = stats.MaxHP;
+                        break;
+                    case ResourceType.Energy:
+                        current = stats.Energy;
+                        maxValue = stats.MaxEnergy;
+                        break;
+                    case ResourceType.posture:
+                        current = stats.Posture;
+                        maxValue = stats.MaxPosture;
+                        break;
+                }
+            }
+
+            return current;
+        }
+
+        private static string DescribeConditionTarget(ConditionTarget target)
+        {
+            return target switch
+            {
+                ConditionTarget.Caster => "caster",
+                ConditionTarget.PrimaryTarget => "primary target",
+                ConditionTarget.SecondaryTarget => "secondary target",
+                _ => "target"
+            };
+        }
+
+        private static bool MatchesConditionTarget(ConditionTarget target, EffectContext context)
+        {
+            if (target == ConditionTarget.Any || context == null)
+                return true;
+
+            var expected = ResolveConditionTarget(target, context);
+            var actual = context.ConditionEventTarget ?? context.PrimaryTarget;
+
+            if (expected == null || actual == null)
+                return true;
+
+            return ReferenceEquals(expected, actual);
+        }
         private static void InterpretEffect(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
             if (effect == null)
@@ -172,6 +322,9 @@ namespace TGD.Combat
                     break;
                 case EffectType.ApplyStatus:
                     ApplyStatus(effect, context, result, visited);
+                    break;
+                case EffectType.ModifyStatus:
+                    ApplyModifyStatus(effect, context, result);
                     break;
                 case EffectType.ConditionalEffect:
                     ApplyConditional(effect, context, result, visited);
@@ -396,6 +549,56 @@ namespace TGD.Combat
             string durationSuffix = string.IsNullOrEmpty(durationLabel) ? string.Empty : $" {durationLabel}";
             result.AddLog($"{action} status '{effect.statusSkillID}' ({stackLabel}){durationSuffix} ({probability:0.##}% chance).");
         }
+        private static void ApplyModifyStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
+            var preview = new StatusModificationPreview
+            {
+                ModifyType = effect.statusModifyType,
+                Target = effect.target,
+                ReplacementSkillID = effect.statusModifyReplacementSkillID,
+                ShowStacks = effect.statusModifyShowStacks,
+                StackCount = effect.statusModifyStacks,
+                MaxStacks = effect.statusModifyMaxStacks,
+                Probability = probability,
+                Condition = effect.condition
+            };
+
+            if (effect.statusModifySkillIDs != null && effect.statusModifySkillIDs.Count > 0)
+            {
+                preview.SkillIDs.AddRange(effect.statusModifySkillIDs);
+            }
+            else if (!string.IsNullOrWhiteSpace(effect.statusSkillID))
+            {
+                preview.SkillIDs.Add(effect.statusSkillID);
+            }
+
+            result.StatusModifications.Add(preview);
+
+            string skillsLabel = preview.SkillIDs.Count > 0 ? string.Join(", ", preview.SkillIDs) : "(auto)";
+            string stackInfo = string.Empty;
+            if (effect.statusModifyShowStacks)
+            {
+                string maxLabel = effect.statusModifyMaxStacks < 0 ? "inf" : effect.statusModifyMaxStacks.ToString(CultureInfo.InvariantCulture);
+                stackInfo = $" (stacks {effect.statusModifyStacks}, max {maxLabel})";
+            }
+
+            switch (effect.statusModifyType)
+            {
+                case StatusModifyType.ApplyStatus:
+                    result.AddLog($"Modify status: apply {skillsLabel}{stackInfo} to {effect.target}.");
+                    break;
+                case StatusModifyType.ReplaceStatus:
+                    result.AddLog($"Modify status: replace {skillsLabel} with {effect.statusModifyReplacementSkillID} on {effect.target}{stackInfo}.");
+                    break;
+                case StatusModifyType.DeleteStatus:
+                    result.AddLog($"Modify status: remove {skillsLabel} from {effect.target}.");
+                    break;
+                default:
+                    result.AddLog($"Modify status operation not specified for {skillsLabel}.");
+                    break;
+            }
+        }
 
         private static void ApplyConditional(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
@@ -428,26 +631,174 @@ namespace TGD.Combat
             string targetSkill = GetSkillIdOrSelf(effect, context);
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
 
+            string valueExpression = ResolveValueExpression(effect, context);
+            bool isCooldownReset = effect.skillModifyType == SkillModifyType.CooldownReset;
+            bool usesValue = effect.skillModifyType != SkillModifyType.CooldownReset &&
+                             effect.skillModifyType != SkillModifyType.ForbidUse;
+
+            float resolvedValue = 0f;
+            if (usesValue)
+                resolvedValue = EvaluateExpression(valueExpression, context, context.Caster, effect.value);
+
+            bool limitEnabled = effect.modifyLimitEnabled && !isCooldownReset;
+            float resolvedLimit = 0f;
+            if (limitEnabled)
+                resolvedLimit = EvaluateExpression(effect.modifyLimitExpression, context, context.Caster, effect.modifyLimitValue);
+
+
             var preview = new SkillModificationPreview
             {
                 TargetSkillID = targetSkill,
                 ModifyType = effect.skillModifyType,
                 Operation = effect.skillModifyOperation,
                 ModifierType = effect.modifierType,
-                ValueExpression = ResolveValueExpression(effect, context),
+                ValueExpression = valueExpression,
                 AffectAllCosts = effect.modifyAffectsAllCosts,
                 CostResource = effect.modifyCostResource,
                 Probability = probability,
-                Condition = effect.condition
+                Condition = effect.condition,
+                LimitEnabled = limitEnabled,
+                LimitExpression = limitEnabled ? effect.modifyLimitExpression : string.Empty,
+                LimitValue = limitEnabled ? resolvedLimit : 0f
             };
 
-            if (effect.skillModifyType == SkillModifyType.CooldownReset)
+            if (isCooldownReset)
             {
                 preview.ValueExpression = effect.resetCooldownToMax ? "Reset" : "Clear";
             }
 
             result.SkillModifications.Add(preview);
-            result.AddLog($"Modify skill '{targetSkill}' ({effect.skillModifyType}).");
+
+            string log = BuildModifySkillLog(effect, preview, resolvedValue, limitEnabled ? resolvedLimit : 0f);
+            result.AddLog(log);
+        }
+
+        private static string BuildModifySkillLog(EffectDefinition effect, SkillModificationPreview preview, float resolvedValue, float resolvedLimit)
+        {
+            string skillLabel = string.IsNullOrWhiteSpace(preview.TargetSkillID) ? "current skill" : $"'{preview.TargetSkillID}'";
+            string probabilitySuffix = preview.Probability > 0f ? $" ({preview.Probability:0.##}% chance)" : string.Empty;
+            string limitSuffix = preview.LimitEnabled ? $" Limit: {FormatLimitLabel(preview, resolvedLimit)}." : string.Empty;
+
+            switch (preview.ModifyType)
+            {
+                case SkillModifyType.CooldownReset:
+                    {
+                        string action = effect.resetCooldownToMax
+                            ? $"Reset cooldown of {skillLabel} and start a new cooldown"
+                            : $"Clear remaining cooldown of {skillLabel}";
+                        return $"{action}{probabilitySuffix}.";
+                    }
+                case SkillModifyType.ForbidUse:
+                    {
+                        string message = $"Forbid use of {skillLabel}{probabilitySuffix}.";
+                        return preview.LimitEnabled ? message + limitSuffix : message;
+                    }
+                case SkillModifyType.AddCost:
+                    {
+                        string resourceLabel = effect.modifyCostResource.ToString();
+                        string valueLabel = FormatExpressionLabel(preview.ValueExpression, resolvedValue, ModifierType.Flat);
+                        string message = $"Add {resourceLabel} cost {valueLabel} to {skillLabel}{probabilitySuffix}.";
+                        return preview.LimitEnabled ? message + limitSuffix : message;
+                    }
+                case SkillModifyType.ResourceCost:
+                    {
+                        string costTarget = effect.modifyAffectsAllCosts ? "all costs" : $"{effect.modifyCostResource} cost";
+                        var (verb, connector) = GetSkillModifyOperationWords(preview.Operation);
+                        string valueLabel = FormatExpressionLabel(preview.ValueExpression, resolvedValue, preview.ModifierType);
+                        string modifierSuffix = FormatModifierSuffix(preview.ModifierType);
+                        string message = $"{verb} {costTarget} for {skillLabel} {connector} {valueLabel}{modifierSuffix}{probabilitySuffix}.";
+                        return preview.LimitEnabled ? message + limitSuffix : message;
+                    }
+                default:
+                    {
+                        string category = GetSkillModifyCategory(preview.ModifyType);
+                        var (verb, connector) = GetSkillModifyOperationWords(preview.Operation);
+                        string valueLabel = FormatExpressionLabel(preview.ValueExpression, resolvedValue, preview.ModifierType);
+                        string modifierSuffix = FormatModifierSuffix(preview.ModifierType);
+                        string message = $"{verb} {category} of {skillLabel} {connector} {valueLabel}{modifierSuffix}{probabilitySuffix}.";
+                        return preview.LimitEnabled ? message + limitSuffix : message;
+                    }
+            }
+            return string.Empty;
+        }
+
+        private static string GetSkillModifyCategory(SkillModifyType type)
+        {
+            switch (type)
+            {
+                case SkillModifyType.Range:
+                    return "range";
+                case SkillModifyType.CooldownModify:
+                    return "cooldown";
+                case SkillModifyType.TimeCost:
+                    return "time cost";
+                case SkillModifyType.Damage:
+                    return "damage";
+                case SkillModifyType.Heal:
+                    return "healing";
+                case SkillModifyType.Duration:
+                    return "duration";
+                case SkillModifyType.BuffPower:
+                    return "buff power";
+                default:
+                    return "value";
+            }
+        }
+
+        private static (string verb, string connector) GetSkillModifyOperationWords(SkillModifyOperation operation)
+        {
+            switch (operation)
+            {
+                case SkillModifyOperation.Override:
+                    return ("Set", "to");
+                case SkillModifyOperation.Multiply:
+                    return ("Scale", "by");
+                default:
+                    return ("Reduce", "by");
+            }
+        }
+
+        private static string FormatExpressionLabel(string expression, float resolvedValue, ModifierType modifierType)
+        {
+            string suffix = modifierType == ModifierType.Percentage ? "%" : string.Empty;
+            string resolvedText = resolvedValue.ToString("0.###", CultureInfo.InvariantCulture) + suffix;
+
+            if (string.IsNullOrWhiteSpace(expression))
+                return resolvedText;
+
+            if (float.TryParse(expression, NumberStyles.Float, CultureInfo.InvariantCulture, out float numeric))
+            {
+                string numericText = numeric.ToString("0.###", CultureInfo.InvariantCulture);
+                return modifierType == ModifierType.Percentage ? numericText + "%" : numericText;
+            }
+
+            return $"'{expression}' (~{resolvedText})";
+        }
+
+        private static string FormatModifierSuffix(ModifierType modifierType)
+        {
+            switch (modifierType)
+            {
+                case ModifierType.Percentage:
+                    return " (Percentage)";
+                case ModifierType.Flat:
+                    return " (Flat)";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string FormatLimitLabel(SkillModificationPreview preview, float resolvedLimit)
+        {
+            string resolvedText = resolvedLimit.ToString("0.###", CultureInfo.InvariantCulture);
+
+            if (string.IsNullOrWhiteSpace(preview.LimitExpression))
+                return resolvedText;
+
+            if (float.TryParse(preview.LimitExpression, NumberStyles.Float, CultureInfo.InvariantCulture, out float numeric))
+                return numeric.ToString("0.###", CultureInfo.InvariantCulture);
+
+            return $"'{preview.LimitExpression}' (~{resolvedText})";
         }
 
         private static void ApplyReplaceSkill(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -896,7 +1247,11 @@ namespace TGD.Combat
                 case EffectCondition.None:
                     return true;
                 case EffectCondition.AfterAttack:
-                    return context.ConditionAfterAttack;
+                    return context.ConditionAfterAttack && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.OnPerformAttack:
+                    return context.ConditionOnPerformAttack && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.OnPerformHeal:
+                    return context.ConditionOnPerformHeal && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnCriticalHit:
                     return context.ConditionOnCrit;
                 case EffectCondition.OnCooldownEnd:
@@ -918,12 +1273,14 @@ namespace TGD.Combat
                     if (string.IsNullOrWhiteSpace(requiredState))
                         return true;
 
-                    foreach (var state in context.ActiveSkillStates)
-                    {
-                        if (string.Equals(state, requiredState, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    }
-                    return false;
+                    int stateStacks = context.GetSkillStateStacks(requiredState);
+                    if (stateStacks <= 0)
+                        return false;
+
+                    if (effect.conditionSkillStateCheckStacks)
+                        return EvaluateComparison(stateStacks, effect.conditionSkillStateStacks, effect.conditionSkillStateStackCompare);
+
+                    return true;
                 case EffectCondition.OnDotHotActive:
                     context.ConditionDotStacks = 0f;
                     if (context.ActiveDotHotStatuses == null || context.ActiveDotHotStatuses.Count == 0)
@@ -1256,6 +1613,11 @@ namespace TGD.Combat
             map["damage_pre"] = context.IncomingDamage;
             map["damage_post"] = context.IncomingDamageMitigated;
             map["spent"] = context.LastResourceSpendAmount;
+            map["currentdamage"] = context.IncomingDamage;
+            map["heal"] = context.IncomingHealing;
+            map["currentheal"] = context.IncomingHealing;
+            if (context.ResourceValues.TryGetValue(ResourceType.Energy, out var energyValue))
+                map["currentenergy"] = energyValue;
 
             if (context.LastResourceSpendType.HasValue)
             {

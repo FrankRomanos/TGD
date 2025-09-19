@@ -91,7 +91,7 @@ namespace TGD.Editor
             var sb = CreateHeader("Scaling Buff", GetTargetLabel(effectProp));
             string resource = GetEnumName(effectProp.FindPropertyRelative("resourceType"), ResourceType.Discipline);
             string attribute = GetEnumName(effectProp.FindPropertyRelative("scalingAttribute"), ScalingAttribute.Attack);
-            string operation = GetEnumName(effectProp.FindPropertyRelative("scalingOperation"), SkillModifyOperation.Add);
+            string operation = GetEnumName(effectProp.FindPropertyRelative("scalingOperation"), SkillModifyOperation.Minus);
             string value = FormatSimpleString(effectProp.FindPropertyRelative("scalingValuePerResource"));
             AddBullet(sb, string.IsNullOrEmpty(value)
                 ? "Value per resource: (not set)"
@@ -166,7 +166,7 @@ namespace TGD.Editor
                 : SkillModifyType.None;
             SkillModifyOperation operation = operationProp != null
                 ? (SkillModifyOperation)operationProp.enumValueIndex
-                : SkillModifyOperation.Add;
+                : SkillModifyOperation.Minus;
 
             AddBullet(sb, $"Modify: {modifyType}");
 

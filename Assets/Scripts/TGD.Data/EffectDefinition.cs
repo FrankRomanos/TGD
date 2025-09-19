@@ -41,6 +41,7 @@ namespace TGD.Data
         GainResource,
         ScalingBuff,      // ✅ 每点资源提升属性
         ApplyStatus,      // Buff/Debuff（skillID 状态）
+        ModifyStatus,
         ConditionalEffect,
         ModifySkill,
         ReplaceSkill,
@@ -61,7 +62,7 @@ namespace TGD.Data
         All,
         ExceptRed
     }
-
+    
 
     public enum DamageSchool 
     { 
@@ -78,6 +79,8 @@ namespace TGD.Data
     {
         None,
         AfterAttack,
+        OnPerformAttack,
+        OnPerformHeal,
         OnCriticalHit,
         OnCooldownEnd,
         AfterSkillUse,
@@ -114,6 +117,14 @@ namespace TGD.Data
         GreaterEqual,
         Less,
         LessEqual
+    }
+    [Serializable]
+    public enum ConditionTarget
+    {
+        Caster,
+        PrimaryTarget,
+        SecondaryTarget,
+        Any
     }
 
     [Serializable]
@@ -154,14 +165,22 @@ namespace TGD.Data
         Heal,
         ResourceCost,
         Duration,
+        AddCost,
+        ForbidUse,
         BuffPower
     }
 
     public enum SkillModifyOperation
     {
-        Add,
+        Minus,
         Override,
         Multiply
+    }
+    public enum StatusModifyType
+    {
+        ApplyStatus,
+        ReplaceStatus,
+        DeleteStatus
     }
 
     public enum MoveSubject
@@ -271,7 +290,11 @@ namespace TGD.Data
 
         // —— 条件参数 ——
         public string conditionSkillStateID; // SkillStateActive: 指定需要激活的状态 skillID
+        public bool conditionSkillStateCheckStacks = false;
+        public CompareOp conditionSkillStateStackCompare = CompareOp.Equal;
+        public int conditionSkillStateStacks = 0;
         public string conditionSkillUseID;  // AfterSkillUse: 指定触发的技能ID（空/any = 任意技能）
+        public ConditionTarget conditionTarget = ConditionTarget.Any;
         public TargetType conditionDotTarget = TargetType.Enemy;
         public List<string> conditionDotSkillIDs = new();
         public bool conditionDotUseStacks = false;
@@ -332,6 +355,12 @@ namespace TGD.Data
 
         // ===== Buff/Debuff =====
         public string statusSkillID;        // 传统 Buff/Debuff 用 skillID
+        public StatusModifyType statusModifyType = StatusModifyType.ApplyStatus;
+        public List<string> statusModifySkillIDs = new();
+        public string statusModifyReplacementSkillID;
+        public bool statusModifyShowStacks = false;
+        public int statusModifyStacks = 0;
+        public int statusModifyMaxStacks = -1;
         // ===== Skill References =====
         public string targetSkillID;        // 原技能ID/被修改技能
         public string replaceSkillID;       // 替换后技能ID
@@ -340,10 +369,13 @@ namespace TGD.Data
         public CooldownTargetScope cooldownTargetScope = CooldownTargetScope.Self; // CooldownModifier: 影响范围
         // ===== Modify Skill =====
         public SkillModifyType skillModifyType = SkillModifyType.None;
-        public SkillModifyOperation skillModifyOperation = SkillModifyOperation.Add;
+        public SkillModifyOperation skillModifyOperation = SkillModifyOperation.Minus;
         public bool modifyAffectsAllCosts = true;
         public CostResourceType modifyCostResource = CostResourceType.Energy;
         public bool resetCooldownToMax = true; // ModifySkill: 冷却重置时是否刷新为全新冷却
+        public bool modifyLimitEnabled = false;
+        public string modifyLimitExpression;
+        public float modifyLimitValue;
 
         // ===== Modify Damage School =====
         public DamageSchoolModifyType damageSchoolModifyType = DamageSchoolModifyType.Damage;
@@ -366,7 +398,7 @@ namespace TGD.Data
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
         public int maxStacks = 0;                  // 0 = unlimited (shared by effects that support stacking caps)
         public ScalingAttribute scalingAttribute = ScalingAttribute.Attack;
-        public SkillModifyOperation scalingOperation = SkillModifyOperation.Add;
+        public SkillModifyOperation scalingOperation = SkillModifyOperation.Minus;
 
         // ===== Mastery: Posture Engine =====
         public MasteryPostureSettings masteryPosture = new MasteryPostureSettings();

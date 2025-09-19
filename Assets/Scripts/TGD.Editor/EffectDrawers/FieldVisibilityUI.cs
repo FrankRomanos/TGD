@@ -88,6 +88,24 @@ namespace TGD.Editor
                             EditorGUILayout.HelpBox("Leave empty to react to any active state.", MessageType.Info);
                         }
                     }
+
+                    var checkStacksProp = elem.FindPropertyRelative("conditionSkillStateCheckStacks");
+                    var compareProp = elem.FindPropertyRelative("conditionSkillStateStackCompare");
+                    var stacksProp = elem.FindPropertyRelative("conditionSkillStateStacks");
+                    if (checkStacksProp != null && compareProp != null && stacksProp != null)
+                    {
+                        EditorGUILayout.PropertyField(checkStacksProp, new GUIContent("Check Stacks"));
+                        if (checkStacksProp.boolValue)
+                        {
+                            CompareOp[] options = { CompareOp.Greater, CompareOp.Less, CompareOp.Equal };
+                            string[] labels = { ">", "<", "==" };
+                            int current = System.Array.IndexOf(options, (CompareOp)compareProp.enumValueIndex);
+                            if (current < 0) current = 0;
+                            int selected = EditorGUILayout.Popup("Stack Comparison", current, labels);
+                            compareProp.enumValueIndex = (int)options[selected];
+                            EditorGUILayout.PropertyField(stacksProp, new GUIContent("Required Stacks"));
+                        }
+                    }
                     break;
                 case EffectCondition.OnDotHotActive:
                     var targetProp = elem.FindPropertyRelative("conditionDotTarget");
@@ -114,6 +132,14 @@ namespace TGD.Editor
                     EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
                         new GUIContent("Consume Status On Trigger"));
                     break;
+                    if (condition == EffectCondition.AfterAttack ||
+                        condition == EffectCondition.OnPerformAttack ||
+                        condition == EffectCondition.OnPerformHeal)
+                    {
+                        var targetProp = elem.FindPropertyRelative("conditionTarget");
+                        if (targetProp != null)
+                            EditorGUILayout.PropertyField(targetProp, new GUIContent("Condition Target"));
+                    }
             }
         }
     }

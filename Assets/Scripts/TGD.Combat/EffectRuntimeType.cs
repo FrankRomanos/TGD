@@ -59,6 +59,9 @@ namespace TGD.Combat
             CustomVariables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
             ActiveSkillStates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             ActiveDotHotStatuses = new List<DotHotStatusSnapshot>();
+            ActiveSkillStateStacks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            ConditionDistances = new Dictionary<ConditionTarget, float>();
+            ConditionPathBlocked = new Dictionary<ConditionTarget, bool>();
 
             if (caster != null)
             {
@@ -83,10 +86,14 @@ namespace TGD.Combat
         public Dictionary<ResourceType, float> ResourceMaxValues { get; }
         public Dictionary<string, float> CustomVariables { get; }
         public float IncomingDamage { get; set; }
+        public float IncomingHealing { get; set; }
         public HashSet<string> ActiveSkillStates { get; }
+        public Dictionary<string, int> ActiveSkillStateStacks { get; }
         public List<DotHotStatusSnapshot> ActiveDotHotStatuses { get; }
         public bool ConditionAfterAttack { get; set; }
         public float IncomingDamageMitigated { get; set; }
+        public bool ConditionOnPerformAttack { get; set; }
+        public bool ConditionOnPerformHeal { get; set; }
         public bool ConditionOnCrit { get; set; }
         public bool ConditionOnCooldownEnd { get; set; }
         public bool ConditionAfterSkillUse { get; set; }
@@ -99,6 +106,9 @@ namespace TGD.Combat
         public float LastResourceSpendAmount { get; set; }
         public ISkillResolver SkillResolver { get; set; }
         public float ConditionDotStacks { get; set; }
+        public Dictionary<ConditionTarget, float> ConditionDistances { get; }
+        public Dictionary<ConditionTarget, bool> ConditionPathBlocked { get; }
+        public Unit ConditionEventTarget { get; set; }
         private int skillLevelOverride;
 
         public bool HasSkillLevelOverride => skillLevelOverride > 0;
@@ -138,9 +148,12 @@ namespace TGD.Combat
                 PrimaryTarget = PrimaryTarget,
                 SecondaryTarget = SecondaryTarget,
                 IncomingDamage = IncomingDamage,
+                IncomingHealing = IncomingHealing,
                 IncomingDamageMitigated = IncomingDamageMitigated,
                 ConditionAfterAttack = ConditionAfterAttack,
                 ConditionOnCrit = ConditionOnCrit,
+                ConditionOnPerformAttack = ConditionOnPerformAttack,
+                ConditionOnPerformHeal = ConditionOnPerformHeal,
                 ConditionOnCooldownEnd = ConditionOnCooldownEnd,
                 ConditionAfterSkillUse = ConditionAfterSkillUse,
                 LastSkillUsedID = LastSkillUsedID,
@@ -150,7 +163,8 @@ namespace TGD.Combat
                 ConditionOnDamageTaken = ConditionOnDamageTaken,
                 LastResourceSpendType = LastResourceSpendType,
                 LastResourceSpendAmount = LastResourceSpendAmount,
-                SkillResolver = SkillResolver
+                SkillResolver = SkillResolver,
+                ConditionEventTarget = ConditionEventTarget
             };
 
             clone.Allies.Clear();
@@ -178,6 +192,10 @@ namespace TGD.Combat
             foreach (var state in ActiveSkillStates)
                 clone.ActiveSkillStates.Add(state);
 
+            clone.ActiveSkillStateStacks.Clear();
+            foreach (var kvp in ActiveSkillStateStacks)
+                clone.ActiveSkillStateStacks[kvp.Key] = kvp.Value;
+
             clone.ActiveDotHotStatuses.Clear();
             foreach (var status in ActiveDotHotStatuses)
             {
@@ -192,12 +210,43 @@ namespace TGD.Combat
                 });
             }
 
+            clone.ConditionDistances.Clear();
+            foreach (var kvp in ConditionDistances)
+                clone.ConditionDistances[kvp.Key] = kvp.Value;
+
+            clone.ConditionPathBlocked.Clear();
+            foreach (var kvp in ConditionPathBlocked)
+                clone.ConditionPathBlocked[kvp.Key] = kvp.Value;
 
             if (inheritSkillLevelOverride && HasSkillLevelOverride)
                 clone.skillLevelOverride = skillLevelOverride;
             
             clone.ConditionDotStacks = ConditionDotStacks;
             return clone;
+        }
+
+        public int GetSkillStateStacks(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return 0;
+
+            if (ActiveSkillStateStacks.TryGetValue(skillId, out int stacks))
+                return stacks;
+
+            return ActiveSkillStates.Contains(skillId) ? 1 : 0;
+        }
+
+        public float GetDistance(ConditionTarget target)
+        {
+            if (ConditionDistances.TryGetValue(target, out float distance))
+                return distance;
+
+            return 0f;
+        }
+
+        public bool IsPathBlocked(ConditionTarget target)
+        {
+            return ConditionPathBlocked.TryGetValue(target, out bool blocked) && blocked;
         }
     }
 
@@ -207,6 +256,7 @@ namespace TGD.Combat
         public List<HealPreview> Healing { get; } = new();
         public List<ResourceChangePreview> ResourceChanges { get; } = new();
         public List<StatusApplicationPreview> StatusApplications { get; } = new();
+        public List<StatusModificationPreview> StatusModifications { get; } = new();
         public List<ConditionalPreview> Conditionals { get; } = new();
         public List<SkillModificationPreview> SkillModifications { get; } = new();
         public List<SkillReplacementPreview> SkillReplacements { get; } = new();
@@ -232,6 +282,7 @@ namespace TGD.Combat
             Healing.AddRange(other.Healing);
             ResourceChanges.AddRange(other.ResourceChanges);
             StatusApplications.AddRange(other.StatusApplications);
+            StatusModifications.AddRange(other.StatusModifications);
             Conditionals.AddRange(other.Conditionals);
             SkillModifications.AddRange(other.SkillModifications);
             SkillReplacements.AddRange(other.SkillReplacements);
@@ -313,7 +364,18 @@ namespace TGD.Combat
         public EffectCondition Condition { get; set; }
         public EffectInterpretationResult InstantResult { get; set; }
     }
-
+    public class StatusModificationPreview
+    {
+        public StatusModifyType ModifyType { get; set; }
+        public TargetType Target { get; set; }
+        public List<string> SkillIDs { get; set; } = new();
+        public string ReplacementSkillID { get; set; }
+        public bool ShowStacks { get; set; }
+        public int StackCount { get; set; }
+        public int MaxStacks { get; set; }
+        public float Probability { get; set; }
+        public EffectCondition Condition { get; set; }
+    }
     public class ConditionalPreview
     {
         public ResourceType Resource { get; set; }
@@ -324,9 +386,20 @@ namespace TGD.Combat
     }
     public class SkillUseConditionPreview
     {
+        public SkillCostConditionType ConditionType { get; set; }
+        public ConditionTarget Target { get; set; }
         public ResourceType Resource { get; set; }
         public CompareOp Comparison { get; set; }
         public float CompareValue { get; set; }
+        public string CompareExpression { get; set; }
+        public float CurrentValue { get; set; }
+        public float MaxValue { get; set; }
+        public float Distance { get; set; }
+        public int MinDistance { get; set; }
+        public int MaxDistance { get; set; }
+        public bool RequireLineOfSight { get; set; }
+        public bool PathBlocked { get; set; }
+        public bool Succeeded { get; set; }
     }
 
     public class SkillModificationPreview
@@ -340,6 +413,9 @@ namespace TGD.Combat
         public CostResourceType CostResource { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool LimitEnabled { get; set; }
+        public string LimitExpression { get; set; }
+        public float LimitValue { get; set; }
     }
 
     public class SkillReplacementPreview

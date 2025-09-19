@@ -155,7 +155,7 @@ namespace TGD.Editor
                     string school = schoolProp != null ? ((DamageSchool)schoolProp.enumValueIndex).ToString() : "Unknown";
 
                     var opProp = elem.FindPropertyRelative("skillModifyOperation");
-                    string operation = opProp != null ? ((SkillModifyOperation)opProp.enumValueIndex).ToString() : SkillModifyOperation.Add.ToString();
+                    string operation = opProp != null ? ((SkillModifyOperation)opProp.enumValueIndex).ToString() : SkillModifyOperation.Minus.ToString();
 
                     var modifierProp = elem.FindPropertyRelative("modifierType");
                     string modifier = modifierProp != null ? ((ModifierType)modifierProp.enumValueIndex).ToString() : ModifierType.Percentage.ToString();

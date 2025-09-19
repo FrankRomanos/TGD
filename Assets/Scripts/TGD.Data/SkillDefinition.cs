@@ -15,11 +15,26 @@ namespace TGD.Data
         public int amount = 0;
     }
     [System.Serializable]
+    public enum SkillCostConditionType
+    {
+        Resource,
+        Distance,
+        PerformHeal,
+        PerformAttack
+    }
+
+    [System.Serializable]
     public class SkillUseCondition
     {
+        public SkillCostConditionType conditionType = SkillCostConditionType.Resource;
+        public ConditionTarget target = ConditionTarget.Caster;
         public ResourceType resourceType = ResourceType.Discipline;   // Resource type to evaluate
         public CompareOp compareOp = CompareOp.Equal;                  // Comparison operator
         public float compareValue = 0f;                                // Threshold value
+        public string compareValueExpression;                          // Expression based threshold
+        public int minDistance = 0;                                    // Minimum distance requirement
+        public int maxDistance = 0;                                    // Optional maximum distance
+        public bool requireLineOfSight = true;                         // Distance requires unobstructed path
     }
     [System.Serializable]
     public class SkillDurationSettings

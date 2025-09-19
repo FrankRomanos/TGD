@@ -203,9 +203,9 @@ namespace TGD.Editor
                 {
                     var condElem = useConditionsProp.GetArrayElementAtIndex(i);
                     EditorGUILayout.BeginVertical("box");
-
+                    var conditionTypeProp = condElem.FindPropertyRelative("conditionType");
                     EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("resourceType"), new GUIContent("Resource"));
+                    EditorGUILayout.PropertyField(conditionTypeProp, new GUIContent("Condition Type"));
                     if (GUILayout.Button("Remove", GUILayout.Width(70)))
                     {
                         useConditionsProp.DeleteArrayElementAtIndex(i);
@@ -215,9 +215,33 @@ namespace TGD.Editor
                     }
                     EditorGUILayout.EndHorizontal();
 
-                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareOp"), new GUIContent("Compare"));
-                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareValue"), new GUIContent("Value"));
-                    EditorGUILayout.HelpBox("Example: resource Discipline == 0 satisfies the condition.", MessageType.None);
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("target"), new GUIContent("Condition Target"));
+
+                    var conditionType = (SkillCostConditionType)conditionTypeProp.enumValueIndex;
+                    switch (conditionType)
+                    {
+                        case SkillCostConditionType.Resource:
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("resourceType"), new GUIContent("Resource"));
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareOp"), new GUIContent("Compare"));
+
+                            var exprProp = condElem.FindPropertyRelative("compareValueExpression");
+                            EditorGUILayout.PropertyField(exprProp, new GUIContent("Value Expression"));
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareValue"), new GUIContent("Value (Fallback)"));
+                            EditorGUILayout.HelpBox("Expressions can reference caster/target stats, e.g. 0.1*maxhp.", MessageType.None);
+                            break;
+                        case SkillCostConditionType.Distance:
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("minDistance"), new GUIContent("Min Distance"));
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("maxDistance"), new GUIContent("Max Distance (0 = ignore)"));
+                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("requireLineOfSight"), new GUIContent("Require Clear Path"));
+                            EditorGUILayout.HelpBox("Distance is evaluated between the caster and the chosen target.", MessageType.None);
+                            break;
+                        case SkillCostConditionType.PerformHeal:
+                            EditorGUILayout.HelpBox("Requires the skill to perform healing on the specified target.", MessageType.None);
+                            break;
+                        case SkillCostConditionType.PerformAttack:
+                            EditorGUILayout.HelpBox("Requires the skill to deal damage to the specified target.", MessageType.None);
+                            break;
+                    }
 
                     EditorGUILayout.EndVertical();
                 }
