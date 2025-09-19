@@ -25,8 +25,10 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(modifyTypeProp, new GUIContent("Modify Type"));
             var modifyType = (SkillModifyType)modifyTypeProp.enumValueIndex;
 
-            if (modifyType != SkillModifyType.None && modifyType != SkillModifyType.CooldownReset &&
-            modifyType != SkillModifyType.AddCost && modifyType != SkillModifyType.ForbidUse)
+            if (modifyType != SkillModifyType.None &&
+            modifyType != SkillModifyType.CooldownReset &&
+            modifyType != SkillModifyType.AddCost &&
+            modifyType != SkillModifyType.ForbidUse)
             {
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("skillModifyOperation"),
                     new GUIContent("Operation"));
@@ -148,6 +150,87 @@ namespace TGD.Editor
             }
 
             EditorGUILayout.PropertyField(valueProp, new GUIContent(GetValueLabel(type)));
+            switch (type)
+            {
+                case SkillModifyType.CooldownModify:
+                    EditorGUILayout.HelpBox(
+                        "Positive values extend cooldown. Negative values reduce cooldown.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.TimeCost:
+                    EditorGUILayout.HelpBox(
+                        "Time cost is measured in seconds. Use negative values to reduce it.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.Range:
+                    EditorGUILayout.HelpBox(
+                        "Flat values move range in tiles. Percentage values scale the current range.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.ResourceCost:
+                    EditorGUILayout.HelpBox(
+                        "Flat values change resource amount. Percentage values scale the original cost.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.AddCost:
+                    EditorGUILayout.HelpBox(
+                        "Adds a new cost requirement to the skill. Use expressions for dynamic values.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.Duration:
+                    EditorGUILayout.HelpBox(
+                        "Duration changes are measured in turns. Use negative values to shorten effects.",
+                        MessageType.Info);
+                    break;
+                case SkillModifyType.BuffPower:
+                    EditorGUILayout.HelpBox(
+                        "Scales healing and buff outputs produced by the target skill.",
+                        MessageType.Info);
+                    break;
+            }
+        }
+
+        private void DrawResetBlock(SerializedProperty elem)
+        {
+            var resetProp = elem.FindPropertyRelative("resetCooldownToMax");
+            EditorGUILayout.PropertyField(resetProp, new GUIContent("Refresh Cooldown"));
+            EditorGUILayout.HelpBox(
+                resetProp.boolValue
+                    ? "When enabled the skill starts a brand new cooldown cycle."
+                    : "When disabled the remaining cooldown is cleared but a new cooldown does not start.",
+                MessageType.Info);
+        }
+
+        private void DrawCondition(SerializedProperty elem)
+        {
+            var condProp = elem.FindPropertyRelative("condition");
+            EditorGUILayout.PropertyField(condProp, new GUIContent("Trigger Condition"));
+
+            FieldVisibilityUI.DrawConditionFields(elem, condProp);
+        }
+
+        private void DrawSummary(SerializedProperty elem, SkillModifyType type)
+        {
+            var skillId = elem.FindPropertyRelative("targetSkillID").stringValue;
+            if (string.IsNullOrEmpty(skillId) || type == SkillModifyType.None)
+            {
+                return;
+            }
+
+            string summary = BuildSummary(elem, type, skillId);
+            if (!string.IsNullOrEmpty(summary))
+            {
+                EditorGUILayout.HelpBox(summary, MessageType.None);
+            }
+        }
+
+        private string BuildSummary(SerializedProperty elem, SkillModifyType type, string skillId)
+        {
+            string limitSuffix = GetLimitSummarySuffix(elem);
+            if (!string.IsNullOrEmpty(limitSuffix))
+            {
+                limitSuffix = " " + limitSuffix;
+            }
 
             switch (type)
             {
@@ -156,38 +239,85 @@ namespace TGD.Editor
                     return refresh
                         ? $"Reset cooldown of '{skillId}' and start a fresh cooldown."
                         : $"Clear the remaining cooldown of '{skillId}' without starting a new cooldown.";
-                case SkillModifyType.CooldownModify:
-                    return $"{verb} cooldown of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.Range:
-                    return $"{verb} range of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.TimeCost:
-                    return $"{verb} time cost of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.Damage:
-                    return $"{verb} damage of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.Heal:
-                    return $"{verb} healing of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.ResourceCost:
-                    bool affectsAll = elem.FindPropertyRelative("modifyAffectsAllCosts").boolValue;
-                    string target = affectsAll
-                        ? "all costs"
-                        : $"{((CostResourceType)elem.FindPropertyRelative("modifyCostResource").enumValueIndex)} cost";
-                    return $"{verb} {target} for '{skillId}' {connector} {valueText}{limitText}.";
+                case SkillModifyType.ForbidUse:
+                    return $"Disable '{skillId}'{limitSuffix}.";
                 case SkillModifyType.AddCost:
                     var costResourceProp = elem.FindPropertyRelative("modifyCostResource");
                     string resourceLabel = costResourceProp != null
                         ? ((CostResourceType)costResourceProp.enumValueIndex).ToString()
                         : "resource";
-                    return $"Add {resourceLabel} cost '{valueText}' to '{skillId}'{limitText}.";
+                    return $"Add {resourceLabel} cost {GetSummaryValue(elem)} to '{skillId}'{limitSuffix}.";
+            }
+
+            var opProp = elem.FindPropertyRelative("skillModifyOperation");
+            SkillModifyOperation op = opProp != null
+                ? (SkillModifyOperation)opProp.enumValueIndex
+                : SkillModifyOperation.Minus;
+
+            (string verb, string connector) = GetOperationWords(op);
+            string valueText = GetSummaryValue(elem);
+
+            switch (type)
+            {
+                case SkillModifyType.CooldownModify:
+                    return $"{verb} cooldown of '{skillId}' {connector} {valueText}{limitSuffix}.";
+                case SkillModifyType.Range:
+                    return $"{verb} range of '{skillId}' {connector} {valueText}{limitSuffix}.";
+                case SkillModifyType.TimeCost:
+                    return $"{verb} time cost of '{skillId}' {connector} {valueText}{limitSuffix}.";
+                case SkillModifyType.Damage:
+                    return $"{verb} damage of '{skillId}' {connector} {valueText}{limitSuffix}.";
+                case SkillModifyType.Heal:
+                    return $"{verb} healing of '{skillId}' {connector} {valueText}{limitSuffix}.";
+                case SkillModifyType.ResourceCost:
+                    bool affectsAll = elem.FindPropertyRelative("modifyAffectsAllCosts").boolValue;
+                    string target = affectsAll
+                        ? "all costs"
+                        : $"{((CostResourceType)elem.FindPropertyRelative("modifyCostResource").enumValueIndex)} cost";
+                    return $"{verb} {target} for '{skillId}' {connector} {valueText}{limitSuffix}.";
                 case SkillModifyType.Duration:
-                    return $"{verb} duration of '{skillId}' {connector} {valueText}{limitText}.";
+                    return $"{verb} duration of '{skillId}' {connector} {valueText}{limitSuffix}.";
                 case SkillModifyType.BuffPower:
-                    return $"{verb} buff potency of '{skillId}' {connector} {valueText}{limitText}.";
-                case SkillModifyType.ForbidUse:
-                    return $"Disable '{skillId}'{limitText}.";
+                    return $"{verb} buff potency of '{skillId}' {connector} {valueText}{limitSuffix}.";
                 default:
                     return string.Empty;
             }
+        }
+     
 
+        private string GetLimitSummarySuffix(SerializedProperty elem)
+        {
+            var enabledProp = elem.FindPropertyRelative("modifyLimitEnabled");
+            if (enabledProp == null || !enabledProp.boolValue)
+            {
+                return string.Empty;
+            }
+
+            var exprProp = elem.FindPropertyRelative("modifyLimitExpression");
+            if (exprProp != null && !string.IsNullOrWhiteSpace(exprProp.stringValue))
+            {
+                return $"(limit: {exprProp.stringValue})";
+            }
+
+            var valueProp = elem.FindPropertyRelative("modifyLimitValue");
+            if (valueProp != null)
+            {
+                switch (valueProp.propertyType)
+                {
+                    case SerializedPropertyType.Float:
+                        return $"(limit: {valueProp.floatValue:0.###})";
+                    case SerializedPropertyType.Integer:
+                        return $"(limit: {valueProp.intValue})";
+                    case SerializedPropertyType.String:
+                        if (!string.IsNullOrWhiteSpace(valueProp.stringValue))
+                        {
+                            return $"(limit: {valueProp.stringValue})";
+                        }
+                        break;
+                }
+            }
+
+            return "(limit enabled)";
         }
 
         private (string verb, string connector) GetOperationWords(SkillModifyOperation op)

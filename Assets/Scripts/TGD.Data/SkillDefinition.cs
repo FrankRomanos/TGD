@@ -5,7 +5,20 @@ namespace TGD.Data
 {
     public enum CostResourceType
     {
-        Energy, Discipline, Rage, Versatility, Gunpowder, Qi, Vision, Custom
+        HP,
+        Energy,
+        Discipline,
+        Iron,
+        Rage,
+        Versatility,
+        Gunpowder,
+        point,
+        combo,
+        punch,
+        qi,
+        vision,
+        posture,
+        Custom
     }
 
     [System.Serializable]
