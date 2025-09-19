@@ -14,6 +14,7 @@ namespace TGD.Editor
             Register(EffectType.GainResource, new GainResourceDrawer());
             Register(EffectType.ModifySkill, new ModifySkillDrawer());
             Register(EffectType.ApplyStatus, new ApplyStatusDrawer());
+            Register(EffectType.ModifyStatus, new ModifyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
             Register(EffectType.ModifyAction, new ModifyActionDrawer());
             Register(EffectType.ModifyDamageSchool, new ModifyDamageSchoolDrawer());

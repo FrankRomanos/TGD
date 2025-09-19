@@ -132,14 +132,15 @@ namespace TGD.Editor
                     EditorGUILayout.PropertyField(elem.FindPropertyRelative("consumeStatusOnTrigger"),
                         new GUIContent("Consume Status On Trigger"));
                     break;
-                    if (condition == EffectCondition.AfterAttack ||
-                        condition == EffectCondition.OnPerformAttack ||
-                        condition == EffectCondition.OnPerformHeal)
-                    {
-                        var targetProp = elem.FindPropertyRelative("conditionTarget");
-                        if (targetProp != null)
-                            EditorGUILayout.PropertyField(targetProp, new GUIContent("Condition Target"));
-                    }
+            }
+
+            if (condition == EffectCondition.AfterAttack ||
+                condition == EffectCondition.OnPerformAttack ||
+                condition == EffectCondition.OnPerformHeal)
+            {
+                var targetProp = elem.FindPropertyRelative("conditionTarget");
+                if (targetProp != null)
+                    EditorGUILayout.PropertyField(targetProp, new GUIContent("Condition Target"));
             }
         }
     }
