@@ -105,7 +105,16 @@ namespace TGD.Data
     }
 
     public enum SkillType { Active, Passive, Mastery, State, None }
-    public enum SkillTargetType { Single, AOE, Self, Line, Cone, None }
+    public enum SkillTargetType
+    {
+        Single = 0,
+        AOE = 1,
+        Self = 2,
+        Line = 3,
+        Cone = 4,
+        None = 5,
+        Multi = 6
+    }
 
     [CreateAssetMenu(fileName = "SkillDefinition", menuName = "RPG/SkillDefinition")]
     public class SkillDefinition : ScriptableObject

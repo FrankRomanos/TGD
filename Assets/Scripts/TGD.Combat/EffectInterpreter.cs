@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using UnityEngine;
 using TGD.Core;
 using TGD.Data;
@@ -34,6 +35,8 @@ namespace TGD.Combat
                     ConditionOnDamageTaken = workingContext.ConditionOnDamageTaken,
                     LastResourceSpendAmount = workingContext.LastResourceSpendAmount,
                     LastResourceSpendType = workingContext.LastResourceSpendType,
+                    OutgoingDamage = workingContext.OutgoingDamage,
+                    OutgoingHealing = workingContext.OutgoingHealing,
                     SkillResolver = workingContext.SkillResolver,
                     PrimaryTarget = workingContext.PrimaryTarget,
                     SecondaryTarget = workingContext.SecondaryTarget
@@ -381,6 +384,7 @@ namespace TGD.Combat
                 targets.Add(context.PrimaryTarget ?? context.Caster);
 
             string expression = ResolveValueExpression(effect, context);
+            float totalAmount = 0f;
             foreach (var target in targets)
             {
                 float amount = EvaluateExpression(expression, context, target, effect.value);
@@ -399,6 +403,7 @@ namespace TGD.Combat
 
                 PopulateDamagePreview(preview, effect, context, target);
                 result.Damage.Add(preview);
+                totalAmount += amount;
 
                 string log = $"Damage {DescribeUnit(target)} for {amount:0.##} {effect.damageSchool} ({probability:0.##}% chance).";
                 if (preview.ExpectedNormalDamage > 0f)
@@ -414,6 +419,7 @@ namespace TGD.Combat
 
                 result.AddLog(log);
             }
+            context.OutgoingDamage = totalAmount;
         }
 
         private static void ApplyHeal(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -423,6 +429,7 @@ namespace TGD.Combat
                 targets.Add(context.PrimaryTarget ?? context.Caster);
 
             string expression = ResolveValueExpression(effect, context);
+            float totalHeal = 0f;
             foreach (var target in targets)
             {
                 float amount = EvaluateExpression(expression, context, target, effect.value);
@@ -437,8 +444,11 @@ namespace TGD.Combat
                     Expression = expression,
                     Condition = effect.condition
                 });
+                totalHeal += amount;
                 result.AddLog($"Heal {DescribeUnit(target)} for {amount:0.##} ({probability:0.##}% chance).");
             }
+
+            context.OutgoingHealing = totalHeal;
         }
 
         private static void ApplyResourceModification(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -996,6 +1006,134 @@ namespace TGD.Combat
             string durationLabel = duration > 0 ? $"{duration} turn(s)" : "unlimited duration";
             result.AddLog($"Aura ({effect.auraCategories}) radius {effect.auraRadius:0.##} from {sourceLabel} affects {targetLabel} ({immuneLabel}, {durationLabel}) ({probability:0.##}% chance).");
         }
+        private static void ApplyModifyDefence(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
+            int duration = ResolveDuration(effect, context);
+            int stacks = ResolveStackCount(effect, context);
+
+            var preview = new DefenceModificationPreview
+            {
+                Mode = effect.defenceMode,
+                Target = effect.target,
+                Probability = probability,
+                Condition = effect.condition,
+                Duration = duration,
+                StackCount = stacks
+            };
+
+            switch (effect.defenceMode)
+            {
+                case DefenceModificationMode.Shield:
+                    {
+                        string expression = ResolveValueExpression(effect, context);
+                        Unit reference = context.PrimaryTarget ?? context.Caster;
+                        float value = EvaluateExpression(expression, context, reference, effect.value);
+                        preview.ValueExpression = expression;
+                        preview.Value = value;
+                        preview.MaxValueExpression = effect.defenceShieldMaxExpression;
+                        float maxValue = EvaluateExpression(effect.defenceShieldMaxExpression, context, reference, effect.defenceShieldMaxValue);
+                        preview.MaxValue = maxValue;
+                        preview.UsesPerSchoolBreakdown = effect.defenceShieldUsePerSchool;
+
+                        if (effect.defenceShieldUsePerSchool && effect.defenceShieldBreakdown != null)
+                        {
+                            foreach (var entry in effect.defenceShieldBreakdown)
+                            {
+                                if (entry == null)
+                                    continue;
+
+                                string entryExpression = !string.IsNullOrWhiteSpace(entry.valueExpression)
+                                    ? entry.valueExpression
+                                    : entry.value.ToString(CultureInfo.InvariantCulture);
+                                float entryValue = EvaluateExpression(entryExpression, context, reference, entry.value);
+                                preview.ShieldBreakdown.Add(new DamageSchoolBreakdownPreview
+                                {
+                                    School = entry.school,
+                                    ValueExpression = entryExpression,
+                                    Value = entryValue
+                                });
+                            }
+                        }
+
+                        string stackLabel = stacks > 1 ? $" x{stacks}" : string.Empty;
+                        string maxLabel = maxValue > 0f ? $" (max {maxValue:0.##})" : string.Empty;
+                        string breakdown = preview.ShieldBreakdown.Count > 0
+                            ? $" Split: {string.Join(", ", preview.ShieldBreakdown.Select(b => $"{b.School}:{b.Value:0.##}"))}."
+                            : string.Empty;
+
+                        result.AddLog($"Defence shield {value:0.##}{stackLabel}{maxLabel} targeting {effect.target}.{breakdown}");
+                        break;
+                    }
+                case DefenceModificationMode.DamageRedirect:
+                    {
+                        string redirectExpression = effect.defenceRedirectExpression;
+                        float ratio = EvaluateExpression(redirectExpression, context, context.Caster, effect.defenceRedirectRatio);
+                        preview.RedirectExpression = redirectExpression;
+                        preview.RedirectRatio = ratio;
+                        preview.RedirectTarget = effect.defenceRedirectTarget;
+
+                        string ratioLabel = ratio.ToString("P0", CultureInfo.InvariantCulture);
+                        result.AddLog($"Defence redirect {ratioLabel} damage from {effect.target} to {effect.defenceRedirectTarget}.");
+                        break;
+                    }
+                case DefenceModificationMode.Reflect:
+                    {
+                        preview.ReflectUsesIncomingDamage = effect.defenceReflectUseIncomingDamage;
+                        float ratio = effect.defenceReflectUseIncomingDamage
+                            ? EvaluateExpression(effect.defenceReflectRatioExpression, context, context.Caster, effect.defenceReflectRatio)
+                            : 0f;
+                        preview.ReflectRatioExpression = effect.defenceReflectRatioExpression;
+                        preview.ReflectRatio = ratio;
+
+                        float flatValue = EvaluateExpression(effect.defenceReflectFlatExpression, context, context.Caster, effect.defenceReflectFlatDamage);
+                        preview.ReflectFlatExpression = effect.defenceReflectFlatExpression;
+                        preview.ReflectFlatValue = flatValue;
+                        preview.ReflectSchool = effect.defenceReflectDamageSchool;
+
+                        string components = string.Empty;
+                        if (effect.defenceReflectUseIncomingDamage && ratio > 0f)
+                            components = $"ratio {ratio.ToString("P0", CultureInfo.InvariantCulture)}";
+                        if (flatValue > 0f)
+                            components = string.IsNullOrEmpty(components)
+                                ? $"flat {flatValue:0.##}"
+                                : $"{components}, flat {flatValue:0.##}";
+                        if (string.IsNullOrEmpty(components))
+                            components = "no reflected damage configured";
+
+                        result.AddLog($"Defence reflect ({effect.defenceReflectDamageSchool}) {components}.");
+                        break;
+                    }
+                case DefenceModificationMode.Immunity:
+                    {
+                        preview.ImmunityScope = effect.immunityScope;
+                        if (effect.defenceImmuneSkillIDs != null)
+                        {
+                            foreach (var id in effect.defenceImmuneSkillIDs)
+                            {
+                                if (string.IsNullOrWhiteSpace(id))
+                                    continue;
+                                preview.ImmuneSkillIDs.Add(id);
+                            }
+                        }
+
+                        string scopeLabel = effect.immunityScope == ImmunityScope.All
+                            ? "all damage & effects"
+                            : "damage only";
+                        string skillLabel = preview.ImmuneSkillIDs.Count > 0
+                            ? $" Skills: {string.Join(", ", preview.ImmuneSkillIDs)}."
+                            : string.Empty;
+
+                        result.AddLog($"Defence immunity ({scopeLabel}).{skillLabel}");
+                        break;
+                    }
+                default:
+                    result.AddLog($"ModifyDefence mode {effect.defenceMode} not implemented.");
+                    break;
+            }
+
+            result.DefenceModifications.Add(preview);
+        }
 
         private static void ApplyModifyAction(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
@@ -1077,11 +1215,7 @@ namespace TGD.Combat
             };
 
             result.AttributeModifiers.Add(preview);
-
-            if (effect.attributeType == AttributeType.Immune)
-                result.AddLog($"Attribute modifier {effect.attributeType} ({effect.immunityScope}).");
-            else
-                result.AddLog($"Attribute modifier {effect.attributeType} ({expression}).");
+            result.AddLog($"Attribute modifier {effect.attributeType} ({expression}).");
         }
 
         private static void ApplyMasteryPosture(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -1765,13 +1899,15 @@ namespace TGD.Combat
 
             if (target != null)
                 AddStats(map, target.Stats, "target_");
-
+            map["targetdistance"] = ResolveTargetDistance(context, target);
             map["damage"] = context.IncomingDamage;
             map["damage_pre"] = context.IncomingDamage;
             map["damage_post"] = context.IncomingDamageMitigated;
             map["spent"] = context.LastResourceSpendAmount;
             map["currentdamage"] = context.IncomingDamage;
             map["heal"] = context.IncomingHealing;
+            map["damage_dealt"] = context.OutgoingDamage;
+            map["heal_dealt"] = context.OutgoingHealing;
             map["currentheal"] = context.IncomingHealing;
             if (context.ResourceValues.TryGetValue(ResourceType.Energy, out var energyValue))
                 map["currentenergy"] = energyValue;
@@ -1804,6 +1940,43 @@ namespace TGD.Combat
             map["skillLevel"] = context.ResolveSkillLevel(context.Skill);
             return map;
         }
+        private static float ResolveTargetDistance(EffectContext context, Unit target)
+        {
+            if (context == null)
+                return 0f;
+
+            if (target == null)
+            {
+                float distance = context.GetDistance(ConditionTarget.PrimaryTarget);
+                if (distance <= 0f)
+                    distance = context.GetDistance(ConditionTarget.Any);
+                return distance;
+            }
+
+            if (target == context.Caster)
+                return 0f;
+
+            if (target == context.PrimaryTarget)
+                return context.GetDistance(ConditionTarget.PrimaryTarget);
+
+            if (target == context.SecondaryTarget)
+                return context.GetDistance(ConditionTarget.SecondaryTarget);
+
+            if (target == context.ConditionEventTarget)
+                return context.GetDistance(ConditionTarget.Any);
+
+            if ((context.Allies != null && context.Allies.Contains(target)) ||
+                (context.Enemies != null && context.Enemies.Contains(target)))
+            {
+                return context.GetDistance(ConditionTarget.Any);
+            }
+
+            float fallback = context.GetDistance(ConditionTarget.Any);
+            if (fallback <= 0f)
+                fallback = context.GetDistance(ConditionTarget.PrimaryTarget);
+            return fallback;
+        }
+
 
         private static void AddStats(IDictionary<string, float> map, Stats stats, string prefix)
         {

@@ -87,6 +87,8 @@ namespace TGD.Combat
         public Dictionary<string, float> CustomVariables { get; }
         public float IncomingDamage { get; set; }
         public float IncomingHealing { get; set; }
+        public float OutgoingDamage { get; set; }
+        public float OutgoingHealing { get; set; }
         public HashSet<string> ActiveSkillStates { get; }
         public Dictionary<string, int> ActiveSkillStateStacks { get; }
         public List<DotHotStatusSnapshot> ActiveDotHotStatuses { get; }
@@ -150,6 +152,8 @@ namespace TGD.Combat
                 IncomingDamage = IncomingDamage,
                 IncomingHealing = IncomingHealing,
                 IncomingDamageMitigated = IncomingDamageMitigated,
+                OutgoingDamage = OutgoingDamage,
+                OutgoingHealing = OutgoingHealing,
                 ConditionAfterAttack = ConditionAfterAttack,
                 ConditionOnCrit = ConditionOnCrit,
                 ConditionOnPerformAttack = ConditionOnPerformAttack,
@@ -271,6 +275,7 @@ namespace TGD.Combat
         public List<RandomOutcomePreview> RandomOutcomes { get; } = new();
         public List<RepeatEffectPreview> RepeatEffects { get; } = new();
         public List<ProbabilityModifierPreview> ProbabilityModifiers { get; } = new();
+        public List<DefenceModificationPreview> DefenceModifications { get; } = new();
         public List<DotHotModifierPreview> DotHotModifiers { get; } = new();
         public List<SkillUseConditionPreview> SkillUseConditions { get; } = new();
         public List<string> Logs { get; } = new();
@@ -299,6 +304,7 @@ namespace TGD.Combat
             RepeatEffects.AddRange(other.RepeatEffects);
             ProbabilityModifiers.AddRange(other.ProbabilityModifiers);
             DotHotModifiers.AddRange(other.DotHotModifiers);
+            DefenceModifications.AddRange(other.DefenceModifications);
             SkillUseConditions.AddRange(other.SkillUseConditions);
             Logs.AddRange(other.Logs);
         }
@@ -530,6 +536,39 @@ namespace TGD.Combat
         public int Weight { get; set; }
         public ProbabilityModifierMode ProbabilityMode { get; set; }
         public EffectInterpretationResult Result { get; set; }
+    }
+    public class DamageSchoolBreakdownPreview
+    {
+        public DamageSchool School { get; set; }
+        public string ValueExpression { get; set; }
+        public float Value { get; set; }
+    }
+
+    public class DefenceModificationPreview
+    {
+        public DefenceModificationMode Mode { get; set; }
+        public TargetType Target { get; set; }
+        public float Probability { get; set; }
+        public EffectCondition Condition { get; set; }
+        public int Duration { get; set; }
+        public int StackCount { get; set; }
+        public string ValueExpression { get; set; }
+        public float Value { get; set; }
+        public string MaxValueExpression { get; set; }
+        public float MaxValue { get; set; }
+        public bool UsesPerSchoolBreakdown { get; set; }
+        public List<DamageSchoolBreakdownPreview> ShieldBreakdown { get; } = new();
+        public string RedirectExpression { get; set; }
+        public float RedirectRatio { get; set; }
+        public TargetType RedirectTarget { get; set; }
+        public string ReflectRatioExpression { get; set; }
+        public float ReflectRatio { get; set; }
+        public string ReflectFlatExpression { get; set; }
+        public float ReflectFlatValue { get; set; }
+        public DamageSchool ReflectSchool { get; set; }
+        public bool ReflectUsesIncomingDamage { get; set; }
+        public ImmunityScope ImmunityScope { get; set; }
+        public List<string> ImmuneSkillIDs { get; } = new();
     }
 
     public class RandomOutcomePreview

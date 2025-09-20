@@ -155,6 +155,105 @@ namespace TGD.Editor
 
             return sb.ToString().TrimEnd();
         }
+        private static string BuildModifyDefenceSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            string target = GetTargetLabel(effectProp);
+            var sb = CreateHeader("Modify Defence", target);
+
+            var modeProp = effectProp.FindPropertyRelative("defenceMode");
+            DefenceModificationMode mode = modeProp != null
+                ? (DefenceModificationMode)modeProp.enumValueIndex
+                : DefenceModificationMode.Shield;
+            AddBullet(sb, $"Mode: {mode}");
+
+            switch (mode)
+            {
+                case DefenceModificationMode.Shield:
+                    {
+                        AddValueLine(sb, effectProp, owningSkill, "Shield Value");
+
+                        string stacks = DescribeStacks(effectProp, owningSkill);
+                        if (!string.IsNullOrEmpty(stacks))
+                            AddBullet(sb, stacks);
+
+                        string maxExpression = FormatSimpleString(effectProp.FindPropertyRelative("defenceShieldMaxExpression"));
+                        if (!string.IsNullOrEmpty(maxExpression))
+                        {
+                            AddBullet(sb, $"Max Value: {maxExpression}");
+                        }
+                        else
+                        {
+                            var maxValueProp = effectProp.FindPropertyRelative("defenceShieldMaxValue");
+                            if (maxValueProp != null)
+                            {
+                                float maxValue = maxValueProp.propertyType == SerializedPropertyType.Float
+                                    ? maxValueProp.floatValue
+                                    : maxValueProp.propertyType == SerializedPropertyType.Integer
+                                        ? maxValueProp.intValue
+                                        : 0f;
+                                if (Mathf.Abs(maxValue) > Mathf.Epsilon)
+                                    AddBullet(sb, $"Max Value: {maxValue.ToString("0.##", CultureInfo.InvariantCulture)}");
+                            }
+                        }
+
+                        bool perSchool = effectProp.FindPropertyRelative("defenceShieldUsePerSchool")?.boolValue ?? false;
+                        if (perSchool)
+                        {
+                            var listProp = effectProp.FindPropertyRelative("defenceShieldBreakdown");
+                            var entries = CollectShieldBreakdown(listProp);
+                            if (entries.Count > 0)
+                                AddBullet(sb, $"Per school: {string.Join(", ", entries)}");
+                            else
+                                AddBullet(sb, "Per school: (none)");
+                        }
+                        break;
+                    }
+                case DefenceModificationMode.DamageRedirect:
+                    {
+                        string ratioLine = DescribeExpressionOrValue(effectProp, "defenceRedirectExpression", "defenceRedirectRatio", "Redirect Ratio");
+                        AddBullet(sb, ratioLine);
+
+                        string redirectTarget = GetEnumName(effectProp.FindPropertyRelative("defenceRedirectTarget"), TargetType.Allies);
+                        AddBullet(sb, $"Redirect Target: {redirectTarget}");
+                        break;
+                    }
+                case DefenceModificationMode.Reflect:
+                    {
+                        bool useIncoming = effectProp.FindPropertyRelative("defenceReflectUseIncomingDamage")?.boolValue ?? true;
+                        if (useIncoming)
+                        {
+                            string ratioLine = DescribeExpressionOrValue(effectProp, "defenceReflectRatioExpression", "defenceReflectRatio", "Reflect Ratio");
+                            AddBullet(sb, ratioLine);
+                        }
+                        else
+                        {
+                            AddBullet(sb, "Reflect Ratio: (disabled)");
+                        }
+
+                        string flatLine = DescribeExpressionOrValue(effectProp, "defenceReflectFlatExpression", "defenceReflectFlatDamage", "Flat Damage");
+                        AddBullet(sb, flatLine);
+
+                        string school = GetEnumName(effectProp.FindPropertyRelative("defenceReflectDamageSchool"), DamageSchool.Physical);
+                        AddBullet(sb, $"Damage School: {school}");
+                        break;
+                    }
+                case DefenceModificationMode.Immunity:
+                    {
+                        string scope = GetEnumName(effectProp.FindPropertyRelative("immunityScope"), ImmunityScope.All);
+                        AddBullet(sb, $"Scope: {scope}");
+
+                        var list = CollectStringList(effectProp.FindPropertyRelative("defenceImmuneSkillIDs"));
+                        if (list.Count > 0)
+                            AddBullet(sb, $"Immune Skills: {string.Join(", ", list)}");
+                        else
+                            AddBullet(sb, "Immune Skills: (none)");
+                        break;
+                    }
+            }
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
 
 
         private static string BuildScalingBuffSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
@@ -1071,6 +1170,94 @@ namespace TGD.Editor
         {
             return prop == null ? string.Empty : prop.stringValue;
         }
+        private static string DescribeExpressionOrValue(SerializedProperty effectProp, string expressionProperty, string valueProperty, string label)
+        {
+            if (effectProp == null)
+                return $"{label}: (not set)";
+
+            var expressionPropSerialized = effectProp.FindPropertyRelative(expressionProperty);
+            string expression = FormatSimpleString(expressionPropSerialized);
+            if (!string.IsNullOrWhiteSpace(expression))
+                return $"{label}: {expression}";
+
+            var valuePropSerialized = effectProp.FindPropertyRelative(valueProperty);
+            if (valuePropSerialized != null)
+            {
+                switch (valuePropSerialized.propertyType)
+                {
+                    case SerializedPropertyType.Float:
+                        return $"{label}: {valuePropSerialized.floatValue.ToString("0.##", CultureInfo.InvariantCulture)}";
+                    case SerializedPropertyType.Integer:
+                        return $"{label}: {valuePropSerialized.intValue}";
+                    case SerializedPropertyType.Boolean:
+                        return $"{label}: {(valuePropSerialized.boolValue ? "true" : "false")}";
+                }
+            }
+
+            return $"{label}: (not set)";
+        }
+
+        private static List<string> CollectShieldBreakdown(SerializedProperty listProp)
+        {
+            var result = new List<string>();
+            if (listProp == null || !listProp.isArray)
+                return result;
+
+            for (int i = 0; i < listProp.arraySize; i++)
+            {
+                var element = listProp.GetArrayElementAtIndex(i);
+                if (element == null)
+                    continue;
+
+                string school = GetEnumName(element.FindPropertyRelative("school"), DamageSchool.Physical);
+                string expression = FormatSimpleString(element.FindPropertyRelative("valueExpression"));
+
+                if (string.IsNullOrWhiteSpace(expression))
+                {
+                    var valuePropSerialized = element.FindPropertyRelative("value");
+                    if (valuePropSerialized != null)
+                    {
+                        switch (valuePropSerialized.propertyType)
+                        {
+                            case SerializedPropertyType.Float:
+                                expression = valuePropSerialized.floatValue.ToString("0.##", CultureInfo.InvariantCulture);
+                                break;
+                            case SerializedPropertyType.Integer:
+                                expression = valuePropSerialized.intValue.ToString(CultureInfo.InvariantCulture);
+                                break;
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(expression))
+                    expression = "0";
+
+                result.Add($"{school}: {expression}");
+            }
+
+            return result;
+        }
+
+        private static List<string> CollectStringList(SerializedProperty listProp)
+        {
+            var result = new List<string>();
+            if (listProp == null || !listProp.isArray)
+                return result;
+
+            for (int i = 0; i < listProp.arraySize; i++)
+            {
+                var element = listProp.GetArrayElementAtIndex(i);
+                if (element == null || element.propertyType != SerializedPropertyType.String)
+                    continue;
+
+                string value = element.stringValue;
+                if (!string.IsNullOrWhiteSpace(value))
+                    result.Add(value.Trim());
+            }
+
+            return result;
+        }
+
         private static string DescribeModifyStackInfo(SerializedProperty effectProp)
         {
             var showStacksProp = effectProp.FindPropertyRelative("statusModifyShowStacks");

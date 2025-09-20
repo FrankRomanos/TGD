@@ -36,6 +36,7 @@ namespace TGD.Editor
             Register(EffectType.ProbabilityModifier, new ProbabilityModifierDrawer());
             Register(EffectType.DotHotModifier, new DotHotModifierDrawer());
             Register(EffectType.Aura, new AuraDrawer());
+            Register(EffectType.ModifyDefence, new ModifyDefenceDrawer());
         }
 
         public static void Register(EffectType type, IEffectDrawer drawer)

@@ -16,7 +16,6 @@ namespace TGD.Data
     {
         Attack,
         Armor,
-        Shield,
         Speed,
         Movement,
         CritRate,
@@ -29,8 +28,7 @@ namespace TGD.Data
         DamageIncrease,
         CritDamage,
         Threat,
-        ThreatShred,
-        Immune
+        ThreatShred
     }
 
     public enum EffectType
@@ -55,7 +53,8 @@ namespace TGD.Data
         ProbabilityModifier = 18,
         DotHotModifier = 19,
         ModifyResource = 20,
-        Aura = 21
+        Aura = 21,
+        ModifyDefence = 22
     }
     public static class EffectTypeLegacy
     {
@@ -79,6 +78,22 @@ namespace TGD.Data
         Fire,
         Frost
     }
+    public enum DefenceModificationMode
+    {
+        Shield,
+        DamageRedirect,
+        Reflect,
+        Immunity
+    }
+
+    [Serializable]
+    public class DamageSchoolValueEntry
+    {
+        public DamageSchool school = DamageSchool.Physical;
+        public string valueExpression;
+        public float value;
+    }
+
     [Serializable]
     public enum EffectCondition
     {
@@ -427,6 +442,22 @@ namespace TGD.Data
         public bool auraAffectsImmune = false;
         public int auraDuration = 0;
 
+        // ===== Modify Defence =====
+        public DefenceModificationMode defenceMode = DefenceModificationMode.Shield;
+        public bool defenceShieldUsePerSchool = false;
+        public List<DamageSchoolValueEntry> defenceShieldBreakdown = new();
+        public float defenceShieldMaxValue = 0f;
+        public string defenceShieldMaxExpression;
+        public string defenceRedirectExpression;
+        public float defenceRedirectRatio = 1f;
+        public TargetType defenceRedirectTarget = TargetType.Allies;
+        public bool defenceReflectUseIncomingDamage = true;
+        public string defenceReflectRatioExpression;
+        public float defenceReflectRatio = 0f;
+        public string defenceReflectFlatExpression;
+        public float defenceReflectFlatDamage = 0f;
+        public DamageSchool defenceReflectDamageSchool = DamageSchool.Physical;
+        public List<string> defenceImmuneSkillIDs = new();
 
         // ===== ScalingBuff 专用 =====
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"
