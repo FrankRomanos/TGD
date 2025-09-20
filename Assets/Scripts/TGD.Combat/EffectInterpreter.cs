@@ -372,6 +372,9 @@ namespace TGD.Combat
                 case EffectType.Aura:
                     ApplyAura(effect, context, result);
                     break;
+                case EffectType.ModifyDefence:
+                    ApplyModifyDefence(effect, context, result);
+                    break;
                 default:
                     result.AddLog($"No interpreter implemented for {effect.effectType}.");
                     break;

@@ -55,6 +55,7 @@ namespace TGD.Editor
                 EffectType.ProbabilityModifier => BuildProbabilityModifierSummary(effectProp, owningSkill),
                 EffectType.DotHotModifier => BuildDotHotSummary(effectProp, owningSkill),
                 EffectType.Aura => BuildAuraSummary(effectProp, owningSkill),
+                EffectType.ModifyDefence => BuildModifyDefenceSummary(effectProp, owningSkill),
                 _ => BuildDefaultSummary(effectProp, owningSkill, effectType)
             };
         }
