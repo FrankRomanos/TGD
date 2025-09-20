@@ -37,7 +37,8 @@ namespace TGD.Editor
             {
                 EffectType.Damage => BuildDamageSummary(effectProp, owningSkill),
                 EffectType.Heal => BuildHealSummary(effectProp, owningSkill),
-                EffectType.GainResource => BuildGainResourceSummary(effectProp, owningSkill),
+                EffectType.GainResource => BuildResourceModificationSummary(effectProp, owningSkill),
+                EffectType.ModifyResource => BuildResourceModificationSummary(effectProp, owningSkill),
                 EffectType.ScalingBuff => BuildScalingBuffSummary(effectProp, owningSkill),
                 EffectType.ModifyStatus => BuildModifyStatusSummary(effectProp, owningSkill),
                 EffectType.ConditionalEffect => BuildConditionalSummary(effectProp),
@@ -53,6 +54,7 @@ namespace TGD.Editor
                 EffectType.Repeat => BuildRepeatSummary(effectProp, owningSkill),
                 EffectType.ProbabilityModifier => BuildProbabilityModifierSummary(effectProp, owningSkill),
                 EffectType.DotHotModifier => BuildDotHotSummary(effectProp, owningSkill),
+                EffectType.Aura => BuildAuraSummary(effectProp, owningSkill),
                 _ => BuildDefaultSummary(effectProp, owningSkill, effectType)
             };
         }
@@ -86,14 +88,74 @@ namespace TGD.Editor
             return sb.ToString().TrimEnd();
         }
 
-        private static string BuildGainResourceSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        private static string BuildResourceModificationSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
         {
+            var typeProp = effectProp.FindPropertyRelative("resourceModifyType");
+            ResourceModifyType modifyType = typeProp != null
+                ? (ResourceModifyType)typeProp.enumValueIndex
+                : ResourceModifyType.Gain;
+
+            var effectTypeProp = effectProp.FindPropertyRelative("effectType");
+            if (effectTypeProp != null && (EffectType)effectTypeProp.enumValueIndex == EffectType.GainResource)
+                modifyType = ResourceModifyType.Gain;
+
             string resource = GetEnumName(effectProp.FindPropertyRelative("resourceType"), ResourceType.Discipline);
-            var sb = CreateHeader($"Gain Resource ({resource})", GetTargetLabel(effectProp));
-            AddValueLine(sb, effectProp, owningSkill, "Amount");
+            string title = modifyType switch
+            {
+                ResourceModifyType.Gain => $"Gain Resource ({resource})",
+                ResourceModifyType.ConvertMax => $"Adjust Max {resource}",
+                ResourceModifyType.Lock => $"Lock Resource ({resource})",
+                ResourceModifyType.Overdraft => $"Overdraft ({resource})",
+                ResourceModifyType.PayLate => $"Pay Late ({resource})",
+                _ => $"Modify Resource ({resource})"
+            };
+
+            var sb = CreateHeader(title, GetTargetLabel(effectProp));
+
+            switch (modifyType)
+            {
+                case ResourceModifyType.Gain:
+                    AddValueLine(sb, effectProp, owningSkill, "Amount");
+                    break;
+                case ResourceModifyType.ConvertMax:
+                    AddValueLine(sb, effectProp, owningSkill, "Max Delta");
+                    break;
+                case ResourceModifyType.Lock:
+                case ResourceModifyType.Overdraft:
+                case ResourceModifyType.PayLate:
+                    bool enabled = effectProp.FindPropertyRelative("resourceStateEnabled")?.boolValue ?? true;
+                    AddBullet(sb, $"State: {(enabled ? "Enable" : "Disable")}");
+                    break;
+            }
             AppendCommonLines(sb, effectProp, owningSkill);
             return sb.ToString().TrimEnd();
         }
+        private static string BuildAuraSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("Aura", GetTargetLabel(effectProp));
+
+            float radius = effectProp.FindPropertyRelative("auraRadius")?.floatValue ?? 0f;
+            string radiusLabel = radius.ToString("0.##", CultureInfo.InvariantCulture);
+            AddBullet(sb, $"Radius: {radiusLabel}");
+
+            string category = GetEnumName(effectProp.FindPropertyRelative("auraCategories"), AuraEffectCategory.Damage);
+            AddBullet(sb, $"Category: {category}");
+
+            string affected = GetEnumName(effectProp.FindPropertyRelative("auraTarget"), TargetType.Allies);
+            AddBullet(sb, $"Affects: {affected}");
+
+            bool affectsImmune = effectProp.FindPropertyRelative("auraAffectsImmune")?.boolValue ?? false;
+            AddBullet(sb, $"Affect immune: {(affectsImmune ? "Yes" : "No")}");
+
+            int auraDuration = effectProp.FindPropertyRelative("auraDuration")?.intValue ?? 0;
+            AddBullet(sb, auraDuration > 0 ? $"Aura duration: {auraDuration} turn(s)" : "Aura duration: Unlimited");
+
+            AddBullet(sb, DescribeProbability(effectProp, owningSkill));
+            AddBullet(sb, DescribeCondition(effectProp));
+
+            return sb.ToString().TrimEnd();
+        }
+
 
         private static string BuildScalingBuffSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
         {

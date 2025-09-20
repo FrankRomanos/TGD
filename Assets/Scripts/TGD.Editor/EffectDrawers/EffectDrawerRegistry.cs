@@ -11,7 +11,7 @@ namespace TGD.Editor
         static EffectDrawerRegistry()
         {
             // 在这里注册所有 Drawer
-            Register(EffectType.GainResource, new GainResourceDrawer());
+            Register(EffectType.ModifyResource, new ModifyResourceDrawer());
             Register(EffectType.ModifySkill, new ModifySkillDrawer());
             Register(EffectType.ModifyStatus, new ModifyStatusDrawer());
             Register(EffectType.ScalingBuff, new ScalingBuffDrawer());
@@ -35,6 +35,7 @@ namespace TGD.Editor
             Register(EffectType.Repeat, new RepeatEffectDrawer());
             Register(EffectType.ProbabilityModifier, new ProbabilityModifierDrawer());
             Register(EffectType.DotHotModifier, new DotHotModifierDrawer());
+            Register(EffectType.Aura, new AuraDrawer());
         }
 
         public static void Register(EffectType type, IEffectDrawer drawer)

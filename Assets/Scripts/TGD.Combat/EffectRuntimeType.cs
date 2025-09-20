@@ -267,6 +267,7 @@ namespace TGD.Combat
         public List<ScalingBuffPreview> ScalingBuffs { get; } = new();
         public List<MovePreview> Moves { get; } = new();
         public List<MasteryPosturePreview> MasteryPosture { get; } = new();
+        public List<AuraPreview> Auras { get; } = new();
         public List<RandomOutcomePreview> RandomOutcomes { get; } = new();
         public List<RepeatEffectPreview> RepeatEffects { get; } = new();
         public List<ProbabilityModifierPreview> ProbabilityModifiers { get; } = new();
@@ -293,6 +294,7 @@ namespace TGD.Combat
             ScalingBuffs.AddRange(other.ScalingBuffs);
             Moves.AddRange(other.Moves);
             MasteryPosture.AddRange(other.MasteryPosture);
+            Auras.AddRange(other.Auras);
             RandomOutcomes.AddRange(other.RandomOutcomes);
             RepeatEffects.AddRange(other.RepeatEffects);
             ProbabilityModifiers.AddRange(other.ProbabilityModifiers);
@@ -349,6 +351,9 @@ namespace TGD.Combat
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
         public bool FillToMax { get; set; }
+        public ResourceModifyType ModifyType { get; set; }
+        public bool AffectsMax { get; set; }
+        public bool StateEnabled { get; set; }
     }
 
     public class StatusApplicationPreview
@@ -502,6 +507,18 @@ namespace TGD.Combat
         public bool IgnoreObstacles { get; set; }
         public bool StopAdjacentToTarget { get; set; }
         public TargetType Target { get; set; }
+        public float Probability { get; set; }
+        public EffectCondition Condition { get; set; }
+    }
+
+    public class AuraPreview
+    {
+        public TargetType Source { get; set; }
+        public float Radius { get; set; }
+        public AuraEffectCategory Category { get; set; }
+        public TargetType AffectedTargets { get; set; }
+        public bool AffectsImmune { get; set; }
+        public int Duration { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
     }

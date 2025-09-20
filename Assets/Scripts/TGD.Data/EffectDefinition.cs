@@ -53,7 +53,9 @@ namespace TGD.Data
         RandomOutcome = 16,
         Repeat = 17,
         ProbabilityModifier = 18,
-        DotHotModifier = 19
+        DotHotModifier = 19,
+        ModifyResource = 20,
+        Aura = 21
     }
     public static class EffectTypeLegacy
     {
@@ -110,6 +112,22 @@ namespace TGD.Data
         qi,
         vision,
         posture
+    }
+    public enum ResourceModifyType
+    {
+        Gain,
+        ConvertMax,
+        Lock,
+        Overdraft,
+        PayLate
+    }
+
+    public enum AuraEffectCategory
+    {
+        Damage,
+        Heal,
+        Buff,
+        Debuff
     }
 
     [Serializable]
@@ -208,7 +226,10 @@ namespace TGD.Data
     {
         Step,
         Dash,
-        Teleport
+        Teleport,
+        Pull,
+        Push,
+        SwapPositions
     }
 
     [System.Flags]
@@ -321,6 +342,8 @@ namespace TGD.Data
 
         // ===== Resource / Condition =====
         public ResourceType resourceType = ResourceType.Discipline;
+        public ResourceModifyType resourceModifyType = ResourceModifyType.Gain;
+        public bool resourceStateEnabled = true;
         public CompareOp compareOp = CompareOp.Equal;
         public float compareValue;
         [SerializeReference]
@@ -396,6 +419,14 @@ namespace TGD.Data
         public bool allowPartialMove = false;
         public bool moveIgnoreObstacles = false;
         public bool moveStopAdjacentToTarget = true;
+
+        // ===== Aura =====
+        public float auraRadius = 0f;
+        public AuraEffectCategory auraCategories = AuraEffectCategory.Damage;
+        public TargetType auraTarget = TargetType.Allies;
+        public bool auraAffectsImmune = false;
+        public int auraDuration = 0;
+
 
         // ===== ScalingBuff 专用 =====
         public string scalingValuePerResource;     // e.g. "p%", "0.2*Mastery"

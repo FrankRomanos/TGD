@@ -317,7 +317,8 @@ namespace TGD.Combat
                     ApplyHeal(effect, context, result);
                     break;
                 case EffectType.GainResource:
-                    ApplyResourceGain(effect, context, result);
+                case EffectType.ModifyResource:
+                    ApplyResourceModification(effect, context, result);
                     break;
                 case EffectType.ScalingBuff:
                     ApplyScalingBuff(effect, context, result);
@@ -363,6 +364,9 @@ namespace TGD.Combat
                     break;
                 case EffectType.DotHotModifier:
                     ApplyDotHotModifier(effect, context, result, visited);
+                    break;
+                case EffectType.Aura:
+                    ApplyAura(effect, context, result);
                     break;
                 default:
                     result.AddLog($"No interpreter implemented for {effect.effectType}.");
@@ -437,37 +441,104 @@ namespace TGD.Combat
             }
         }
 
-        private static void ApplyResourceGain(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        private static void ApplyResourceModification(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
             var targets = ResolveTargets(effect.target, context);
             if (targets.Count == 0)
                 targets.Add(context.PrimaryTarget ?? context.Caster);
 
-            string expression = ResolveValueExpression(effect, context);
-            bool fillToMax = IsMaxExpression(expression);
+            ResourceModifyType modifyType = effect.effectType == EffectType.GainResource
+        ? ResourceModifyType.Gain
+        : effect.resourceModifyType;
+
+            bool requiresValue = modifyType == ResourceModifyType.Gain || modifyType == ResourceModifyType.ConvertMax;
+            string expression = requiresValue ? ResolveValueExpression(effect, context) : string.Empty;
+            bool fillToMax = modifyType == ResourceModifyType.Gain && IsMaxExpression(expression);
+
             foreach (var target in targets)
             {
-                float amount = fillToMax
-    ? CalculateMaxFillAmount(effect.resourceType, context, target)
-    : EvaluateExpression(expression, context, target, effect.value);
                 float probability = ResolveProbabilityValue(effect, context, target);
-                result.ResourceChanges.Add(new ResourceChangePreview
+                switch (modifyType)
                 {
-                    Resource = effect.resourceType,
-                    Target = target,
-                    Amount = amount,
-                    Probability = probability,
-                    Expression = expression,
-                    Condition = effect.condition,
-                    FillToMax = fillToMax
-                });
-                if (fillToMax)
-                {
-                    result.AddLog($"Restore {effect.resourceType} to max for {DescribeUnit(target)} ({probability:0.##}% chance).");
-                }
-                else
-                {
-                    result.AddLog($"Gain {amount:0.##} {effect.resourceType} for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                    case ResourceModifyType.Gain:
+                        {
+                            float amount = fillToMax
+                                ? CalculateMaxFillAmount(effect.resourceType, context, target)
+                                : EvaluateExpression(expression, context, target, effect.value);
+
+                            var preview = new ResourceChangePreview
+                            {
+                                Resource = effect.resourceType,
+                                Target = target,
+                                Amount = amount,
+                                Probability = probability,
+                                Expression = expression,
+                                Condition = effect.condition,
+                                FillToMax = fillToMax,
+                                ModifyType = ResourceModifyType.Gain,
+                                AffectsMax = false,
+                                StateEnabled = true
+                            };
+                            result.ResourceChanges.Add(preview);
+
+                            if (fillToMax)
+                            {
+                                result.AddLog($"Restore {effect.resourceType} to max for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                            }
+                            else
+                            {
+                                string verb = amount >= 0f ? "Gain" : "Lose";
+                                float magnitude = Mathf.Abs(amount);
+                                result.AddLog($"{verb} {magnitude:0.##} {effect.resourceType} for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                            }
+                            break;
+                        }
+                    case ResourceModifyType.ConvertMax:
+                        {
+                            float amount = EvaluateExpression(expression, context, target, effect.value);
+                            var preview = new ResourceChangePreview
+                            {
+                                Resource = effect.resourceType,
+                                Target = target,
+                                Amount = amount,
+                                Probability = probability,
+                                Expression = expression,
+                                Condition = effect.condition,
+                                FillToMax = false,
+                                ModifyType = ResourceModifyType.ConvertMax,
+                                AffectsMax = true,
+                                StateEnabled = true
+                            };
+                            result.ResourceChanges.Add(preview);
+
+                            string verb = amount >= 0f ? "Increase" : "Reduce";
+                            float magnitude = Mathf.Abs(amount);
+                            result.AddLog($"{verb} max {effect.resourceType} by {magnitude:0.##} for {DescribeUnit(target)} ({probability:0.##}% chance).");
+                            break;
+                        }
+                    default:
+                        {
+                            bool state = effect.resourceStateEnabled;
+                            var preview = new ResourceChangePreview
+                            {
+                                Resource = effect.resourceType,
+                                Target = target,
+                                Amount = 0f,
+                                Probability = probability,
+                                Expression = string.Empty,
+                                Condition = effect.condition,
+                                FillToMax = false,
+                                ModifyType = modifyType,
+                                AffectsMax = false,
+                                StateEnabled = state
+                            };
+                            result.ResourceChanges.Add(preview);
+
+                            string stateLabel = state ? "Enable" : "Disable";
+                            string actionLabel = DescribeResourceStateAction(modifyType);
+                            result.AddLog($"{stateLabel} {actionLabel} for {effect.resourceType} on {DescribeUnit(target)} ({probability:0.##}% chance).");
+                            break;
+                        }
                 }
             }
         }
@@ -849,6 +920,17 @@ namespace TGD.Combat
 
             return $"'{preview.LimitExpression}' (~{resolvedText})";
         }
+        private static string DescribeResourceStateAction(ResourceModifyType modifyType)
+        {
+            return modifyType switch
+            {
+                ResourceModifyType.Lock => "Lock",
+                ResourceModifyType.Overdraft => "Overdraft",
+                ResourceModifyType.PayLate => "Pay Late",
+                _ => modifyType.ToString()
+            };
+        }
+
 
         private static void ApplyReplaceSkill(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
@@ -889,6 +971,30 @@ namespace TGD.Combat
 
             result.Moves.Add(preview);
             result.AddLog($"Move {effect.moveSubject} via {effect.moveExecution} ({effect.moveDirection}).");
+        }
+        private static void ApplyAura(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
+            int duration = effect.auraDuration;
+
+            var preview = new AuraPreview
+            {
+                Source = effect.target,
+                Radius = effect.auraRadius,
+                Category = effect.auraCategories,
+                AffectedTargets = effect.auraTarget,
+                AffectsImmune = effect.auraAffectsImmune,
+                Duration = duration,
+                Probability = probability,
+                Condition = effect.condition
+            };
+            result.Auras.Add(preview);
+
+            string sourceLabel = effect.target.ToString();
+            string targetLabel = effect.auraTarget.ToString();
+            string immuneLabel = effect.auraAffectsImmune ? "affects immune" : "ignores immune";
+            string durationLabel = duration > 0 ? $"{duration} turn(s)" : "unlimited duration";
+            result.AddLog($"Aura ({effect.auraCategories}) radius {effect.auraRadius:0.##} from {sourceLabel} affects {targetLabel} ({immuneLabel}, {durationLabel}) ({probability:0.##}% chance).");
         }
 
         private static void ApplyModifyAction(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
