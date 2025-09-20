@@ -213,7 +213,7 @@ namespace TGD.Editor
                         string ratioLine = DescribeExpressionOrValue(effectProp, "defenceRedirectExpression", "defenceRedirectRatio", "Redirect Ratio");
                         AddBullet(sb, ratioLine);
 
-                        string redirectTarget = GetEnumName(effectProp.FindPropertyRelative("defenceRedirectTarget"), TargetType.Allies);
+                        string redirectTarget = GetEnumName(effectProp.FindPropertyRelative("defenceRedirectTarget"), ConditionTarget.Caster);
                         AddBullet(sb, $"Redirect Target: {redirectTarget}");
                         break;
                     }

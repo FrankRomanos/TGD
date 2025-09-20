@@ -263,7 +263,8 @@ namespace TGD.Data
     public enum ImmunityScope
     {
         All,
-        DamageOnly
+        DamageOnly,
+        OnlySkill
     }
 
     public enum ProbabilityModifierMode
@@ -450,7 +451,7 @@ namespace TGD.Data
         public string defenceShieldMaxExpression;
         public string defenceRedirectExpression;
         public float defenceRedirectRatio = 1f;
-        public TargetType defenceRedirectTarget = TargetType.Allies;
+        public ConditionTarget defenceRedirectTarget = ConditionTarget.Caster;
         public bool defenceReflectUseIncomingDamage = true;
         public string defenceReflectRatioExpression;
         public float defenceReflectRatio = 0f;

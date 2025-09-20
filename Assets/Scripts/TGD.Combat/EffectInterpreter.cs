@@ -281,6 +281,7 @@ namespace TGD.Combat
                 ConditionTarget.Caster => "caster",
                 ConditionTarget.PrimaryTarget => "primary target",
                 ConditionTarget.SecondaryTarget => "secondary target",
+                ConditionTarget.Any => "any target",
                 _ => "target"
             };
         }
@@ -1068,13 +1069,16 @@ namespace TGD.Combat
                 case DefenceModificationMode.DamageRedirect:
                     {
                         string redirectExpression = effect.defenceRedirectExpression;
-                        float ratio = EvaluateExpression(redirectExpression, context, context.Caster, effect.defenceRedirectRatio);
+                        Unit redirectReference = ResolveConditionTarget(effect.defenceRedirectTarget, context) ?? context.Caster;
+                        float ratio = EvaluateExpression(redirectExpression, context, redirectReference, effect.defenceRedirectRatio);
                         preview.RedirectExpression = redirectExpression;
                         preview.RedirectRatio = ratio;
                         preview.RedirectTarget = effect.defenceRedirectTarget;
 
                         string ratioLabel = ratio.ToString("P0", CultureInfo.InvariantCulture);
-                        result.AddLog($"Defence redirect {ratioLabel} damage from {effect.target} to {effect.defenceRedirectTarget}.");
+                        string sourceLabel = effect.target.ToString();
+                        string redirectTargetLabel = DescribeConditionTarget(effect.defenceRedirectTarget);
+                        result.AddLog($"Defence redirect {ratioLabel} damage from {sourceLabel} to {redirectTargetLabel}.");
                         break;
                     }
                 case DefenceModificationMode.Reflect:
@@ -1117,14 +1121,32 @@ namespace TGD.Combat
                             }
                         }
 
-                        string scopeLabel = effect.immunityScope == ImmunityScope.All
-                            ? "all damage & effects"
-                            : "damage only";
-                        string skillLabel = preview.ImmuneSkillIDs.Count > 0
-                            ? $" Skills: {string.Join(", ", preview.ImmuneSkillIDs)}."
+                        var immuneSkills = preview.ImmuneSkillIDs;
+                        string joinedSkills = immuneSkills.Count > 0
+                            ? string.Join(", ", immuneSkills)
                             : string.Empty;
 
-                        result.AddLog($"Defence immunity ({scopeLabel}).{skillLabel}");
+                        string logMessage = effect.immunityScope switch
+                        {
+                            ImmunityScope.All =>
+                                immuneSkills.Count > 0
+                                    ? $"Defence immunity (all damage & effects). Skills: {joinedSkills}"
+                                    : "Defence immunity (all damage & effects)",
+                            ImmunityScope.DamageOnly =>
+                                immuneSkills.Count > 0
+                                    ? $"Defence immunity (damage only). Skills: {joinedSkills}"
+                                    : "Defence immunity (damage only)",
+                            ImmunityScope.OnlySkill =>
+                                immuneSkills.Count > 0
+                                    ? $"Defence immunity (specific skills: {joinedSkills})"
+                                    : "Defence immunity (specific skills: none configured)",
+                            _ =>
+                                immuneSkills.Count > 0
+                                    ? $"Defence immunity ({effect.immunityScope}). Skills: {joinedSkills}"
+                                    : $"Defence immunity ({effect.immunityScope})"
+                        };
+
+                        result.AddLog($"{logMessage}.");
                         break;
                     }
                 default:

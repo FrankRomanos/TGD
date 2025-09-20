@@ -560,7 +560,7 @@ namespace TGD.Combat
         public List<DamageSchoolBreakdownPreview> ShieldBreakdown { get; } = new();
         public string RedirectExpression { get; set; }
         public float RedirectRatio { get; set; }
-        public TargetType RedirectTarget { get; set; }
+        public ConditionTarget RedirectTarget { get; set; }
         public string ReflectRatioExpression { get; set; }
         public float ReflectRatio { get; set; }
         public string ReflectFlatExpression { get; set; }

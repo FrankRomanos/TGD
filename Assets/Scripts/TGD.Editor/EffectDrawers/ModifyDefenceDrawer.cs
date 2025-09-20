@@ -131,7 +131,7 @@ namespace TGD.Editor
 
             var targetProp = elem.FindPropertyRelative("defenceRedirectTarget");
             if (targetProp != null)
-                EditorGUILayout.PropertyField(targetProp, new GUIContent("Redirect Target"));
+                EditorGUILayout.PropertyField(targetProp, new GUIContent("Redirect Target (Condition)"));
         }
 
         private void DrawReflectBlock(SerializedProperty elem)
@@ -174,7 +174,9 @@ namespace TGD.Editor
             if (listProp != null)
                 EditorGUILayout.PropertyField(listProp, new GUIContent("Immune Skill IDs"), includeChildren: true);
 
-            EditorGUILayout.HelpBox("Leave the skill list empty to apply the immunity scope globally.", MessageType.Info);
+            EditorGUILayout.HelpBox(
+             "Set Immunity Scope to 'OnlySkill' to block effects from the listed skills. Leave the list empty to apply the selected scope globally.",
+             MessageType.Info);
         }
 
         private void DrawStackField(SerializedProperty elem)
