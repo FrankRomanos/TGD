@@ -58,8 +58,10 @@ namespace TGD.Combat
 
         private void EndTurn(Unit u)
         {
-            u.EndTurn();
-            // TODO: 回合结束触发（冷却-1已在Unit里），清理临时状态等
+            u.EndTurn(); // 你现有的单位收尾
+                         // ▲ 新增：对战场上所有单位统一 -6s
+            foreach (var p in playerParty) p?.TickCooldownSeconds(6);
+            foreach (var e in enemyParty) e?.TickCooldownSeconds(6);
         }
 
         private IEnumerator RunUnitTurn(Unit u, bool isPlayer)
