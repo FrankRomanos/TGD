@@ -33,6 +33,10 @@ namespace TGD.Combat
                     ConditionOnResourceSpend = workingContext.ConditionOnResourceSpend,
                     ConditionOnEffectEnd = workingContext.ConditionOnEffectEnd,
                     ConditionOnDamageTaken = workingContext.ConditionOnDamageTaken,
+                    ConditionOnTurnBeginSelf = workingContext.ConditionOnTurnBeginSelf,
+                    ConditionOnTurnBeginEnemy = workingContext.ConditionOnTurnBeginEnemy,
+                    ConditionOnTurnEndSelf = workingContext.ConditionOnTurnEndSelf,
+                    ConditionOnTurnEndEnemy = workingContext.ConditionOnTurnEndEnemy,
                     LastResourceSpendAmount = workingContext.LastResourceSpendAmount,
                     LastResourceSpendType = workingContext.LastResourceSpendType,
                     OutgoingDamage = workingContext.OutgoingDamage,
@@ -1749,6 +1753,14 @@ namespace TGD.Combat
                     return context.ConditionOnEffectEnd;
                 case EffectCondition.OnDamageTaken:
                     return context.ConditionOnDamageTaken;
+                case EffectCondition.OnTurnBeginSelf:
+                    return context.ConditionOnTurnBeginSelf && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.OnTurnBeginEnemy:
+                    return context.ConditionOnTurnBeginEnemy && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.OnTurnEndSelf:
+                    return context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.OnTurnEndEnemy:
+                    return context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
                 default:
                     return true;
             }

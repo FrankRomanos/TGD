@@ -108,7 +108,11 @@ namespace TGD.Data
         OnDotHotActive,
         OnNextSkillSpendResource,
         OnDamageTaken,
-        OnEffectEnd
+        OnEffectEnd,
+        OnTurnBeginSelf,
+        OnTurnBeginEnemy,
+        OnTurnEndSelf,
+        OnTurnEndEnemy
     }
 
     [Serializable]

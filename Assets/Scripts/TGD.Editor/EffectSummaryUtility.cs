@@ -1113,6 +1113,18 @@ namespace TGD.Editor
                 case EffectCondition.OnEffectEnd:
                     sb.Append(" (trigger: when the effect ends)");
                     break;
+                case EffectCondition.OnTurnBeginSelf:
+                    sb.Append(" (trigger: at the start of your turn)");
+                    break;
+                case EffectCondition.OnTurnBeginEnemy:
+                    sb.Append(" (trigger: at the start of an enemy turn)");
+                    break;
+                case EffectCondition.OnTurnEndSelf:
+                    sb.Append(" (trigger: at the end of your turn)");
+                    break;
+                case EffectCondition.OnTurnEndEnemy:
+                    sb.Append(" (trigger: at the end of an enemy turn)");
+                    break;
             }
 
             return sb.ToString();

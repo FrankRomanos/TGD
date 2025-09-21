@@ -104,6 +104,10 @@ namespace TGD.Combat
         public bool ConditionOnResourceSpend { get; set; }
         public bool ConditionOnEffectEnd { get; set; }
         public bool ConditionOnDamageTaken { get; set; }
+        public bool ConditionOnTurnBeginSelf { get; set; }
+        public bool ConditionOnTurnBeginEnemy { get; set; }
+        public bool ConditionOnTurnEndSelf { get; set; }
+        public bool ConditionOnTurnEndEnemy { get; set; }
         public ResourceType? LastResourceSpendType { get; set; }
         public float LastResourceSpendAmount { get; set; }
         public ISkillResolver SkillResolver { get; set; }
@@ -165,6 +169,10 @@ namespace TGD.Combat
                 ConditionOnResourceSpend = ConditionOnResourceSpend,
                 ConditionOnEffectEnd = ConditionOnEffectEnd,
                 ConditionOnDamageTaken = ConditionOnDamageTaken,
+                ConditionOnTurnBeginSelf = ConditionOnTurnBeginSelf,
+                ConditionOnTurnBeginEnemy = ConditionOnTurnBeginEnemy,
+                ConditionOnTurnEndSelf = ConditionOnTurnEndSelf,
+                ConditionOnTurnEndEnemy = ConditionOnTurnEndEnemy,
                 LastResourceSpendType = LastResourceSpendType,
                 LastResourceSpendAmount = LastResourceSpendAmount,
                 SkillResolver = SkillResolver,
