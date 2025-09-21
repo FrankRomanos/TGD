@@ -506,8 +506,10 @@ namespace TGD.Editor
                     AddBullet(sb, $"Direction: Absolute offset ({offset.x}, {offset.y})");
                     break;
                 default:
+                    string expression = FormatSimpleString(effectProp.FindPropertyRelative("moveDistanceExpression"));
                     int distance = effectProp.FindPropertyRelative("moveDistance")?.intValue ?? 0;
-                    AddBullet(sb, $"Direction: {direction} ({distance} tile(s))");
+                    string distanceLabel = FormatExpressionWithFallback(expression, distance);
+                    AddBullet(sb, $"Direction: {direction} ({distanceLabel} tile(s))");
                     int maxDistance = effectProp.FindPropertyRelative("moveMaxDistance")?.intValue ?? 0;
                     if (direction == MoveDirection.TowardTarget && maxDistance > 0)
                         AddBullet(sb, $"Max distance: {maxDistance} tile(s)");
@@ -1125,6 +1127,9 @@ namespace TGD.Editor
                 case EffectCondition.OnTurnEndEnemy:
                     sb.Append(" (trigger: at the end of an enemy turn)");
                     break;
+                case EffectCondition.LinkCancelled:
+                    sb.Append(" (trigger: when a reaction cancels your previous standard in the chain - time is refunded but resources remain spent, and the standard goes on cooldown as a cancelled use)");
+                    break;
             }
 
             return sb.ToString();
@@ -1213,6 +1218,14 @@ namespace TGD.Editor
         private static string FormatSimpleString(SerializedProperty prop)
         {
             return prop == null ? string.Empty : prop.stringValue;
+        }
+        private static string FormatExpressionWithFallback(string expression, int fallback)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return fallback.ToString(CultureInfo.InvariantCulture);
+
+            string trimmed = expression.Trim();
+            return string.Format(CultureInfo.InvariantCulture, "{0} (~{1})", trimmed, fallback);
         }
         private static string DescribeExpressionOrValue(SerializedProperty effectProp, string expressionProperty, string valueProperty, string label)
         {

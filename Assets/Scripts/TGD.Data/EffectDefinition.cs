@@ -112,7 +112,8 @@ namespace TGD.Data
         OnTurnBeginSelf,
         OnTurnBeginEnemy,
         OnTurnEndSelf,
-        OnTurnEndEnemy
+        OnTurnEndEnemy,
+        LinkCancelled
     }
 
     [Serializable]
@@ -439,6 +440,7 @@ namespace TGD.Data
         public MoveExecution moveExecution = MoveExecution.Step;
         public MoveDirection moveDirection = MoveDirection.Forward;
         public int moveDistance = 1;
+        public string moveDistanceExpression;
         public int moveMaxDistance = 0;
         public Vector2Int moveOffset = Vector2Int.zero;
         public bool forceMovement = true;

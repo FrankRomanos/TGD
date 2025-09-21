@@ -136,7 +136,8 @@ namespace TGD.Editor
 
             if (condition == EffectCondition.AfterAttack ||
                 condition == EffectCondition.OnPerformAttack ||
-                condition == EffectCondition.OnPerformHeal)
+                   condition == EffectCondition.OnPerformHeal ||
+                condition == EffectCondition.LinkCancelled)
             {
                 var targetProp = elem.FindPropertyRelative("conditionTarget");
                 if (targetProp != null)

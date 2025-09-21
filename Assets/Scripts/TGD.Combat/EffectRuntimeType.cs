@@ -99,6 +99,7 @@ namespace TGD.Combat
         public bool ConditionOnCrit { get; set; }
         public bool ConditionOnCooldownEnd { get; set; }
         public bool ConditionAfterSkillUse { get; set; }
+        public bool ConditionLinkCancelled { get; set; }
         public string LastSkillUsedID { get; set; }
         public bool ConditionSkillStateActive { get; set; }
         public bool ConditionOnResourceSpend { get; set; }
@@ -164,7 +165,8 @@ namespace TGD.Combat
                 ConditionOnPerformHeal = ConditionOnPerformHeal,
                 ConditionOnCooldownEnd = ConditionOnCooldownEnd,
                 ConditionAfterSkillUse = ConditionAfterSkillUse,
-                LastSkillUsedID = LastSkillUsedID,
+                ConditionLinkCancelled = ConditionLinkCancelled,
+                LastSkillUsedID = LastSkillUsedID,           
                 ConditionSkillStateActive = ConditionSkillStateActive,
                 ConditionOnResourceSpend = ConditionOnResourceSpend,
                 ConditionOnEffectEnd = ConditionOnEffectEnd,
@@ -515,6 +517,7 @@ namespace TGD.Combat
         public MoveExecution Execution { get; set; }
         public MoveDirection Direction { get; set; }
         public int Distance { get; set; }
+        public string DistanceExpression { get; set; }
         public int MaxDistance { get; set; }
         public Vector2Int Offset { get; set; }
         public bool ForceMovement { get; set; }

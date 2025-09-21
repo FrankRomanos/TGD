@@ -27,8 +27,14 @@ namespace TGD.Editor
             }
             else
             {
-                EditorGUILayout.PropertyField(elem.FindPropertyRelative("moveDistance"),
+                var distanceExpressionProp = elem.FindPropertyRelative("moveDistanceExpression");
+                var fallbackDistanceProp = elem.FindPropertyRelative("moveDistance");
+
+                EditorGUILayout.PropertyField(distanceExpressionProp,
                     new GUIContent("Distance (tiles)"));
+                EditorGUILayout.PropertyField(fallbackDistanceProp,
+                    new GUIContent("Distance Fallback (tiles)"));
+                EditorGUILayout.HelpBox("Expressions support variables such as 'targetdistance'. Leave empty to use the fallback value.", MessageType.None);
 
                 if (direction == MoveDirection.TowardTarget)
                 {
@@ -89,15 +95,25 @@ namespace TGD.Editor
                     return $"to offset ({offset.x}, {offset.y}).";
                 case MoveDirection.TowardTarget:
                     int max = elem.FindPropertyRelative("moveMaxDistance").intValue;
-                    int dist = elem.FindPropertyRelative("moveDistance").intValue;
+                    string towardLabel = FormatDistanceLabel(elem);
                     if (max > 0)
-                        return $"toward target up to {max} tile(s) (prefers {dist}).";
-                    return $"toward target by {dist} tile(s).";
+                        return $"toward target up to {max} tile(s) (prefers {towardLabel}).";
+                    return $"toward target by {towardLabel} tile(s).";
                 case MoveDirection.AwayFromTarget:
-                    return $"away from target by {elem.FindPropertyRelative("moveDistance").intValue} tile(s).";
+                    return $"away from target by {FormatDistanceLabel(elem)} tile(s).";
                 default:
-                    return $"{direction.ToString().ToLower()} by {elem.FindPropertyRelative("moveDistance").intValue} tile(s).";
+                    return $"{direction.ToString().ToLower()} by {FormatDistanceLabel(elem)} tile(s).";
             }
+        }
+        private string FormatDistanceLabel(SerializedProperty elem)
+        {
+            var expressionProp = elem.FindPropertyRelative("moveDistanceExpression");
+            string expression = expressionProp != null ? expressionProp.stringValue : string.Empty;
+            int fallback = elem.FindPropertyRelative("moveDistance").intValue;
+            if (string.IsNullOrWhiteSpace(expression))
+                return fallback.ToString();
+
+            return $"{expression.Trim()} (~{fallback})";
         }
 
         private string SubjectToString(MoveSubject subject)

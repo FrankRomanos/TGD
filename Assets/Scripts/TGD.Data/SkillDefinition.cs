@@ -133,7 +133,7 @@ namespace TGD.Data
 
         public ActionType actionType = ActionType.None;
         public SkillTargetType targetType = SkillTargetType.None;
-
+        public int multiTargetCount = 1;
         public List<SkillCost> costs = new();
         public List<SkillUseCondition> useConditions = new();
         public int timeCostSeconds = 0;
@@ -156,6 +156,8 @@ namespace TGD.Data
                 skillDuration = new SkillDurationSettings();
             if (string.IsNullOrWhiteSpace(skillTag))
                 skillTag = "none";
+            if (multiTargetCount < 1)
+                multiTargetCount = 1;
         }
 
 

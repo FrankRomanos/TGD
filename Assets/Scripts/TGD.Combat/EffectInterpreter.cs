@@ -29,6 +29,7 @@ namespace TGD.Combat
                     ConditionOnCooldownEnd = workingContext.ConditionOnCooldownEnd,
                     ConditionAfterSkillUse = workingContext.ConditionAfterSkillUse,
                     LastSkillUsedID = workingContext.LastSkillUsedID,
+                    ConditionLinkCancelled = workingContext.ConditionLinkCancelled,
                     ConditionSkillStateActive = workingContext.ConditionSkillStateActive,
                     ConditionOnResourceSpend = workingContext.ConditionOnResourceSpend,
                     ConditionOnEffectEnd = workingContext.ConditionOnEffectEnd,
@@ -969,13 +970,16 @@ namespace TGD.Combat
 
         private static void ApplyMove(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
-            float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
+            Unit subject = ResolveMoveSubject(effect, context);
+            float probability = ResolveProbabilityValue(effect, context, subject ?? context.PrimaryTarget ?? context.Caster);
+            int resolvedDistance = ResolveMoveDistance(effect, context, subject ?? context.PrimaryTarget ?? context.Caster);
             var preview = new MovePreview
             {
                 Subject = effect.moveSubject,
                 Execution = effect.moveExecution,
                 Direction = effect.moveDirection,
-                Distance = effect.moveDistance,
+                Distance = resolvedDistance,
+                DistanceExpression = effect.moveDistanceExpression,
                 MaxDistance = effect.moveMaxDistance,
                 Offset = effect.moveOffset,
                 ForceMovement = effect.forceMovement,
@@ -989,6 +993,31 @@ namespace TGD.Combat
 
             result.Moves.Add(preview);
             result.AddLog($"Move {effect.moveSubject} via {effect.moveExecution} ({effect.moveDirection}).");
+        }
+        private static Unit ResolveMoveSubject(EffectDefinition effect, EffectContext context)
+        {
+            switch (effect.moveSubject)
+            {
+                case MoveSubject.Caster:
+                    return context.Caster;
+                case MoveSubject.PrimaryTarget:
+                    return context.PrimaryTarget;
+                case MoveSubject.SecondaryTarget:
+                    return context.SecondaryTarget;
+                default:
+                    return context.PrimaryTarget ?? context.Caster;
+            }
+        }
+
+        private static int ResolveMoveDistance(EffectDefinition effect, EffectContext context, Unit subject)
+        {
+            float fallback = effect.moveDistance;
+            string expression = effect.moveDistanceExpression;
+            float resolved = EvaluateExpression(expression, context, subject, fallback);
+            if (float.IsNaN(resolved) || float.IsInfinity(resolved))
+                resolved = fallback;
+            resolved = Mathf.Max(0f, resolved);
+            return Mathf.RoundToInt(resolved);
         }
         private static void ApplyAura(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
@@ -1761,6 +1790,8 @@ namespace TGD.Combat
                     return context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnTurnEndEnemy:
                     return context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
+                case EffectCondition.LinkCancelled:
+                    return context.ConditionLinkCancelled && MatchesConditionTarget(effect.conditionTarget, context);
                 default:
                     return true;
             }
@@ -2016,6 +2047,7 @@ namespace TGD.Combat
             if (!map.ContainsKey("dotStacks"))
                 map["dotStacks"] = context.ConditionDotStacks;
 
+            map["linkcancelled"] = context.ConditionLinkCancelled ? 1f : 0f;
 
             if (context.Caster != null)
             {
