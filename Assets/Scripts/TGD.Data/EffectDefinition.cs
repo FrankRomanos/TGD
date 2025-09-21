@@ -144,6 +144,11 @@ namespace TGD.Data
         Buff,
         Debuff
     }
+    public enum AuraRangeMode
+    {
+        Within,
+        Between
+    }
 
     [Serializable]
     public enum CompareOp
@@ -314,6 +319,7 @@ namespace TGD.Data
         public ModifierType modifierType;
         public ActionModifyType actionModifyType = ActionModifyType.None;
         public ActionType actionTypeOverride = ActionType.None;
+        public string actionFilterTag = string.Empty;
         public string valueExpression;
         public float value;            // Damage/Heal 等常规效果
         public float duration;         // 持续时间（回合）
@@ -437,11 +443,19 @@ namespace TGD.Data
         public bool moveStopAdjacentToTarget = true;
 
         // ===== Aura =====
+        public AuraRangeMode auraRangeMode = AuraRangeMode.Within;
         public float auraRadius = 0f;
+        public float auraMinRadius = 0f;
+        public float auraMaxRadius = 0f;
         public AuraEffectCategory auraCategories = AuraEffectCategory.Damage;
         public TargetType auraTarget = TargetType.Allies;
         public bool auraAffectsImmune = false;
         public int auraDuration = 0;
+        public EffectCondition auraOnEnter = EffectCondition.None;
+        public EffectCondition auraOnExit = EffectCondition.None;
+        public int auraHeartSeconds = 6;
+        [SerializeReference]
+        public List<EffectDefinition> auraAdditionalEffects = new();
 
         // ===== Modify Defence =====
         public DefenceModificationMode defenceMode = DefenceModificationMode.Shield;

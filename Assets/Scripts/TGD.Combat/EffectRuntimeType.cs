@@ -442,6 +442,7 @@ namespace TGD.Combat
     {
         public string TargetSkillID { get; set; }
         public ActionType ActionFilter { get; set; }
+        public string TargetTag { get; set; }
         public ActionModifyType ModifyType { get; set; }
         public ModifierType ModifierType { get; set; }
         public string ValueExpression { get; set; }
@@ -520,13 +521,20 @@ namespace TGD.Combat
     public class AuraPreview
     {
         public TargetType Source { get; set; }
+        public AuraRangeMode RangeMode { get; set; }
         public float Radius { get; set; }
+        public float MinRadius { get; set; }
+        public float MaxRadius { get; set; }
         public AuraEffectCategory Category { get; set; }
         public TargetType AffectedTargets { get; set; }
         public bool AffectsImmune { get; set; }
         public int Duration { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public EffectCondition OnEnterCondition { get; set; }
+        public EffectCondition OnExitCondition { get; set; }
+        public int HeartbeatSeconds { get; set; }
+        public EffectInterpretationResult AdditionalEffects { get; set; }
     }
     public class RandomOutcomeOptionPreview
     {

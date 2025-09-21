@@ -127,6 +127,7 @@ namespace TGD.Data
         public string variantKey;
         public string chainNextID;
         public bool resetOnTurnEnd;
+        public string skillTag = "none";
 
         public SkillType skillType = SkillType.Active;
 
@@ -153,6 +154,8 @@ namespace TGD.Data
         {
             if (skillDuration == null)
                 skillDuration = new SkillDurationSettings();
+            if (string.IsNullOrWhiteSpace(skillTag))
+                skillTag = "none";
         }
 
 

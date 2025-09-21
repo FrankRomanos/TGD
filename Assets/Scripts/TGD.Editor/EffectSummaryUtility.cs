@@ -135,9 +135,20 @@ namespace TGD.Editor
         {
             var sb = CreateHeader("Aura", GetTargetLabel(effectProp));
 
-            float radius = effectProp.FindPropertyRelative("auraRadius")?.floatValue ?? 0f;
-            string radiusLabel = radius.ToString("0.##", CultureInfo.InvariantCulture);
-            AddBullet(sb, $"Radius: {radiusLabel}");
+            string rangeMode = GetEnumName(effectProp.FindPropertyRelative("auraRangeMode"), AuraRangeMode.Within);
+            if (Enum.TryParse(rangeMode, out AuraRangeMode parsedMode) && parsedMode == AuraRangeMode.Between)
+            {
+                float min = effectProp.FindPropertyRelative("auraMinRadius")?.floatValue ?? 0f;
+                float max = effectProp.FindPropertyRelative("auraMaxRadius")?.floatValue ?? 0f;
+                if (max <= 0f)
+                    max = effectProp.FindPropertyRelative("auraRadius")?.floatValue ?? 0f;
+                AddBullet(sb, $"Range: Between {min.ToString("0.##", CultureInfo.InvariantCulture)} - {max.ToString("0.##", CultureInfo.InvariantCulture)}");
+            }
+            else
+            {
+                float radius = effectProp.FindPropertyRelative("auraRadius")?.floatValue ?? 0f;
+                AddBullet(sb, $"Range: Within {radius.ToString("0.##", CultureInfo.InvariantCulture)}");
+            }
 
             string category = GetEnumName(effectProp.FindPropertyRelative("auraCategories"), AuraEffectCategory.Damage);
             AddBullet(sb, $"Category: {category}");
@@ -150,6 +161,21 @@ namespace TGD.Editor
 
             int auraDuration = effectProp.FindPropertyRelative("auraDuration")?.intValue ?? 0;
             AddBullet(sb, auraDuration > 0 ? $"Aura duration: {auraDuration} turn(s)" : "Aura duration: Unlimited");
+            int heartbeat = effectProp.FindPropertyRelative("auraHeartSeconds")?.intValue ?? 0;
+            if (heartbeat > 0)
+                AddBullet(sb, $"Heartbeat: {heartbeat}s");
+
+            string onEnter = GetEnumName(effectProp.FindPropertyRelative("auraOnEnter"), EffectCondition.None);
+            if (!string.Equals(onEnter, EffectCondition.None.ToString(), StringComparison.Ordinal))
+                AddBullet(sb, $"On enter: {onEnter}");
+
+            string onExit = GetEnumName(effectProp.FindPropertyRelative("auraOnExit"), EffectCondition.None);
+            if (!string.Equals(onExit, EffectCondition.None.ToString(), StringComparison.Ordinal))
+                AddBullet(sb, $"On exit: {onExit}");
+
+            var extras = effectProp.FindPropertyRelative("auraAdditionalEffects");
+            if (extras != null && extras.isArray && extras.arraySize > 0)
+                AddBullet(sb, $"Additional effects: {extras.arraySize}");
 
             AddBullet(sb, DescribeProbability(effectProp, owningSkill));
             AddBullet(sb, DescribeCondition(effectProp));
@@ -525,6 +551,11 @@ namespace TGD.Editor
             string actionFilter = DescribeActionFilter(effectProp.FindPropertyRelative("targetActionType"));
             if (!string.IsNullOrEmpty(actionFilter))
                 AddBullet(sb, $"Filter: {actionFilter}");
+
+            string tagFilter = FormatSimpleString(effectProp.FindPropertyRelative("actionFilterTag"));
+            if (!string.IsNullOrEmpty(tagFilter) && !string.Equals(tagFilter, "none", StringComparison.OrdinalIgnoreCase))
+                AddBullet(sb, $"Tag filter: {tagFilter}");
+
 
             var modifyTypeProp = effectProp.FindPropertyRelative("actionModifyType");
             ActionModifyType modifyType = modifyTypeProp != null

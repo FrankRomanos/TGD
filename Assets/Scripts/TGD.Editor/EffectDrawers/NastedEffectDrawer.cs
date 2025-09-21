@@ -103,17 +103,24 @@ namespace TGD.Editor
             SetEnumValue(effectProp.FindPropertyRelative("target"), TargetType.Self);
             SetEnumValue(effectProp.FindPropertyRelative("attributeType"), AttributeType.Attack);
             SetEnumValue(effectProp.FindPropertyRelative("damageSchool"), DamageSchool.Physical);
+            SetEnumValue(effectProp.FindPropertyRelative("auraRangeMode"), AuraRangeMode.Within);
+            SetEnumValue(effectProp.FindPropertyRelative("auraOnEnter"), EffectCondition.None);
+            SetEnumValue(effectProp.FindPropertyRelative("auraOnExit"), EffectCondition.None);
             SetString(effectProp.FindPropertyRelative("valueExpression"), string.Empty);
             SetString(effectProp.FindPropertyRelative("probability"), string.Empty);
             SetString(effectProp.FindPropertyRelative("statusSkillID"), string.Empty);
             SetString(effectProp.FindPropertyRelative("targetSkillID"), string.Empty);
+            SetString(effectProp.FindPropertyRelative("actionFilterTag"), string.Empty);
             SetString(effectProp.FindPropertyRelative("repeatCountExpression"), string.Empty);
             SetInt(effectProp.FindPropertyRelative("stackCount"), 1);
             SetFloat(effectProp.FindPropertyRelative("value"), 0f);
             SetFloat(effectProp.FindPropertyRelative("duration"), 0f);
+            SetFloat(effectProp.FindPropertyRelative("auraMinRadius"), 0f);
+            SetFloat(effectProp.FindPropertyRelative("auraMaxRadius"), 0f);
             SetInt(effectProp.FindPropertyRelative("repeatCount"), 1);
             SetInt(effectProp.FindPropertyRelative("repeatMaxCount"), 0);
             SetInt(effectProp.FindPropertyRelative("dotHotBaseTriggerCount"), 0);
+            SetInt(effectProp.FindPropertyRelative("auraHeartSeconds"), 6);
 
             SetBool(effectProp.FindPropertyRelative("perLevel"), false);
             SetBool(effectProp.FindPropertyRelative("perLevelDuration"), true);
@@ -123,6 +130,7 @@ namespace TGD.Editor
             ClearArray(effectProp.FindPropertyRelative("onSuccess"));
             ClearArray(effectProp.FindPropertyRelative("repeatEffects"));
             ClearArray(effectProp.FindPropertyRelative("dotHotAdditionalEffects"));
+            ClearArray(effectProp.FindPropertyRelative("auraAdditionalEffects"));
             ClearArray(effectProp.FindPropertyRelative("randomOutcomes"));
         }
 

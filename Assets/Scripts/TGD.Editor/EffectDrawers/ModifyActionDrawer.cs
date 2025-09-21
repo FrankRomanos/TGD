@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 using TGD.Data;
@@ -26,6 +27,10 @@ namespace TGD.Editor
             var targetActionProp = elem.FindPropertyRelative("targetActionType");
             if (targetActionProp != null)
                 EditorGUILayout.PropertyField(targetActionProp, new GUIContent("Action Filter"));
+
+            var tagFilterProp = elem.FindPropertyRelative("actionFilterTag");
+            if (tagFilterProp != null)
+                EditorGUILayout.PropertyField(tagFilterProp, new GUIContent("Skill Tag Filter"));
 
             var modifyTypeProp = elem.FindPropertyRelative("actionModifyType");
             EditorGUILayout.PropertyField(modifyTypeProp, new GUIContent("Modify Type"));
@@ -133,10 +138,12 @@ namespace TGD.Editor
                 ? (ActionType)actionFilterProp.enumValueIndex
                 : ActionType.None;
 
+            string tagFilter = NormalizeTag(elem.FindPropertyRelative("actionFilterTag")?.stringValue);
+
             switch (type)
             {
                 case ActionModifyType.Damage:
-                    EditorGUILayout.HelpBox(BuildDamageSummary(elem, actionFilter, skillLabel), MessageType.None);
+                    EditorGUILayout.HelpBox(BuildDamageSummary(elem, actionFilter, skillLabel, tagFilter), MessageType.None);
                     break;
                 case ActionModifyType.ActionType:
                     var overrideProp = elem.FindPropertyRelative("actionTypeOverride");
@@ -144,36 +151,65 @@ namespace TGD.Editor
                         ? (ActionType)overrideProp.enumValueIndex
                         : ActionType.None;
 
-                    string actionText = DescribeActionFilter(actionFilter);
-                    string targetText = string.IsNullOrEmpty(actionText) ? skillLabel : $"{skillLabel} {actionText}";
+                    string targetText = BuildTargetDescription(skillLabel, actionFilter, tagFilter);
                     EditorGUILayout.HelpBox($"Convert {targetText} into {DescribeActionFilter(newType, fallback: "the same type")}.", MessageType.None);
                     break;
             }
         }
 
-        private string BuildDamageSummary(SerializedProperty elem, ActionType actionFilter, string skillLabel)
+        private string BuildDamageSummary(SerializedProperty elem, ActionType actionFilter, string skillLabel, string tagFilter)
         {
+            string target = BuildTargetDescription(skillLabel, actionFilter, tagFilter);
             var perLevelProp = elem.FindPropertyRelative("perLevel");
             if (perLevelProp != null && perLevelProp.boolValue)
-                return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} using per-level expressions.";
+                return $"Adjust {target} using per-level expressions.";
 
             var valueProp = FieldVisibilityUI.GetProp(elem, "valueExpression", "value");
             if (valueProp == null)
-                return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} (value not set).";
+                return $"Adjust {target} (value not set).";
 
             switch (valueProp.propertyType)
             {
                 case SerializedPropertyType.String:
                     return string.IsNullOrWhiteSpace(valueProp.stringValue)
-                        ? $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} (value not set)."
-                        : $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by '{valueProp.stringValue}'.";
+                          ? $"Adjust {target} (value not set)."
+                        : $"Adjust {target} by '{valueProp.stringValue}'.";
                 case SerializedPropertyType.Float:
-                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by {valueProp.floatValue:0.###}.";
+                    return $"Adjust {target} by {valueProp.floatValue:0.###}.";
                 case SerializedPropertyType.Integer:
-                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)} by {valueProp.intValue}.";
+                    return $"Adjust {target} by {valueProp.intValue}.";
                 default:
-                    return $"Adjust {skillLabel} {DescribeActionFilter(actionFilter)}.";
+                    return $"Adjust {target}.";
             }
+        }
+
+        private string BuildTargetDescription(string skillLabel, ActionType actionFilter, string tagFilter)
+        {
+            tagFilter = NormalizeTag(tagFilter);
+            string actionText = DescribeActionFilter(actionFilter, fallback: string.Empty);
+            if (!string.IsNullOrWhiteSpace(tagFilter))
+            {
+                if (string.IsNullOrEmpty(actionText))
+                    actionText = $"actions tagged '{tagFilter}'";
+                else
+                    actionText = $"{actionText} tagged '{tagFilter}'";
+            }
+            else if (string.IsNullOrEmpty(actionText))
+            {
+                actionText = "all actions";
+            }
+
+            return string.IsNullOrEmpty(actionText)
+                ? skillLabel
+                : $"{skillLabel} {actionText}";
+        }
+
+        private string NormalizeTag(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+            string trimmed = value.Trim();
+            return string.Equals(trimmed, "none", StringComparison.OrdinalIgnoreCase) ? string.Empty : trimmed;
         }
         private string DescribeActionFilter(ActionType actionFilter, string fallback = "all actions")
         {

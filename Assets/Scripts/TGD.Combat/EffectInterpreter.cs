@@ -370,7 +370,7 @@ namespace TGD.Combat
                     ApplyDotHotModifier(effect, context, result, visited);
                     break;
                 case EffectType.Aura:
-                    ApplyAura(effect, context, result);
+                    ApplyAura(effect, context, result, visited);
                     break;
                 case EffectType.ModifyDefence:
                     ApplyModifyDefence(effect, context, result);
@@ -986,29 +986,89 @@ namespace TGD.Combat
             result.Moves.Add(preview);
             result.AddLog($"Move {effect.moveSubject} via {effect.moveExecution} ({effect.moveDirection}).");
         }
-        private static void ApplyAura(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        private static void ApplyAura(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
             float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
             int duration = effect.auraDuration;
+            float rangeMin;
+            float rangeMax;
+            string rangeLabel;
+            if (effect.auraRangeMode == AuraRangeMode.Between)
+            {
+                rangeMin = effect.auraMinRadius;
+                rangeMax = effect.auraMaxRadius > 0f ? effect.auraMaxRadius : effect.auraRadius;
+                rangeMin = Mathf.Max(0f, rangeMin);
+                rangeMax = Mathf.Max(rangeMax, rangeMin);
+                if (rangeMax < rangeMin)
+                {
+                    float temp = rangeMin;
+                    rangeMin = rangeMax;
+                    rangeMax = temp;
+                }
+                rangeLabel = $"range {rangeMin:0.##}-{rangeMax:0.##}";
+            }
+            else
+            {
+                rangeMin = 0f;
+                rangeMax = effect.auraRadius > 0f ? effect.auraRadius : Mathf.Max(effect.auraMaxRadius, 0f);
+                rangeMax = Mathf.Max(rangeMax, rangeMin);
+                if (rangeMax < rangeMin)
+                    rangeMax = rangeMin;
+                rangeLabel = $"radius {rangeMax:0.##}";
+            }
 
             var preview = new AuraPreview
             {
                 Source = effect.target,
+                RangeMode = effect.auraRangeMode,
                 Radius = effect.auraRadius,
+                MinRadius = rangeMin,
+                MaxRadius = rangeMax,
                 Category = effect.auraCategories,
                 AffectedTargets = effect.auraTarget,
                 AffectsImmune = effect.auraAffectsImmune,
                 Duration = duration,
                 Probability = probability,
-                Condition = effect.condition
+                Condition = effect.condition,
+                OnEnterCondition = effect.auraOnEnter,
+                OnExitCondition = effect.auraOnExit,
+                HeartbeatSeconds = effect.auraHeartSeconds
             };
+
+            if (effect.auraAdditionalEffects != null && effect.auraAdditionalEffects.Count > 0)
+            {
+                var additional = new EffectInterpretationResult();
+                foreach (var nested in effect.auraAdditionalEffects)
+                {
+                    if (nested == null)
+                        continue;
+                    InterpretEffect(nested, context, additional, visited);
+                }
+
+                preview.AdditionalEffects = additional;
+                result.Append(additional);
+            }
             result.Auras.Add(preview);
 
             string sourceLabel = effect.target.ToString();
             string targetLabel = effect.auraTarget.ToString();
             string immuneLabel = effect.auraAffectsImmune ? "affects immune" : "ignores immune";
             string durationLabel = duration > 0 ? $"{duration} turn(s)" : "unlimited duration";
-            result.AddLog($"Aura ({effect.auraCategories}) radius {effect.auraRadius:0.##} from {sourceLabel} affects {targetLabel} ({immuneLabel}, {durationLabel}) ({probability:0.##}% chance).");
+            var extraDetails = new List<string>();
+            if (effect.auraHeartSeconds > 0)
+                extraDetails.Add($"heartbeat {effect.auraHeartSeconds}s");
+            if (effect.auraOnEnter != EffectCondition.None)
+                extraDetails.Add($"on enter: {effect.auraOnEnter}");
+            if (effect.auraOnExit != EffectCondition.None)
+                extraDetails.Add($"on exit: {effect.auraOnExit}");
+            if (effect.auraAdditionalEffects != null && effect.auraAdditionalEffects.Count > 0)
+                extraDetails.Add($"additional effects: {effect.auraAdditionalEffects.Count}");
+
+            string detailSuffix = extraDetails.Count > 0
+                ? $" [{string.Join(", ", extraDetails)}]"
+                : string.Empty;
+
+            result.AddLog($"Aura ({effect.auraCategories}) {rangeLabel} from {sourceLabel} affects {targetLabel} ({immuneLabel}, {durationLabel}){detailSuffix} ({probability:0.##}% chance).");
         }
         private static void ApplyModifyDefence(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
@@ -1163,6 +1223,11 @@ namespace TGD.Combat
         private static void ApplyModifyAction(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
         {
             string targetSkill = GetSkillIdOrSelf(effect, context);
+            string tagFilter = string.IsNullOrWhiteSpace(effect.actionFilterTag)
+               ? string.Empty
+               : effect.actionFilterTag.Trim();
+            if (string.Equals(tagFilter, "none", StringComparison.OrdinalIgnoreCase))
+                tagFilter = string.Empty;
             float probability = ResolveProbabilityValue(effect, context, context.Caster);
             var preview = new ActionModificationPreview
             {
@@ -1171,12 +1236,40 @@ namespace TGD.Combat
                 ModifyType = effect.actionModifyType,
                 ModifierType = effect.modifierType,
                 ValueExpression = ResolveValueExpression(effect, context),
+                TargetTag = tagFilter,
                 ActionTypeOverride = effect.actionTypeOverride,
                 Probability = probability,
                 Condition = effect.condition
             };
             result.ActionModifications.Add(preview);
-            result.AddLog($"Modify actions on '{targetSkill}' ({effect.actionModifyType}).");
+
+            string filterLabel = effect.targetActionType == ActionType.None
+                ? "all actions"
+                : $"{effect.targetActionType.ToString().ToLowerInvariant()} actions";
+            if (!string.IsNullOrWhiteSpace(tagFilter))
+                filterLabel += $" tagged '{tagFilter}'";
+
+            string scope;
+            if (!string.IsNullOrWhiteSpace(targetSkill))
+            {
+                scope = $"skill '{targetSkill}'";
+                if (!string.IsNullOrWhiteSpace(tagFilter))
+                    scope += $" with tag '{tagFilter}'";
+            }
+            else if (!string.IsNullOrWhiteSpace(tagFilter))
+            {
+                scope = $"skills tagged '{tagFilter}'";
+            }
+            else if (!string.IsNullOrWhiteSpace(context.Skill?.skillID))
+            {
+                scope = $"skill '{context.Skill.skillID}'";
+            }
+            else
+            {
+                scope = "owning skill";
+            }
+
+            result.AddLog($"Modify {filterLabel} on {scope} ({effect.actionModifyType}).");
         }
 
         private static void ApplyModifyDamageSchool(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
