@@ -13,7 +13,10 @@ namespace TGD.Editor
         private SerializedProperty skillColorProp;
         private SerializedProperty skillLevelProp;
         private SerializedProperty skillDurationProp;
+        private SerializedProperty statusMetadataProp;
 
+        private bool showStatusMetadataFoldout = true;
+        private bool showStatusAccumulatorFoldout = true;
 
         private static readonly SkillColor[] kLeveledColors = new[]
         {
@@ -31,6 +34,7 @@ namespace TGD.Editor
             skillColorProp = serializedObject.FindProperty("skillColor");
             skillLevelProp = serializedObject.FindProperty("skillLevel");
             skillDurationProp = serializedObject.FindProperty("skillDuration");
+            statusMetadataProp = serializedObject.FindProperty("statusMetadata");
         }
 
         public override void OnInspectorGUI()
@@ -174,6 +178,11 @@ namespace TGD.Editor
 
             EditorGUILayout.PropertyField(serializedObject.FindProperty("namekey"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("descriptionKey"));
+            if (skillType == SkillType.State)
+            {
+                DrawStatusMetadataSection();
+            }
+
 
             // Costs
             EditorGUILayout.Space();
@@ -341,7 +350,101 @@ namespace TGD.Editor
 
             serializedObject.ApplyModifiedProperties();
         }
+        private void DrawStatusMetadataSection()
+        {
+            EditorGUILayout.Space();
+            if (statusMetadataProp == null)
+            {
+                EditorGUILayout.HelpBox("'statusMetadata' property not found on SkillDefinition.", MessageType.Warning);
+                return;
+            }
 
+            showStatusMetadataFoldout = EditorGUILayout.Foldout(showStatusMetadataFoldout, "Status Metadata", true);
+            if (!showStatusMetadataFoldout)
+                return;
+
+            EditorGUI.indentLevel++;
+            var accumulatorProp = statusMetadataProp.FindPropertyRelative("accumulatorSettings");
+            DrawStatusAccumulatorSettings(accumulatorProp);
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawStatusAccumulatorSettings(SerializedProperty accumulatorProp)
+        {
+            if (accumulatorProp == null)
+            {
+                EditorGUILayout.HelpBox("'accumulatorSettings' property not found on status metadata.", MessageType.Warning);
+                return;
+            }
+
+            showStatusAccumulatorFoldout = EditorGUILayout.Foldout(showStatusAccumulatorFoldout, "Status Accumulator Settings", true);
+            if (!showStatusAccumulatorFoldout)
+                return;
+
+            EditorGUI.indentLevel++;
+            var enabledProp = accumulatorProp.FindPropertyRelative("enabled");
+            if (enabledProp == null)
+            {
+                EditorGUILayout.HelpBox("'enabled' property not found on status accumulator settings.", MessageType.Warning);
+                EditorGUI.indentLevel--;
+                return;
+            }
+
+            EditorGUILayout.PropertyField(enabledProp, new GUIContent("Enabled"));
+            if (enabledProp.boolValue)
+            {
+                EditorGUI.indentLevel++;
+                var sourceProp = accumulatorProp.FindPropertyRelative("source");
+                StatusAccumulatorSource sourceValue = StatusAccumulatorSource.DamageTaken;
+                if (sourceProp != null)
+                {
+                    EditorGUILayout.PropertyField(sourceProp, new GUIContent("Source"));
+                    sourceValue = (StatusAccumulatorSource)sourceProp.enumValueIndex;
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("'source' property not found on status accumulator settings.", MessageType.Warning);
+                }
+
+                var fromProp = accumulatorProp.FindPropertyRelative("from");
+                if (fromProp != null)
+                    EditorGUILayout.PropertyField(fromProp, new GUIContent("From"));
+                else
+                    EditorGUILayout.HelpBox("'from' property not found on status accumulator settings.", MessageType.Warning);
+
+                var amountProp = accumulatorProp.FindPropertyRelative("amount");
+                if (amountProp != null)
+                    EditorGUILayout.PropertyField(amountProp, new GUIContent("Amount"));
+                else
+                    EditorGUILayout.HelpBox("'amount' property not found on status accumulator settings.", MessageType.Warning);
+
+                var includeProp = accumulatorProp.FindPropertyRelative("includeDotHot");
+                if (includeProp != null)
+                    EditorGUILayout.PropertyField(includeProp, new GUIContent("Include DoT/HoT"));
+                else
+                    EditorGUILayout.HelpBox("'includeDotHot' property not found on status accumulator settings.", MessageType.Warning);
+
+                if (sourceValue == StatusAccumulatorSource.DamageTaken)
+                {
+                    var schoolProp = accumulatorProp.FindPropertyRelative("damageSchool");
+                    if (schoolProp != null)
+                        EditorGUILayout.PropertyField(schoolProp, new GUIContent("Damage School"));
+                    else
+                        EditorGUILayout.HelpBox("'damageSchool' property not found on status accumulator settings.", MessageType.Warning);
+                }
+
+                string variableKey = StatusAccumulatorSettings.GetVariableKey(sourceValue);
+                EditorGUILayout.HelpBox($"Accumulated value is stored in custom variable '{variableKey}'.", MessageType.Info);
+
+                EditorGUI.indentLevel--;
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Accumulator disabled. No values will be tracked for this status.", MessageType.None);
+            }
+
+            EditorGUI.indentLevel--;
+        }
         private static bool DrawUseConditionClause(SerializedProperty condElem, bool secondary, SerializedProperty list = null, int index = -1)
         {
             string typePropName = secondary ? "secondConditionType" : "conditionType";

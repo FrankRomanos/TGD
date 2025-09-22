@@ -720,9 +720,17 @@ namespace TGD.Combat
                 Condition = effect.condition
             };
 
-            if (isInstant && !string.IsNullOrWhiteSpace(statusSkillId) && context.SkillResolver != null)
+            SkillDefinition statusSkill = null;
+            if (!string.IsNullOrWhiteSpace(statusSkillId) && context.SkillResolver != null)
             {
-                var statusSkill = context.SkillResolver.FindSkill(statusSkillId);
+                statusSkill = context.SkillResolver.FindSkill(statusSkillId);
+                var accumulatorPreview = BuildStatusAccumulatorPreview(statusSkill);
+                if (accumulatorPreview != null)
+                    preview.Accumulator = accumulatorPreview;
+            }
+
+            if (isInstant)
+            {
                 if (statusSkill != null)
                 {
                     var childContext = context.CloneForSkill(statusSkill, inheritSkillLevelOverride: false);
@@ -736,6 +744,12 @@ namespace TGD.Combat
             }
 
             result.StatusApplications.Add(preview);
+            if (preview.Accumulator != null)
+            {
+                string accumulatorLog = BuildStatusAccumulatorLog(statusSkillId, preview.Accumulator);
+                if (!string.IsNullOrEmpty(accumulatorLog))
+                    result.AddLog(accumulatorLog);
+            }
             string action = isInstant ? "Trigger" : "Apply";
 
             string stackLabel = stacks > 0 ? $"{stacks} stack(s)" : "(no stacks)";
@@ -752,6 +766,67 @@ namespace TGD.Combat
 
             string durationSuffix = string.IsNullOrEmpty(durationLabel) ? string.Empty : $" {durationLabel}";
             result.AddLog($"{action} status '{statusSkillId}' ({stackLabel}){durationSuffix} ({probability:0.##}% chance).");
+        }
+        private static StatusAccumulatorPreview BuildStatusAccumulatorPreview(SkillDefinition statusSkill)
+        {
+            if (statusSkill?.statusMetadata == null)
+                return null;
+
+            var settings = statusSkill.statusMetadata.accumulatorSettings;
+            if (settings == null || !settings.enabled)
+                return null;
+
+            var preview = new StatusAccumulatorPreview
+            {
+                Source = settings.source,
+                From = settings.from,
+                Amount = settings.amount,
+                IncludeDotHot = settings.includeDotHot,
+                VariableKey = settings.GetVariableKey()
+            };
+
+            if (settings.source == StatusAccumulatorSource.DamageTaken)
+                preview.DamageSchool = settings.damageSchool;
+
+            return preview;
+        }
+
+        private static string BuildStatusAccumulatorLog(string statusSkillId, StatusAccumulatorPreview accumulator)
+        {
+            if (accumulator == null)
+                return string.Empty;
+
+            string statusLabel = string.IsNullOrWhiteSpace(statusSkillId)
+                ? "(unknown status)"
+                : $"'{statusSkillId}'";
+
+            string sourceLabel = accumulator.Source switch
+            {
+                StatusAccumulatorSource.DamageTaken => "damage taken",
+                StatusAccumulatorSource.HealingTaken => "healing received",
+                _ => accumulator.Source.ToString()
+            };
+
+            string fromLabel = accumulator.From switch
+            {
+                StatusAccumulatorContributor.CasterOnly => "from the caster only",
+                StatusAccumulatorContributor.Allies => "from allies",
+                StatusAccumulatorContributor.Any => "from any source",
+                _ => accumulator.From.ToString()
+            };
+
+            string dotLabel = accumulator.IncludeDotHot ? "including DoT/HoT" : "excluding DoT/HoT";
+            string amountLabel = accumulator.Amount switch
+            {
+                StatusAccumulatorAmount.PostMitigation => "post-mitigation values",
+                _ => accumulator.Amount.ToString()
+            };
+
+            string schoolLabel = accumulator.Source == StatusAccumulatorSource.DamageTaken && accumulator.DamageSchool.HasValue
+                ? $" ({accumulator.DamageSchool.Value} only)"
+                : string.Empty;
+
+            return $"Status {statusLabel} accumulates {sourceLabel}{schoolLabel} {fromLabel}, {dotLabel} ({amountLabel}) into '{accumulator.VariableKey}'.";
         }
         private static List<string> GatherStatusSkillIds(EffectDefinition effect, IReadOnlyList<string> explicitSkillIds)
         {
