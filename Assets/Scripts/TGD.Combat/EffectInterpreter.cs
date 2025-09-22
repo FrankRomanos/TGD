@@ -216,26 +216,26 @@ namespace TGD.Combat
             switch (clause.ConditionType)
             {
                 case SkillCostConditionType.Resource:
-                {
-                    var referenceUnit = ResolveConditionTarget(clause.Target, context);
-                    float compareValue = EvaluateConditionCompareValue(clause.CompareExpression, clause.CompareValue, context, referenceUnit);
-                    clause.CompareValue = compareValue;
-                    float maxValue;
-                    clause.CurrentValue = ResolveConditionResourceValue(clause.Resource, context, referenceUnit, out maxValue);
-                    clause.MaxValue = maxValue;
-                    clause.Succeeded = EvaluateComparison(clause.CurrentValue, compareValue, clause.Comparison);
-                    break;
-                }
+                    {
+                        var referenceUnit = ResolveConditionTarget(clause.Target, context);
+                        float compareValue = EvaluateConditionCompareValue(clause.CompareExpression, clause.CompareValue, context, referenceUnit);
+                        clause.CompareValue = compareValue;
+                        float maxValue;
+                        clause.CurrentValue = ResolveConditionResourceValue(clause.Resource, context, referenceUnit, out maxValue);
+                        clause.MaxValue = maxValue;
+                        clause.Succeeded = EvaluateComparison(clause.CurrentValue, compareValue, clause.Comparison);
+                        break;
+                    }
                 case SkillCostConditionType.Distance:
-                {
-                    clause.Distance = context?.GetDistance(clause.Target) ?? 0f;
-                    clause.PathBlocked = clause.RequireLineOfSight && (context?.IsPathBlocked(clause.Target) ?? false);
-                    bool meetsMin = clause.Distance >= clause.MinDistance;
-                    bool meetsMax = clause.MaxDistance <= 0 || clause.Distance <= clause.MaxDistance;
-                    bool meetsPath = !clause.RequireLineOfSight || !clause.PathBlocked;
-                    clause.Succeeded = meetsMin && meetsMax && meetsPath;
-                    break;
-                }
+                    {
+                        clause.Distance = context?.GetDistance(clause.Target) ?? 0f;
+                        clause.PathBlocked = clause.RequireLineOfSight && (context?.IsPathBlocked(clause.Target) ?? false);
+                        bool meetsMin = clause.Distance >= clause.MinDistance;
+                        bool meetsMax = clause.MaxDistance <= 0 || clause.Distance <= clause.MaxDistance;
+                        bool meetsPath = !clause.RequireLineOfSight || !clause.PathBlocked;
+                        clause.Succeeded = meetsMin && meetsMax && meetsPath;
+                        break;
+                    }
                 case SkillCostConditionType.PerformHeal:
                     clause.Succeeded = context?.ConditionOnPerformHeal ?? false;
                     break;
@@ -243,14 +243,14 @@ namespace TGD.Combat
                     clause.Succeeded = context?.ConditionOnPerformAttack ?? false;
                     break;
                 case SkillCostConditionType.SkillStateActive:
-                {
-                    int stacks = ResolveSkillStateStacks(context, clause.SkillID);
-                    clause.SkillStateStacks = stacks;
-                    clause.CurrentValue = stacks;
-                    clause.MaxValue = stacks;
-                    clause.Succeeded = stacks > 0;
-                    break;
-                }
+                    {
+                        int stacks = ResolveSkillStateStacks(context, clause.SkillID);
+                        clause.SkillStateStacks = stacks;
+                        clause.CurrentValue = stacks;
+                        clause.MaxValue = stacks;
+                        clause.Succeeded = stacks > 0;
+                        break;
+                    }
             }
 
             return clause;
@@ -281,40 +281,37 @@ namespace TGD.Combat
             switch (clause.ConditionType)
             {
                 case SkillCostConditionType.Resource:
-                {
-                    string valueLabel = !string.IsNullOrWhiteSpace(clause.CompareExpression)
-                        ? clause.CompareExpression
-                        : clause.CompareValue.ToString("0.##", CultureInfo.InvariantCulture);
-                    return $"[Resource] ({clause.Resource}) on {DescribeConditionTarget(clause.Target)} {clause.Comparison} {valueLabel}. Current {clause.CurrentValue:0.##} / Max {clause.MaxValue:0.##} => {(clause.Succeeded ? "met" : "failed")}";
-                }
+                    {
+                        string valueLabel = !string.IsNullOrWhiteSpace(clause.CompareExpression)
+                            ? clause.CompareExpression
+                            : clause.CompareValue.ToString("0.##", CultureInfo.InvariantCulture);
+                        return $"[Resource] ({clause.Resource}) on {DescribeConditionTarget(clause.Target)} {clause.Comparison} {valueLabel}. Current {clause.CurrentValue:0.##} / Max {clause.MaxValue:0.##} => {(clause.Succeeded ? "met" : "failed")}";
+                    }
                 case SkillCostConditionType.Distance:
-                {
-                    string maxLabel = clause.MaxDistance > 0 ? clause.MaxDistance.ToString(CultureInfo.InvariantCulture) : "inf";
-                    string losLabel = clause.RequireLineOfSight ? (clause.PathBlocked ? "blocked" : "clear") : "ignored";
-                    return $"[Distance] to {DescribeConditionTarget(clause.Target)}: {clause.Distance:0.##} (min {clause.MinDistance}, max {maxLabel}, path {losLabel}) => {(clause.Succeeded ? "met" : "failed")}";
-                }
+                    {
+                        string maxLabel = clause.MaxDistance > 0 ? clause.MaxDistance.ToString(CultureInfo.InvariantCulture) : "inf";
+                        string losLabel = clause.RequireLineOfSight ? (clause.PathBlocked ? "blocked" : "clear") : "ignored";
+                        return $"[Distance] to {DescribeConditionTarget(clause.Target)}: {clause.Distance:0.##} (min {clause.MinDistance}, max {maxLabel}, path {losLabel}) => {(clause.Succeeded ? "met" : "failed")}";
+                    }
                 case SkillCostConditionType.PerformHeal:
                     return $"[Perform Heal] on {DescribeConditionTarget(clause.Target)} => {(clause.Succeeded ? "met" : "failed")}";
                 case SkillCostConditionType.PerformAttack:
                     return $"[Perform Attack] on {DescribeConditionTarget(clause.Target)} => {(clause.Succeeded ? "met" : "failed")}";
                 case SkillCostConditionType.SkillStateActive:
-                {
-                    string skillLabel = string.IsNullOrWhiteSpace(clause.SkillID)
-                        ? "any state"
-                        : $"state '{clause.SkillID}'";
-                    string stackInfo = clause.SkillStateStacks > 0 ? $" (stacks {clause.SkillStateStacks})" : string.Empty;
-                    return $"[Skill State Active] {skillLabel} on {DescribeConditionTarget(clause.Target)}{stackInfo} => {(clause.Succeeded ? "met" : "failed")}";
-                }
+                    {
+                        string skillLabel = string.IsNullOrWhiteSpace(clause.SkillID)
+                            ? "any state"
+                            : $"state '{clause.SkillID}'";
+                        string stackInfo = clause.SkillStateStacks > 0 ? $" (stacks {clause.SkillStateStacks})" : string.Empty;
+                        return $"[Skill State Active] {skillLabel} on {DescribeConditionTarget(clause.Target)}{stackInfo} => {(clause.Succeeded ? "met" : "failed")}";
+                    }
                 default:
                     return "[Condition] => failed";
             }
         }
-                
 
-        private static float EvaluateConditionCompareValue(string expression, float fallback, EffectContext context, Unit referenceUnit)
+        private static Unit ResolveConditionTarget(ConditionTarget target, EffectContext context)
         {
-<<<<<<< HEAD
-=======
             return target switch
             {
                 ConditionTarget.Caster => context?.Caster,
@@ -327,7 +324,6 @@ namespace TGD.Combat
 
         private static float EvaluateConditionCompareValue(string expression, float fallback, EffectContext context, Unit referenceUnit)
         {
->>>>>>> origin/codex/update-use-condition-logic-for-skills-pa77t0
             if (!string.IsNullOrWhiteSpace(expression))
                 return EvaluateExpression(expression, context, referenceUnit, fallback);
 
@@ -416,7 +412,7 @@ namespace TGD.Combat
                 return;
             }
             int effectTypeValue = (int)effect.effectType;
-  
+
 
             switch (effect.effectType)
             {
@@ -738,7 +734,7 @@ namespace TGD.Combat
 
             result.StatusApplications.Add(preview);
             string action = isInstant ? "Trigger" : "Apply";
-            
+
             string stackLabel = stacks > 0 ? $"{stacks} stack(s)" : "(no stacks)";
             if (effect.maxStacks > 0)
                 stackLabel += $" (max {effect.maxStacks})";
