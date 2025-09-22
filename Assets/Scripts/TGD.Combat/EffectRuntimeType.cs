@@ -386,6 +386,17 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
         public EffectInterpretationResult InstantResult { get; set; }
+        public StatusAccumulatorPreview Accumulator { get; set; }
+    }
+
+    public class StatusAccumulatorPreview
+    {
+        public StatusAccumulatorSource Source { get; set; }
+        public StatusAccumulatorContributor From { get; set; }
+        public StatusAccumulatorAmount Amount { get; set; }
+        public bool IncludeDotHot { get; set; }
+        public DamageSchool? DamageSchool { get; set; }
+        public string VariableKey { get; set; }
     }
     public class StatusModificationPreview
     {
