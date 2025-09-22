@@ -313,6 +313,21 @@ namespace TGD.Combat
 
         private static float EvaluateConditionCompareValue(string expression, float fallback, EffectContext context, Unit referenceUnit)
         {
+<<<<<<< HEAD
+=======
+            return target switch
+            {
+                ConditionTarget.Caster => context?.Caster,
+                ConditionTarget.PrimaryTarget => context?.PrimaryTarget,
+                ConditionTarget.SecondaryTarget => context?.SecondaryTarget,
+                _ => context?.PrimaryTarget ?? context?.Caster
+            };
+        }
+
+
+        private static float EvaluateConditionCompareValue(string expression, float fallback, EffectContext context, Unit referenceUnit)
+        {
+>>>>>>> origin/codex/update-use-condition-logic-for-skills-pa77t0
             if (!string.IsNullOrWhiteSpace(expression))
                 return EvaluateExpression(expression, context, referenceUnit, fallback);
 
