@@ -405,7 +405,7 @@ namespace TGD.Combat
         public float CurrentValue { get; set; }
         public bool Succeeded { get; set; }
     }
-    public class SkillUseConditionPreview
+    public class SkillUseConditionClausePreview
     {
         public SkillCostConditionType ConditionType { get; set; }
         public ConditionTarget Target { get; set; }
@@ -420,6 +420,17 @@ namespace TGD.Combat
         public int MaxDistance { get; set; }
         public bool RequireLineOfSight { get; set; }
         public bool PathBlocked { get; set; }
+        public bool Succeeded { get; set; }
+        public string SkillID { get; set; }
+        public int SkillStateStacks { get; set; }
+    }
+
+    public class SkillUseConditionPreview
+    {
+        public SkillUseConditionClausePreview Primary { get; set; }
+        public SkillUseConditionClausePreview Secondary { get; set; }
+        public bool HasSecondaryCondition { get; set; }
+        public SkillConditionLogicOperator LogicOperator { get; set; }
         public bool Succeeded { get; set; }
     }
 

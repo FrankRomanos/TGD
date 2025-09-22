@@ -33,7 +33,15 @@ namespace TGD.Data
         Resource,
         Distance,
         PerformHeal,
-        PerformAttack
+        PerformAttack,
+        SkillStateActive
+    }
+
+    [System.Serializable]
+    public enum SkillConditionLogicOperator
+    {
+        And,
+        Or
     }
 
     [System.Serializable]
@@ -48,6 +56,20 @@ namespace TGD.Data
         public int minDistance = 0;                                    // Minimum distance requirement
         public int maxDistance = 0;                                    // Optional maximum distance
         public bool requireLineOfSight = true;                         // Distance requires unobstructed path
+        public string skillID;                                         // Skill state identifier for SkillStateActive
+
+        public bool useSecondCondition = false;                       // Whether a secondary condition is evaluated
+        public SkillConditionLogicOperator secondConditionLogic = SkillConditionLogicOperator.And; // How primary/secondary combine
+        public SkillCostConditionType secondConditionType = SkillCostConditionType.Resource;
+        public ConditionTarget secondTarget = ConditionTarget.Caster;
+        public ResourceType secondResourceType = ResourceType.Discipline;
+        public CompareOp secondCompareOp = CompareOp.Equal;
+        public float secondCompareValue = 0f;
+        public string secondCompareValueExpression;
+        public int secondMinDistance = 0;
+        public int secondMaxDistance = 0;
+        public bool secondRequireLineOfSight = true;
+        public string secondSkillID;
     }
     [System.Serializable]
     public class SkillDurationSettings
@@ -92,16 +114,16 @@ namespace TGD.Data
     }
 
 
-    // ¼¼ÄÜÑÕÉ«
+    // æŠ€èƒ½é¢œè‰²
     public enum SkillColor
     {
-        DeepBlue,   // ÉîÀ¶
-        DarkYellow, // ÍÁ»Æ
-        Green,      // ÂÌÉ«
-        Purple,     // ×ÏÉ«
-        LightBlue,  // µ­À¶
-        Red,        // ÖÕ¼«¼¼ÄÜ£¨²»·Ö¼¶£©
-        None        // ÎŞÉ«£¨Buff/×´Ì¬µÈ£©
+        DeepBlue,   // æ·±è“
+        DarkYellow, // åœŸé»„
+        Green,      // ç»¿è‰²
+        Purple,     // ç´«è‰²
+        LightBlue,  // æ·¡è“
+        Red,        // ç»ˆææŠ€èƒ½ï¼ˆä¸åˆ†çº§ï¼‰
+        None        // æ— è‰²ï¼ˆBuff/çŠ¶æ€ç­‰ï¼‰
     }
 
     public enum SkillType { Active, Passive, Mastery, State, None }
@@ -138,17 +160,17 @@ namespace TGD.Data
         public List<SkillUseCondition> useConditions = new();
         public int timeCostSeconds = 0;
         public int cooldownSeconds = 0;
-        public int cooldownTurns = 0; // ÓÉ RecalculateDerived ¼ÆËã
+        public int cooldownTurns = 0; // ç”± RecalculateDerived è®¡ç®—
         public int range = 0;
         public float threat;
         public float shredMultiplier;
         public string namekey;
         public string descriptionKey;
 
-        // === ĞÂ°æ£ºÖ»±£ÁôÑÕÉ« & µ±Ç°µÈ¼¶ ===
+        // === æ–°ç‰ˆï¼šåªä¿ç•™é¢œè‰² & å½“å‰ç­‰çº§ ===
         public SkillColor skillColor = SkillColor.None;
         [Range(1, 4)]
-        public int skillLevel = 1; // ½ö±ê¼Ç¡°µ±Ç°µÈ¼¶¡±£»ÕæÕıµÄÃ¿¼¶ÊıÖµÔÚ EffectDefinition ÖĞ perLevel ÌîĞ´
+        public int skillLevel = 1; // ä»…æ ‡è®°â€œå½“å‰ç­‰çº§â€ï¼›çœŸæ­£çš„æ¯çº§æ•°å€¼åœ¨ EffectDefinition ä¸­ perLevel å¡«å†™
         public SkillDurationSettings skillDuration = new SkillDurationSettings();
         private void OnValidate()
         {
@@ -161,7 +183,7 @@ namespace TGD.Data
         }
 
 
-        // ¼¼ÄÜĞ§¹û
+        // æŠ€èƒ½æ•ˆæœ
         public List<EffectDefinition> effects = new List<EffectDefinition>();
 
         public int ResolveDuration()
