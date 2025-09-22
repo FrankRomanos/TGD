@@ -203,44 +203,22 @@ namespace TGD.Editor
                 {
                     var condElem = useConditionsProp.GetArrayElementAtIndex(i);
                     EditorGUILayout.BeginVertical("box");
-                    var conditionTypeProp = condElem.FindPropertyRelative("conditionType");
-                    EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.PropertyField(conditionTypeProp, new GUIContent("Condition Type"));
-                    if (GUILayout.Button("Remove", GUILayout.Width(70)))
+                    if (!DrawUseConditionClause(condElem, false, useConditionsProp, i))
                     {
-                        useConditionsProp.DeleteArrayElementAtIndex(i);
-                        EditorGUILayout.EndHorizontal();
                         EditorGUILayout.EndVertical();
                         break;
                     }
-                    EditorGUILayout.EndHorizontal();
 
-                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative("target"), new GUIContent("Condition Target"));
-
-                    var conditionType = (SkillCostConditionType)conditionTypeProp.enumValueIndex;
-                    switch (conditionType)
+                    var useSecondProp = condElem.FindPropertyRelative("useSecondCondition");
+                    EditorGUILayout.PropertyField(useSecondProp, new GUIContent("Enable Secondary Condition"));
+                    if (useSecondProp.boolValue)
                     {
-                        case SkillCostConditionType.Resource:
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("resourceType"), new GUIContent("Resource"));
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareOp"), new GUIContent("Compare"));
-
-                            var exprProp = condElem.FindPropertyRelative("compareValueExpression");
-                            EditorGUILayout.PropertyField(exprProp, new GUIContent("Value Expression"));
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("compareValue"), new GUIContent("Value (Fallback)"));
-                            EditorGUILayout.HelpBox("Expressions can reference caster/target stats, e.g. 0.1*maxhp.", MessageType.None);
-                            break;
-                        case SkillCostConditionType.Distance:
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("minDistance"), new GUIContent("Min Distance"));
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("maxDistance"), new GUIContent("Max Distance (0 = ignore)"));
-                            EditorGUILayout.PropertyField(condElem.FindPropertyRelative("requireLineOfSight"), new GUIContent("Require Clear Path"));
-                            EditorGUILayout.HelpBox("Distance is evaluated between the caster and the chosen target.", MessageType.None);
-                            break;
-                        case SkillCostConditionType.PerformHeal:
-                            EditorGUILayout.HelpBox("Requires the skill to perform healing on the specified target.", MessageType.None);
-                            break;
-                        case SkillCostConditionType.PerformAttack:
-                            EditorGUILayout.HelpBox("Requires the skill to deal damage to the specified target.", MessageType.None);
-                            break;
+                        EditorGUILayout.PropertyField(condElem.FindPropertyRelative("secondConditionLogic"), new GUIContent("Logic Operator"));
+                        EditorGUILayout.Space();
+                        EditorGUILayout.LabelField("Secondary Condition", EditorStyles.boldLabel);
+                        EditorGUI.indentLevel++;
+                        DrawUseConditionClause(condElem, true);
+                        EditorGUI.indentLevel--;
                     }
 
                     EditorGUILayout.EndVertical();
@@ -363,6 +341,82 @@ namespace TGD.Editor
 
             serializedObject.ApplyModifiedProperties();
         }
+
+        private static bool DrawUseConditionClause(SerializedProperty condElem, bool secondary, SerializedProperty list = null, int index = -1)
+        {
+            string typePropName = secondary ? "secondConditionType" : "conditionType";
+            string targetPropName = secondary ? "secondTarget" : "target";
+            string resourcePropName = secondary ? "secondResourceType" : "resourceType";
+            string compareOpPropName = secondary ? "secondCompareOp" : "compareOp";
+            string compareValuePropName = secondary ? "secondCompareValue" : "compareValue";
+            string compareExprPropName = secondary ? "secondCompareValueExpression" : "compareValueExpression";
+            string minDistancePropName = secondary ? "secondMinDistance" : "minDistance";
+            string maxDistancePropName = secondary ? "secondMaxDistance" : "maxDistance";
+            string requireLinePropName = secondary ? "secondRequireLineOfSight" : "requireLineOfSight";
+            string skillIdPropName = secondary ? "secondSkillID" : "skillID";
+
+            var conditionTypeProp = condElem.FindPropertyRelative(typePropName);
+            GUIContent typeLabel = secondary
+                ? new GUIContent("Condition Type (Secondary)")
+                : new GUIContent("Condition Type");
+
+            if (!secondary)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PropertyField(conditionTypeProp, typeLabel);
+                if (list != null && index >= 0)
+                {
+                    if (GUILayout.Button("Remove", GUILayout.Width(70)))
+                    {
+                        list.DeleteArrayElementAtIndex(index);
+                        EditorGUILayout.EndHorizontal();
+                        return false;
+                    }
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+            else
+            {
+                EditorGUILayout.PropertyField(conditionTypeProp, typeLabel);
+            }
+
+            var targetProp = condElem.FindPropertyRelative(targetPropName);
+            EditorGUILayout.PropertyField(targetProp, secondary
+                ? new GUIContent("Condition Target (Secondary)")
+                : new GUIContent("Condition Target"));
+
+            var conditionType = (SkillCostConditionType)conditionTypeProp.enumValueIndex;
+            switch (conditionType)
+            {
+                case SkillCostConditionType.Resource:
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(resourcePropName), new GUIContent("Resource"));
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(compareOpPropName), new GUIContent("Compare"));
+                    var exprProp = condElem.FindPropertyRelative(compareExprPropName);
+                    EditorGUILayout.PropertyField(exprProp, new GUIContent("Value Expression"));
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(compareValuePropName), new GUIContent("Value (Fallback)"));
+                    EditorGUILayout.HelpBox("Expressions can reference caster/target stats, e.g. 0.1*maxhp.", MessageType.None);
+                    break;
+                case SkillCostConditionType.Distance:
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(minDistancePropName), new GUIContent("Min Distance"));
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(maxDistancePropName), new GUIContent("Max Distance (0 = ignore)"));
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(requireLinePropName), new GUIContent("Require Clear Path"));
+                    EditorGUILayout.HelpBox("Distance is evaluated between the caster and the chosen target.", MessageType.None);
+                    break;
+                case SkillCostConditionType.PerformHeal:
+                    EditorGUILayout.HelpBox("Requires the skill to perform healing on the specified target.", MessageType.None);
+                    break;
+                case SkillCostConditionType.PerformAttack:
+                    EditorGUILayout.HelpBox("Requires the skill to deal damage to the specified target.", MessageType.None);
+                    break;
+                case SkillCostConditionType.SkillStateActive:
+                    EditorGUILayout.PropertyField(condElem.FindPropertyRelative(skillIdPropName), new GUIContent("Skill ID"));
+                    EditorGUILayout.HelpBox("Requires the specified skill state to be active on the target.", MessageType.None);
+                    break;
+            }
+
+            return true;
+        }
+
 
         private static void DrawPropertyField(SerializedProperty property, string propertyName, GUIContent label = null)
         {

@@ -147,80 +147,166 @@ namespace TGD.Combat
 
             return result;
         }
+
         private static SkillUseConditionPreview EvaluateSkillUseCondition(SkillUseCondition condition, EffectContext context)
         {
+            bool hasSecondary = condition?.useSecondCondition ?? false;
             var preview = new SkillUseConditionPreview
             {
-                ConditionType = condition?.conditionType ?? SkillCostConditionType.Resource,
-                Target = condition?.target ?? ConditionTarget.Caster,
-                Resource = condition?.resourceType ?? ResourceType.Discipline,
-                Comparison = condition?.compareOp ?? CompareOp.Equal,
-                CompareValue = condition?.compareValue ?? 0f,
-                CompareExpression = condition?.compareValueExpression
+                HasSecondaryCondition = hasSecondary,
+                LogicOperator = condition?.secondConditionLogic ?? SkillConditionLogicOperator.And
             };
 
-            switch (preview.ConditionType)
+            var primary = EvaluateSkillUseConditionClause(condition, context, secondary: false);
+            preview.Primary = primary;
+
+            bool overall = primary?.Succeeded ?? false;
+
+            if (hasSecondary)
             {
-                case SkillCostConditionType.Resource:
-                    {
-                        var referenceUnit = ResolveConditionTarget(preview.Target, context);
-                        float compareValue = EvaluateConditionValue(condition, context, referenceUnit);
-                        preview.CompareValue = compareValue;
-                        float maxValue;
-                        preview.CurrentValue = ResolveConditionResourceValue(condition, context, referenceUnit, out maxValue);
-                        preview.MaxValue = maxValue;
-                        preview.Succeeded = EvaluateComparison(preview.CurrentValue, compareValue, preview.Comparison);
-                        break;
-                    }
-                case SkillCostConditionType.Distance:
-                    {
-                        preview.MinDistance = condition?.minDistance ?? 0;
-                        preview.MaxDistance = condition?.maxDistance ?? 0;
-                        preview.RequireLineOfSight = condition?.requireLineOfSight ?? false;
-                        preview.Distance = context?.GetDistance(preview.Target) ?? 0f;
-                        preview.PathBlocked = preview.RequireLineOfSight && (context?.IsPathBlocked(preview.Target) ?? false);
-                        bool meetsMin = preview.Distance >= preview.MinDistance;
-                        bool meetsMax = preview.MaxDistance <= 0 || preview.Distance <= preview.MaxDistance;
-                        bool meetsPath = !preview.RequireLineOfSight || !preview.PathBlocked;
-                        preview.Succeeded = meetsMin && meetsMax && meetsPath;
-                        break;
-                    }
-                case SkillCostConditionType.PerformHeal:
-                    preview.Succeeded = context?.ConditionOnPerformHeal ?? false;
-                    break;
-                case SkillCostConditionType.PerformAttack:
-                    preview.Succeeded = context?.ConditionOnPerformAttack ?? false;
-                    break;
+                var secondary = EvaluateSkillUseConditionClause(condition, context, secondary: true);
+                preview.Secondary = secondary;
+
+                bool primarySuccess = primary?.Succeeded ?? false;
+                bool secondarySuccess = secondary?.Succeeded ?? false;
+
+                overall = preview.LogicOperator == SkillConditionLogicOperator.And
+                    ? (primarySuccess && secondarySuccess)
+                    : (primarySuccess || secondarySuccess);
             }
 
+            preview.Succeeded = overall;
             return preview;
         }
-        private static string BuildSkillUseConditionLog(SkillUseConditionPreview preview)
-        {
-            if (preview == null)
-                return "Use condition: (invalid).";
 
-            switch (preview.ConditionType)
+        private static SkillUseConditionClausePreview EvaluateSkillUseConditionClause(SkillUseCondition condition, EffectContext context, bool secondary)
+        {
+            var clause = new SkillUseConditionClausePreview
+            {
+                ConditionType = secondary
+                    ? (condition?.secondConditionType ?? SkillCostConditionType.Resource)
+                    : (condition?.conditionType ?? SkillCostConditionType.Resource),
+                Target = secondary
+                    ? (condition?.secondTarget ?? ConditionTarget.Caster)
+                    : (condition?.target ?? ConditionTarget.Caster),
+                Resource = secondary
+                    ? (condition?.secondResourceType ?? ResourceType.Discipline)
+                    : (condition?.resourceType ?? ResourceType.Discipline),
+                Comparison = secondary
+                    ? (condition?.secondCompareOp ?? CompareOp.Equal)
+                    : (condition?.compareOp ?? CompareOp.Equal),
+                CompareValue = secondary
+                    ? (condition?.secondCompareValue ?? 0f)
+                    : (condition?.compareValue ?? 0f),
+                CompareExpression = secondary
+                    ? condition?.secondCompareValueExpression
+                    : condition?.compareValueExpression,
+                MinDistance = secondary
+                    ? (condition?.secondMinDistance ?? 0)
+                    : (condition?.minDistance ?? 0),
+                MaxDistance = secondary
+                    ? (condition?.secondMaxDistance ?? 0)
+                    : (condition?.maxDistance ?? 0),
+                RequireLineOfSight = secondary
+                    ? (condition?.secondRequireLineOfSight ?? false)
+                    : (condition?.requireLineOfSight ?? false),
+                SkillID = secondary ? condition?.secondSkillID : condition?.skillID
+            };
+
+            switch (clause.ConditionType)
             {
                 case SkillCostConditionType.Resource:
-                    {
-                        string valueLabel = !string.IsNullOrWhiteSpace(preview.CompareExpression)
-                            ? preview.CompareExpression
-                            : preview.CompareValue.ToString("0.##", CultureInfo.InvariantCulture);
-                        return $"Use condition [Resource] ({preview.Resource}) on {DescribeConditionTarget(preview.Target)} {preview.Comparison} {valueLabel}. Current {preview.CurrentValue:0.##} / Max {preview.MaxValue:0.##} => {(preview.Succeeded ? "met" : "failed")}.";
-                    }
+                {
+                    var referenceUnit = ResolveConditionTarget(clause.Target, context);
+                    float compareValue = EvaluateConditionCompareValue(clause.CompareExpression, clause.CompareValue, context, referenceUnit);
+                    clause.CompareValue = compareValue;
+                    float maxValue;
+                    clause.CurrentValue = ResolveConditionResourceValue(clause.Resource, context, referenceUnit, out maxValue);
+                    clause.MaxValue = maxValue;
+                    clause.Succeeded = EvaluateComparison(clause.CurrentValue, compareValue, clause.Comparison);
+                    break;
+                }
                 case SkillCostConditionType.Distance:
-                    {
-                        string maxLabel = preview.MaxDistance > 0 ? preview.MaxDistance.ToString(CultureInfo.InvariantCulture) : "inf";
-                        string losLabel = preview.RequireLineOfSight ? (preview.PathBlocked ? "blocked" : "clear") : "ignored";
-                        return $"Use condition [Distance] to {DescribeConditionTarget(preview.Target)}: {preview.Distance:0.##} (min {preview.MinDistance}, max {maxLabel}, path {losLabel}) => {(preview.Succeeded ? "met" : "failed")}.";
-                    }
+                {
+                    clause.Distance = context?.GetDistance(clause.Target) ?? 0f;
+                    clause.PathBlocked = clause.RequireLineOfSight && (context?.IsPathBlocked(clause.Target) ?? false);
+                    bool meetsMin = clause.Distance >= clause.MinDistance;
+                    bool meetsMax = clause.MaxDistance <= 0 || clause.Distance <= clause.MaxDistance;
+                    bool meetsPath = !clause.RequireLineOfSight || !clause.PathBlocked;
+                    clause.Succeeded = meetsMin && meetsMax && meetsPath;
+                    break;
+                }
                 case SkillCostConditionType.PerformHeal:
-                    return $"Use condition [Perform Heal] on {DescribeConditionTarget(preview.Target)} => {(preview.Succeeded ? "met" : "failed")}.";
+                    clause.Succeeded = context?.ConditionOnPerformHeal ?? false;
+                    break;
                 case SkillCostConditionType.PerformAttack:
-                    return $"Use condition [Perform Attack] on {DescribeConditionTarget(preview.Target)} => {(preview.Succeeded ? "met" : "failed")}.";
+                    clause.Succeeded = context?.ConditionOnPerformAttack ?? false;
+                    break;
+                case SkillCostConditionType.SkillStateActive:
+                {
+                    int stacks = ResolveSkillStateStacks(context, clause.SkillID);
+                    clause.SkillStateStacks = stacks;
+                    clause.CurrentValue = stacks;
+                    clause.MaxValue = stacks;
+                    clause.Succeeded = stacks > 0;
+                    break;
+                }
+            }
+
+            return clause;
+        }
+
+        private static string BuildSkillUseConditionLog(SkillUseConditionPreview preview)
+        {
+            if (preview?.Primary == null)
+                return "Use condition: (invalid).";
+
+            string primaryDescription = DescribeSkillUseConditionClause(preview.Primary);
+
+            if (!preview.HasSecondaryCondition || preview.Secondary == null)
+            {
+                return $"Use condition {primaryDescription} => {(preview.Succeeded ? "met" : "failed")}.";
+            }
+
+            string logicLabel = preview.LogicOperator == SkillConditionLogicOperator.And ? "AND" : "OR";
+            string secondaryDescription = DescribeSkillUseConditionClause(preview.Secondary);
+            return $"Use condition ({primaryDescription} {logicLabel} {secondaryDescription}) => {(preview.Succeeded ? "met" : "failed")}.";
+        }
+
+        private static string DescribeSkillUseConditionClause(SkillUseConditionClausePreview clause)
+        {
+            if (clause == null)
+                return "(invalid)";
+
+            switch (clause.ConditionType)
+            {
+                case SkillCostConditionType.Resource:
+                {
+                    string valueLabel = !string.IsNullOrWhiteSpace(clause.CompareExpression)
+                        ? clause.CompareExpression
+                        : clause.CompareValue.ToString("0.##", CultureInfo.InvariantCulture);
+                    return $"[Resource] ({clause.Resource}) on {DescribeConditionTarget(clause.Target)} {clause.Comparison} {valueLabel}. Current {clause.CurrentValue:0.##} / Max {clause.MaxValue:0.##} => {(clause.Succeeded ? "met" : "failed")}";
+                }
+                case SkillCostConditionType.Distance:
+                {
+                    string maxLabel = clause.MaxDistance > 0 ? clause.MaxDistance.ToString(CultureInfo.InvariantCulture) : "inf";
+                    string losLabel = clause.RequireLineOfSight ? (clause.PathBlocked ? "blocked" : "clear") : "ignored";
+                    return $"[Distance] to {DescribeConditionTarget(clause.Target)}: {clause.Distance:0.##} (min {clause.MinDistance}, max {maxLabel}, path {losLabel}) => {(clause.Succeeded ? "met" : "failed")}";
+                }
+                case SkillCostConditionType.PerformHeal:
+                    return $"[Perform Heal] on {DescribeConditionTarget(clause.Target)} => {(clause.Succeeded ? "met" : "failed")}";
+                case SkillCostConditionType.PerformAttack:
+                    return $"[Perform Attack] on {DescribeConditionTarget(clause.Target)} => {(clause.Succeeded ? "met" : "failed")}";
+                case SkillCostConditionType.SkillStateActive:
+                {
+                    string skillLabel = string.IsNullOrWhiteSpace(clause.SkillID)
+                        ? "any state"
+                        : $"state '{clause.SkillID}'";
+                    string stackInfo = clause.SkillStateStacks > 0 ? $" (stacks {clause.SkillStateStacks})" : string.Empty;
+                    return $"[Skill State Active] {skillLabel} on {DescribeConditionTarget(clause.Target)}{stackInfo} => {(clause.Succeeded ? "met" : "failed")}";
+                }
                 default:
-                    return "Use condition evaluated.";
+                    return "[Condition] => failed";
             }
         }
 
@@ -235,31 +321,26 @@ namespace TGD.Combat
             };
         }
 
-        private static float EvaluateConditionValue(SkillUseCondition condition, EffectContext context, Unit referenceUnit)
+
+        private static float EvaluateConditionCompareValue(string expression, float fallback, EffectContext context, Unit referenceUnit)
         {
-            if (condition == null)
-                return 0f;
-
-            string expression = condition.compareValueExpression;
             if (!string.IsNullOrWhiteSpace(expression))
-                return EvaluateExpression(expression, context, referenceUnit, condition.compareValue);
+                return EvaluateExpression(expression, context, referenceUnit, fallback);
 
-            return condition.compareValue;
+            return fallback;
         }
 
-        private static float ResolveConditionResourceValue(SkillUseCondition condition, EffectContext context, Unit referenceUnit, out float maxValue)
+        private static float ResolveConditionResourceValue(ResourceType resourceType, EffectContext context, Unit referenceUnit, out float maxValue)
         {
             maxValue = 0f;
-            if (condition == null)
-                return 0f;
 
-            float current = context?.GetResourceAmount(condition.resourceType) ?? 0f;
-            maxValue = context?.GetResourceMax(condition.resourceType) ?? 0f;
+            float current = context?.GetResourceAmount(resourceType) ?? 0f;
+            maxValue = context?.GetResourceMax(resourceType) ?? 0f;
 
             var stats = referenceUnit?.Stats;
             if (stats != null)
             {
-                switch (condition.resourceType)
+                switch (resourceType)
                 {
                     case ResourceType.HP:
                         current = stats.HP;
@@ -277,6 +358,22 @@ namespace TGD.Combat
             }
 
             return current;
+        }
+
+        private static int ResolveSkillStateStacks(EffectContext context, string skillId)
+        {
+            if (context == null)
+                return 0;
+
+            if (string.IsNullOrWhiteSpace(skillId))
+            {
+                if (context.ConditionSkillStateActive)
+                    return 1;
+
+                return context.ActiveSkillStates != null && context.ActiveSkillStates.Count > 0 ? 1 : 0;
+            }
+
+            return context.GetSkillStateStacks(skillId);
         }
 
         private static string DescribeConditionTarget(ConditionTarget target)
