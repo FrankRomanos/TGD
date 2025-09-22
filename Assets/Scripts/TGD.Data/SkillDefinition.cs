@@ -71,6 +71,62 @@ namespace TGD.Data
         public bool secondRequireLineOfSight = true;
         public string secondSkillID;
     }
+
+    public enum StatusAccumulatorSource
+    {
+        DamageTaken,
+        HealingTaken
+    }
+
+    public enum StatusAccumulatorContributor
+    {
+        CasterOnly,
+        Allies,
+        Any
+    }
+
+    public enum StatusAccumulatorAmount
+    {
+        PostMitigation
+    }
+
+    [System.Serializable]
+    public class StatusAccumulatorSettings
+    {
+        public const string DamageVariableKey = "damage_accu";
+        public const string HealVariableKey = "heal_accu";
+
+        public bool enabled = false;
+        public StatusAccumulatorSource source = StatusAccumulatorSource.DamageTaken;
+        public StatusAccumulatorContributor from = StatusAccumulatorContributor.Allies;
+        public StatusAccumulatorAmount amount = StatusAccumulatorAmount.PostMitigation;
+        public bool includeDotHot = true;
+        public DamageSchool damageSchool = DamageSchool.Physical;
+
+        public string GetVariableKey()
+        {
+            return GetVariableKey(source);
+        }
+
+        public static string GetVariableKey(StatusAccumulatorSource accumulatorSource)
+        {
+            return accumulatorSource == StatusAccumulatorSource.DamageTaken
+                ? DamageVariableKey
+                : HealVariableKey;
+        }
+    }
+
+    [System.Serializable]
+    public class StatusSkillMetadata
+    {
+        public StatusAccumulatorSettings accumulatorSettings = new StatusAccumulatorSettings();
+
+        public void EnsureInitialized()
+        {
+            if (accumulatorSettings == null)
+                accumulatorSettings = new StatusAccumulatorSettings();
+        }
+    }
     [System.Serializable]
     public class SkillDurationSettings
     {
@@ -172,10 +228,15 @@ namespace TGD.Data
         [Range(1, 4)]
         public int skillLevel = 1; // 仅标记“当前等级”；真正的每级数值在 EffectDefinition 中 perLevel 填写
         public SkillDurationSettings skillDuration = new SkillDurationSettings();
+        public StatusSkillMetadata statusMetadata = new StatusSkillMetadata();
         private void OnValidate()
         {
             if (skillDuration == null)
                 skillDuration = new SkillDurationSettings();
+            if (statusMetadata == null)
+                statusMetadata = new StatusSkillMetadata();
+            else
+                statusMetadata.EnsureInitialized();
             if (string.IsNullOrWhiteSpace(skillTag))
                 skillTag = "none";
             if (multiTargetCount < 1)
