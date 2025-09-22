@@ -132,6 +132,7 @@ namespace TGD.Editor
             ClearArray(effectProp.FindPropertyRelative("dotHotAdditionalEffects"));
             ClearArray(effectProp.FindPropertyRelative("auraAdditionalEffects"));
             ClearArray(effectProp.FindPropertyRelative("randomOutcomes"));
+            ClearArray(effectProp.FindPropertyRelative("negativeStatuses"));
         }
 
         private static void SetEnumValue(SerializedProperty prop, Enum value)

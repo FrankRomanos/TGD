@@ -477,6 +477,9 @@ namespace TGD.Combat
                 case EffectType.ModifyDefence:
                     ApplyModifyDefence(effect, context, result);
                     break;
+                case EffectType.NegativeStatus:
+                    ApplyNegativeStatus(effect, context, result);
+                    break;
                 default:
                     result.AddLog($"No interpreter implemented for {effect.effectType}.");
                     break;
@@ -1348,6 +1351,109 @@ namespace TGD.Combat
             }
 
             result.DefenceModifications.Add(preview);
+        }
+        private static void ApplyNegativeStatus(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
+        {
+            if (effect.negativeStatuses == null || effect.negativeStatuses.Count == 0)
+            {
+                result.AddLog("Negative status effect configured without entries.");
+                return;
+            }
+
+            float probability = ResolveProbabilityValue(effect, context, context.PrimaryTarget ?? context.Caster);
+            int duration = ResolveDuration(effect, context);
+            int baseTurnSeconds = CombatClock.BaseTurnSeconds;
+
+            foreach (var status in effect.negativeStatuses)
+            {
+                if (status == null)
+                    continue;
+
+                var preview = new NegativeStatusPreview
+                {
+                    Target = effect.target,
+                    StatusType = status.statusType,
+                    Probability = probability,
+                    Duration = duration,
+                    Condition = effect.condition
+                };
+
+                switch (status.statusType)
+                {
+                    case NegativeStatusType.Stun:
+                        {
+                            float seconds = Mathf.Max(0f, status.seconds);
+                            int skippedTurns = baseTurnSeconds > 0
+                                ? Mathf.FloorToInt(seconds / baseTurnSeconds)
+                                : 0;
+                            float remainder = seconds - skippedTurns * baseTurnSeconds;
+                            remainder = Mathf.Clamp(remainder, 0f, baseTurnSeconds);
+                            float remainingBase = (skippedTurns > 0 && Mathf.Approximately(remainder, 0f))
+                                ? 0f
+                                : Mathf.Max(0f, baseTurnSeconds - remainder);
+                            float lost = baseTurnSeconds - remainingBase;
+
+                            preview.Seconds = seconds;
+                            preview.SkippedTurns = skippedTurns;
+                            preview.BaseTurnTimeRemaining = remainingBase;
+                            preview.BaseTurnTimeLost = lost;
+
+                            result.AddLog(
+                                $"Negative status: stun {seconds:0.##}s → skip {skippedTurns} turn(s), next base time {remainingBase:0.##}s (lost {lost:0.##}s).");
+                            break;
+                        }
+                    case NegativeStatusType.Entangle:
+                        {
+                            preview.MovementSetToZero = true;
+                            preview.BlocksNonForcedMovement = status.disableNonForcedMovement;
+                            preview.MinimumMovement = 0;
+
+                            string suffix = preview.BlocksNonForcedMovement
+                                ? ", non-forced move effects disabled"
+                                : string.Empty;
+                            result.AddLog($"Negative status: entangle → movement set to 0{suffix}.");
+                            break;
+                        }
+                    case NegativeStatusType.Slow:
+                        {
+                            int reduction = Mathf.Max(0, status.movementReduction);
+                            preview.MovementReduction = reduction;
+                            preview.MinimumMovement = 1;
+                            result.AddLog($"Negative status: slow → movement -{reduction} (min 1).");
+                            break;
+                        }
+                    case NegativeStatusType.Sluggish:
+                        {
+                            float requestedSeconds = Mathf.Max(0f, status.seconds);
+                            float clampedSeconds = Mathf.Min(requestedSeconds, baseTurnSeconds);
+                            float remainingBase = Mathf.Max(0f, baseTurnSeconds - clampedSeconds);
+                            float lost = baseTurnSeconds - remainingBase;
+                            bool fatal = Mathf.Approximately(remainingBase, 0f);
+
+                            preview.Seconds = clampedSeconds;
+                            preview.BaseTurnTimeRemaining = remainingBase;
+                            preview.BaseTurnTimeLost = lost;
+                            preview.FatalOnZeroBaseTime = fatal;
+                            preview.MaximumSeconds = baseTurnSeconds;
+
+                            string clampSuffix = !Mathf.Approximately(requestedSeconds, clampedSeconds)
+                                ? $" (clamped from {requestedSeconds:0.##}s)"
+                                : string.Empty;
+                            string fatalSuffix = fatal ? ", base time reduced to 0 (fatal)" : string.Empty;
+
+                            result.AddLog(
+                                $"Negative status: sluggish {clampedSeconds:0.##}s{clampSuffix} → base time {remainingBase:0.##}s (lost {lost:0.##}s){fatalSuffix}.");
+                            break;
+                        }
+                    default:
+                        {
+                            result.AddLog($"Negative status: unsupported type {status.statusType}.");
+                            break;
+                        }
+                }
+
+                result.NegativeStatuses.Add(preview);
+            }
         }
 
         private static void ApplyModifyAction(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)

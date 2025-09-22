@@ -37,6 +37,7 @@ namespace TGD.Editor
             Register(EffectType.DotHotModifier, new DotHotModifierDrawer());
             Register(EffectType.Aura, new AuraDrawer());
             Register(EffectType.ModifyDefence, new ModifyDefenceDrawer());
+            Register(EffectType.NegativeStatus, new NegativeStatusDrawer());
         }
 
         public static void Register(EffectType type, IEffectDrawer drawer)

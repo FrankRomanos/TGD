@@ -54,7 +54,8 @@ namespace TGD.Data
         DotHotModifier = 19,
         ModifyResource = 20,
         Aura = 21,
-        ModifyDefence = 22
+        ModifyDefence = 22,
+        NegativeStatus = 23
     }
     public static class EffectTypeLegacy
     {
@@ -299,7 +300,23 @@ namespace TGD.Data
         ConvertDamageToDot = 2,
         None = 3
     }
+    [Serializable]
+    public enum NegativeStatusType
+    {
+        Stun,
+        Entangle,
+        Slow,
+        Sluggish
+    }
 
+    [Serializable]
+    public class NegativeStatusDefinition
+    {
+        public NegativeStatusType statusType = NegativeStatusType.Stun;
+        public float seconds = 0f;
+        public int movementReduction = 0;
+        public bool disableNonForcedMovement = true;
+    }
     [Serializable]
     public class RandomOutcomeEntry
     {
@@ -405,6 +422,9 @@ namespace TGD.Data
         public int dotHotMaxStacks = 1;
         [SerializeReference]
         public List<EffectDefinition> dotHotAdditionalEffects = new List<EffectDefinition>();
+
+        // ===== Negative Status =====
+        public List<NegativeStatusDefinition> negativeStatuses = new();
 
         // ===== Buff/Debuff =====
         public string statusSkillID;        // 传统 Buff/Debuff 用 skillID

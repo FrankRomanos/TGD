@@ -287,6 +287,7 @@ namespace TGD.Combat
         public List<ProbabilityModifierPreview> ProbabilityModifiers { get; } = new();
         public List<DefenceModificationPreview> DefenceModifications { get; } = new();
         public List<DotHotModifierPreview> DotHotModifiers { get; } = new();
+        public List<NegativeStatusPreview> NegativeStatuses { get; } = new();
         public List<SkillUseConditionPreview> SkillUseConditions { get; } = new();
         public List<string> Logs { get; } = new();
 
@@ -315,6 +316,7 @@ namespace TGD.Combat
             ProbabilityModifiers.AddRange(other.ProbabilityModifiers);
             DotHotModifiers.AddRange(other.DotHotModifiers);
             DefenceModifications.AddRange(other.DefenceModifications);
+            NegativeStatuses.AddRange(other.NegativeStatuses);
             SkillUseConditions.AddRange(other.SkillUseConditions);
             Logs.AddRange(other.Logs);
         }
@@ -644,7 +646,24 @@ namespace TGD.Combat
         public bool SupportsStacks { get; set; }
         public int MaxStacks { get; set; }
     }
-
+    public class NegativeStatusPreview
+    {
+        public TargetType Target { get; set; }
+        public NegativeStatusType StatusType { get; set; }
+        public float Probability { get; set; }
+        public int Duration { get; set; }
+        public EffectCondition Condition { get; set; }
+        public float Seconds { get; set; }
+        public int SkippedTurns { get; set; }
+        public float BaseTurnTimeRemaining { get; set; }
+        public float BaseTurnTimeLost { get; set; }
+        public bool MovementSetToZero { get; set; }
+        public int MovementReduction { get; set; }
+        public int MinimumMovement { get; set; }
+        public bool BlocksNonForcedMovement { get; set; }
+        public bool FatalOnZeroBaseTime { get; set; }
+        public float MaximumSeconds { get; set; }
+    }
     public class MasteryPosturePreview
     {
         public bool LockArmorToZero { get; set; }

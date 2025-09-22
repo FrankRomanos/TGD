@@ -56,6 +56,7 @@ namespace TGD.Editor
                 EffectType.DotHotModifier => BuildDotHotSummary(effectProp, owningSkill),
                 EffectType.Aura => BuildAuraSummary(effectProp, owningSkill),
                 EffectType.ModifyDefence => BuildModifyDefenceSummary(effectProp, owningSkill),
+                EffectType.NegativeStatus => BuildNegativeStatusSummary(effectProp, owningSkill),
                 _ => BuildDefaultSummary(effectProp, owningSkill, effectType)
             };
         }
@@ -181,6 +182,100 @@ namespace TGD.Editor
             AddBullet(sb, DescribeCondition(effectProp));
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildNegativeStatusSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
+        {
+            var sb = CreateHeader("Negative Status", GetTargetLabel(effectProp));
+
+            var listProp = effectProp.FindPropertyRelative("negativeStatuses");
+            if (listProp != null && listProp.isArray && listProp.arraySize > 0)
+            {
+                for (int i = 0; i < listProp.arraySize; i++)
+                {
+                    var entry = listProp.GetArrayElementAtIndex(i);
+                    if (entry == null)
+                        continue;
+
+                    string label = BuildNegativeStatusEntryLabel(entry);
+                    if (!string.IsNullOrEmpty(label))
+                        AddBullet(sb, label);
+                }
+            }
+            else
+            {
+                AddBullet(sb, "No negative statuses configured.");
+            }
+
+            AppendCommonLines(sb, effectProp, owningSkill);
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildNegativeStatusEntryLabel(SerializedProperty entry)
+        {
+            var typeProp = entry.FindPropertyRelative("statusType");
+            NegativeStatusType type = typeProp != null
+                ? (NegativeStatusType)typeProp.enumValueIndex
+                : NegativeStatusType.Stun;
+
+            switch (type)
+            {
+                case NegativeStatusType.Stun:
+                    {
+                        float seconds = entry.FindPropertyRelative("seconds")?.floatValue ?? 0f;
+                        return DescribeStunSummary(seconds);
+                    }
+                case NegativeStatusType.Entangle:
+                    {
+                        bool block = entry.FindPropertyRelative("disableNonForcedMovement")?.boolValue ?? true;
+                        return block
+                            ? "Entangle: movement 0, non-forced moves disabled"
+                            : "Entangle: movement 0";
+                    }
+                case NegativeStatusType.Slow:
+                    {
+                        int reduction = entry.FindPropertyRelative("movementReduction")?.intValue ?? 0;
+                        reduction = Mathf.Max(0, reduction);
+                        string amount = reduction > 0 ? $"-{reduction}" : "0";
+                        return $"Slow: movement {amount} (min 1)";
+                    }
+                case NegativeStatusType.Sluggish:
+                    {
+                        float seconds = entry.FindPropertyRelative("seconds")?.floatValue ?? 0f;
+                        return DescribeSluggishSummary(seconds);
+                    }
+                default:
+                    return type.ToString();
+            }
+        }
+
+        private static string DescribeStunSummary(float seconds)
+        {
+            float safeSeconds = Mathf.Max(0f, seconds);
+            int baseTurn = BaseTurnSeconds;
+            int skip = baseTurn > 0 ? Mathf.FloorToInt(safeSeconds / baseTurn) : 0;
+            float remainder = safeSeconds - skip * baseTurn;
+            remainder = Mathf.Clamp(remainder, 0f, baseTurn);
+            float nextBase = (skip > 0 && Mathf.Approximately(remainder, 0f)) ? 0f : Mathf.Max(0f, baseTurn - remainder);
+            float lost = baseTurn - nextBase;
+
+            return $"Stun: {safeSeconds:0.##}s (skip {skip}, next base {nextBase:0.##}s, lost {lost:0.##}s)";
+        }
+
+        private static string DescribeSluggishSummary(float seconds)
+        {
+            float safeSeconds = Mathf.Max(0f, seconds);
+            float clamped = Mathf.Min(safeSeconds, BaseTurnSeconds);
+            float remaining = Mathf.Max(0f, BaseTurnSeconds - clamped);
+            float lost = BaseTurnSeconds - remaining;
+            bool fatal = Mathf.Approximately(remaining, 0f);
+
+            string clampSuffix = !Mathf.Approximately(safeSeconds, clamped)
+                ? $" (clamped from {safeSeconds:0.##}s)"
+                : string.Empty;
+            string fatalSuffix = fatal ? ", fatal" : string.Empty;
+
+            return $"Sluggish: {clamped:0.##}s{clampSuffix} (base {remaining:0.##}s, lost {lost:0.##}s{fatalSuffix})";
         }
         private static string BuildModifyDefenceSummary(SerializedProperty effectProp, SkillDefinition owningSkill)
         {

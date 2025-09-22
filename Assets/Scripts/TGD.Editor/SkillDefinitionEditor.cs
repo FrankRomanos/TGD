@@ -46,7 +46,7 @@ namespace TGD.Editor
             EditorGUILayout.PropertyField(serializedObject.FindProperty("variantKey"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("chainNextID"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("resetOnTurnEnd"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("skillTag"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("skillTag")); 
             // 颜色 + 等级
             EditorGUILayout.PropertyField(skillColorProp, new GUIContent("Skill Color"));
 
