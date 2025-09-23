@@ -30,6 +30,8 @@ namespace TGD.Core
             public float SkillThreatMultiplier;
             /// <summary>Skill level shred multiplier.</summary>
             public float SkillShredMultiplier;
+            /// <summary>Conversion ratio applied to the attacker's mastery stat.</summary>
+            public float MasteryConversionRatio;
         }
 
         public struct DamageResult
@@ -53,7 +55,11 @@ namespace TGD.Core
             // Attribute scaling follows (Strength or Agility) / 15 / 100 as requested.
             float attributeMultiplier = ClampNonNegative(input.PrimaryAttributeValue / AttributeDivisor / AttributeNormalization);
 
-            float masteryMultiplier = 1f + ClampNonNegative(attacker.Mastery);
+            float masteryRatio = input.MasteryConversionRatio;
+            if (masteryRatio <= 0f)
+                masteryRatio = 1f;
+
+            float masteryMultiplier = 1f + ClampNonNegative(attacker.Mastery * masteryRatio);
             float statDamageMultiplier = 1f + ClampNonNegative(attacker.DamageIncrease);
             float additionalMultiplier = 1f + ClampNonNegative(input.AdditionalDamageMultiplier);
             float situationalMultiplier = 1f + ClampNonNegative(input.SituationalDamageMultiplier);

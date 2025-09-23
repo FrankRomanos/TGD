@@ -82,7 +82,7 @@ namespace TGD.Core
         /// <summary>
         /// Returns the mastery value formatted as a percentage (three decimals precision).
         /// </summary>
-        public float GetMasteryPercent() => RoundToThreeDecimals(Mastery * 100f);
+        public float GetMasteryPercent(float conversionRatio = 1f) => RoundToThreeDecimals(Mastery * conversionRatio * 100f);
 
         /// <summary>
         /// Returns the threat multiplier ready for UI display (percentage form).

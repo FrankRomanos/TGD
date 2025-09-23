@@ -133,6 +133,19 @@ namespace TGD.Editor
 
             if (skillType == SkillType.Mastery)
             {
+                var masteryRatioProp = serializedObject.FindProperty("masteryStatConversionRatio");
+                if (masteryRatioProp != null)
+                {
+                    EditorGUILayout.PropertyField(
+                        masteryRatioProp,
+                        new GUIContent(
+                            "Mastery → Stat Ratio",
+                            "Fraction of this class mastery converted into the shared mastery stat (used by 'p')."));
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("'masteryStatConversionRatio' property not found on SkillDefinition.", MessageType.Error);
+                }
                 if (targetTypeProp != null)
                     targetTypeProp.enumValueIndex = (int)SkillTargetType.None;
                 if (timeCostSecondsProp != null)

@@ -237,6 +237,9 @@ namespace TGD.Data
         public string skillTag = "none";
 
         public SkillType skillType = SkillType.Active;
+        [Tooltip("Fraction of this class mastery that converts into the shared mastery stat ('p').")]
+        [Min(0f)]
+        public float masteryStatConversionRatio = 1f;
 
         public ActionType actionType = ActionType.None;
         public SkillTargetType targetType = SkillTargetType.None;
@@ -270,6 +273,8 @@ namespace TGD.Data
                 skillTag = "none";
             if (multiTargetCount < 1)
                 multiTargetCount = 1;
+            if (masteryStatConversionRatio <= 0f)
+                masteryStatConversionRatio = 1f;
         }
 
 

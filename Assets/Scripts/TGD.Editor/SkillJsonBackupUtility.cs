@@ -197,7 +197,7 @@ namespace TGD.Editor
         public SkillType skillType;
         public ActionType actionType;
         public SkillTargetType targetType;
-
+        public float masteryStatConversionRatio = 1f;
         public List<SkillCost> costs = new();
 
         public int timeCostSeconds;
@@ -235,7 +235,7 @@ namespace TGD.Editor
                 skillType = s.skillType,
                 actionType = s.actionType,
                 targetType = s.targetType,
-
+                masteryStatConversionRatio = s.masteryStatConversionRatio,
                 timeCostSeconds = s.timeCostSeconds,
                 cooldownSeconds = s.cooldownSeconds,
                 cooldownTurns = s.cooldownTurns,
@@ -308,6 +308,7 @@ namespace TGD.Editor
             s.skillType = skillType;
             s.actionType = actionType;
             s.targetType = targetType;
+            s.masteryStatConversionRatio = masteryStatConversionRatio;
 
             s.costs = costs != null ? new List<SkillCost>(costs) : new List<SkillCost>();
 

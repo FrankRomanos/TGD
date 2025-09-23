@@ -2148,6 +2148,7 @@ namespace TGD.Combat
                 return;
 
             var stats = context.Caster.Stats;
+            var casterMastery = ResolveMasteryValues(context.Caster);
             float primaryAttribute = ResolvePrimaryOffensiveStat(stats);
             float additionalMultiplier = ResolveCustomVariable(context, "damageincrease1");
             float situationalMultiplier = ResolveCustomVariable(context, "damageincrease2");
@@ -2197,7 +2198,8 @@ namespace TGD.Combat
                 DamageReduction = damageReduction,
                 ArmorMitigationMultiplier = armorMultiplier,
                 SkillThreatMultiplier = skillThreat,
-                SkillShredMultiplier = skillShred
+                SkillShredMultiplier = skillShred,
+                MasteryConversionRatio = casterMastery.Ratio
             };
 
             var normal = CombatFormula.CalculateDamage(input, stats);
@@ -2326,19 +2328,34 @@ namespace TGD.Combat
                 map["dotStacks"] = context.ConditionDotStacks;
 
             map["linkcancelled"] = context.ConditionLinkCancelled ? 1f : 0f;
+            map["p"] = 0f;
+            map["mastery"] = 0f;
+            map["mastery_raw"] = 0f;
+            map["mastery_ratio"] = 1f;
 
             if (context.Caster != null)
             {
                 AddStats(map, context.Caster.Stats, string.Empty);
-                map["p"] = context.Caster.Stats?.Mastery ?? 0f;
-            }
-            else
-            {
-                map["p"] = 0f;
+                var casterMastery = ResolveMasteryValues(context.Caster);
+                map["p"] = casterMastery.Converted;
+                map["mastery"] = casterMastery.Converted;
+                map["mastery_raw"] = casterMastery.Raw;
+                map["mastery_ratio"] = casterMastery.Ratio;
             }
 
+
+            map["target_mastery"] = 0f;
+            map["target_mastery_raw"] = 0f;
+            map["target_mastery_ratio"] = 1f;
+
             if (target != null)
+            {
                 AddStats(map, target.Stats, "target_");
+                var targetMastery = ResolveMasteryValues(target);
+                map["target_mastery"] = targetMastery.Converted;
+                map["target_mastery_raw"] = targetMastery.Raw;
+                map["target_mastery_ratio"] = targetMastery.Ratio;
+            }
             map["targetdistance"] = ResolveTargetDistance(context, target);
             map["damage"] = context.IncomingDamage;
             map["damage_pre"] = context.IncomingDamage;
@@ -2416,7 +2433,47 @@ namespace TGD.Combat
                 fallback = context.GetDistance(ConditionTarget.PrimaryTarget);
             return fallback;
         }
+        private readonly struct MasteryValues
+        {
+            public MasteryValues(float raw, float ratio)
+            {
+                Raw = raw;
+                Ratio = ratio;
+                Converted = raw * ratio;
+            }
 
+            public float Raw { get; }
+            public float Ratio { get; }
+            public float Converted { get; }
+        }
+
+        private static MasteryValues ResolveMasteryValues(Unit unit)
+        {
+            if (unit?.Stats == null)
+                return new MasteryValues(0f, 1f);
+
+            float raw = unit.Stats.Mastery;
+            float ratio = ResolveMasteryConversionRatio(unit);
+            return new MasteryValues(raw, ratio);
+        }
+
+        private static float ResolveMasteryConversionRatio(Unit unit)
+        {
+            if (unit?.Skills != null)
+            {
+                foreach (var skill in unit.Skills)
+                {
+                    if (skill == null || skill.skillType != SkillType.Mastery)
+                        continue;
+
+                    float candidate = Mathf.Max(0f, skill.masteryStatConversionRatio);
+                    if (candidate > 0f)
+                        return candidate;
+                }
+            }
+
+            return 1f;
+        }
 
         private static void AddStats(IDictionary<string, float> map, Stats stats, string prefix)
         {
