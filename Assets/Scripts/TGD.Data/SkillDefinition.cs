@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
@@ -131,9 +132,13 @@ namespace TGD.Data
         public StatusAccumulatorAmount amount = StatusAccumulatorAmount.PostMitigation;
         public bool includeDotHot = true;
         public DamageSchool damageSchool = DamageSchool.Physical;
-
+        public int windowSeconds = 12;
+        public string variableKey;
         public string GetVariableKey()
         {
+            if (!string.IsNullOrWhiteSpace(variableKey))
+                return variableKey;
+
             return GetVariableKey(source);
         }
 
@@ -235,7 +240,7 @@ namespace TGD.Data
         public string chainNextID;
         public bool resetOnTurnEnd;
         public string skillTag = "none";
-
+        public List<string> tags = new();
         public SkillType skillType = SkillType.Active;
         [Tooltip("Fraction of this class mastery that converts into the shared mastery stat ('p').")]
         [Min(0f)]
@@ -271,6 +276,31 @@ namespace TGD.Data
                 statusMetadata.EnsureInitialized();
             if (string.IsNullOrWhiteSpace(skillTag))
                 skillTag = "none";
+            if (tags == null)
+                tags = new List<string>();
+            else
+            {
+                var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = tags.Count - 1; i >= 0; i--)
+                {
+                    string value = tags[i];
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        tags.RemoveAt(i);
+                        continue;
+                    }
+
+                    string trimmed = value.Trim();
+                    if (unique.Contains(trimmed))
+                    {
+                        tags.RemoveAt(i);
+                        continue;
+                    }
+
+                    unique.Add(trimmed);
+                    tags[i] = trimmed;
+                }
+            }
             if (multiTargetCount < 1)
                 multiTargetCount = 1;
             if (masteryStatConversionRatio <= 0f)

@@ -397,6 +397,7 @@ namespace TGD.Combat
         public bool IncludeDotHot { get; set; }
         public DamageSchool? DamageSchool { get; set; }
         public string VariableKey { get; set; }
+        public int WindowSeconds { get; set; }
     }
     public class StatusModificationPreview
     {
@@ -409,6 +410,8 @@ namespace TGD.Combat
         public int MaxStacks { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public StatusTransferFlags TransferFlags { get; set; }
+        public bool ClampToNewMax { get; set; } = true;
     }
     public class ConditionalPreview
     {
@@ -461,6 +464,9 @@ namespace TGD.Combat
         public bool LimitEnabled { get; set; }
         public string LimitExpression { get; set; }
         public float LimitValue { get; set; }
+        public List<string> IncludeTags { get; } = new();
+        public List<string> ExcludeTags { get; } = new();
+        public string SourceHandle { get; set; }
     }
 
     public class SkillReplacementPreview

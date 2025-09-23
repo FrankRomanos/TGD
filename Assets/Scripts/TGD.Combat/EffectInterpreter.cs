@@ -782,7 +782,8 @@ namespace TGD.Combat
                 From = settings.from,
                 Amount = settings.amount,
                 IncludeDotHot = settings.includeDotHot,
-                VariableKey = settings.GetVariableKey()
+                VariableKey = settings.GetVariableKey(),
+                WindowSeconds = settings.windowSeconds
             };
 
             if (settings.source == StatusAccumulatorSource.DamageTaken)
@@ -870,7 +871,9 @@ namespace TGD.Combat
                 StackCount = effect.statusModifyStacks,
                 MaxStacks = effect.statusModifyMaxStacks,
                 Probability = probability,
-                Condition = effect.condition
+                Condition = effect.condition,
+                TransferFlags = effect.statusTransferFlags,
+                ClampToNewMax = effect.statusTransferClampToNewMax
             };
 
             if (effect.statusModifySkillIDs != null && effect.statusModifySkillIDs.Count > 0)
@@ -975,6 +978,26 @@ namespace TGD.Combat
                 LimitExpression = limitEnabled ? effect.modifyLimitExpression : string.Empty,
                 LimitValue = limitEnabled ? resolvedLimit : 0f
             };
+            if (effect.modifyIncludeTags != null)
+            {
+                foreach (var tag in effect.modifyIncludeTags)
+                {
+                    if (!string.IsNullOrWhiteSpace(tag))
+                        preview.IncludeTags.Add(tag);
+                }
+            }
+
+            if (effect.modifyExcludeTags != null)
+            {
+                foreach (var tag in effect.modifyExcludeTags)
+                {
+                    if (!string.IsNullOrWhiteSpace(tag))
+                        preview.ExcludeTags.Add(tag);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(effect.modifySourceHandle))
+                preview.SourceHandle = effect.modifySourceHandle;
 
             if (isCooldownReset)
             {

@@ -229,7 +229,15 @@ namespace TGD.Data
         ReplaceStatus,
         DeleteStatus
     }
-
+    [Flags]
+    public enum StatusTransferFlags
+    {
+        None = 0,
+        Stacks = 1 << 0,
+        Duration = 1 << 1,
+        Source = 1 << 2,
+        Metadata = 1 << 3
+    }
     public enum MoveSubject
     {
         Caster,
@@ -434,6 +442,8 @@ namespace TGD.Data
         public bool statusModifyShowStacks = false;
         public int statusModifyStacks = 0;
         public int statusModifyMaxStacks = -1;
+        public StatusTransferFlags statusTransferFlags = StatusTransferFlags.None;
+        public bool statusTransferClampToNewMax = true;
         // ===== Skill References =====
         public string targetSkillID;        // 原技能ID/被修改技能
         public string replaceSkillID;       // 替换后技能ID
@@ -449,6 +459,9 @@ namespace TGD.Data
         public bool modifyLimitEnabled = false;
         public string modifyLimitExpression;
         public float modifyLimitValue;
+        public List<string> modifyIncludeTags = new();
+        public List<string> modifyExcludeTags = new();
+        public string modifySourceHandle;
 
         // ===== Modify Damage School =====
         public DamageSchoolModifyType damageSchoolModifyType = DamageSchoolModifyType.Damage;
