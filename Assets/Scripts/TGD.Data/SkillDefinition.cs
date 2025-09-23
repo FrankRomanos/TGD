@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
+using TGD.Core;
 
 namespace TGD.Data
 {
@@ -24,8 +26,36 @@ namespace TGD.Data
     [System.Serializable]
     public class SkillCost
     {
+        private static readonly IReadOnlyDictionary<string, float> EmptyVariables = new Dictionary<string, float>();
+
         public CostResourceType resourceType = CostResourceType.Energy;
         public int amount = 0;
+        public string amountExpression;
+
+        public bool HasExpression => !string.IsNullOrWhiteSpace(amountExpression);
+
+        public float ResolveAmount(IReadOnlyDictionary<string, float> variables = null)
+        {
+            if (HasExpression)
+            {
+                var scope = variables ?? EmptyVariables;
+                if (Formula.TryEvaluate(amountExpression, scope, out float value))
+                    return value;
+
+                if (float.TryParse(amountExpression, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                    return value;
+            }
+
+            return amount;
+        }
+
+        public string GetAmountLabel()
+        {
+            if (HasExpression)
+                return amountExpression;
+
+            return amount.ToString(CultureInfo.InvariantCulture);
+        }
     }
     [System.Serializable]
     public enum SkillCostConditionType

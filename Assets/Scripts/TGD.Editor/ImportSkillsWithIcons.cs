@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,7 +15,7 @@ namespace TGD.Editor
     {
         private static bool bindIcons = true;
         private static bool verboseLog = true;
-        private static string spriteFolder = "Assets/Icons"; // ÄãÔ­À´µÄÍ¼±êÂ·¾¶
+        private static string spriteFolder = "Assets/Icons"; // ä½ åŸæ¥çš„å›¾æ ‡è·¯å¾„
         private static Dictionary<string, Sprite> spritePaths = new Dictionary<string, Sprite>();
         private static Dictionary<string, string> normalizedToPaths = new Dictionary<string, string>();
 
@@ -30,7 +31,7 @@ namespace TGD.Editor
             var lines = File.ReadAllLines(path, Encoding.UTF8).ToList();
             if (lines.Count < 2)
             {
-                Debug.LogError("CSV ÎÄ¼şÎª¿Õ»òÈ±ÉÙÊı¾İĞĞ£¡");
+                Debug.LogError("CSV æ–‡ä»¶ä¸ºç©ºæˆ–ç¼ºå°‘æ•°æ®è¡Œï¼");
                 return;
             }
 
@@ -52,7 +53,7 @@ namespace TGD.Editor
                     AssetDatabase.CreateAsset(asset, assetPath);
                 }
 
-                // »ù´¡×Ö¶Î
+                // åŸºç¡€å­—æ®µ
                 asset.skillID = skillID;
                 asset.skillName = Get(cols, indexOf, "skillName");
                 asset.moduleID = Get(cols, indexOf, "moduleID");
@@ -65,10 +66,22 @@ namespace TGD.Editor
                 TryParseEnumField(asset, "targetType", Get(cols, indexOf, "targetType"));
                 asset.costs = new List<SkillCost>();
 
-                int energy = ParseIntSafe(Get(cols, indexOf, "cost"));
-                if (energy > 0)
+                string costRaw = Get(cols, indexOf, "cost");
+                if (!string.IsNullOrWhiteSpace(costRaw))
                 {
-                    asset.costs.Add(new SkillCost { resourceType = CostResourceType.Energy, amount = energy });
+                    costRaw = costRaw.Trim();
+                    var cost = new SkillCost { resourceType = CostResourceType.Energy };
+
+                    if (int.TryParse(costRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int energyValue) && energyValue > 0)
+                    {
+                        cost.amount = energyValue;
+                        asset.costs.Add(cost);
+                    }
+                    else if (!string.IsNullOrEmpty(costRaw))
+                    {
+                        cost.amountExpression = costRaw;
+                        asset.costs.Add(cost);
+                    }
                 }
 
                 asset.timeCostSeconds = ParseIntSafe(Get(cols, indexOf, "timeCostSeconds"));
@@ -79,10 +92,10 @@ namespace TGD.Editor
                 asset.namekey = Get(cols, indexOf, "namekey");
                 asset.descriptionKey = Get(cols, indexOf, "descriptionKey");
 
-                // ²»ÔÙÊ¹ÓÃ effectsRaw£¬±£³Ö effects Îª¿Õ£¨ºóĞø¿ÉÓÃ Editor ÊÖ¶¯ÅäÖÃ£©
+                // ä¸å†ä½¿ç”¨ effectsRawï¼Œä¿æŒ effects ä¸ºç©ºï¼ˆåç»­å¯ç”¨ Editor æ‰‹åŠ¨é…ç½®ï¼‰
                 asset.effects = new List<EffectDefinition>();
 
-                // ×Ô¶¯°ó¶¨Í¼±ê
+                // è‡ªåŠ¨ç»‘å®šå›¾æ ‡
                 if (bindIcons)
                 {
                     Sprite found = FindIconByIDOnly(asset.skillID, spriteFolder, spritePaths, normalizedToPaths);
@@ -105,7 +118,7 @@ namespace TGD.Editor
             EditorUtility.DisplayDialog("Import Complete", "Skills imported successfully!", "OK");
         }
 
-        // ======================== µ¼³ö¹¦ÄÜ ========================
+        // ======================== å¯¼å‡ºåŠŸèƒ½ ========================
         [MenuItem("Tools/Export Skills to CSV")]
         public static void ExportSkillsToCSV()
         {
@@ -118,13 +131,16 @@ namespace TGD.Editor
                 .ToList();
             using (var writer = new StreamWriter(outputPath, false, Encoding.UTF8))
             {
-                // ²»ÔÙ°üº¬ effectsRaw
+                // ä¸å†åŒ…å« effectsRaw
                 writer.WriteLine("skillID,skillName,moduleID,variantKey,chainNextID,resetOnTurnEnd,classID,actionType,targetType,energyCost,timeCostSeconds,cooldownSeconds,range,threat,shredMultiplier,namekey,descriptionKey");
 
                 foreach (var s in skills)
                 {
-                    // ÕÒ Energy ÏûºÄ£¨Èç¹ûÃ»ÓĞÔò 0£©
-                    int energy = s.costs.FirstOrDefault(c => c.resourceType == CostResourceType.Energy)?.amount ?? 0;
+                    // æ‰¾ Energy æ¶ˆè€—ï¼ˆå¦‚æœæ²¡æœ‰åˆ™ 0ï¼‰
+                    string energy = string.Empty;
+                    var energyCost = s.costs?.FirstOrDefault(c => c.resourceType == CostResourceType.Energy);
+                    if (energyCost != null)
+                        energy = energyCost.GetAmountLabel();
 
                     string line = string.Join(",",
                         s.skillID,
@@ -154,7 +170,7 @@ namespace TGD.Editor
             EditorUtility.DisplayDialog("Export Complete", $"Exported {skills.Count} skills to {outputPath}", "OK");
         }
 
-        // ======================== ¹¤¾ß·½·¨ ========================
+        // ======================== å·¥å…·æ–¹æ³• ========================
         private static string Get(List<string> cols, Dictionary<string, int> indexOf, string key)
         {
             if (!indexOf.ContainsKey(key)) return "";
@@ -164,7 +180,7 @@ namespace TGD.Editor
 
         private static List<string> ParseCSVLine(string line)
         {
-            // ¼òµ¥ CSV ĞĞ½âÎö£¨°´¶ººÅ·Ö¸î£©
+            // ç®€å• CSV è¡Œè§£æï¼ˆæŒ‰é€—å·åˆ†å‰²ï¼‰
             return line.Split(',').Select(s => s.Trim()).ToList();
         }
 
