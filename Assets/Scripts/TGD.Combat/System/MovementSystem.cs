@@ -1,5 +1,7 @@
 using System;
+using TGD.Data;
 using UnityEngine;
+
 
 namespace TGD.Combat
 {

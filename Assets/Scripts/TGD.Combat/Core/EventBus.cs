@@ -42,6 +42,16 @@ namespace TGD.Combat
         event Action<StatusEvent> OnStatusApplied;
         event Action<StatusEvent> OnStatusExpired;
         event Action<StatusEvent> OnStatusDispelled;
+        void EmitDamageResolved(Unit atk, Unit tgt, float amountPost, bool isDot, DamageSchool school, float t);
+
+        void EmitTurnBegin(Unit u);
+        void EmitTurnEnd(Unit u);
+
+        void EmitUnitPositionChanged(Unit u, Vector2Int from, Vector2Int to);
+
+        void EmitStatusApplied(in StatusEvent e);
+        void EmitStatusExpired(in StatusEvent e);
+        void EmitStatusDispelled(in StatusEvent e);
     }
 
     /// <summary>
