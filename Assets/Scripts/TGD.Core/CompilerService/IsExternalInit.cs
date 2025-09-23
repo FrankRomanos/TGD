@@ -1,13 +1,9 @@
+#if !NET5_0_OR_GREATER
 namespace System.Runtime.CompilerServices
 {
     /// <summary>
-    /// Provides a shim for init-only setters on older runtime targets that do not expose
-    /// System.Runtime.CompilerServices.IsExternalInit. Unity's current runtime predates
-    /// the official type, so we declare it here to unblock the compiler when using the
-    /// C# 9 init accessor syntax.
+    /// Shim for C# 9 init accessors on older Unity runtimes.
     /// </summary>
-    internal static class IsExternalInit
-    {
-
-    }
+    public static class IsExternalInit { }
 }
+#endif

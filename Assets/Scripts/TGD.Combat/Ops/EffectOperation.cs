@@ -214,6 +214,8 @@ namespace TGD.Combat
         {
         }
 
+        public Unit AnchorUnit { get; set; }    // ¡û ÐÂ×Ö¶Î
+
         public TargetType Source { get; init; } = TargetType.Self;
         public AuraRangeMode RangeMode { get; init; } = AuraRangeMode.Within;
         public float Radius { get; init; }

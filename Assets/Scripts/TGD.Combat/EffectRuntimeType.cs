@@ -467,6 +467,7 @@ namespace TGD.Combat
         public List<string> IncludeTags { get; } = new();
         public List<string> ExcludeTags { get; } = new();
         public string SourceHandle { get; set; }
+
     }
 
     public class SkillReplacementPreview

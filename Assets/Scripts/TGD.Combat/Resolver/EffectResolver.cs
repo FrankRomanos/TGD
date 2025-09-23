@@ -1,7 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TGD.Data;
+using Unity.VisualScripting.YamlDotNet.Core.Tokens;
+using static UnityEngine.EventSystems.EventTrigger;
 
 namespace TGD.Combat
 {
@@ -328,6 +330,29 @@ namespace TGD.Combat
 
         private static void AppendAuras(EffectInterpretationResult preview, EffectContext context, List<EffectOp> operations, HashSet<object> consumed, bool respectConsumed)
         {
+            Unit anchor = context?.Caster;
+            if (entry.Source == TargetType.Enemy && context?.PrimaryTarget != null)
+                anchor = context.PrimaryTarget;
+
+            operations.Add(new AuraOp
+            {
+                AnchorUnit = anchor, // ✅
+                Source = entry.Source,
+                RangeMode = entry.RangeMode,
+                Radius = entry.Radius,
+                MinRadius = entry.MinRadius,
+                MaxRadius = entry.MaxRadius,
+                Category = entry.Category,
+                AffectedTargets = entry.AffectedTargets,
+                AffectsImmune = entry.AffectsImmune,
+                DurationSeconds = ConvertDurationToSeconds(entry.Duration, false, entry.Duration <= 0),
+                HeartbeatSeconds = entry.HeartbeatSeconds,
+                OnEnterCondition = entry.OnEnterCondition,
+                OnExitCondition = entry.OnExitCondition,
+                AdditionalOperations = additionalOps,
+                Probability = entry.Probability,
+                Condition = entry.Condition
+            });
             foreach (var entry in preview.Auras)
             {
                 if (entry == null)
@@ -341,6 +366,7 @@ namespace TGD.Combat
 
                 operations.Add(new AuraOp
                 {
+                    AnchorUnit = anchor,                   // ✅ 新字段
                     Source = entry.Source,
                     RangeMode = entry.RangeMode,
                     Radius = entry.Radius,
@@ -592,8 +618,6 @@ namespace TGD.Combat
                 case TargetType.Enemy:
                     if (context.PrimaryTarget != null)
                         targets.Add(context.PrimaryTarget);
-                    else if (context.Enemies.Count > 0)
-                        targets.AddRange(context.Enemies);
                     break;
                 case TargetType.Allies:
                     if (context.Allies.Count > 0)
