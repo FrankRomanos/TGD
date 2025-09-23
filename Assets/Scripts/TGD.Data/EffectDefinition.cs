@@ -153,7 +153,8 @@ namespace TGD.Data
     public enum AuraRangeMode
     {
         Within,
-        Between
+        Between,
+        Exact
     }
 
     [Serializable]

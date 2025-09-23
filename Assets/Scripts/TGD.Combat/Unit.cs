@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 using TGD.Core;
 using TGD.Data;
 
@@ -9,60 +10,129 @@ namespace TGD.Combat
     public class Unit
     {
         public string UnitId;
+        public int TeamId;
         public Stats Stats = new Stats();
+        public Vector2Int Position;
 
-        // 技能与冷却
-        public List<SkillDefinition> Skills = new List<SkillDefinition>();
+        public List<SkillDefinition> Skills = new();
         private readonly Dictionary<string, int> _cdSeconds = new();
+        private readonly List<StatusInstance> _statuses = new();
 
-        // 施放技能时设定冷却（以秒为准）
-        public void SetCooldown(SkillDefinition s)
+        public IReadOnlyList<StatusInstance> Statuses => _statuses;
+
+        public void SetCooldown(SkillDefinition skill)
         {
-            _cdSeconds[s.skillID] = Math.Max(0, s.cooldownSeconds);
+            if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
+                return;
+            _cdSeconds[skill.skillID] = Math.Max(0, skill.cooldownSeconds);
         }
 
-        // 任意回合结束时统一调用：-6s
-        public void TickCooldownSeconds(int deltaSeconds = 6)
+        public void TickCooldownSeconds(int deltaSeconds = CombatClock.BaseTurnSeconds)
         {
-            if (_cdSeconds.Count == 0) return;
+            if (_cdSeconds.Count == 0)
+                return;
+
             foreach (var key in _cdSeconds.Keys.ToList())
-            {
                 _cdSeconds[key] = Math.Max(0, _cdSeconds[key] - deltaSeconds);
-            }
         }
 
-
-        // 回合时间
         public int TurnTime => CombatClock.BaseTurnSeconds + Stats.Speed;
-        public int PrepaidTime;   // 敌回合 Reaction 预支
-        public int RemainingTime; // 自己回合剩余时间
+        public int PrepaidTime;
+        public int RemainingTime;
 
         public void StartTurn()
         {
             RemainingTime = TurnTime - PrepaidTime;
-            if (RemainingTime < 0) RemainingTime = 0;
+            if (RemainingTime < 0)
+                RemainingTime = 0;
             PrepaidTime = 0;
         }
 
         public void EndTurn()
         {
-            // 冷却 -1
-            var keys = new List<string>(_cdSeconds.Keys);
-            foreach (var k in keys)
+            foreach (var key in _cdSeconds.Keys.ToList())
+                _cdSeconds[key] = Math.Max(0, _cdSeconds[key] - CombatClock.BaseTurnSeconds);
+        }
+
+        public bool IsOnCooldown(SkillDefinition skill)
+        {
+            if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
+                return false;
+            return _cdSeconds.TryGetValue(skill.skillID, out var seconds) && seconds > 0;
+        }
+
+        public int GetUiTurns(SkillDefinition skill)
+        {
+            if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
+                return 0;
+            return (int)Math.Ceiling((_cdSeconds.TryGetValue(skill.skillID, out var sec) ? sec : 0) / (float)CombatClock.BaseTurnSeconds);
+        }
+
+        public int GetUiRounds(SkillDefinition skill)
+        {
+            if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
+                return 0;
+            return (int)Math.Ceiling((_cdSeconds.TryGetValue(skill.skillID, out var sec) ? sec : 0) / (2f * CombatClock.BaseTurnSeconds));
+        }
+
+        public bool IsAllyOf(Unit other) => other != null && TeamId == other.TeamId;
+        public bool IsEnemyOf(Unit other) => other != null && TeamId != other.TeamId;
+
+        public void ModifyCooldown(string skillId, int deltaSeconds)
+        {
+            if (string.IsNullOrWhiteSpace(skillId) || deltaSeconds == 0)
+                return;
+
+            if (!_cdSeconds.TryGetValue(skillId, out var seconds))
+                seconds = 0;
+
+            seconds = Math.Max(0, seconds + deltaSeconds);
+            _cdSeconds[skillId] = seconds;
+        }
+
+        public StatusInstance FindStatus(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return null;
+            return _statuses.FirstOrDefault(s => string.Equals(s.StatusSkillId, skillId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public IEnumerable<StatusInstance> FindStatuses(IEnumerable<string> skillIds)
+        {
+            if (skillIds == null)
+                yield break;
+
+            var set = new HashSet<string>(skillIds.Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.OrdinalIgnoreCase);
+            if (set.Count == 0)
+                yield break;
+
+            foreach (var status in _statuses)
             {
-                _cdSeconds[k] = System.Math.Max(0, _cdSeconds[k] - 6);
+                if (set.Contains(status.StatusSkillId))
+                    yield return status;
             }
         }
 
-        public bool IsOnCooldown(SkillDefinition s) =>
-            _cdSeconds.TryGetValue(s.skillID, out var sec) && sec > 0;
+        public void AddStatus(StatusInstance instance)
+        {
+            if (instance == null)
+                return;
+            if (!_statuses.Contains(instance))
+                _statuses.Add(instance);
+        }
 
-        // —— 仅供 UI 显示 —— 
-        public int GetUiTurns(SkillDefinition s) =>
-            (int)Math.Ceiling((_cdSeconds.TryGetValue(s.skillID, out var sec) ? sec : 0) / 6.0);
+        public void RemoveStatus(StatusInstance instance)
+        {
+            if (instance == null)
+                return;
+            _statuses.Remove(instance);
+        }
 
-        public int GetUiRounds(SkillDefinition s) =>
-            (int)Math.Ceiling((_cdSeconds.TryGetValue(s.skillID, out var sec) ? sec : 0) / 12.0);
-
+        public SkillDefinition FindSkill(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return null;
+            return Skills.FirstOrDefault(s => string.Equals(s?.skillID, skillId, StringComparison.OrdinalIgnoreCase));
+        }
     }
 }

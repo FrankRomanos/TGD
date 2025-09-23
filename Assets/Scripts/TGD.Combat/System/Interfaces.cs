@@ -1,22 +1,36 @@
 // Assets/Scripts/TGD.Combat/Systems/Interfaces.cs
+using System;
 using TGD.Data;
 
 namespace TGD.Combat
 {
-    // ÈÕÖ¾½Ó¿Ú£¨±¾ÂÖÏÈÂú×ã EffectOpRunner µÄµ÷ÓÃ£©
+        void Log(string eventType, params object[] args);
+    public interface IStatusSystem
+    {
+        void Execute(ApplyStatusOp op, RuntimeCtx ctx);
+        void Execute(RemoveStatusOp op, RuntimeCtx ctx);
+        void Tick(Unit unit, int deltaSeconds);
+    }
+
+    public interface IAuraSystem
+    {
+        void Execute(AuraOp op, RuntimeCtx ctx);
+    }
+
+    // æ—¥å¿—æ¥å£ï¼ˆæœ¬è½®å…ˆæ»¡è¶³ EffectOpRunner çš„è°ƒç”¨ï¼‰
     public interface ICombatLogger
     {
         void Emit(LogOp op, RuntimeCtx ctx);
     }
 
-    // ÉËº¦/ÖÎÁÆÏµÍ³
+    // ä¼¤å®³/æ²»ç–—ç³»ç»Ÿ
     public interface IDamageSystem
     {
         void Execute(DealDamageOp op, RuntimeCtx ctx);
         void Execute(HealOp op, RuntimeCtx ctx);
     }
 
-    // ×ÊÔ´Ôö¼õÏµÍ³£¨¾«Á¦/¼ÍÂÉ/HPÉÏÏŞµÈ£©
+    // èµ„æºå¢å‡ç³»ç»Ÿï¼ˆç²¾åŠ›/çºªå¾‹/HPä¸Šé™ç­‰ï¼‰
     public interface IResourceSystem
     {
         void Execute(ModifyResourceOp op, RuntimeCtx ctx);
@@ -24,30 +38,30 @@ namespace TGD.Combat
 
 
 
-    // ÀäÈ´ÏµÍ³£¨Ö»ÔÚ TurnEnd Í³Ò» -6s£©
+    // å†·å´ç³»ç»Ÿï¼ˆåªåœ¨ TurnEnd ç»Ÿä¸€ -6sï¼‰
     public interface ICooldownSystem
     {
         void Execute(ModifyCooldownOp op, RuntimeCtx ctx);
-        void TickEndOfTurn(); // ÈÎÒâµ¥Î» TurnEnd µ÷ÓÃÒ»´Î
+        void TickEndOfTurn(); // ä»»æ„å•ä½ TurnEnd è°ƒç”¨ä¸€æ¬¡
     }
 
-    // ¼¼ÄÜÁÙÊ±ĞŞ¸Ä£¨AddCost µÈ£¬¿Éµş¼Ó¡¢°´ SourceHandle »Ø¹ö£©
+    // æŠ€èƒ½ä¸´æ—¶ä¿®æ”¹ï¼ˆAddCost ç­‰ï¼Œå¯å åŠ ã€æŒ‰ SourceHandle å›æ»šï¼‰
     public interface ISkillModSystem
     {
         void Execute(ModifySkillOp op, RuntimeCtx ctx);
         void Execute(ReplaceSkillOp op, RuntimeCtx ctx);
     }
 
-    // ÒÆ¶¯ÏµÍ³£¨ÒÆ¶¯=¼¼ÄÜ£»Commit ²Å¸Ä×ø±ê£©
+    // ç§»åŠ¨ç³»ç»Ÿï¼ˆç§»åŠ¨=æŠ€èƒ½ï¼›Commit æ‰æ”¹åæ ‡ï¼‰
     public interface IMovementSystem
     {
         void Execute(MoveOp op, RuntimeCtx ctx);
     }
 
-    // ¹â»·/·¶Î§ÏµÍ³£¨AnchorUnit ÎªÔ²ĞÄ£¬Within/Between/Exact£©
+    // å…‰ç¯/èŒƒå›´ç³»ç»Ÿï¼ˆAnchorUnit ä¸ºåœ†å¿ƒï¼ŒWithin/Between/Exactï¼‰
 
 
-    // µ÷¶ÈÏµÍ³£¨Ëæ»ú·ÖÖ§/ÖØ¸´/DoT¡¤HoT ¸½¼Ó/½«À´ÑÓÊ±µÈ£©
+    // è°ƒåº¦ç³»ç»Ÿï¼ˆéšæœºåˆ†æ”¯/é‡å¤/DoTÂ·HoT é™„åŠ /å°†æ¥å»¶æ—¶ç­‰ï¼‰
     public interface IScheduler
     {
         void Execute(ScheduleOp op, RuntimeCtx ctx);

@@ -13,6 +13,7 @@ namespace TGD.Combat
         public ICombatEventBus EventBus { get; set; }
         public ICombatLogger Logger { get; set; }
         public ICombatTime Time { get; set; }
+        public ISkillResolver SkillResolver { get; set; }
 
         public IDamageSystem DamageSystem { get; set; }
         public IStatusSystem StatusSystem { get; set; }
@@ -21,6 +22,6 @@ namespace TGD.Combat
         public IMovementSystem MovementSystem { get; set; }
         public IAuraSystem AuraSystem { get; set; }
         public IScheduler Scheduler { get; set; }
-        public IResourceSystem ResourceSystem { get; set; } // 若已有则复用
+        public IResourceSystem ResourceSystem { get; set; } // 脠么脪脩脫脨脭貌赂麓脫脙
     }
 }

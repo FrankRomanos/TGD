@@ -330,29 +330,9 @@ namespace TGD.Combat
 
         private static void AppendAuras(EffectInterpretationResult preview, EffectContext context, List<EffectOp> operations, HashSet<object> consumed, bool respectConsumed)
         {
-            Unit anchor = context?.Caster;
-            if (entry.Source == TargetType.Enemy && context?.PrimaryTarget != null)
-                anchor = context.PrimaryTarget;
+            if (preview?.Auras == null)
+                return;
 
-            operations.Add(new AuraOp
-            {
-                AnchorUnit = anchor, // ✅
-                Source = entry.Source,
-                RangeMode = entry.RangeMode,
-                Radius = entry.Radius,
-                MinRadius = entry.MinRadius,
-                MaxRadius = entry.MaxRadius,
-                Category = entry.Category,
-                AffectedTargets = entry.AffectedTargets,
-                AffectsImmune = entry.AffectsImmune,
-                DurationSeconds = ConvertDurationToSeconds(entry.Duration, false, entry.Duration <= 0),
-                HeartbeatSeconds = entry.HeartbeatSeconds,
-                OnEnterCondition = entry.OnEnterCondition,
-                OnExitCondition = entry.OnExitCondition,
-                AdditionalOperations = additionalOps,
-                Probability = entry.Probability,
-                Condition = entry.Condition
-            });
             foreach (var entry in preview.Auras)
             {
                 if (entry == null)
@@ -364,9 +344,11 @@ namespace TGD.Combat
                     ? ResolveInternal(entry.AdditionalEffects, context, consumed, respectConsumed: false)
                     : Array.Empty<EffectOp>();
 
+                var anchor = ResolveAuraAnchor(entry.Source, context);
+
                 operations.Add(new AuraOp
                 {
-                    AnchorUnit = anchor,                   // ✅ 新字段
+                    AnchorUnit = anchor,
                     Source = entry.Source,
                     RangeMode = entry.RangeMode,
                     Radius = entry.Radius,
@@ -384,6 +366,21 @@ namespace TGD.Combat
                     Condition = entry.Condition
                 });
             }
+        }
+
+        private static Unit ResolveAuraAnchor(TargetType source, EffectContext context)
+        {
+            if (context == null)
+                return null;
+
+            return source switch
+            {
+                TargetType.Self => context.Caster,
+                TargetType.Enemy => context.PrimaryTarget,
+                TargetType.Allies => context.Allies.FirstOrDefault(u => u != null),
+                TargetType.All => context.PrimaryTarget ?? context.Caster,
+                _ => context.Caster
+            };
         }
 
         private static void AppendSchedules(EffectInterpretationResult preview, EffectContext context, List<EffectOp> operations, HashSet<object> consumed, bool respectConsumed)
