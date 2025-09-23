@@ -723,7 +723,7 @@ namespace TGD.Combat
             SkillDefinition statusSkill = null;
             if (!string.IsNullOrWhiteSpace(statusSkillId) && context.SkillResolver != null)
             {
-                statusSkill = context.SkillResolver.FindSkill(statusSkillId);
+                statusSkill = context.SkillResolver.ResolveById(statusSkillId);
                 var accumulatorPreview = BuildStatusAccumulatorPreview(statusSkill);
                 if (accumulatorPreview != null)
                     preview.Accumulator = accumulatorPreview;
@@ -1733,7 +1733,7 @@ namespace TGD.Combat
                 Scope = scope,
                 SelfSkillID = selfSkillId,
                 Seconds = seconds,
-                turns = turns,
+                Turns = turns,
                 Probability = probability,
                 Condition = effect.condition
             });

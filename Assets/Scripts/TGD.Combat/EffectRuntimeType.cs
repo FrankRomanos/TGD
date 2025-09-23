@@ -1,40 +1,40 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.Data;
 
 namespace TGD.Combat
 {
-    public interface ISkillResolver
+    public sealed class DictionarySkillResolver : ISkillResolver
     {
-        SkillDefinition FindSkill(string skillID);
-    }
-
-    public class DictionarySkillResolver : ISkillResolver
-    {
-        private readonly Dictionary<string, SkillDefinition> skills;
+        private readonly Dictionary<string, SkillDefinition> _skills;
 
         public DictionarySkillResolver(IEnumerable<SkillDefinition> source)
         {
-            skills = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            if (source == null)
-                return;
+            _skills = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
+            if (source == null) return;
 
             foreach (var skill in source)
             {
-                if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
-                    continue;
-                skills[skill.skillID] = skill;
+                if (skill == null) continue;
+
+                // 注意：你的 SkillDefinition 字段名是 skillID（不是 Id）
+                var id = skill.skillID;
+                if (string.IsNullOrWhiteSpace(id)) continue;
+
+                _skills[id] = skill;
             }
         }
 
-        public SkillDefinition FindSkill(string skillID)
+        // ✅ 真正实现接口要求的方法
+        public SkillDefinition ResolveById(string skillId)
         {
-            if (string.IsNullOrWhiteSpace(skillID))
-                return null;
-            skills.TryGetValue(skillID, out var skill);
-            return skill;
+            if (string.IsNullOrWhiteSpace(skillId)) return null;
+            return _skills.TryGetValue(skillId, out var def) ? def : null;
         }
+
+        // ✅ 兼容旧调用（可选）：以后删也行
+        public SkillDefinition FindSkill(string skillId) => ResolveById(skillId);
     }
 
     public class DotHotStatusSnapshot
@@ -512,7 +512,7 @@ namespace TGD.Combat
         public string SelfSkillID { get; set; }
         public int Seconds { get; set; }
         public int Rounds { get; set; }
-        public int turns {  get; set; }
+        public int Turns {  get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
     }

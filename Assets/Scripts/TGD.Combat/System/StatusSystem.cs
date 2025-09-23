@@ -255,7 +255,7 @@ namespace TGD.Combat
 
         SkillDefinition ResolveStatusSkill(string skillId, Unit target, RuntimeCtx ctx)
         {
-            return ctx?.SkillResolver?.FindSkill(skillId)
+            return ctx?.SkillResolver?.ResolveById(skillId)
                    ?? ctx?.Caster?.FindSkill(skillId)
                    ?? target?.FindSkill(skillId);
         }

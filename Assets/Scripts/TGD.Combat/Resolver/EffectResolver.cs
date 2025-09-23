@@ -240,8 +240,8 @@ namespace TGD.Combat
         private static int ResolveCooldownSeconds(CooldownModificationPreview entry)
         {
             int seconds = entry.Seconds;
-            if (entry.turns != 0)
-                seconds += entry.turns * CombatClock.BaseTurnSeconds;
+            if (entry.Turns != 0)
+                seconds += entry.Turns * CombatClock.BaseTurnSeconds;
             if (entry.Rounds != 0)
                 seconds += entry.Rounds * CombatClock.BaseTurnSeconds * 2;
             return seconds;

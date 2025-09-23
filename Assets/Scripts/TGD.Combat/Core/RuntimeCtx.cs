@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-
+using TGD.Data;
 
 namespace TGD.Combat
 {
@@ -22,6 +22,6 @@ namespace TGD.Combat
         public IMovementSystem MovementSystem { get; set; }
         public IAuraSystem AuraSystem { get; set; }
         public IScheduler Scheduler { get; set; }
-        public IResourceSystem ResourceSystem { get; set; } // ÈôÒÑÓÐÔò¸´ÓÃ
+        public IResourceSystem ResourceSystem { get; set; }
     }
 }
