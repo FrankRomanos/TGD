@@ -4,7 +4,7 @@ using TGD.Data;
 
 namespace TGD.Combat
 {
-        void Log(string eventType, params object[] args);
+
     public interface IStatusSystem
     {
         void Execute(ApplyStatusOp op, RuntimeCtx ctx);
@@ -21,6 +21,7 @@ namespace TGD.Combat
     public interface ICombatLogger
     {
         void Emit(LogOp op, RuntimeCtx ctx);
+        void Log(string eventType, params object[] args);
     }
 
     // 伤害/治疗系统
