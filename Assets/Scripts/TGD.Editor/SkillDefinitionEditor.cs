@@ -1,4 +1,5 @@
-﻿using UnityEditor;
+using System.Globalization;
+using UnityEditor;
 using UnityEngine;
 using TGD.Data;
 
@@ -192,9 +193,46 @@ namespace TGD.Editor
                 for (int i = 0; i < costsProp.arraySize; i++)
                 {
                     var costElem = costsProp.GetArrayElementAtIndex(i);
+                    var resourceProp = costElem.FindPropertyRelative("resourceType");
+                    var amountProp = costElem.FindPropertyRelative("amount");
+                    var amountExpressionProp = costElem.FindPropertyRelative("amountExpression");
+
                     EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.PropertyField(costElem.FindPropertyRelative("resourceType"), GUIContent.none);
-                    EditorGUILayout.PropertyField(costElem.FindPropertyRelative("amount"), GUIContent.none);
+                    EditorGUILayout.PropertyField(resourceProp, GUIContent.none);
+
+                    string currentDisplay = amountExpressionProp != null && !string.IsNullOrWhiteSpace(amountExpressionProp.stringValue)
+                        ? amountExpressionProp.stringValue
+                        : amountProp != null ? amountProp.intValue.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+                    EditorGUI.BeginChangeCheck();
+                    string newValue = EditorGUILayout.DelayedTextField(
+                        new GUIContent(string.Empty, "Enter a number or expression (e.g., maxhp*0.5)."),
+                        currentDisplay);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        string trimmed = string.IsNullOrWhiteSpace(newValue) ? string.Empty : newValue.Trim();
+
+                        if (string.IsNullOrEmpty(trimmed))
+                        {
+                            if (amountProp != null)
+                                amountProp.intValue = 0;
+                            if (amountExpressionProp != null)
+                                amountExpressionProp.stringValue = string.Empty;
+                        }
+                        else if (amountProp != null && int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
+                        {
+                            amountProp.intValue = parsed;
+                            if (amountExpressionProp != null)
+                                amountExpressionProp.stringValue = string.Empty;
+                        }
+                        else if (amountExpressionProp != null)
+                        {
+                            amountExpressionProp.stringValue = trimmed;
+                            if (amountProp != null)
+                                amountProp.intValue = 0;
+                        }
+                    }
+
                     if (GUILayout.Button("X", GUILayout.Width(20)))
                         costsProp.DeleteArrayElementAtIndex(i);
                     EditorGUILayout.EndHorizontal();
