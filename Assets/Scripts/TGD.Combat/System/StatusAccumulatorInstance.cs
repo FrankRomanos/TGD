@@ -44,7 +44,7 @@ namespace TGD.Combat
         }
 
         void OnExpire() => FinalizeAndTrigger(onDispel: false);
-        void OnDispel() { /* 规则：驱散不结算；若要结算改 true */ }
+        void OnDispel() => FinalizeAndTrigger(onDispel: true);
 
         void FinalizeAndTrigger(bool onDispel)
         {
@@ -54,7 +54,8 @@ namespace TGD.Combat
             if (onDispel) return;
 
             var value = Sum();
-            var effCtx = _owner.BuildEffectContext(); // 你们已有便捷方法的话用它
+            effCtx.ConditionOnEffectEnd = true;
+            _ctx?.Logger?.Log("ACCUMULATOR_FINAL", _owner.Target?.UnitId, value);
             effCtx.CustomVariables[_cfg.VariableKey] = value;
             effCtx.Flags.OnEffectEnd = true;
 
