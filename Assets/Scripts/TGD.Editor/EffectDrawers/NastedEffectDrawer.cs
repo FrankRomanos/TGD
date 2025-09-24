@@ -124,6 +124,7 @@ namespace TGD.Editor
 
             SetBool(effectProp.FindPropertyRelative("perLevel"), false);
             SetBool(effectProp.FindPropertyRelative("perLevelDuration"), true);
+            SetBool(effectProp.FindPropertyRelative("conditionNegate"), false);
 
             SetBool(effectProp.FindPropertyRelative("repeatConsumeResource"), true);
 

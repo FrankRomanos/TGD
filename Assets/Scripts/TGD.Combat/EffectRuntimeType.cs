@@ -338,6 +338,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public ImmunityScope ImmunityScope { get; set; }
         public float ExpectedNormalDamage { get; set; }
         public float ExpectedCriticalDamage { get; set; }
@@ -358,6 +359,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class ResourceChangePreview
@@ -368,6 +370,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public string Expression { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public bool FillToMax { get; set; }
         public ResourceModifyType ModifyType { get; set; }
         public bool AffectsMax { get; set; }
@@ -385,6 +388,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public EffectInterpretationResult InstantResult { get; set; }
         public StatusAccumulatorPreview Accumulator { get; set; }
     }
@@ -410,6 +414,7 @@ namespace TGD.Combat
         public int MaxStacks { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public StatusTransferFlags TransferFlags { get; set; }
         public bool ClampToNewMax { get; set; } = true;
     }
@@ -461,6 +466,7 @@ namespace TGD.Combat
         public CostResourceType CostResource { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public bool LimitEnabled { get; set; }
         public string LimitExpression { get; set; }
         public float LimitValue { get; set; }
@@ -477,6 +483,7 @@ namespace TGD.Combat
         public bool InheritCooldown { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class ActionModificationPreview
@@ -490,6 +497,7 @@ namespace TGD.Combat
         public ActionType ActionTypeOverride { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class DamageSchoolModificationPreview
@@ -504,6 +512,7 @@ namespace TGD.Combat
         public string ValueExpression { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class CooldownModificationPreview
@@ -515,6 +524,7 @@ namespace TGD.Combat
         public int Turns {  get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class AttributeModifierPreview
@@ -527,6 +537,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public ImmunityScope ImmunityScope { get; set; }
     }
 
@@ -540,6 +551,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class MovePreview
@@ -558,6 +570,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class AuraPreview
@@ -573,6 +586,7 @@ namespace TGD.Combat
         public int Duration { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public EffectCondition OnEnterCondition { get; set; }
         public EffectCondition OnExitCondition { get; set; }
         public int HeartbeatSeconds { get; set; }
@@ -600,6 +614,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public int Duration { get; set; }
         public int StackCount { get; set; }
         public string ValueExpression { get; set; }
@@ -627,6 +642,7 @@ namespace TGD.Combat
         public bool AllowDuplicates { get; set; }
         public List<RandomOutcomeOptionPreview> Options { get; } = new();
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 
     public class RepeatEffectPreview
@@ -638,6 +654,7 @@ namespace TGD.Combat
         public ResourceType ResourceType { get; set; }
         public bool ConsumeResource { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public EffectInterpretationResult Result { get; set; }
     }
 
@@ -645,6 +662,7 @@ namespace TGD.Combat
     {
         public ProbabilityModifierMode Mode { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public TargetType Target { get; set; }
     }
 
@@ -660,6 +678,7 @@ namespace TGD.Combat
         public TargetType Target { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public EffectInterpretationResult AdditionalEffects { get; set; }
         public bool SupportsStacks { get; set; }
         public int MaxStacks { get; set; }
@@ -671,6 +690,7 @@ namespace TGD.Combat
         public float Probability { get; set; }
         public int Duration { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
         public float Seconds { get; set; }
         public int SkippedTurns { get; set; }
         public float BaseTurnTimeRemaining { get; set; }
@@ -699,5 +719,6 @@ namespace TGD.Combat
         public bool BreakSkipsTurn { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
+        public bool ConditionNegated { get; set; }
     }
 }

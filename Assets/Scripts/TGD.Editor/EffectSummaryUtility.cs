@@ -1159,9 +1159,15 @@ namespace TGD.Editor
             if (condition == EffectCondition.None)
                 return string.Empty;
 
+            bool invert = effectProp.FindPropertyRelative("conditionNegate")?.boolValue ?? false;
+
             var sb = new StringBuilder();
             sb.Append("Condition: ");
+            if (invert)
+                sb.Append('!');
             sb.Append(condition);
+            if (invert)
+                sb.Append(" (invert)");
 
             switch (condition)
             {
