@@ -7,9 +7,11 @@ using TGD.Data;
 
 namespace TGD.Combat
 {
+    [Serializable]
     public class Unit
     {
         public string UnitId;
+        public string ClassId;
         public int TeamId;
         public Stats Stats = new Stats();
         public HexCoord Position;
@@ -50,8 +52,35 @@ namespace TGD.Combat
 
         public void EndTurn()
         {
-            foreach (var key in _cdSeconds.Keys.ToList())
-                _cdSeconds[key] = Math.Max(0, _cdSeconds[key] - CombatClock.BaseTurnSeconds);
+            RemainingTime = 0;
+            PrepaidTime = 0;
+        }
+
+        public void SpendTime(int seconds)
+        {
+            if (seconds <= 0)
+                return;
+
+            RemainingTime -= seconds;
+            if (RemainingTime < 0)
+            {
+                PrepaidTime += -RemainingTime;
+                RemainingTime = 0;
+            }
+        }
+
+        public void RefundTime(int seconds)
+        {
+            if (seconds <= 0)
+                return;
+
+            RemainingTime += seconds;
+            if (PrepaidTime > 0)
+            {
+                int refund = Math.Min(PrepaidTime, RemainingTime);
+                PrepaidTime -= refund;
+                RemainingTime -= refund;
+            }
         }
 
         public bool IsOnCooldown(SkillDefinition skill)

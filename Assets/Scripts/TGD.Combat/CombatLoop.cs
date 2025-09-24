@@ -1,74 +1,120 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using TGD.Core;
+using TGD.Data;
 
 namespace TGD.Combat
 {
-    /// <summary>
-    /// ×îĞ¡µÄ»ØºÏÇı¶¯£ºÍæ¼Ò»ØºÏ ¡ú Boss»ØºÏ ¡ú Íæ¼Ò»ØºÏ ... 
-    /// ÕâÀïÖ»ÊÇ¹Ç¼Ü£¬ÓÃÓÚ¹ÒÔÚ³¡¾°ÖĞµÄÒ»¸öÎïÌåÉÏÇı¶¯Á÷³Ì¡£
-    /// </summary>
     public class CombatLoop : MonoBehaviour
     {
-        [Tooltip("Íæ¼Ò¶ÓÎé£¨×î¶à4ÈË£©")]
-        public List<Unit> playerParty = new List<Unit>();
+        [Tooltip("ç©å®¶é˜Ÿä¼ï¼ˆæœ€å¤š4äººï¼‰")]
+        public List<Unit> playerParty = new();
 
-        [Tooltip("Boss/µĞÈË·½£¨±¾DemoÏÈÓÃ1¸öBoss¼´¿É£©")]
-        public List<Unit> enemyParty = new List<Unit>();
+        [Tooltip("æ•Œäººé˜Ÿä¼ï¼ˆå½“å‰é»˜è®¤æœ¨æ¡©ï¼‰")]
+        public List<Unit> enemyParty = new();
+
+        [Tooltip("å¯é€‰çš„æˆ˜æ–—æ—¥å¿—å­˜å‚¨å¯¹è±¡ï¼ˆå¦‚æœä¸ºç©ºä¼šè‡ªåŠ¨åˆ›å»ºä¸´æ—¶å®ä¾‹ï¼‰")]
+        public CombatLog combatLog;
 
         public bool autoStart = true;
 
-        private void Start()
+        private TurnManager _turnManager;
+        private ICombatEventBus _eventBus;
+        private ICombatTime _combatTime;
+        private ICombatLogger _logger;
+        private ISkillResolver _skillResolver;
+        private IStatusSystem _statusSystem;
+        private ICooldownSystem _cooldownSystem;
+
+        private void Awake()
         {
-            if (autoStart)
-                StartCoroutine(RunLoop());
+            InitializeSystems();
         }
 
-        private IEnumerator RunLoop()
+        private void Start()
         {
-            while (true)
+            if (autoStart && _turnManager != null)
+                StartCoroutine(_turnManager.RunLoop());
+        }
+
+        private void InitializeSystems()
+        {
+            SkillDatabase.EnsureLoaded();
+
+            combatLog ??= ScriptableObject.CreateInstance<CombatLog>();
+            combatLog.Clear();
+            _logger = combatLog;
+
+            _eventBus = new CombatEventBus();
+            _combatTime = new CombatTime();
+
+            PopulateUnits(playerParty);
+            PopulateUnits(enemyParty);
+
+            var allUnits = new List<Unit>();
+            if (playerParty != null) allUnits.AddRange(playerParty.Where(u => u != null));
+            if (enemyParty != null) allUnits.AddRange(enemyParty.Where(u => u != null));
+
+            var movementSystem = new MovementSystem(_eventBus, _logger);
+            _statusSystem = new StatusSystem(_eventBus, _combatTime, _logger);
+            var damageSystem = new DamageSystem(_logger, _eventBus, _combatTime);
+            var resourceSystem = new ResourceSystem(_logger);
+            var skillModSystem = new SkillModSystem();
+            var auraSystem = new AuraSystem(_logger);
+            var scheduler = new Scheduler();
+            _cooldownSystem = new CooldownSystem(allUnits, _statusSystem, _logger);
+
+            _skillResolver = new DefaultSkillResolver(SkillDatabase.GetAllSkills());
+
+            _turnManager = new TurnManager(playerParty, enemyParty, _eventBus, _logger, _combatTime,
+                _skillResolver, damageSystem, resourceSystem, _statusSystem, _cooldownSystem,
+                skillModSystem, movementSystem, auraSystem, scheduler);
+        }
+
+        private void PopulateUnits(IEnumerable<Unit> units)
+        {
+            if (units == null)
+                return;
+
+            foreach (var unit in units)
             {
-                // Íæ¼Ò»ØºÏ£¨Öğ¸öµ¥Î»¿ª»ØºÏ£©
-                foreach (var u in playerParty)
-                {
-                    if (u == null) continue;
-                    StartTurn(u);
-                    yield return RunUnitTurn(u, isPlayer: true);
-                    EndTurn(u);
-                }
+                if (unit == null)
+                    continue;
 
-                // µĞ·½»ØºÏ£¨Boss£©
-                foreach (var u in enemyParty)
-                {
-                    if (u == null) continue;
-                    StartTurn(u);
-                    yield return RunUnitTurn(u, isPlayer: false);
-                    EndTurn(u);
-                }
+                unit.Stats ??= new Stats();
+                unit.Stats.Clamp();
 
-                yield return null;
+                unit.Skills ??= new List<SkillDefinition>();
+
+                if (!string.IsNullOrWhiteSpace(unit.ClassId))
+                {
+                    var skills = SkillDatabase.GetSkillsForClass(unit.ClassId);
+                    unit.Skills.Clear();
+                    foreach (var skill in skills)
+                        unit.Skills.Add(skill);
+                }
             }
         }
 
-        private void StartTurn(Unit u)
+        public bool ExecuteSkill(Unit caster, string skillId, Unit primaryTarget)
         {
-            u.StartTurn();
-            // TODO: »ØºÏ¿ªÊ¼´¥·¢£¨¹â»·¡¢DOT/HOT£©ÈôÓĞ
+            if (_turnManager == null || caster == null || string.IsNullOrWhiteSpace(skillId))
+                return false;
+
+            var skill = _skillResolver.ResolveById(skillId);
+            if (skill == null)
+                return false;
+
+            return _turnManager.ExecuteSkill(caster, skill, primaryTarget);
         }
 
-        private void EndTurn(Unit u)
+        public void EndActiveTurn()
         {
-            u.EndTurn(); // ÄãÏÖÓĞµÄµ¥Î»ÊÕÎ²
-                         // ¡ø ĞÂÔö£º¶ÔÕ½³¡ÉÏËùÓĞµ¥Î»Í³Ò» -6s
-            foreach (var p in playerParty) p?.TickCooldownSeconds(6);
-            foreach (var e in enemyParty) e?.TickCooldownSeconds(6);
+            _turnManager?.EndTurnEarly();
         }
 
-        private IEnumerator RunUnitTurn(Unit u, bool isPlayer)
-        {
-            // ×îĞ¡°æ£ºµÈ´ı1Ö¡±íÊ¾¸Ãµ¥Î»¡°Íê³É»ØºÏ¡±
-            // ÒÔºó½ÓÄãµÄUI£¨¼¼ÄÜÀ¸/Ñ¡Ôñ/Ö´ĞĞ£©
-            yield return null;
-        }
+        public Unit GetActiveUnit() => _turnManager?.ActiveUnit;
     }
 }

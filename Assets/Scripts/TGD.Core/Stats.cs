@@ -5,6 +5,7 @@ namespace TGD.Core
     /// <summary>
     /// Aggregates the base stats for a combat unit.
     /// </summary>
+    [Serializable]
     public class Stats
     {
         public int Level;
@@ -16,6 +17,7 @@ namespace TGD.Core
 
         // Base offensive power.
         public int Attack;
+        public int SpellPower;
 
         // Class resources.
         public int Energy;
@@ -31,9 +33,13 @@ namespace TGD.Core
         // stacks additively only when coming from the same skill ID).
         public float DamageIncrease;
         public float HealIncrease;
+        public float DamageIncreaseSecondary;
+        public float DamageReduction;
+        public float DamageTakenMultiplier = 1f;
 
         // Defensive layer.
         public int Armor;
+        public int ArmorPenetration;
 
         // Ratings converted to normalized ratios. Example: 0.325f => 32.5% crit chance.
         public float Crit;
@@ -49,6 +55,11 @@ namespace TGD.Core
         // Bonus threat / shred multipliers (0.15f => +15%).
         public float Threat;
         public float Shred;
+
+        // Combat utility stats to ease playtest iteration.
+        public int HealthRegenPerTurn;
+        public int ArmorRegenPerTurn;
+        public int Shield;
 
         public void Clamp()
         {
@@ -69,7 +80,10 @@ namespace TGD.Core
             Crit = RoundToThreeDecimals(Crit);
             Mastery = RoundToThreeDecimals(Mastery);
             DamageIncrease = RoundToThreeDecimals(DamageIncrease);
+            DamageIncreaseSecondary = RoundToThreeDecimals(DamageIncreaseSecondary);
             HealIncrease = RoundToThreeDecimals(HealIncrease);
+            DamageReduction = RoundToThreeDecimals(DamageReduction);
+            DamageTakenMultiplier = RoundToThreeDecimals(DamageTakenMultiplier);
             Threat = RoundToThreeDecimals(Threat);
             Shred = RoundToThreeDecimals(Shred);
         }
