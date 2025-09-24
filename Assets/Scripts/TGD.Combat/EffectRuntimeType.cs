@@ -291,7 +291,7 @@ namespace TGD.Combat
         public List<NegativeStatusPreview> NegativeStatuses { get; } = new();
         public List<SkillUseConditionPreview> SkillUseConditions { get; } = new();
         public List<string> Logs { get; } = new();
-
+        public bool SkillTerminatedEarly { get; private set; }
         public void Append(EffectInterpretationResult other)
         {
             if (other == null)
@@ -320,12 +320,18 @@ namespace TGD.Combat
             NegativeStatuses.AddRange(other.NegativeStatuses);
             SkillUseConditions.AddRange(other.SkillUseConditions);
             Logs.AddRange(other.Logs);
+            if (other.SkillTerminatedEarly)
+                SkillTerminatedEarly = true;
         }
 
         public void AddLog(string message)
         {
             if (!string.IsNullOrWhiteSpace(message))
                 Logs.Add(message);
+        }
+        public void MarkSkillTerminated()
+        {
+            SkillTerminatedEarly = true;
         }
     }
 

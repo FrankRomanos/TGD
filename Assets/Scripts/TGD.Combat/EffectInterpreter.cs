@@ -140,7 +140,8 @@ namespace TGD.Combat
 
             foreach (var effect in context.Skill.effects)
             {
-                InterpretEffect(effect, context, result, visited);
+                if (!InterpretEffect(effect, context, result, visited))
+                    break;
             }
 
             if (!string.IsNullOrWhiteSpace(skillId))
@@ -402,17 +403,34 @@ namespace TGD.Combat
 
             return ReferenceEquals(expected, actual);
         }
-        private static void InterpretEffect(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
+        private readonly struct ConditionEvaluation
+        {
+            public ConditionEvaluation(bool shouldExecute, bool negatedConditionTriggered)
+            {
+                ShouldExecute = shouldExecute;
+                NegatedConditionTriggered = negatedConditionTriggered;
+            }
+
+            public bool ShouldExecute { get; }
+            public bool NegatedConditionTriggered { get; }
+        }
+        private static bool InterpretEffect(EffectDefinition effect, EffectContext context, EffectInterpretationResult result, HashSet<string> visited)
         {
             if (effect == null)
-                return;
-
-            if (!CheckCondition(effect, context))
+                return true;
+            var condition = CheckCondition(effect, context);
+            if (!condition.ShouldExecute)
             {
+                if (condition.NegatedConditionTriggered)
+                {
+                    result.AddLog($"Condition {effect.condition} met (negated) for {effect.effectType}; terminating skill execution.");
+                    result.MarkSkillTerminated();
+                    return false;
+                }
                 result.AddLog($"Condition {effect.condition} not met for {effect.effectType}.");
-                return;
+                return true;
             }
-            int effectTypeValue = (int)effect.effectType;
+          
 
 
             switch (effect.effectType)
@@ -485,6 +503,7 @@ namespace TGD.Combat
                     result.AddLog($"No interpreter implemented for {effect.effectType}.");
                     break;
             }
+            return !result.SkillTerminatedEarly;
         }
 
         private static void ApplyDamage(EffectDefinition effect, EffectContext context, EffectInterpretationResult result)
@@ -948,7 +967,8 @@ namespace TGD.Combat
 
             foreach (var nested in effect.onSuccess)
             {
-                InterpretEffect(nested, context, result, visited);
+                if (!InterpretEffect(nested, context, result, visited))
+                    break;
             }
         }
 
@@ -1287,7 +1307,11 @@ namespace TGD.Combat
                 {
                     if (nested == null)
                         continue;
-                    InterpretEffect(nested, context, additional, visited);
+                    if (!InterpretEffect(nested, context, additional, visited))
+                    {
+                        result.MarkSkillTerminated();
+                        break;
+                    }
                 }
 
                 preview.AdditionalEffects = additional;
@@ -1803,6 +1827,7 @@ namespace TGD.Combat
                 ConditionNegated = effect.conditionNegate
             };
 
+            bool abort = false;
             int optionIndex = 0;
             foreach (var entry in effect.randomOutcomes)
             {
@@ -1829,11 +1854,20 @@ namespace TGD.Combat
                 {
                     var nested = new EffectInterpretationResult();
                     foreach (var nestedEffect in entry.effects)
-                        InterpretEffect(nestedEffect, context, nested, visited);
+                    {
+                        if (!InterpretEffect(nestedEffect, context, nested, visited))
+                        {
+                            result.MarkSkillTerminated();
+                            abort = true;
+                            break;
+                        }
+                    }
                     optionPreview.Result = nested;
                 }
 
                 preview.Options.Add(optionPreview);
+                if (abort)
+                    break;
             }
 
             result.RandomOutcomes.Add(preview);
@@ -1863,10 +1897,18 @@ namespace TGD.Combat
             if (effect.repeatEffects != null && effect.repeatEffects.Count > 0 && count > 0)
             {
                 var aggregate = new EffectInterpretationResult();
-                for (int i = 0; i < count; i++)
+                bool abort = false;
+                for (int i = 0; i < count && !abort; i++)
                 {
                     foreach (var nested in effect.repeatEffects)
-                        InterpretEffect(nested, context, aggregate, visited);
+                    {
+                        if (!InterpretEffect(nested, context, aggregate, visited))
+                        {
+                            result.MarkSkillTerminated();
+                            abort = true;
+                            break;
+                        }
+                    }
                 }
 
                 preview.Result = aggregate;
@@ -1938,7 +1980,13 @@ namespace TGD.Combat
             {
                 var additional = new EffectInterpretationResult();
                 foreach (var nested in effect.dotHotAdditionalEffects)
-                    InterpretEffect(nested, context, additional, visited);
+                {
+                    if (!InterpretEffect(nested, context, additional, visited))
+                    {
+                        result.MarkSkillTerminated();
+                        break;
+                    }
+                }
                 preview.AdditionalEffects = additional;
                 result.Append(additional);
             }
@@ -2008,33 +2056,34 @@ namespace TGD.Combat
                     return fallback;
             }
         }
-        private static bool CheckCondition(EffectDefinition effect, EffectContext context)
+        private static ConditionEvaluation CheckCondition(EffectDefinition effect, EffectContext context)
         {
-            bool result = true;
+            bool rawResult = true;
+            bool hasCondition = effect.condition != EffectCondition.None;
             switch (effect.condition)
             {
                 case EffectCondition.None:
-                    result = true;
+                    rawResult = true;
                     break;
                 case EffectCondition.AfterAttack:
-                    result = context.ConditionAfterAttack && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionAfterAttack && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.OnPerformAttack:
-                    result = context.ConditionOnPerformAttack && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionOnPerformAttack && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.OnPerformHeal:
-                    result = context.ConditionOnPerformHeal && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionOnPerformHeal && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.OnCriticalHit:
-                    result = context.ConditionOnCrit;
+                    rawResult = context.ConditionOnCrit;
                     break;
                 case EffectCondition.OnCooldownEnd:
-                    result = context.ConditionOnCooldownEnd;
+                    rawResult = context.ConditionOnCooldownEnd;
                     break;
                 case EffectCondition.AfterSkillUse:
                     if (!context.ConditionAfterSkillUse)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
@@ -2042,48 +2091,48 @@ namespace TGD.Combat
                     if (string.IsNullOrWhiteSpace(requiredSkill) ||
                         string.Equals(requiredSkill, "any", StringComparison.OrdinalIgnoreCase))
                     {
-                        result = true;
+                        rawResult = true;
                         break;
                     }
 
                     string lastSkill = context.LastSkillUsedID;
-                    result = !string.IsNullOrWhiteSpace(lastSkill) &&
+                    rawResult = !string.IsNullOrWhiteSpace(lastSkill) &&
                              string.Equals(requiredSkill, lastSkill, StringComparison.OrdinalIgnoreCase);
                     break;
                 case EffectCondition.SkillStateActive:
                     if (!context.ConditionSkillStateActive)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
                     string requiredState = effect.conditionSkillStateID;
                     if (string.IsNullOrWhiteSpace(requiredState))
                     {
-                        result = true;
+                        rawResult = true;
                         break;
                     }
 
                     int stateStacks = context.GetSkillStateStacks(requiredState);
                     if (stateStacks <= 0)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
                     if (effect.conditionSkillStateCheckStacks)
                     {
-                        result = EvaluateComparison(stateStacks, effect.conditionSkillStateStacks, effect.conditionSkillStateStackCompare);
+                       rawResult = EvaluateComparison(stateStacks, effect.conditionSkillStateStacks, effect.conditionSkillStateStackCompare);
                         break;
                     }
 
-                    result = true;
+                    rawResult = true;
                     break;
                 case EffectCondition.OnDotHotActive:
                     context.ConditionDotStacks = 0f;
                     if (context.ActiveDotHotStatuses == null || context.ActiveDotHotStatuses.Count == 0)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
@@ -2126,58 +2175,62 @@ namespace TGD.Combat
 
                     if (matchedEntries == 0)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
                     context.ConditionDotStacks = effect.conditionDotUseStacks ? Mathf.Max(0, totalStacks) : matchedEntries;
-                    result = true;
+                   rawResult = true;
                     break;
                 case EffectCondition.OnNextSkillSpendResource:
                     if (!context.ConditionOnResourceSpend)
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
                     float spent = context.GetResourceSpent(effect.conditionResourceType);
                     if (spent < effect.conditionMinAmount)
-                        return false;
-                    context.LastResourceSpendType = effect.conditionResourceType;
-                    context.LastResourceSpendAmount = spent;
                     {
-                        result = false;
+                        rawResult = false;
                         break;
                     }
 
-                case EffectCondition.OnEffectEnd:
-                    result = context.ConditionOnEffectEnd;
+                    context.LastResourceSpendType = effect.conditionResourceType;
+                    context.LastResourceSpendAmount = spent;
+                    rawResult = true;
+                    break;
+
+                    case EffectCondition.OnEffectEnd:
+                    rawResult = context.ConditionOnEffectEnd;
                     break;
                 case EffectCondition.OnDamageTaken:
-                    result = context.ConditionOnEffectEnd;
+                    rawResult = context.ConditionOnEffectEnd;
                     break;
                 case EffectCondition.OnTurnBeginSelf:
-                    return context.ConditionOnTurnBeginSelf && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionOnTurnBeginSelf && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.OnTurnBeginEnemy:
-                    return context.ConditionOnTurnBeginEnemy && MatchesConditionTarget(effect.conditionTarget, context);
-                    break ;
+                    rawResult = context.ConditionOnTurnBeginEnemy && MatchesConditionTarget(effect.conditionTarget, context);
+                    break;
                 case EffectCondition.OnTurnEndSelf:
-                    return context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.OnTurnEndEnemy:
-                    return context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 case EffectCondition.LinkCancelled:
-                    return context.ConditionLinkCancelled && MatchesConditionTarget(effect.conditionTarget, context);
+                    rawResult = context.ConditionLinkCancelled && MatchesConditionTarget(effect.conditionTarget, context);
                     break;
                 default:
-                    return true;
+                    rawResult = true;
                     break;
             }
-            return effect.conditionNegate ? !result : result;
-        }
 
+            bool shouldExecute = effect.conditionNegate ? !rawResult : rawResult;
+            bool negatedConditionTriggered = hasCondition && effect.conditionNegate && rawResult;
+            return new ConditionEvaluation(shouldExecute, negatedConditionTriggered);
+        }
         private static List<Unit> ResolveTargets(TargetType targetType, EffectContext context)
         {
             var targets = new List<Unit>();
