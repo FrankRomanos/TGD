@@ -2,7 +2,9 @@
     "name": "TGD.Level",
     "rootNamespace": "",
     "references": [
-        "GUID:82be78445c098e7438cabe6497da1621"
+        "GUID:82be78445c098e7438cabe6497da1621",
+        "GUID:b8b46cd88c815d5469de6fd64204603c",
+        "GUID:8bd3f25fb8e35d742a0ac67a86746790"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

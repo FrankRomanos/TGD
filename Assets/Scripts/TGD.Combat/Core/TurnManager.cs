@@ -32,6 +32,10 @@ namespace TGD.Combat
         private bool _turnShouldEnd;
         private int _roundIndex;
 
+        // ★ 新增：对外事件（供 CombatLoop / 视图桥接订阅）
+        public event Action<Unit> OnTurnBegan;
+        public event Action<Unit> OnTurnEnded;
+
         public TurnManager(IList<Unit> players, IList<Unit> enemies,
             ICombatEventBus eventBus, ICombatLogger logger, ICombatTime time,
             ISkillResolver skillResolver, IDamageSystem damageSystem,
@@ -80,15 +84,13 @@ namespace TGD.Combat
             {
                 foreach (var player in _players)
                 {
-                    if (player == null)
-                        continue;
+                    if (player == null) continue;
                     yield return RunTurn(player, isPlayer: true);
                 }
 
                 foreach (var enemy in _enemies)
                 {
-                    if (enemy == null)
-                        continue;
+                    if (enemy == null) continue;
                     yield return RunTurn(enemy, isPlayer: false);
                 }
 
@@ -97,23 +99,18 @@ namespace TGD.Combat
             }
         }
 
-        public void EndTurnEarly()
-        {
-            _turnShouldEnd = true;
-        }
+        public void EndTurnEarly() => _turnShouldEnd = true;
 
         public bool ExecuteSkill(Unit caster, SkillDefinition skill, Unit primaryTarget, Unit secondaryTarget = null)
         {
-            if (caster == null || skill == null)
-                return false;
-            if (ActiveUnit != caster)
-                return false;
+            if (caster == null || skill == null) return false;
+            if (ActiveUnit != caster) return false;
+
             if (caster.IsOnCooldown(skill))
             {
                 _logger?.Log("SKILL_COOLDOWN", caster.UnitId, skill.skillID);
                 return false;
             }
-
             if (!HasResources(caster, skill))
             {
                 _logger?.Log("SKILL_RESOURCE_FAIL", caster.UnitId, skill.skillID);
@@ -152,6 +149,7 @@ namespace TGD.Combat
             unit.StartTurn();
             _eventBus?.EmitTurnBegin(unit);
             _logger?.Log("TURN_BEGIN", unit.UnitId, _roundIndex, unit.RemainingTime);
+            OnTurnBegan?.Invoke(unit);     // ★ 新增：对外广播
 
             ProcessDotHot(unit);
 
@@ -159,8 +157,7 @@ namespace TGD.Combat
             {
                 while (!_turnShouldEnd)
                 {
-                    if (unit.RemainingTime <= 0)
-                        break;
+                    if (unit.RemainingTime <= 0) break;
                     yield return null;
                 }
             }
@@ -184,6 +181,7 @@ namespace TGD.Combat
             unit.EndTurn();
             _eventBus?.EmitTurnEnd(unit);
             _logger?.Log("TURN_END", unit.UnitId);
+            OnTurnEnded?.Invoke(unit);     // ★ 新增：对外广播
 
             _cooldownSystem?.TickEndOfTurn();
 
@@ -193,18 +191,13 @@ namespace TGD.Combat
 
         private void ApplyEnemyRegeneration(Unit unit)
         {
-            if (unit?.Stats == null)
-                return;
+            if (unit?.Stats == null) return;
 
             if (unit.Stats.HealthRegenPerTurn > 0)
-            {
                 unit.Stats.HP = Mathf.Min(unit.Stats.MaxHP, unit.Stats.HP + unit.Stats.HealthRegenPerTurn);
-            }
 
             if (unit.Stats.ArmorRegenPerTurn > 0)
-            {
                 unit.Stats.Armor = Mathf.Max(0, unit.Stats.Armor + unit.Stats.ArmorRegenPerTurn);
-            }
 
             unit.Stats.Clamp();
             _logger?.Log("ENEMY_REGEN", unit.UnitId, unit.Stats.HP, unit.Stats.Armor);
@@ -231,55 +224,44 @@ namespace TGD.Combat
 
         private static void CollectUnits(IEnumerable<Unit> source, int teamId, ICollection<Unit> destination, bool includeTeam)
         {
-            if (source == null || destination == null)
-                return;
+            if (source == null || destination == null) return;
 
             foreach (var unit in source)
             {
-                if (unit == null)
-                    continue;
-                if (includeTeam && unit.TeamId == teamId)
-                    destination.Add(unit);
-                else if (!includeTeam && unit.TeamId != teamId)
-                    destination.Add(unit);
+                if (unit == null) continue;
+                if (includeTeam && unit.TeamId == teamId) destination.Add(unit);
+                else if (!includeTeam && unit.TeamId != teamId) destination.Add(unit);
             }
         }
 
         private bool HasResources(Unit caster, SkillDefinition skill)
         {
-            if (skill.costs == null || skill.costs.Count == 0)
-                return true;
+            if (skill.costs == null || skill.costs.Count == 0) return true;
 
             foreach (var cost in skill.costs)
             {
-                if (cost == null)
-                    continue;
+                if (cost == null) continue;
                 float amount = cost.ResolveAmount();
                 switch (cost.resourceType)
                 {
                     case CostResourceType.Energy:
-                        if (caster.Stats.Energy < amount)
-                            return false;
+                        if (caster.Stats.Energy < amount) return false;
                         break;
                     case CostResourceType.HP:
-                        if (caster.Stats.HP < amount)
-                            return false;
+                        if (caster.Stats.HP < amount) return false;
                         break;
                 }
             }
-
             return true;
         }
 
         private void SpendResources(Unit caster, SkillDefinition skill)
         {
-            if (skill.costs == null)
-                return;
+            if (skill.costs == null) return;
 
             foreach (var cost in skill.costs)
             {
-                if (cost == null)
-                    continue;
+                if (cost == null) continue;
                 int amount = Mathf.RoundToInt(cost.ResolveAmount());
                 switch (cost.resourceType)
                 {
@@ -291,14 +273,12 @@ namespace TGD.Combat
                         break;
                 }
             }
-
             caster.Stats.Clamp();
         }
 
         private void ProcessDotHot(Unit unit)
         {
-            if (unit?.Statuses == null || unit.Statuses.Count == 0)
-                return;
+            if (unit?.Statuses == null || unit.Statuses.Count == 0) return;
 
             if (!_dotHotRounds.TryGetValue(unit, out var tracker))
             {
@@ -309,25 +289,21 @@ namespace TGD.Combat
             var stillActive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var status in unit.Statuses)
             {
-                if (status == null)
-                    continue;
+                if (status == null) continue;
 
                 var statusSkill = status.StatusSkill ?? _skillResolver?.ResolveById(status.StatusSkillId);
-                if (statusSkill == null || statusSkill.effects == null)
-                    continue;
+                if (statusSkill == null || statusSkill.effects == null) continue;
 
                 foreach (var effect in statusSkill.effects)
                 {
-                    if (effect == null)
-                        continue;
+                    if (effect == null) continue;
 
                     if (effect.dotHotOperation != DotHotOperation.TriggerDots &&
                         effect.dotHotOperation != DotHotOperation.TriggerHots)
                         continue;
 
                     stillActive.Add(status.StatusSkillId);
-                    if (!ShouldTriggerDotHot(tracker, status.StatusSkillId))
-                        continue;
+                    if (!ShouldTriggerDotHot(tracker, status.StatusSkillId)) continue;
 
                     ApplyDotHot(status, effect);
                     tracker[status.StatusSkillId] = _roundIndex;
@@ -335,51 +311,34 @@ namespace TGD.Combat
             }
 
             var toRemove = tracker.Keys.Where(id => !stillActive.Contains(id)).ToList();
-            foreach (var key in toRemove)
-                tracker.Remove(key);
+            foreach (var key in toRemove) tracker.Remove(key);
         }
 
         private bool ShouldTriggerDotHot(Dictionary<string, int> tracker, string statusId)
         {
-            if (string.IsNullOrWhiteSpace(statusId))
-                return false;
+            if (string.IsNullOrWhiteSpace(statusId)) return false;
             return !tracker.TryGetValue(statusId, out var lastRound) || lastRound < _roundIndex;
         }
 
         private void ApplyDotHot(StatusInstance status, EffectDefinition effect)
         {
             var target = status.Target;
-            if (target == null)
-                return;
+            if (target == null) return;
 
             var source = status.Source ?? target;
             PrepareRuntime(source, target, null, status.StatusSkill ?? _skillResolver?.ResolveById(status.StatusSkillId));
 
             float baseAmount = effect.value;
-            if (status.StackCount > 1)
-                baseAmount *= status.StackCount;
+            if (status.StackCount > 1) baseAmount *= status.StackCount;
 
             EffectOp op;
             if (effect.dotHotOperation == DotHotOperation.TriggerHots)
             {
-                op = new HealOp
-                {
-                    Source = source,
-                    Target = target,
-                    Amount = baseAmount,
-                    CanCrit = effect.canCrit
-                };
+                op = new HealOp { Source = source, Target = target, Amount = baseAmount, CanCrit = effect.canCrit };
             }
             else
             {
-                op = new DealDamageOp
-                {
-                    Source = source,
-                    Target = target,
-                    Amount = baseAmount,
-                    CanCrit = effect.canCrit,
-                    School = effect.damageSchool
-                };
+                op = new DealDamageOp { Source = source, Target = target, Amount = baseAmount, CanCrit = effect.canCrit, School = effect.damageSchool };
             }
 
             EffectOpRunner.Run(new[] { op }, _runtime);
