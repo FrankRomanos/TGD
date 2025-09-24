@@ -6,11 +6,11 @@ using TGD.Data;
 namespace TGD.Editor
 {
     /// <summary>
-    /// ç»Ÿä¸€çš„â€œæ˜¾ç¤º/éšè—å¼€å…³â€æ¸²æŸ“ä¸ä½æ©ç è¯»å†™ã€‚
+    /// Í³Ò»µÄ¡°ÏÔÊ¾/Òş²Ø¿ª¹Ø¡±äÖÈ¾ÓëÎ»ÑÚÂë¶ÁĞ´¡£
     /// </summary>
     public static class FieldVisibilityUI
     {
-        /// å‹¾é€‰ä¸€ä¸ªå¯è§æ€§å¼€å…³ï¼›è¿”å›ï¼šå½“å‰æ˜¯å¦æ˜¾ç¤ºè¯¥åŒºå—
+        /// ¹´Ñ¡Ò»¸ö¿É¼ûĞÔ¿ª¹Ø£»·µ»Ø£ºµ±Ç°ÊÇ·ñÏÔÊ¾¸ÃÇø¿é
         public static bool Toggle(SerializedProperty elem, EffectFieldMask flag, string label)
         {
             var maskProp = elem.FindPropertyRelative("visibleFields");
@@ -26,7 +26,7 @@ namespace TGD.Editor
             return newOn;
         }
 
-        /// è¯»å–æ˜¯å¦åŒ…å«æŸ flag
+        /// ¶ÁÈ¡ÊÇ·ñ°üº¬Ä³ flag
         public static bool Has(SerializedProperty elem, EffectFieldMask flag)
         {
             var maskProp = elem.FindPropertyRelative("visibleFields");
@@ -34,22 +34,14 @@ namespace TGD.Editor
             return (mask & flag) != 0;
         }
 
-        /// æ•°ç»„é•¿åº¦æ ¡æ­£
+        /// Êı×é³¤¶ÈĞ£Õı
         public static void EnsureSize(SerializedProperty arr, int n)
         {
             while (arr.arraySize < n) arr.InsertArrayElementAtIndex(arr.arraySize);
             while (arr.arraySize > n) arr.DeleteArrayElementAtIndex(arr.arraySize - 1);
         }
 
-            var negateProp = elem.FindPropertyRelative("conditionNegate");
-            if (negateProp != null)
-            {
-                EditorGUILayout.PropertyField(
-                    negateProp,
-                    new GUIContent("Invert Condition (!)", "Enable to apply the effect unless the trigger condition is met."));
-            }
-
-        /// å…¼å®¹æ—§å­—æ®µåçš„è·å–ï¼ˆä¼˜å…ˆä¸»åï¼Œæ¬¡é€‰åˆ«åï¼‰
+        /// ¼æÈİ¾É×Ö¶ÎÃûµÄ»ñÈ¡£¨ÓÅÏÈÖ÷Ãû£¬´ÎÑ¡±ğÃû£©
         public static SerializedProperty GetProp(SerializedProperty elem, string mainName, params string[] altNames)
         {
             var p = elem.FindPropertyRelative(mainName);

@@ -56,7 +56,6 @@ namespace TGD.Combat
                     Expression = entry.Expression,
                     Probability = entry.Probability,
                     Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated,
                     ImmunityScope = entry.ImmunityScope,
                     ExpectedNormalDamage = entry.ExpectedNormalDamage,
                     ExpectedCriticalDamage = entry.ExpectedCriticalDamage,
@@ -88,8 +87,7 @@ namespace TGD.Combat
                     CanCrit = entry.CanCrit,
                     Expression = entry.Expression,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -114,8 +112,7 @@ namespace TGD.Combat
                     AffectsMax = entry.AffectsMax,
                     StateEnabled = entry.StateEnabled,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -159,7 +156,6 @@ namespace TGD.Combat
                     MaxStacks = entry.MaxStacks,
                     Probability = entry.Probability,
                     Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated,
                     Accumulator = accumulator,
                     InstantOperations = instantOps
                 };
@@ -202,8 +198,7 @@ namespace TGD.Combat
                     MaxStacks = entry.MaxStacks,
                     Replacement = replacement,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 };
 
                 operations.Add(op);
@@ -237,8 +232,7 @@ namespace TGD.Combat
                     SkillId = entry.SelfSkillID,
                     DeltaSeconds = ResolveCooldownSeconds(entry),
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -278,8 +272,7 @@ namespace TGD.Combat
                     ExcludeTags = entry.ExcludeTags?.Where(NotNullOrWhiteSpace).ToArray() ?? Array.Empty<string>(),
                     SourceHandle = entry.SourceHandle,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -301,8 +294,7 @@ namespace TGD.Combat
                     NewSkillId = entry.NewSkillID,
                     InheritCooldown = entry.InheritCooldown,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -331,8 +323,7 @@ namespace TGD.Combat
                     StopAdjacentToTarget = entry.StopAdjacentToTarget,
                     TargetType = entry.Target,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -372,8 +363,7 @@ namespace TGD.Combat
                     OnExitCondition = entry.OnExitCondition,
                     AdditionalOperations = additionalOps,
                     Probability = entry.Probability,
-                    Condition = entry.Condition,
-                    ConditionNegated = entry.ConditionNegated
+                    Condition = entry.Condition
                 });
             }
         }
@@ -416,8 +406,7 @@ namespace TGD.Combat
                     ConsumeResource = repeat.ConsumeResource,
                     Operations = repeatOps,
                     Probability = 100f,
-                    Condition = repeat.Condition,
-                    ConditionNegated = repeat.ConditionNegated
+                    Condition = repeat.Condition
                 });
             }
 
@@ -458,8 +447,7 @@ namespace TGD.Combat
                     RepeatCount = random.RollCount,
                     AllowDuplicates = random.AllowDuplicates,
                     Probability = 100f,
-                    Condition = random.Condition,
-                    ConditionNegated = random.ConditionNegated
+                    Condition = random.Condition
                 });
             }
 
@@ -479,8 +467,7 @@ namespace TGD.Combat
                     Kind = ScheduleKind.DotHotAdditional,
                     Operations = nested,
                     Probability = dotHot.Probability,
-                    Condition = dotHot.Condition,
-                    ConditionNegated = dotHot.ConditionNegated
+                    Condition = dotHot.Condition
                 });
             }
         }

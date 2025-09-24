@@ -357,7 +357,6 @@ namespace TGD.Data
         public string probability;     // 概率（字符串，允许 "p%"）
 
         public EffectCondition condition = EffectCondition.None;
-        public bool conditionNegate = false; // "!" logic: execute unless the condition is met
         public EffectFieldMask visibleFields =
     EffectFieldMask.Probability |
     EffectFieldMask.Duration |

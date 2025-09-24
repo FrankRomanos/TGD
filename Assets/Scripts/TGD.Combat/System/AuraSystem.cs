@@ -131,7 +131,6 @@ namespace TGD.Combat
                 MaxStacks = op.MaxStacks,
                 Probability = op.Probability,
                 Condition = op.Condition,
-                ConditionNegated = op.ConditionNegated,
                 Accumulator = op.Accumulator,
                 InstantOperations = op.InstantOperations
             };
@@ -150,8 +149,7 @@ namespace TGD.Combat
                 MaxStacks = op.MaxStacks,
                 Replacement = op.Replacement,
                 Probability = op.Probability,
-                Condition = op.Condition,
-                ConditionNegated = op.ConditionNegated
+                Condition = op.Condition
             };
         }
     }

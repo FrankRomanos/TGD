@@ -31,7 +31,6 @@ namespace TGD.Combat
         public EffectOpType Type { get; }
         public float Probability { get; init; } = 100f;
         public EffectCondition Condition { get; init; } = EffectCondition.None;
-        public bool ConditionNegated { get; init; }
     }
 
     public sealed class DealDamageOp : EffectOp
@@ -215,7 +214,7 @@ namespace TGD.Combat
         {
         }
 
-        public Unit AnchorUnit { get; set; }    // Â¡Ã» ÃÃ‚Ã—Ã–Â¶Ã
+        public Unit AnchorUnit { get; set; }    // ¡û ĞÂ×Ö¶Î
 
         public TargetType Source { get; init; } = TargetType.Self;
         public AuraRangeMode RangeMode { get; init; } = AuraRangeMode.Within;

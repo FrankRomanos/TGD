@@ -507,8 +507,7 @@ namespace TGD.Combat
                     CanCrit = effect.canCrit,
                     Probability = probability,
                     Expression = expression,
-                    Condition = effect.condition,
-                    ConditionNegated = effect.conditionNegate
+                    Condition = effect.condition
                 };
 
                 PopulateDamagePreview(preview, effect, context, target);
@@ -552,8 +551,7 @@ namespace TGD.Combat
                     CanCrit = effect.canCrit,
                     Probability = probability,
                     Expression = expression,
-                    Condition = effect.condition,
-                    ConditionNegated = effect.conditionNegate
+                    Condition = effect.condition
                 });
                 totalHeal += amount;
                 result.AddLog($"Heal {DescribeUnit(target)} for {amount:0.##} ({probability:0.##}% chance).");
@@ -595,7 +593,6 @@ namespace TGD.Combat
                                 Probability = probability,
                                 Expression = expression,
                                 Condition = effect.condition,
-                                ConditionNegated = effect.conditionNegate,
                                 FillToMax = fillToMax,
                                 ModifyType = ResourceModifyType.Gain,
                                 AffectsMax = false,
@@ -626,7 +623,6 @@ namespace TGD.Combat
                                 Probability = probability,
                                 Expression = expression,
                                 Condition = effect.condition,
-                                ConditionNegated = effect.conditionNegate,
                                 FillToMax = false,
                                 ModifyType = ResourceModifyType.ConvertMax,
                                 AffectsMax = true,
@@ -650,7 +646,6 @@ namespace TGD.Combat
                                 Probability = probability,
                                 Expression = string.Empty,
                                 Condition = effect.condition,
-                                ConditionNegated = effect.conditionNegate,
                                 FillToMax = false,
                                 ModifyType = modifyType,
                                 AffectsMax = false,
@@ -679,8 +674,7 @@ namespace TGD.Combat
                 Operation = effect.scalingOperation,
                 Target = effect.target,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             });
             string opLabel = effect.scalingOperation.ToString();
             string valueLabel = string.IsNullOrWhiteSpace(effect.scalingValuePerResource)
@@ -723,8 +717,7 @@ namespace TGD.Combat
                 MaxStacks = effect.maxStacks,
                 Target = effect.target,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
 
             SkillDefinition statusSkill = null;
@@ -879,7 +872,6 @@ namespace TGD.Combat
                 MaxStacks = effect.statusModifyMaxStacks,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 TransferFlags = effect.statusTransferFlags,
                 ClampToNewMax = effect.statusTransferClampToNewMax
             };
@@ -982,7 +974,6 @@ namespace TGD.Combat
                 CostResource = effect.modifyCostResource,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 LimitEnabled = limitEnabled,
                 LimitExpression = limitEnabled ? effect.modifyLimitExpression : string.Empty,
                 LimitValue = limitEnabled ? resolvedLimit : 0f
@@ -1169,8 +1160,7 @@ namespace TGD.Combat
                 NewSkillID = effect.replaceSkillID,
                 InheritCooldown = effect.inheritReplacedCooldown,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             });
 
             result.AddLog($"Replace skill '{targetSkill}' with '{effect.replaceSkillID}' (inherit cooldown: {effect.inheritReplacedCooldown}).");
@@ -1196,8 +1186,7 @@ namespace TGD.Combat
                 StopAdjacentToTarget = effect.moveStopAdjacentToTarget,
                 Target = effect.target,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
 
             result.Moves.Add(preview);
@@ -1272,7 +1261,6 @@ namespace TGD.Combat
                 Duration = duration,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 OnEnterCondition = effect.auraOnEnter,
                 OnExitCondition = effect.auraOnExit,
                 HeartbeatSeconds = effect.auraHeartSeconds
@@ -1325,7 +1313,6 @@ namespace TGD.Combat
                 Target = effect.target,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 Duration = duration,
                 StackCount = stacks
             };
@@ -1486,8 +1473,7 @@ namespace TGD.Combat
                     StatusType = status.statusType,
                     Probability = probability,
                     Duration = duration,
-                    Condition = effect.condition,
-                    ConditionNegated = effect.conditionNegate
+                    Condition = effect.condition
                 };
 
                 switch (status.statusType)
@@ -1587,8 +1573,7 @@ namespace TGD.Combat
                 TargetTag = tagFilter,
                 ActionTypeOverride = effect.actionTypeOverride,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
             result.ActionModifications.Add(preview);
 
@@ -1642,8 +1627,7 @@ namespace TGD.Combat
                 UseFilter = useFilter,
                 Filter = effect.damageSchoolFilter,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
 
             result.DamageSchoolModifications.Add(preview);
@@ -1679,7 +1663,6 @@ namespace TGD.Combat
                 Target = effect.target,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 ImmunityScope = effect.immunityScope
             };
 
@@ -1708,8 +1691,7 @@ namespace TGD.Combat
                 BreakDuration = settings.postureBreakDurationTurns,
                 BreakSkipsTurn = settings.postureBreakSkipsTurn,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             });
 
             result.AddLog("Mastery posture engine configured.");
@@ -1753,8 +1735,7 @@ namespace TGD.Combat
                 Seconds = seconds,
                 Turns = turns,
                 Probability = probability,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             });
 
             string scopeDescription = scope switch
@@ -1797,8 +1778,7 @@ namespace TGD.Combat
             {
                 RollCount = rollCount,
                 AllowDuplicates = allowDuplicates,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
 
             int optionIndex = 0;
@@ -1854,8 +1834,7 @@ namespace TGD.Combat
                 CountExpression = expression,
                 ResourceType = effect.repeatResourceType,
                 ConsumeResource = effect.repeatConsumeResource,
-                Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate
+                Condition = effect.condition
             };
 
             if (effect.repeatEffects != null && effect.repeatEffects.Count > 0 && count > 0)
@@ -1894,7 +1873,6 @@ namespace TGD.Combat
             {
                 Mode = effect.probabilityModifierMode,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 Target = effect.target
             };
 
@@ -1927,7 +1905,6 @@ namespace TGD.Combat
                 Target = effect.target,
                 Probability = probability,
                 Condition = effect.condition,
-                ConditionNegated = effect.conditionNegate,
                 SupportsStacks = effect.dotHotShowStacks,
                 MaxStacks = effect.dotHotShowStacks ? effect.dotHotMaxStacks : 1
             };
@@ -2008,82 +1985,49 @@ namespace TGD.Combat
         }
         private static bool CheckCondition(EffectDefinition effect, EffectContext context)
         {
-            bool result = true;
             switch (effect.condition)
             {
                 case EffectCondition.None:
-                    result = true;
-                    break;
+                    return true;
                 case EffectCondition.AfterAttack:
-                    result = context.ConditionAfterAttack && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionAfterAttack && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnPerformAttack:
-                    result = context.ConditionOnPerformAttack && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnPerformAttack && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnPerformHeal:
-                    result = context.ConditionOnPerformHeal && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnPerformHeal && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnCriticalHit:
-                    result = context.ConditionOnCrit;
-                    break;
+                    return context.ConditionOnCrit;
                 case EffectCondition.OnCooldownEnd:
-                    result = context.ConditionOnCooldownEnd;
-                    break;
+                    return context.ConditionOnCooldownEnd;
                 case EffectCondition.AfterSkillUse:
                     if (!context.ConditionAfterSkillUse)
-                    {
-                        result = false;
-                        break;
-                    }
-
+                        return false;
                     string requiredSkill = effect.conditionSkillUseID;
-                    if (string.IsNullOrWhiteSpace(requiredSkill) ||
-                        string.Equals(requiredSkill, "any", StringComparison.OrdinalIgnoreCase))
-                    {
-                        result = true;
-                        break;
-                    }
-
+                    if (string.IsNullOrWhiteSpace(requiredSkill) || string.Equals(requiredSkill, "any", StringComparison.OrdinalIgnoreCase))
+                        return true;
                     string lastSkill = context.LastSkillUsedID;
-                    result = !string.IsNullOrWhiteSpace(lastSkill) &&
-                             string.Equals(requiredSkill, lastSkill, StringComparison.OrdinalIgnoreCase);
-                    break;
+                    return !string.IsNullOrWhiteSpace(lastSkill) &&
+                           string.Equals(requiredSkill, lastSkill, StringComparison.OrdinalIgnoreCase);
                 case EffectCondition.SkillStateActive:
                     if (!context.ConditionSkillStateActive)
-                    {
-                        result = false;
-                        break;
-                    }
+                        return false;
 
                     string requiredState = effect.conditionSkillStateID;
                     if (string.IsNullOrWhiteSpace(requiredState))
-                    {
-                        result = true;
-                        break;
-                    }
+                        return true;
 
                     int stateStacks = context.GetSkillStateStacks(requiredState);
                     if (stateStacks <= 0)
-                    {
-                        result = false;
-                        break;
-                    }
+                        return false;
 
                     if (effect.conditionSkillStateCheckStacks)
-                    {
-                        result = EvaluateComparison(stateStacks, effect.conditionSkillStateStacks, effect.conditionSkillStateStackCompare);
-                        break;
-                    }
+                        return EvaluateComparison(stateStacks, effect.conditionSkillStateStacks, effect.conditionSkillStateStackCompare);
 
-                    result = true;
-                    break;
+                    return true;
                 case EffectCondition.OnDotHotActive:
                     context.ConditionDotStacks = 0f;
                     if (context.ActiveDotHotStatuses == null || context.ActiveDotHotStatuses.Count == 0)
-                    {
-                        result = false;
-                        break;
-                    }
+                        return false;
 
                     TargetType dotTarget = effect.conditionDotTarget;
                     var skillList = effect.conditionDotSkillIDs;
@@ -2104,8 +2048,7 @@ namespace TGD.Combat
                         {
                             foreach (var id in skillList)
                             {
-                                if (!string.IsNullOrWhiteSpace(id) &&
-                                    string.Equals(id, status.SkillID, StringComparison.OrdinalIgnoreCase))
+                                if (!string.IsNullOrWhiteSpace(id) && string.Equals(id, status.SkillID, StringComparison.OrdinalIgnoreCase))
                                 {
                                     skillMatch = true;
                                     break;
@@ -2123,59 +2066,36 @@ namespace TGD.Combat
                     }
 
                     if (matchedEntries == 0)
-                    {
-                        result = false;
-                        break;
-                    }
+                        return false;
 
                     context.ConditionDotStacks = effect.conditionDotUseStacks ? Mathf.Max(0, totalStacks) : matchedEntries;
-                    result = true;
-                    break;
+                    return true;
                 case EffectCondition.OnNextSkillSpendResource:
                     if (!context.ConditionOnResourceSpend)
-                    {
-                        result = false;
-                        break;
-                    }
-
+                        return false;
                     float spent = context.GetResourceSpent(effect.conditionResourceType);
                     if (spent < effect.conditionMinAmount)
-                    {
-                        result = false;
-                        break;
-                    }
-
+                        return false;
                     context.LastResourceSpendType = effect.conditionResourceType;
                     context.LastResourceSpendAmount = spent;
-                    result = true;
-                    break;
+                    return true;
                 case EffectCondition.OnEffectEnd:
-                    result = context.ConditionOnEffectEnd;
-                    break;
+                    return context.ConditionOnEffectEnd;
                 case EffectCondition.OnDamageTaken:
-                    result = context.ConditionOnDamageTaken;
-                    break;
+                    return context.ConditionOnDamageTaken;
                 case EffectCondition.OnTurnBeginSelf:
-                    result = context.ConditionOnTurnBeginSelf && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnTurnBeginSelf && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnTurnBeginEnemy:
-                    result = context.ConditionOnTurnBeginEnemy && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnTurnBeginEnemy && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnTurnEndSelf:
-                    result = context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnTurnEndSelf && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.OnTurnEndEnemy:
-                    result = context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionOnTurnEndEnemy && MatchesConditionTarget(effect.conditionTarget, context);
                 case EffectCondition.LinkCancelled:
-                    result = context.ConditionLinkCancelled && MatchesConditionTarget(effect.conditionTarget, context);
-                    break;
+                    return context.ConditionLinkCancelled && MatchesConditionTarget(effect.conditionTarget, context);
                 default:
-                    result = true;
-                    break;
+                    return true;
             }
-
-            return effect.conditionNegate ? !result : result;
         }
 
         private static List<Unit> ResolveTargets(TargetType targetType, EffectContext context)

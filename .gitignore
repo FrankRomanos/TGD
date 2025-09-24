@@ -37,6 +37,13 @@
 .vsconfig
 /Packages/
 /ProjectSettings/
+# --- Odin Inspector / Sirenix: ignore everything ---
+/Assets/Plugins/Sirenix/
+/Assets/Plugins/Sirenix/**
+/Assets/Sirenix/
+/Assets/Sirenix/**
+# 兜底：不管它出现在 Assets 的哪个子目录，都屏蔽
+/Assets/**/Sirenix/**
 
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data

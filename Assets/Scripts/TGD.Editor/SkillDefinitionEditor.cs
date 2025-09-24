@@ -296,8 +296,6 @@ namespace TGD.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Effects", EditorStyles.boldLabel);
 
-            EditorGUILayout.HelpBox("Trigger Conditions support "!" logic via the Invert Condition toggle.", MessageType.Info);
-
             if (effectsProp == null)
             {
                 EditorGUILayout.HelpBox("'effects' property not found on SkillDefinition.", MessageType.Error);
