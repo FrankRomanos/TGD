@@ -1,10 +1,9 @@
 {
-    "name": "TGD.Combat",
+    "name": "TGD.Grid",
     "rootNamespace": "",
     "references": [
-        "GUID:b8197eabc112cb14f8c18bc27f294233",
-        "GUID:752f754ba24643346b55a818fb97c1e9",
-        "GUID:82be78445c098e7438cabe6497da1621"
+        "GUID:ba8c092d026123a418fb4bfb797a7bd8",
+        "GUID:4307f53044263cf4b835bd812fc161a4"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

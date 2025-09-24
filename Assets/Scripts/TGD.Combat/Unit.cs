@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
+using TGD.Grid;
 using TGD.Core;
 using TGD.Data;
 
@@ -12,7 +12,7 @@ namespace TGD.Combat
         public string UnitId;
         public int TeamId;
         public Stats Stats = new Stats();
-        public Vector2Int Position;
+        public HexCoord Position;
 
         public List<SkillDefinition> Skills = new();
         private readonly Dictionary<string, int> _cdSeconds = new();

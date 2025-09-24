@@ -1,7 +1,8 @@
 // Assets/Scripts/TGD.Combat/Core/EventBus.cs
 using System;
 using UnityEngine;         // Vector2Int
-using TGD.Data;           // Unit / DamageSchool （确认你的Unit定义在哪个命名空间）
+using TGD.Data;           // Unit / DamageSchool
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -35,10 +36,10 @@ namespace TGD.Combat
         event Action<Unit> OnTurnBegin;
         event Action<Unit> OnTurnEnd;
 
-        // 位置变化（只在 Commit 时广播）
-        event Action<Unit, Vector2Int, Vector2Int> OnUnitPositionChanged;
+
 
         // 状态相关
+        event Action<Unit, HexCoord, HexCoord> OnUnitPositionChanged;
         event Action<StatusEvent> OnStatusApplied;
         event Action<StatusEvent> OnStatusExpired;
         event Action<StatusEvent> OnStatusDispelled;
@@ -47,7 +48,7 @@ namespace TGD.Combat
         void EmitTurnBegin(Unit u);
         void EmitTurnEnd(Unit u);
 
-        void EmitUnitPositionChanged(Unit u, Vector2Int from, Vector2Int to);
+        void EmitUnitPositionChanged(Unit u, HexCoord from, HexCoord to);
 
         void EmitStatusApplied(in StatusEvent e);
         void EmitStatusExpired(in StatusEvent e);
@@ -62,7 +63,7 @@ namespace TGD.Combat
         public event Action<Unit, Unit, float, bool, DamageSchool, float> OnDamageResolved;
         public event Action<Unit> OnTurnBegin;
         public event Action<Unit> OnTurnEnd;
-        public event Action<Unit, Vector2Int, Vector2Int> OnUnitPositionChanged;
+        public event Action<Unit, HexCoord, HexCoord> OnUnitPositionChanged;
         public event Action<StatusEvent> OnStatusApplied;
         public event Action<StatusEvent> OnStatusExpired;
         public event Action<StatusEvent> OnStatusDispelled;
@@ -74,8 +75,8 @@ namespace TGD.Combat
         public void EmitTurnBegin(Unit u) => OnTurnBegin?.Invoke(u);
         public void EmitTurnEnd(Unit u) => OnTurnEnd?.Invoke(u);
 
-        public void EmitUnitPositionChanged(Unit u, Vector2Int from, Vector2Int to)
-            => OnUnitPositionChanged?.Invoke(u, from, to);
+        public void EmitUnitPositionChanged(Unit u, HexCoord from, HexCoord to)
+             => OnUnitPositionChanged?.Invoke(u, from, to);
 
         public void EmitStatusApplied(in StatusEvent e) => OnStatusApplied?.Invoke(e);
         public void EmitStatusExpired(in StatusEvent e) => OnStatusExpired?.Invoke(e);

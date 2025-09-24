@@ -23,7 +23,7 @@ namespace TGD.Editor
             if (direction == MoveDirection.AbsoluteOffset)
             {
                 EditorGUILayout.PropertyField(elem.FindPropertyRelative("moveOffset"),
-                    new GUIContent("Offset (tiles)"));
+                   new GUIContent("Offset (axial q,r)"));
             }
             else
             {
@@ -92,7 +92,7 @@ namespace TGD.Editor
             {
                 case MoveDirection.AbsoluteOffset:
                     var offset = elem.FindPropertyRelative("moveOffset").vector2IntValue;
-                    return $"to offset ({offset.x}, {offset.y}).";
+                    return $"to axial offset ({offset.x}, {offset.y}).";
                 case MoveDirection.TowardTarget:
                     int max = elem.FindPropertyRelative("moveMaxDistance").intValue;
                     string towardLabel = FormatDistanceLabel(elem);

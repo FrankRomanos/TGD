@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.Data;
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -42,7 +43,7 @@ namespace TGD.Combat
                 if (op.AffectsImmune == false && unit.IsEnemyOf(anchor) && op.Category == AuraEffectCategory.Buff)
                     continue;
 
-                float distance = Vector2Int.Distance(unit.Position, anchor.Position);
+                int distance = HexCoord.Distance(unit.Position, anchor.Position);
                 if (MatchesRange(distance, op))
                     yield return unit;
             }
@@ -76,7 +77,7 @@ namespace TGD.Combat
             }
         }
 
-        bool MatchesRange(float distance, AuraOp op)
+        bool MatchesRange(int distance, AuraOp op)
         {
             switch (op.RangeMode)
             {

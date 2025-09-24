@@ -13,10 +13,12 @@ namespace TGD.Combat
                 throw new ArgumentNullException(nameof(runtime));
 
             runtime.Caster = caster;
+            runtime.Skill = skill;
 
             var context = effectContext ?? new EffectContext(caster, skill);
             context.SkillResolver = runtime.SkillResolver;
             context.PrimaryTarget = runtime.PrimaryTarget;
+            context.SecondaryTarget = runtime.SecondaryTarget;
 
             context.Allies.Clear();
             if (runtime.Allies != null)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.Data;
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -201,12 +202,13 @@ namespace TGD.Combat
         public int Distance { get; init; }
         public string DistanceExpression { get; init; }
         public int MaxDistance { get; init; }
-        public Vector2Int Offset { get; init; }
+        public HexCoord Offset { get; init; }
         public bool ForceMovement { get; init; }
         public bool AllowPartialMove { get; init; }
         public bool IgnoreObstacles { get; init; }
         public bool StopAdjacentToTarget { get; init; }
         public TargetType TargetType { get; init; }
+        public float DurationSeconds { get; init; }
     }
 
     public sealed class AuraOp : EffectOp

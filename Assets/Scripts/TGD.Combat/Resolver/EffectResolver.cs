@@ -30,7 +30,7 @@ namespace TGD.Combat
             AppendCooldownModifications(preview, operations, consumed, respectConsumed);
             AppendSkillModifications(preview, operations, consumed, respectConsumed);
             AppendSkillReplacements(preview, operations, consumed, respectConsumed);
-            AppendMoves(preview, operations, consumed, respectConsumed);
+            AppendMoves(preview, context, operations, consumed, respectConsumed);
             AppendAuras(preview, context, operations, consumed, respectConsumed);
             AppendSchedules(preview, context, operations, consumed, respectConsumed);
             AppendLogs(preview, operations, consumed, respectConsumed);
@@ -306,7 +306,7 @@ namespace TGD.Combat
             }
         }
 
-        private static void AppendMoves(EffectInterpretationResult preview, List<EffectOp> operations, HashSet<object> consumed, bool respectConsumed)
+        private static void AppendMoves(EffectInterpretationResult preview, EffectContext context, List<EffectOp> operations, HashSet<object> consumed, bool respectConsumed)
         {
             foreach (var entry in preview.Moves)
             {
@@ -329,6 +329,7 @@ namespace TGD.Combat
                     IgnoreObstacles = entry.IgnoreObstacles,
                     StopAdjacentToTarget = entry.StopAdjacentToTarget,
                     TargetType = entry.Target,
+                    DurationSeconds = entry.DurationSeconds,
                     Probability = entry.Probability,
                     Condition = entry.Condition,
                     ConditionNegated = entry.ConditionNegated

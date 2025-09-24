@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using TGD.Data;
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -7,6 +8,7 @@ namespace TGD.Combat
     {
         public Unit Caster;
         public Unit PrimaryTarget;
+        public Unit SecondaryTarget;
         public IReadOnlyList<Unit> Allies;
         public IReadOnlyList<Unit> Enemies;
 
@@ -14,6 +16,7 @@ namespace TGD.Combat
         public ICombatLogger Logger { get; set; }
         public ICombatTime Time { get; set; }
         public ISkillResolver SkillResolver { get; set; }
+        public SkillDefinition Skill { get; set; }
 
         public IDamageSystem DamageSystem { get; set; }
         public IStatusSystem StatusSystem { get; set; }
@@ -23,5 +26,6 @@ namespace TGD.Combat
         public IAuraSystem AuraSystem { get; set; }
         public IScheduler Scheduler { get; set; }
         public IResourceSystem ResourceSystem { get; set; }
+        public HexGridMap<Unit> Grid { get; set; }
     }
 }

@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEngine;
 using TGD.Core;
 using TGD.Data;
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -1189,12 +1190,13 @@ namespace TGD.Combat
                 Distance = resolvedDistance,
                 DistanceExpression = effect.moveDistanceExpression,
                 MaxDistance = effect.moveMaxDistance,
-                Offset = effect.moveOffset,
+                Offset = HexCoord.FromAxial(effect.moveOffset),
                 ForceMovement = effect.forceMovement,
                 AllowPartialMove = effect.allowPartialMove,
                 IgnoreObstacles = effect.moveIgnoreObstacles,
                 StopAdjacentToTarget = effect.moveStopAdjacentToTarget,
                 Target = effect.target,
+                DurationSeconds = context?.Skill?.timeCostSeconds ?? 0f,
                 Probability = probability,
                 Condition = effect.condition,
                 ConditionNegated = effect.conditionNegate
@@ -2502,17 +2504,29 @@ namespace TGD.Combat
         {
             if (context == null)
                 return 0f;
-
+            var caster = context.Caster;
             if (target == null)
             {
-                float distance = context.GetDistance(ConditionTarget.PrimaryTarget);
-                if (distance <= 0f)
-                    distance = context.GetDistance(ConditionTarget.Any);
-                return distance;
+                if (caster != null && context.PrimaryTarget != null)
+                    return HexCoord.Distance(caster.Position, context.PrimaryTarget.Position);
+
+                float stored = context.GetDistance(ConditionTarget.PrimaryTarget);
+                if (stored <= 0f && caster != null && context.SecondaryTarget != null)
+                    stored = HexCoord.Distance(caster.Position, context.SecondaryTarget.Position);
+                if (stored <= 0f)
+                    stored = context.GetDistance(ConditionTarget.Any);
+                return stored;
             }
 
-            if (target == context.Caster)
+            if (target == caster)
                 return 0f;
+            if (caster != null)
+            {
+                float direct = HexCoord.Distance(caster.Position, target.Position);
+                if (direct > 0f)
+                    return direct;
+            }
+
 
             if (target == context.PrimaryTarget)
                 return context.GetDistance(ConditionTarget.PrimaryTarget);
@@ -2530,8 +2544,8 @@ namespace TGD.Combat
             }
 
             float fallback = context.GetDistance(ConditionTarget.Any);
-            if (fallback <= 0f)
-                fallback = context.GetDistance(ConditionTarget.PrimaryTarget);
+            if (fallback <= 0f && caster != null && context.PrimaryTarget != null)
+                fallback = HexCoord.Distance(caster.Position, context.PrimaryTarget.Position);
             return fallback;
         }
         private readonly struct MasteryValues

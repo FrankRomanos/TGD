@@ -598,7 +598,7 @@ namespace TGD.Editor
             {
                 case MoveDirection.AbsoluteOffset:
                     var offset = effectProp.FindPropertyRelative("moveOffset")?.vector2IntValue ?? Vector2Int.zero;
-                    AddBullet(sb, $"Direction: Absolute offset ({offset.x}, {offset.y})");
+                    AddBullet(sb, $"Direction: Absolute offset axial ({offset.x}, {offset.y})");
                     break;
                 default:
                     string expression = FormatSimpleString(effectProp.FindPropertyRelative("moveDistanceExpression"));

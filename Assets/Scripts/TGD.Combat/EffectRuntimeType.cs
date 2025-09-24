@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.Data;
+using TGD.Grid;
 
 namespace TGD.Combat
 {
@@ -386,6 +387,7 @@ namespace TGD.Combat
         public int StackCount { get; set; }
         public int MaxStacks { get; set; }
         public TargetType Target { get; set; }
+        public float DurationSeconds { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
         public bool ConditionNegated { get; set; }
@@ -562,12 +564,13 @@ namespace TGD.Combat
         public int Distance { get; set; }
         public string DistanceExpression { get; set; }
         public int MaxDistance { get; set; }
-        public Vector2Int Offset { get; set; }
+        public HexCoord Offset { get; set; }
         public bool ForceMovement { get; set; }
         public bool AllowPartialMove { get; set; }
         public bool IgnoreObstacles { get; set; }
         public bool StopAdjacentToTarget { get; set; }
         public TargetType Target { get; set; }
+        public float DurationSeconds { get; set; }
         public float Probability { get; set; }
         public EffectCondition Condition { get; set; }
         public bool ConditionNegated { get; set; }
