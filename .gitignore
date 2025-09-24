@@ -44,6 +44,7 @@
 /Assets/Sirenix/**
 # 兜底：不管它出现在 Assets 的哪个子目录，都屏蔽
 /Assets/**/Sirenix/**
+/Assets/HexTiles-Nature
 
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data

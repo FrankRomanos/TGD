@@ -1,0 +1,16 @@
+{
+    "name": "TGD.Level",
+    "rootNamespace": "",
+    "references": [
+        "GUID:82be78445c098e7438cabe6497da1621"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
