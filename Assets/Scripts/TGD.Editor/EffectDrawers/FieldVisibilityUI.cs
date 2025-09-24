@@ -63,6 +63,14 @@ namespace TGD.Editor
             if (condProp == null)
                 return;
 
+            var negateProp = elem.FindPropertyRelative("conditionNegate");
+            if (negateProp != null)
+            {
+                EditorGUILayout.PropertyField(
+                    negateProp,
+                    new GUIContent("Invert Condition (!)", "Enable to apply the effect unless the trigger condition is met."));
+            }
+
             var condition = (EffectCondition)condProp.enumValueIndex;
             switch (condition)
             {

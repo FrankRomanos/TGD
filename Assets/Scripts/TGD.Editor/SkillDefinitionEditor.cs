@@ -421,7 +421,7 @@ namespace TGD.Editor
             if (Event.current.type == EventType.Repaint) EditorGUI.DrawRect(r, col);
             GUI.Label(r, "Legend: " + legend, EditorStyles.miniBoldLabel);
 
-
+      
             if (effectsProp == null)
             {
                 EditorGUILayout.HelpBox("'effects' property not found on SkillDefinition.", MessageType.Error);
