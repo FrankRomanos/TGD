@@ -12,7 +12,7 @@ namespace TGD.Level
     /// Combat 视图桥：只亮当前出手者脚下环；显示伤害数字。
     /// 兼容：即使 CombatLoop 不抛事件，也会用轮询兜底。
     /// </summary>
-    public class CombatViewBridge : MonoBehaviour
+    public class CombatViewBridge : MonoBehaviour, ICombatViewProbe
     {
         public static CombatViewBridge Instance { get; private set; }
 
@@ -38,7 +38,7 @@ namespace TGD.Level
         void Awake()
         {
             Instance = this;
-
+            CombatViewServices.SceneProbe = this;
             _combat = combatLoop ? combatLoop : FindFirstObjectByTypeSafe<CombatLoop>();
             RefreshEventBus();
 
@@ -63,6 +63,8 @@ namespace TGD.Level
                 _bus = null;
             }
             if (Instance == this) Instance = null;
+            if (ReferenceEquals(CombatViewServices.SceneProbe, this))
+                CombatViewServices.SceneProbe = null;
         }
 
         void Update()
@@ -238,6 +240,32 @@ namespace TGD.Level
                 if (entry)
                     yield return entry;
             }
+        }
+        IEnumerable<HexGridAuthoring> ICombatViewProbe.EnumerateKnownGrids()
+        {
+            foreach (var actor in _actors.Values)
+            {
+                var grid = actor?.ResolveGrid();
+                if (grid && grid.Layout != null)
+                    yield return grid;
+            }
+        }
+
+        bool ICombatViewProbe.TryResolveUnitCoordinate(Unit unit, HexGridLayout referenceLayout, out HexCoord coord)
+        {
+            coord = default;
+            if (unit == null || referenceLayout == null)
+                return false;
+
+            if (!_actors.TryGetValue(unit.UnitId, out var actor) || !actor)
+                return false;
+
+            var grid = actor.ResolveGrid();
+            var layout = grid?.Layout ?? referenceLayout;
+            coord = layout.GetCoordinate(actor.transform.position);
+            if (!referenceLayout.Contains(coord))
+                coord = referenceLayout.ClampToBounds(HexCoord.Zero, coord);
+            return true;
         }
 
 

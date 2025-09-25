@@ -195,17 +195,13 @@ namespace TGD.Combat
         private bool TryResolveActorCoordinate(Unit unit, HexGridLayout layout, out HexCoord coord)
         {
             coord = default;
-            var bridge = CombatViewBridge.Instance;
-            if (bridge != null && bridge.TryGetActor(unit, out var actor) && actor)
-            {
-                var grid = actor.ResolveGrid();
-                var targetLayout = grid?.Layout ?? layout;
-                coord = targetLayout.GetCoordinate(actor.transform.position);
-                if (!layout.Contains(coord))
-                    coord = layout.ClampToBounds(HexCoord.Zero, coord);
-                return true;
-            }
+            if (layout == null || unit == null)
+                return false;
 
+            var probe = CombatViewServices.SceneProbe;
+            if (probe != null && probe.TryResolveUnitCoordinate(unit, layout, out coord))
+                return true;
+           
             return false;
         }
 
@@ -218,12 +214,11 @@ namespace TGD.Combat
                 if (battlefieldGrid.Layout != null)
                     return battlefieldGrid;
             }
-            var bridge = CombatViewBridge.Instance;
-            if (bridge != null)
+            var probe = CombatViewServices.SceneProbe;
+            if (probe != null)
             {
-                foreach (var actor in bridge.EnumerateActors())
+                foreach (var candidate in probe.EnumerateKnownGrids())
                 {
-                    var candidate = actor?.ResolveGrid();
                     if (candidate && candidate.Layout != null)
                         return candidate;
                 }
