@@ -60,6 +60,7 @@
             "duration": 0.0,
             "probability": "",
             "condition": 0,
+            "conditionNegate": false,
             "visibleFields": 68,
             "conditionSkillStateID": "",
             "conditionSkillStateCheckStacks": false,
@@ -135,6 +136,8 @@
             "statusModifyShowStacks": false,
             "statusModifyStacks": 0,
             "statusModifyMaxStacks": -1,
+            "statusTransferFlags": 0,
+            "statusTransferClampToNewMax": true,
             "targetSkillID": "",
             "replaceSkillID": "",
             "inheritReplacedCooldown": true,
@@ -148,6 +151,9 @@
             "modifyLimitEnabled": false,
             "modifyLimitExpression": "",
             "modifyLimitValue": 0.0,
+            "modifyIncludeTags": [],
+            "modifyExcludeTags": [],
+            "modifySourceHandle": "",
             "damageSchoolModifyType": 0,
             "damageSchoolFilterEnabled": false,
             "damageSchoolFilter": 0,
@@ -212,7 +218,7 @@
             }
         }
     ],
-    "backupTime": "2025-09-24 00:04:31",
+    "backupTime": "2025-09-26 01:12:46",
     "unityVersion": "6000.0.56f1",
     "notes": "",
     "references": {

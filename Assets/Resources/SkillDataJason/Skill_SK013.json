@@ -1,19 +1,25 @@
 {
-    "skillID": "SK104_STANCE",
-    "skillName": "Justice Seal (State)",
+    "skillID": "SK013",
+    "skillName": "移动",
     "iconGuid": "",
     "iconPath": "",
-    "classID": "CL002",
+    "classID": "CL001",
     "moduleID": "",
     "variantKey": "",
     "chainNextID": "",
     "resetOnTurnEnd": false,
-    "skillType": 3,
-    "actionType": 0,
-    "targetType": 2,
+    "skillType": 0,
+    "actionType": 1,
+    "targetType": 0,
     "masteryStatConversionRatio": 1.0,
-    "costs": [],
-    "timeCostSeconds": 0,
+    "costs": [
+        {
+            "resourceType": 1,
+            "amount": 1,
+            "amountExpression": ""
+        }
+    ],
+    "timeCostSeconds": 1,
     "cooldownSeconds": 0,
     "cooldownTurns": 0,
     "range": 0,
@@ -21,10 +27,10 @@
     "shredMultiplier": 0.0,
     "namekey": "",
     "descriptionKey": "",
-    "skillColor": 2,
-    "skillLevel": 4,
+    "skillColor": 6,
+    "skillLevel": 1,
     "skillDuration": {
-        "duration": 4,
+        "duration": -1,
         "perLevel": false,
         "durationLevels": [
             0,
@@ -35,9 +41,9 @@
     },
     "effects": [
         {
-            "effectType": 1,
+            "effectType": 10,
             "target": 0,
-            "attributeType": 8,
+            "attributeType": 0,
             "immunityScope": 0,
             "targetActionType": 0,
             "modifierType": 0,
@@ -48,8 +54,9 @@
             "value": 0.0,
             "duration": 0.0,
             "probability": "",
-            "condition": 11,
-            "visibleFields": 64,
+            "condition": 0,
+            "conditionNegate": false,
+            "visibleFields": 0,
             "conditionSkillStateID": "",
             "conditionSkillStateCheckStacks": false,
             "conditionSkillStateStackCompare": 0,
@@ -64,26 +71,11 @@
             "consumeStatusOnTrigger": false,
             "damageSchool": 0,
             "canCrit": false,
-            "perLevel": true,
+            "perLevel": false,
             "perLevelDuration": false,
-            "valueExprLevels": [
-                "0.25*damage_accu",
-                "0.3*damage_accu",
-                "0.35*damage_accu",
-                "0.4*damage_accu"
-            ],
-            "durationLevels": [
-                0,
-                0,
-                0,
-                0
-            ],
-            "probabilityLvls": [
-                "",
-                "",
-                "",
-                ""
-            ],
+            "valueExprLevels": [],
+            "durationLevels": [],
+            "probabilityLvls": [],
             "stackCountLevels": [],
             "stackCount": 0,
             "resourceType": 0,
@@ -119,6 +111,8 @@
             "statusModifyShowStacks": false,
             "statusModifyStacks": 0,
             "statusModifyMaxStacks": 0,
+            "statusTransferFlags": 0,
+            "statusTransferClampToNewMax": false,
             "targetSkillID": "",
             "replaceSkillID": "",
             "inheritReplacedCooldown": false,
@@ -132,6 +126,9 @@
             "modifyLimitEnabled": false,
             "modifyLimitExpression": "",
             "modifyLimitValue": 0.0,
+            "modifyIncludeTags": [],
+            "modifyExcludeTags": [],
+            "modifySourceHandle": "",
             "damageSchoolModifyType": 0,
             "damageSchoolFilterEnabled": false,
             "damageSchoolFilter": 0,
@@ -139,7 +136,7 @@
             "moveExecution": 0,
             "moveDirection": 0,
             "moveDistance": 0,
-            "moveDistanceExpression": "",
+            "moveDistanceExpression": "movement",
             "moveMaxDistance": 0,
             "moveOffset": {
                 "x": 0,
@@ -196,7 +193,7 @@
             }
         }
     ],
-    "backupTime": "2025-09-24 00:04:31",
+    "backupTime": "2025-09-26 01:12:46",
     "unityVersion": "6000.0.56f1",
     "notes": "",
     "references": {
