@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TGD.UI
+namespace TGD.Level
 {
     public enum DamageVisualKind { Normal, Crit, Heal }
 

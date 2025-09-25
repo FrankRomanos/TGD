@@ -334,6 +334,7 @@ namespace TGD.Combat
 
         private static float ResolveConditionResourceValue(ResourceType resourceType, EffectContext context, Unit referenceUnit, out float maxValue)
         {
+           
             maxValue = context?.GetResourceMax(resourceType) ?? 0f;
             float current = context?.GetResourceAmount(resourceType) ?? 0f;
 
@@ -2507,6 +2508,9 @@ namespace TGD.Combat
             map["damage_dealt"] = context.OutgoingDamage;
             map["heal_dealt"] = context.OutgoingHealing;
             map["currentheal"] = context.IncomingHealing;
+            if (context.ResourceValues.TryGetValue(ResourceType.Energy, out var energyValue))
+                map["currentenergy"] = energyValue;
+
             if (context.LastResourceSpendType.HasValue)
             {
                 string key = $"spent_{context.LastResourceSpendType.Value.ToString().ToLowerInvariant()}";

@@ -1,7 +1,9 @@
 ﻿using System.Collections;
-using UnityEngine;
 using TGD.Combat;
 using TGD.Data;
+using TGD.Grid;
+using UnityEngine;
+
 
 namespace TGD.Level
 {
@@ -44,6 +46,7 @@ namespace TGD.Level
             if (TryResolveCoordinate(out var coord))
                 u.Position = coord;
 
+
             // 自动装载职业技能（来自 Resources/SkillDataJason）
             var classSkills = SkillDatabase.GetSkillsForClass(classId);
             u.Skills = new System.Collections.Generic.List<SkillDefinition>(classSkills);
@@ -66,7 +69,6 @@ namespace TGD.Level
             var enemy = new Color(1f, 0.36f, 0.25f);
             fx.glowColor = (t == 0) ? ally : enemy;
         }
-
         public void SyncModelPosition()
         {
             if (Model == null)
@@ -75,7 +77,6 @@ namespace TGD.Level
             if (TryResolveCoordinate(out var coord))
                 Model.Position = coord;
         }
-
         // —— 与桥的注册（稳妥版，不会因时序丢注册）——
         Coroutine _registerRoutine;
 

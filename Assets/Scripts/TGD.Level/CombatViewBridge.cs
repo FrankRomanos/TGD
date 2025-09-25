@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.Combat;
-using TGD.UI;   // DamageNumberManager
+
 
 namespace TGD.Level
 {
@@ -59,9 +59,7 @@ namespace TGD.Level
 
         void Update()
         {
-            TryBindActor(actor);
-            if (_lastActive != null && string.Equals(_lastActive.UnitId, unitId, StringComparison.OrdinalIgnoreCase))
-                actor.ShowRing(true);   //  CombatLoop ݾ˳
+            // 兜底轮询（ActiveUnit 改变也会触发）
             _pollTimer += Time.deltaTime;
             if (_pollTimer < pollInterval) return;
             _pollTimer = 0f;
@@ -82,7 +80,9 @@ namespace TGD.Level
             if (string.IsNullOrWhiteSpace(unitId) || !actor) return;
             _actors[unitId] = actor;
             actor.ShowRing(false);
-            TryBindActor(actor);   // 有 CombatLoop 数据就顺带绑定
+            TryBindActor(actor);
+            if (_lastActive != null && string.Equals(_lastActive.UnitId, unitId, StringComparison.OrdinalIgnoreCase))
+                actor.ShowRing(true);  
         }
 
         public void UnregisterActor(string unitId, UnitActor actor)
@@ -152,31 +152,6 @@ namespace TGD.Level
             );
         }
 
-                actor.SyncModelPosition();
-        public bool TryGetActor(Unit unit, out UnitActor actor)
-        {
-            actor = null;
-            if (unit == null || string.IsNullOrWhiteSpace(unit.UnitId))
-                return false;
-
-            if (_actors.TryGetValue(unit.UnitId, out var found) && found)
-            {
-                actor = found;
-                return true;
-            }
-
-            return false;
-        }
-
-        public IEnumerable<UnitActor> EnumerateActors()
-        {
-            foreach (var entry in _actors.Values)
-            {
-                if (entry)
-                    yield return entry;
-            }
-        }
-
         // —— 绑定 —— //
         void BuildUnitIndex()
         {
@@ -201,6 +176,7 @@ namespace TGD.Level
             {
                 actor.Bind(unit);
                 actor.TryTintRingByTeam(unit.TeamId);
+                actor.SyncModelPosition();
             }
         }
 
@@ -208,6 +184,31 @@ namespace TGD.Level
         {
             foreach (var kv in _actors) kv.Value.ShowRing(false);
         }
+
+        public bool TryGetActor(Unit unit, out UnitActor actor)
+        {
+            actor = null;
+            if (unit == null || string.IsNullOrWhiteSpace(unit.UnitId))
+                return false;
+
+            if (_actors.TryGetValue(unit.UnitId, out var found) && found)
+            {
+                actor = found;
+                return true;
+            }
+
+            return false;
+        }
+
+        public IEnumerable<UnitActor> EnumerateActors()
+        {
+            foreach (var entry in _actors.Values)
+            {
+                if (entry)
+                    yield return entry;
+            }
+        }
+
 
         // —— 查找工具（兼容 2023+）—— //
         static T FindFirstObjectByTypeSafe<T>() where T : UnityEngine.Object

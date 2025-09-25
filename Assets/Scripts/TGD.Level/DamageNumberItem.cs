@@ -2,7 +2,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
-namespace TGD.UI
+namespace TGD.Level
 {
     public class DamageNumberItem : MonoBehaviour
     {

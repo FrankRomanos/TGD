@@ -32,6 +32,7 @@ namespace TGD.Combat
             int delta = Mathf.RoundToInt(rawAmount);
             int minMax = resource == ResourceType.HP ? 1 : 0;
 
+
             switch (type)
             {
                 case ResourceModifyType.Gain:
@@ -56,6 +57,8 @@ namespace TGD.Combat
             unit.Stats.Clamp();
             string label = resource.ToString().ToUpperInvariant();
             _logger?.Log($"RESOURCE_{label}", unit.UnitId, accessor.Current, accessor.Max);
+
+
         }
     }
 }

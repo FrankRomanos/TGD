@@ -32,7 +32,7 @@ namespace TGD.Combat
         private bool _turnShouldEnd;
         private int _roundIndex;
 
-        // â˜… æ–°å¢žï¼šå¯¹å¤–äº‹ä»¶ï¼ˆä¾› CombatLoop / è§†å›¾æ¡¥æŽ¥è®¢é˜…ï¼‰
+        // ¡ï ÐÂÔö£º¶ÔÍâÊÂ¼þ£¨¹© CombatLoop / ÊÓÍ¼ÇÅ½Ó¶©ÔÄ£©
         public event Action<Unit> OnTurnBegan;
         public event Action<Unit> OnTurnEnded;
 
@@ -149,7 +149,7 @@ namespace TGD.Combat
             unit.StartTurn();
             _eventBus?.EmitTurnBegin(unit);
             _logger?.Log("TURN_BEGIN", unit.UnitId, _roundIndex, unit.RemainingTime);
-            OnTurnBegan?.Invoke(unit);     // â˜… æ–°å¢žï¼šå¯¹å¤–å¹¿æ’­
+            OnTurnBegan?.Invoke(unit);     // ¡ï ÐÂÔö£º¶ÔÍâ¹ã²¥
 
             ProcessDotHot(unit);
 
@@ -181,7 +181,7 @@ namespace TGD.Combat
             unit.EndTurn();
             _eventBus?.EmitTurnEnd(unit);
             _logger?.Log("TURN_END", unit.UnitId);
-            OnTurnEnded?.Invoke(unit);     // â˜… æ–°å¢žï¼šå¯¹å¤–å¹¿æ’­
+            OnTurnEnded?.Invoke(unit);     // ¡ï ÐÂÔö£º¶ÔÍâ¹ã²¥
 
             _cooldownSystem?.TickEndOfTurn();
 
@@ -268,7 +268,6 @@ namespace TGD.Combat
                 if (cost.resourceType == CostResourceType.Custom) continue;
                 if (!ResourceUtility.TryGetAccessor(caster.Stats, cost.resourceType, out var accessor) || !accessor.IsValid)
                     continue;
-
                 int amount = Mathf.RoundToInt(cost.ResolveAmount());
                 if (cost.resourceType == CostResourceType.HP)
                 {

@@ -22,4 +22,5 @@ public class EndTurnButton : MonoBehaviour
         return UnityEngine.Object.FindObjectOfType<CombatLoop>();
 #endif
     }
+   
 }

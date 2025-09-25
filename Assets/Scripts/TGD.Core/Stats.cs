@@ -161,7 +161,6 @@ namespace TGD.Core
                 return 0f;
             return value;
         }
-
         private static void ClampResource(ref int current, ref int max, int minimumMax = 0)
         {
             if (max < minimumMax)

@@ -5,8 +5,8 @@ using TGD.Data;
 using TGD.Grid;
 using TGD.Level;
 
-namespace TGD.UI
-{
+namespace TGD.UI 
+{ 
     public sealed class SkillTargetingController : BaseTurnUiBehaviour
     {
         [Header("Grid & Visuals")]
