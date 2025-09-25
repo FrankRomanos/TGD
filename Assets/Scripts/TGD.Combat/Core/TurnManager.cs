@@ -32,7 +32,7 @@ namespace TGD.Combat
         private bool _turnShouldEnd;
         private int _roundIndex;
 
-        // ¡ï ÐÂÔö£º¶ÔÍâÊÂ¼þ£¨¹© CombatLoop / ÊÓÍ¼ÇÅ½Ó¶©ÔÄ£©
+        // â˜… æ–°å¢žï¼šå¯¹å¤–äº‹ä»¶ï¼ˆä¾› CombatLoop / è§†å›¾æ¡¥æŽ¥è®¢é˜…ï¼‰
         public event Action<Unit> OnTurnBegan;
         public event Action<Unit> OnTurnEnded;
 
@@ -149,7 +149,7 @@ namespace TGD.Combat
             unit.StartTurn();
             _eventBus?.EmitTurnBegin(unit);
             _logger?.Log("TURN_BEGIN", unit.UnitId, _roundIndex, unit.RemainingTime);
-            OnTurnBegan?.Invoke(unit);     // ¡ï ÐÂÔö£º¶ÔÍâ¹ã²¥
+            OnTurnBegan?.Invoke(unit);     // â˜… æ–°å¢žï¼šå¯¹å¤–å¹¿æ’­
 
             ProcessDotHot(unit);
 
@@ -181,7 +181,7 @@ namespace TGD.Combat
             unit.EndTurn();
             _eventBus?.EmitTurnEnd(unit);
             _logger?.Log("TURN_END", unit.UnitId);
-            OnTurnEnded?.Invoke(unit);     // ¡ï ÐÂÔö£º¶ÔÍâ¹ã²¥
+            OnTurnEnded?.Invoke(unit);     // â˜… æ–°å¢žï¼šå¯¹å¤–å¹¿æ’­
 
             _cooldownSystem?.TickEndOfTurn();
 
@@ -241,15 +241,18 @@ namespace TGD.Combat
             foreach (var cost in skill.costs)
             {
                 if (cost == null) continue;
+                if (cost.resourceType == CostResourceType.Custom) continue;
+                if (!ResourceUtility.TryGetAccessor(caster.Stats, cost.resourceType, out var accessor) || !accessor.IsValid)
+                    continue;
+
                 float amount = cost.ResolveAmount();
-                switch (cost.resourceType)
+                if (cost.resourceType == CostResourceType.HP)
                 {
-                    case CostResourceType.Energy:
-                        if (caster.Stats.Energy < amount) return false;
-                        break;
-                    case CostResourceType.HP:
-                        if (caster.Stats.HP < amount) return false;
-                        break;
+                    if (accessor.Current < amount) return false;
+                }
+                else
+                {
+                    if (accessor.Current < amount) return false;
                 }
             }
             return true;
@@ -262,15 +265,18 @@ namespace TGD.Combat
             foreach (var cost in skill.costs)
             {
                 if (cost == null) continue;
+                if (cost.resourceType == CostResourceType.Custom) continue;
+                if (!ResourceUtility.TryGetAccessor(caster.Stats, cost.resourceType, out var accessor) || !accessor.IsValid)
+                    continue;
+
                 int amount = Mathf.RoundToInt(cost.ResolveAmount());
-                switch (cost.resourceType)
+                if (cost.resourceType == CostResourceType.HP)
                 {
-                    case CostResourceType.Energy:
-                        caster.Stats.Energy = Mathf.Max(0, caster.Stats.Energy - amount);
-                        break;
-                    case CostResourceType.HP:
-                        caster.Stats.HP = Mathf.Max(1, caster.Stats.HP - amount);
-                        break;
+                    accessor.Current = Mathf.Max(1, accessor.Current - amount);
+                }
+                else
+                {
+                    accessor.Current = Mathf.Max(0, accessor.Current - amount);
                 }
             }
             caster.Stats.Clamp();

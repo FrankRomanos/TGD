@@ -8,22 +8,22 @@ using TGD.UI;   // DamageNumberManager
 namespace TGD.Level
 {
     /// <summary>
-    /// Combat ÊÓÍ¼ÇÅ£ºÖ»ÁÁµ±Ç°³öÊÖÕß½ÅÏÂ»·£»ÏÔÊ¾ÉËº¦Êı×Ö¡£
-    /// ¼æÈİ£º¼´Ê¹ CombatLoop ²»Å×ÊÂ¼ş£¬Ò²»áÓÃÂÖÑ¯¶µµ×¡£
+    /// Combat è§†å›¾æ¡¥ï¼šåªäº®å½“å‰å‡ºæ‰‹è€…è„šä¸‹ç¯ï¼›æ˜¾ç¤ºä¼¤å®³æ•°å­—ã€‚
+    /// å…¼å®¹ï¼šå³ä½¿ CombatLoop ä¸æŠ›äº‹ä»¶ï¼Œä¹Ÿä¼šç”¨è½®è¯¢å…œåº•ã€‚
     /// </summary>
     public class CombatViewBridge : MonoBehaviour
     {
         public static CombatViewBridge Instance { get; private set; }
 
         [Header("References")]
-        [SerializeField] CombatLoop combatLoop;  // ¿É¿Õ£¬×Ô¶¯ÕÒ
+        [SerializeField] CombatLoop combatLoop;  // å¯ç©ºï¼Œè‡ªåŠ¨æ‰¾
 
         [Header("Options")]
         public bool autoBindSceneActors = true;
-        [Tooltip("¶µµ×ÂÖÑ¯¼ä¸ô£¨Ãë£©£¬ÊÂ¼şÕı³£Ê±¿ªÏú¼«Ğ¡")]
+        [Tooltip("å…œåº•è½®è¯¢é—´éš”ï¼ˆç§’ï¼‰ï¼Œäº‹ä»¶æ­£å¸¸æ—¶å¼€é”€æå°")]
         public float pollInterval = 0.05f;
 
-        // Ë÷Òı
+        // ç´¢å¼•
         readonly Dictionary<string, UnitActor> _actors =
             new(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, Unit> _units =
@@ -48,7 +48,7 @@ namespace TGD.Level
                     TryBindActor(a);
             }
 
-            HideAllRings();   // ³õÊ¼È«²¿¹Ø±Õ
+            HideAllRings();   // åˆå§‹å…¨éƒ¨å…³é—­
         }
 
         void OnDestroy()
@@ -59,7 +59,9 @@ namespace TGD.Level
 
         void Update()
         {
-            // ¶µµ×ÂÖÑ¯£¨ActiveUnit ¸Ä±äÒ²»á´¥·¢£©
+            TryBindActor(actor);
+            if (_lastActive != null && string.Equals(_lastActive.UnitId, unitId, StringComparison.OrdinalIgnoreCase))
+                actor.ShowRing(true);   //  CombatLoop İ¾Ë³
             _pollTimer += Time.deltaTime;
             if (_pollTimer < pollInterval) return;
             _pollTimer = 0f;
@@ -74,13 +76,13 @@ namespace TGD.Level
             }
         }
 
-        // ¡ª¡ª ¶ÔÍâ£ºUnitActor µ÷ÓÃ ¡ª¡ª //
+        // â€”â€” å¯¹å¤–ï¼šUnitActor è°ƒç”¨ â€”â€” //
         public void RegisterActor(string unitId, UnitActor actor)
         {
             if (string.IsNullOrWhiteSpace(unitId) || !actor) return;
             _actors[unitId] = actor;
             actor.ShowRing(false);
-            TryBindActor(actor);   // ÓĞ CombatLoop Êı¾İ¾ÍË³´ø°ó¶¨
+            TryBindActor(actor);   // æœ‰ CombatLoop æ•°æ®å°±é¡ºå¸¦ç»‘å®š
         }
 
         public void UnregisterActor(string unitId, UnitActor actor)
@@ -95,10 +97,10 @@ namespace TGD.Level
             BuildUnitIndex();
             foreach (var a in _actors.Values) TryBindActor(a);
             HideAllRings();
-            _lastActive = null; // Ç¿ÖÆÏÂ´ÎÂÖÑ¯Á¢¼´Ë¢ĞÂ
+            _lastActive = null; // å¼ºåˆ¶ä¸‹æ¬¡è½®è¯¢ç«‹å³åˆ·æ–°
         }
 
-        // ¡ª¡ª Combat ÊÂ¼ş£¨ÓĞ¾ÍÓÃ£© ¡ª¡ª //
+        // â€”â€” Combat äº‹ä»¶ï¼ˆæœ‰å°±ç”¨ï¼‰ â€”â€” //
         void SubscribeCombat(bool on)
         {
             if (_combat == null) return;
@@ -121,7 +123,7 @@ namespace TGD.Level
             HideAllRings();
             if (u != null && _actors.TryGetValue(u.UnitId, out var a) && a)
                 a.ShowRing(true);
-            _lastActive = u; // ÈÃÂÖÑ¯ºÍÊÂ¼şÒ»ÖÂ
+            _lastActive = u; // è®©è½®è¯¢å’Œäº‹ä»¶ä¸€è‡´
         }
 
         void HandleTurnEnded(Unit u)
@@ -150,7 +152,32 @@ namespace TGD.Level
             );
         }
 
-        // ¡ª¡ª °ó¶¨ ¡ª¡ª //
+                actor.SyncModelPosition();
+        public bool TryGetActor(Unit unit, out UnitActor actor)
+        {
+            actor = null;
+            if (unit == null || string.IsNullOrWhiteSpace(unit.UnitId))
+                return false;
+
+            if (_actors.TryGetValue(unit.UnitId, out var found) && found)
+            {
+                actor = found;
+                return true;
+            }
+
+            return false;
+        }
+
+        public IEnumerable<UnitActor> EnumerateActors()
+        {
+            foreach (var entry in _actors.Values)
+            {
+                if (entry)
+                    yield return entry;
+            }
+        }
+
+        // â€”â€” ç»‘å®š â€”â€” //
         void BuildUnitIndex()
         {
             _units.Clear();
@@ -182,7 +209,7 @@ namespace TGD.Level
             foreach (var kv in _actors) kv.Value.ShowRing(false);
         }
 
-        // ¡ª¡ª ²éÕÒ¹¤¾ß£¨¼æÈİ 2023+£©¡ª¡ª //
+        // â€”â€” æŸ¥æ‰¾å·¥å…·ï¼ˆå…¼å®¹ 2023+ï¼‰â€”â€” //
         static T FindFirstObjectByTypeSafe<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER

@@ -10,29 +10,36 @@ using TGD.Data;
 namespace TGD.UI
 {
     /// <summary>
-    /// 10¸ñ¼¼ÄÜÌõ£¨µã»÷ÔİÊ±Ö±½Ó¶Ô×Ô¼ºÊÍ·Å£¬ÏÈÅÜÁ÷³Ì£©£º
-    /// 1 ÒÆ¶¯£¨ClassÀï×î´óµÄ skillID£©
-    /// 2 ÆÕ¹¥£¨µÚ¶ş´ó£©
-    /// 3 ¾«Í¨£¨×îĞ¡£©
+        [Header("Skill Ordering")]
+        public string moveSkillTag = "Move";
+
+        [Header("Targeting")]
+        public SkillTargetingController targetingController;
+
+            targetingController ??= FindFirstObjectByTypeSafe<SkillTargetingController>();
+            targetingController?.CancelSelection();
+            targetingController?.CancelSelection();
+            PickSkillsFor(_active, moveSkillTag, totalSlots, _ordered, _byId);
+                        RequestSkill(s);
     /// 4 DeepBlue
     /// 5 DarkYellow
     /// 6 Green
     /// 7 LightBlue
     /// 8 Purple
-    /// 9 Red£¨´óÕĞ£©
-    /// 10 Red£¨µÚ¶ş¸öºì£¬ÖÎÁÆÀà£©
+    /// 9 Redï¼ˆå¤§æ‹›ï¼‰
+    /// 10 Redï¼ˆç¬¬äºŒä¸ªçº¢ï¼Œæ²»ç–—ç±»ï¼‰
     /// </summary>
     public sealed class SkillBarController : BaseTurnUiBehaviour
     {
         [Header("UI")]
-        public Transform slotsRoot;         // HorizontalLayoutGroup ÈİÆ÷
-        public GameObject slotPrefab;       // Äã×öºÃµÄ UI_SkillSlot Ô¤ÖÆ
+        public Transform slotsRoot;         // HorizontalLayoutGroup å®¹å™¨
+        public GameObject slotPrefab;       // ä½ åšå¥½çš„ UI_SkillSlot é¢„åˆ¶
         public int totalSlots = 10;
 
         [Header("Hotkeys (optional)")]
         public string[] hotkeys = { "Q", "W", "E", "R", "A", "S", "D", "F", "G", "H" };
 
-        // ÔËĞĞÌ¬
+        // è¿è¡Œæ€
         Unit _active;
         readonly List<SkillSlotView> _slots = new();
         readonly List<SkillDefinition> _ordered = new();
@@ -52,7 +59,7 @@ namespace TGD.UI
             _active = null;
         }
 
-        // ---------- ¹¹½¨ ----------
+        // ---------- æ„å»º ----------
         void BuildBar()
         {
             EnsureSlotViews();
@@ -74,12 +81,12 @@ namespace TGD.UI
                 {
                     view.Bind(s.skillID, s.icon, GetHotkey(i));
                     view.SetInteractable(true);
-                    int idx = i;   // ±Õ°ü²¶»ñ
+                    int idx = i;   // é—­åŒ…æ•è·
                     view.button.onClick.RemoveAllListeners();
                     view.button.onClick.AddListener(() =>
                     {
                         if (_active == null || combat == null) return;
-                        combat.ExecuteSkill(_active, s.skillID, _active); // ÏÈ¶Ô×Ô¼º£¬µÈÄã½ÓÄ¿±êÏµÍ³
+                        combat.ExecuteSkill(_active, s.skillID, _active); // å…ˆå¯¹è‡ªå·±ï¼Œç­‰ä½ æ¥ç›®æ ‡ç³»ç»Ÿ
                     });
                 }
             }
@@ -87,7 +94,7 @@ namespace TGD.UI
 
         void EnsureSlotViews()
         {
-            // Çå¿Õ/²¹×ã
+            // æ¸…ç©º/è¡¥è¶³
             _slots.Clear();
             for (int i = slotsRoot.childCount - 1; i >= 0; --i)
                 Destroy(slotsRoot.GetChild(i).gameObject);
@@ -100,11 +107,11 @@ namespace TGD.UI
             }
         }
 
-        // ---------- Ë¢ĞÂ£¨ÀäÈ´/¿É½»»¥£© ----------
+        // ---------- åˆ·æ–°ï¼ˆå†·å´/å¯äº¤äº’ï¼‰ ----------
         void Update()
         {
       
-            // È»ºó
+            // ç„¶å
             if (!HasActive) return;
             Refresh();
         }
@@ -139,63 +146,103 @@ namespace TGD.UI
 
         string GetHotkey(int i) => (hotkeys != null && i < hotkeys.Length) ? hotkeys[i] : "";
 
-        // ---------- ¹æÔòÌôÑ¡ ----------
-        static void PickSkillsFor(Unit u, List<SkillDefinition> orderedOut,
-                                  Dictionary<string, SkillDefinition> byIdOut)
+        void RequestSkill(SkillDefinition skill)
         {
-            orderedOut.Clear();
-            byIdOut.Clear();
+            if (_active == null || combat == null || skill == null)
+                return;
 
-            if (u == null) return;
-
-            // Ö°Òµ¼¼ÄÜ£ºÓÅÏÈÓÃ Unit.Skills£¬·ñÔòÊı¾İ¿â²é ClassId
-            var all = (u.Skills != null && u.Skills.Count > 0)
-                ? new List<SkillDefinition>(u.Skills.Where(s => s != null))
-                : new List<SkillDefinition>(SkillDatabase.GetSkillsForClass(u.ClassId));
-
-            if (all.Count == 0) return;
-
-            // Êı×ÖĞòºÅ½âÎö£¨SK123 -> 123£»¶µµ×Îª 0£©
-            int Num(SkillDefinition s)
+            targetingController ??= FindFirstObjectByTypeSafe<SkillTargetingController>();
+            if (targetingController)
             {
-                if (s == null || string.IsNullOrEmpty(s.skillID)) return 0;
-                int n = 0;
-                for (int i = 0; i < s.skillID.Length; i++)
-                    if (char.IsDigit(s.skillID[i])) n = n * 10 + (s.skillID[i] - '0');
-                return n;
+                if (targetingController.BeginSkillSelection(_active, skill))
+                    return;
+
+                return;
             }
 
-            // ·½±ã¼ìË÷
-            SkillDefinition FirstByColor(SkillColor col, bool minId = true)
-                => all.Where(s => s != null && s.skillColor == col)
-                      .OrderBy(s => Num(s))
+            combat.ExecuteSkill(_active, skill, _active);
+        }
+
+        static void PickSkillsFor(Unit u, string moveTag, int slotCount, List<SkillDefinition> orderedOut,
+            if (u == null)
+                return;
+
+            slotCount = Mathf.Max(0, slotCount);
+            if (slotCount == 0)
+                return;
+            if (all.Count == 0)
+                return;
+
+            var available = new List<SkillDefinition>(all);
+
+            bool HasMoveTag(SkillDefinition skill)
+                => skill != null && !string.IsNullOrWhiteSpace(moveTag) &&
+                   (string.Equals(skill.skillTag, moveTag, System.StringComparison.OrdinalIgnoreCase) ||
+                    (skill.tags != null && skill.tags.Exists(t => string.Equals(t, moveTag, System.StringComparison.OrdinalIgnoreCase))));
+
+            void Push(SkillDefinition s)
+            {
+                if (s == null || orderedOut.Count >= slotCount) return;
+                if (string.IsNullOrEmpty(s.skillID)) return;
+                if (byIdOut.ContainsKey(s.skillID)) return;
+                orderedOut.Add(s);
+                byIdOut[s.skillID] = s;
+                available.Remove(s);
+            }
+
+            if (!string.IsNullOrWhiteSpace(moveTag))
+            {
+                var taggedMove = available.FirstOrDefault(HasMoveTag);
+                if (taggedMove != null)
+                    Push(taggedMove);
+            }
+            SkillDefinition FirstByColor(SkillColor col)
+                => available.Where(s => s != null && s.skillColor == col)
+                            .OrderBy(Num)
+                            .FirstOrDefault();
+                => available.Where(s => s != null && s.skillColor == SkillColor.Red)
+                            .OrderBy(Num);
+            var byIdDesc = available.OrderByDescending(Num).ToList();
+            Push(move);
+
+            byIdDesc = available.OrderByDescending(Num).ToList();
+            var basic = byIdDesc.ElementAtOrDefault(0);
+            var mastery = available.OrderBy(Num).FirstOrDefault();
+            foreach (var extra in available.OrderBy(Num).ToList())
+            {
+                if (orderedOut.Count >= slotCount) break;
+                Push(extra);
+            }
+
+            while (orderedOut.Count < slotCount)
+                orderedOut.Add(null);
                       .FirstOrDefault();
 
             IEnumerable<SkillDefinition> Reds()
                 => all.Where(s => s != null && s.skillColor == SkillColor.Red)
                       .OrderBy(s => Num(s));
 
-            // 1 ÒÆ¶¯ / 2 ÆÕ¹¥£ºID ×î´óµÄÁ½¸ö
+            // 1 ç§»åŠ¨ / 2 æ™®æ”»ï¼šID æœ€å¤§çš„ä¸¤ä¸ª
             var byIdDesc = all.OrderByDescending(Num).ToList();
             var move = byIdDesc.ElementAtOrDefault(0);
             var basic = byIdDesc.ElementAtOrDefault(1);
 
-            // 3 ¾«Í¨£ºID ×îĞ¡
+            // 3 ç²¾é€šï¼šID æœ€å°
             var mastery = all.OrderBy(Num).FirstOrDefault();
 
-            // 4~8 ÎåÉ«£¨°´Äã¸øµÄË³Ğò£©
+            // 4~8 äº”è‰²ï¼ˆæŒ‰ä½ ç»™çš„é¡ºåºï¼‰
             var deepBlue = FirstByColor(SkillColor.DeepBlue);
             var darkYellow = FirstByColor(SkillColor.DarkYellow);
             var green = FirstByColor(SkillColor.Green);
             var lightBlue = FirstByColor(SkillColor.LightBlue);
             var purple = FirstByColor(SkillColor.Purple);
 
-            // 9~10 ºì£¨´óÕĞ / µÚ¶ş¸öºì£©
+            // 9~10 çº¢ï¼ˆå¤§æ‹› / ç¬¬äºŒä¸ªçº¢ï¼‰
             var reds = Reds().ToList();
             var red1 = reds.ElementAtOrDefault(0);
             var red2 = reds.ElementAtOrDefault(1);
 
-            // È¥ÖØ²¢Ğ´Èë
+            // å»é‡å¹¶å†™å…¥
             void Push(SkillDefinition s)
             {
                 if (s == null) return;
@@ -215,7 +262,7 @@ namespace TGD.UI
             Push(red1);
             Push(red2);
 
-            // ²»×ã 10 ÓÃ null Õ¼Î»£¬Íâ²ã»áÖÃ»Ò
+            // ä¸è¶³ 10 ç”¨ null å ä½ï¼Œå¤–å±‚ä¼šç½®ç°
             while (orderedOut.Count < 10) orderedOut.Add(null);
         }
     }

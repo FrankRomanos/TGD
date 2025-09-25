@@ -67,12 +67,14 @@ namespace TGD.Combat
             if (caster != null)
             {
                 Allies.Add(caster);
-                ResourceValues[ResourceType.HP] = caster.Stats.HP;
-                ResourceValues[ResourceType.Energy] = caster.Stats.Energy;
-                ResourceValues[ResourceType.posture] = caster.Stats.Posture;
-                ResourceMaxValues[ResourceType.HP] = caster.Stats.MaxHP;
-                ResourceMaxValues[ResourceType.Energy] = caster.Stats.MaxEnergy;
-                ResourceMaxValues[ResourceType.posture] = caster.Stats.MaxPosture;
+                foreach (var type in ResourceUtility.EnumerateAvailable(caster))
+                {
+                    if (ResourceUtility.TryGetAccessor(caster.Stats, type, out var accessor) && accessor.IsValid)
+                    {
+                        ResourceValues[type] = accessor.Current;
+                        ResourceMaxValues[type] = accessor.Max;
+                    }
+                }
             }
         }
 

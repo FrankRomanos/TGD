@@ -24,7 +24,37 @@ namespace TGD.Core
         public int MaxEnergy;
         public int EnergyRegenPer2s;
 
-        // Posture (class exclusive resource).
+        public int Discipline;
+        public int MaxDiscipline;
+
+        public int Iron;
+        public int MaxIron;
+
+        public int Rage;
+        public int MaxRage;
+
+        public int Versatility;
+        public int MaxVersatility;
+
+        public int Gunpowder;
+        public int MaxGunpowder;
+
+        public int Point;
+        public int MaxPoint;
+
+        public int Combo;
+        public int MaxCombo;
+
+        public int Punch;
+        public int MaxPunch;
+
+        public int Qi;
+        public int MaxQi;
+
+        public int Vision;
+        public int MaxVision;
+
+        // Posture (class exclusive resource / mastery extension).
         public int Posture;
         public int MaxPosture;
         public int Strength;
@@ -66,8 +96,18 @@ namespace TGD.Core
             if (HP > MaxHP) HP = MaxHP;
             if (HP < 0) HP = 0;
 
-            if (Energy > MaxEnergy) Energy = MaxEnergy;
-            if (Energy < 0) Energy = 0;
+            ClampResource(ref Energy, ref MaxEnergy);
+            ClampResource(ref Discipline, ref MaxDiscipline);
+            ClampResource(ref Iron, ref MaxIron);
+            ClampResource(ref Rage, ref MaxRage);
+            ClampResource(ref Versatility, ref MaxVersatility);
+            ClampResource(ref Gunpowder, ref MaxGunpowder);
+            ClampResource(ref Point, ref MaxPoint);
+            ClampResource(ref Combo, ref MaxCombo);
+            ClampResource(ref Punch, ref MaxPunch);
+            ClampResource(ref Qi, ref MaxQi);
+            ClampResource(ref Vision, ref MaxVision);
+            ClampResource(ref Posture, ref MaxPosture);
 
             NormalizeDecimalStats();
         }
@@ -120,6 +160,21 @@ namespace TGD.Core
             if (value < 0f)
                 return 0f;
             return value;
+        }
+
+        private static void ClampResource(ref int current, ref int max, int minimumMax = 0)
+        {
+            if (max < minimumMax)
+                max = minimumMax;
+            if (current > max)
+                current = max;
+            if (current < 0)
+                current = 0;
+        }
+
+        public Stats Clone()
+        {
+            return (Stats)MemberwiseClone();
         }
     }
 }

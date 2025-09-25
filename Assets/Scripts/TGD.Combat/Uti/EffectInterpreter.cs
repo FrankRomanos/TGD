@@ -334,29 +334,14 @@ namespace TGD.Combat
 
         private static float ResolveConditionResourceValue(ResourceType resourceType, EffectContext context, Unit referenceUnit, out float maxValue)
         {
-            maxValue = 0f;
-
-            float current = context?.GetResourceAmount(resourceType) ?? 0f;
             maxValue = context?.GetResourceMax(resourceType) ?? 0f;
+            float current = context?.GetResourceAmount(resourceType) ?? 0f;
 
             var stats = referenceUnit?.Stats;
-            if (stats != null)
+            if (stats != null && ResourceUtility.TryGetAccessor(stats, resourceType, out var accessor) && accessor.IsValid)
             {
-                switch (resourceType)
-                {
-                    case ResourceType.HP:
-                        current = stats.HP;
-                        maxValue = stats.MaxHP;
-                        break;
-                    case ResourceType.Energy:
-                        current = stats.Energy;
-                        maxValue = stats.MaxEnergy;
-                        break;
-                    case ResourceType.posture:
-                        current = stats.Posture;
-                        maxValue = stats.MaxPosture;
-                        break;
-                }
+                current = accessor.Current;
+                maxValue = accessor.Max;
             }
 
             return current;
@@ -2522,9 +2507,6 @@ namespace TGD.Combat
             map["damage_dealt"] = context.OutgoingDamage;
             map["heal_dealt"] = context.OutgoingHealing;
             map["currentheal"] = context.IncomingHealing;
-            if (context.ResourceValues.TryGetValue(ResourceType.Energy, out var energyValue))
-                map["currentenergy"] = energyValue;
-
             if (context.LastResourceSpendType.HasValue)
             {
                 string key = $"spent_{context.LastResourceSpendType.Value.ToString().ToLowerInvariant()}";
@@ -2541,6 +2523,7 @@ namespace TGD.Combat
             {
                 string key = kvp.Key.ToString().ToLowerInvariant();
                 map[key] = kvp.Value;
+                map[$"current{key}"] = kvp.Value;
             }
 
             foreach (var kvp in context.ResourceMaxValues)
@@ -2690,36 +2673,16 @@ namespace TGD.Combat
 
         private static float GetResourceValue(ResourceType resourceType, EffectContext context, Unit target)
         {
-            if (target?.Stats != null)
-            {
-                switch (resourceType)
-                {
-                    case ResourceType.HP:
-                        return target.Stats.HP;
-                    case ResourceType.Energy:
-                        return target.Stats.Energy;
-                    case ResourceType.posture:
-                        return target.Stats.Posture;
-                }
-            }
+            if (target?.Stats != null && ResourceUtility.TryGetAccessor(target.Stats, resourceType, out var accessor) && accessor.IsValid)
+                return accessor.Current;
 
             return context.GetResourceAmount(resourceType);
         }
 
         private static float GetResourceMaxValue(ResourceType resourceType, EffectContext context, Unit target)
         {
-            if (target?.Stats != null)
-            {
-                switch (resourceType)
-                {
-                    case ResourceType.HP:
-                        return target.Stats.MaxHP;
-                    case ResourceType.Energy:
-                        return target.Stats.MaxEnergy;
-                    case ResourceType.posture:
-                        return target.Stats.MaxPosture;
-                }
-            }
+            if (target?.Stats != null && ResourceUtility.TryGetAccessor(target.Stats, resourceType, out var accessor) && accessor.IsValid)
+                return accessor.Max;
 
             return context.GetResourceMax(resourceType);
         }
