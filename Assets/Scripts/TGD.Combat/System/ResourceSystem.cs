@@ -21,77 +21,41 @@ namespace TGD.Combat
             if (target?.Stats == null)
                 return;
 
-            float amount = op.Amount;
+            if (!ResourceUtility.TryGetAccessor(target.Stats, op.Resource, out var accessor) || !accessor.IsValid)
+                return;
 
-            switch (op.Resource)
-            {
-                case ResourceType.HP:
-                    ModifyHp(target, amount, op.ModifyType);
-                    break;
-                case ResourceType.Energy:
-                    ModifyEnergy(target, amount, op.ModifyType);
-                    break;
-                case ResourceType.posture:
-                    ModifyPosture(target, amount, op.ModifyType);
-                    break;
-            }
+            ApplyModification(target, op.Resource, accessor, op.Amount, op.ModifyType);
         }
 
-        private void ModifyHp(Unit unit, float amount, ResourceModifyType type)
+        private void ApplyModification(Unit unit, ResourceType resource, ResourceAccessor accessor, float rawAmount, ResourceModifyType type)
         {
-            int delta = Mathf.RoundToInt(amount);
-            if (type == ResourceModifyType.Gain)
-            {
-                unit.Stats.HP += delta;
-                if (unit.Stats.HP > unit.Stats.MaxHP)
-                    unit.Stats.HP = unit.Stats.MaxHP;
-            }
-            else if (type == ResourceModifyType.ConvertMax)
-            {
-                unit.Stats.MaxHP += delta;
-                if (unit.Stats.MaxHP < 1)
-                    unit.Stats.MaxHP = 1;
-                if (unit.Stats.HP > unit.Stats.MaxHP)
-                    unit.Stats.HP = unit.Stats.MaxHP;
-            }
+            int delta = Mathf.RoundToInt(rawAmount);
+            int minMax = resource == ResourceType.HP ? 1 : 0;
 
-            _logger?.Log("RESOURCE_HP", unit.UnitId, unit.Stats.HP, unit.Stats.MaxHP);
-        }
-
-        private void ModifyEnergy(Unit unit, float amount, ResourceModifyType type)
-        {
-            int delta = Mathf.RoundToInt(amount);
             switch (type)
             {
                 case ResourceModifyType.Gain:
-                    unit.Stats.Energy = Mathf.Clamp(unit.Stats.Energy + delta, 0, unit.Stats.MaxEnergy);
+                    accessor.Current = Mathf.Clamp(accessor.Current + delta, 0, accessor.Max);
                     break;
                 case ResourceModifyType.ConvertMax:
-                    unit.Stats.MaxEnergy = Mathf.Max(0, unit.Stats.MaxEnergy + delta);
-                    unit.Stats.Energy = Mathf.Clamp(unit.Stats.Energy, 0, unit.Stats.MaxEnergy);
+                    accessor.Max = Mathf.Max(minMax, accessor.Max + delta);
+                    accessor.Current = Mathf.Clamp(accessor.Current, 0, accessor.Max);
+                    break;
+                case ResourceModifyType.Lock:
+                    accessor.Max = Mathf.Max(minMax, accessor.Max + delta);
+                    break;
+                case ResourceModifyType.Overdraft:
+                case ResourceModifyType.PayLate:
+                    accessor.Current = Mathf.Max(0, accessor.Current - delta);
                     break;
                 default:
-                    unit.Stats.Energy = Mathf.Clamp(unit.Stats.Energy + delta, 0, unit.Stats.MaxEnergy);
+                    accessor.Current = Mathf.Clamp(accessor.Current + delta, 0, accessor.Max);
                     break;
             }
 
-            _logger?.Log("RESOURCE_ENERGY", unit.UnitId, unit.Stats.Energy, unit.Stats.MaxEnergy);
-        }
-
-        private void ModifyPosture(Unit unit, float amount, ResourceModifyType type)
-        {
-            int delta = Mathf.RoundToInt(amount);
-            if (type == ResourceModifyType.Gain)
-            {
-                unit.Stats.Posture = Mathf.Clamp(unit.Stats.Posture + delta, 0, unit.Stats.MaxPosture);
-            }
-            else if (type == ResourceModifyType.ConvertMax)
-            {
-                unit.Stats.MaxPosture = Mathf.Max(0, unit.Stats.MaxPosture + delta);
-                unit.Stats.Posture = Mathf.Clamp(unit.Stats.Posture, 0, unit.Stats.MaxPosture);
-            }
-
-            _logger?.Log("RESOURCE_POSTURE", unit.UnitId, unit.Stats.Posture, unit.Stats.MaxPosture);
+            unit.Stats.Clamp();
+            string label = resource.ToString().ToUpperInvariant();
+            _logger?.Log($"RESOURCE_{label}", unit.UnitId, accessor.Current, accessor.Max);
         }
     }
 }

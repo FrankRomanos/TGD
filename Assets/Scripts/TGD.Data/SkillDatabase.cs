@@ -10,7 +10,7 @@ namespace TGD.Data
         private static readonly Dictionary<string, List<SkillDefinition>> SkillsByClass = new(StringComparer.OrdinalIgnoreCase);
         private static bool _initialized;
 
-        public static void EnsureLoaded(string resourcePath = "SkillDataJason")
+        public static void EnsureLoaded(string resourcePath = "SkillData")
         {
             if (_initialized)
                 return;
@@ -18,22 +18,29 @@ namespace TGD.Data
             SkillsById.Clear();
             SkillsByClass.Clear();
 
-            var assets = Resources.LoadAll<TextAsset>(resourcePath);
-            foreach (var asset in assets)
+            var assets = Resources.LoadAll<SkillDefinition>(resourcePath);
+            if (assets == null || assets.Length == 0)
             {
-                if (asset == null || string.IsNullOrWhiteSpace(asset.text))
-                    continue;
+                Debug.LogWarning($"[SkillDatabase] No SkillDefinition assets found under Resources/{resourcePath}.");
+            }
+            else
+            {
+                foreach (var asset in assets)
+                {
+                    if (asset == null)
+                        continue;
 
-                try
-                {
-                    var skill = ScriptableObject.CreateInstance<SkillDefinition>();
-                    JsonUtility.FromJsonOverwrite(asset.text, skill);
-                    PostProcess(skill);
-                    Register(skill);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Failed to parse skill JSON '{asset.name}': {ex.Message}");
+                    try
+                    {
+                        var skill = ScriptableObject.Instantiate(asset);
+                        skill.name = asset.name;
+                        PostProcess(skill);
+                        Register(skill);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Failed to clone skill asset '{asset.name}': {ex.Message}");
+                    }
                 }
             }
 

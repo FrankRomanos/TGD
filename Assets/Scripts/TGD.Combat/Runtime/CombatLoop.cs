@@ -122,6 +122,7 @@ namespace TGD.Combat
                 if (unit == null) continue;
 
                 unit.Stats ??= new Stats();
+                ClassResourceCatalog.ApplyDefaults(unit);
                 unit.Stats.Clamp();
 
                 unit.Skills ??= new List<SkillDefinition>();
@@ -137,15 +138,21 @@ namespace TGD.Combat
         }
 
         // —— UI按钮可调用 —— //
+        public bool ExecuteSkill(Unit caster, SkillDefinition skill, Unit primaryTarget)
+        {
+            if (_turnManager == null || caster == null || skill == null)
+                return false;
+
+            return _turnManager.ExecuteSkill(caster, skill, primaryTarget);
+        }
+
         public bool ExecuteSkill(Unit caster, string skillId, Unit primaryTarget)
         {
             if (_turnManager == null || caster == null || string.IsNullOrWhiteSpace(skillId))
                 return false;
 
             var skill = _skillResolver.ResolveById(skillId);
-            if (skill == null) return false;
-
-            return _turnManager.ExecuteSkill(caster, skill, primaryTarget);
+            return ExecuteSkill(caster, skill, primaryTarget);
         }
 
         public void EndActiveTurn() => _turnManager?.EndTurnEarly();
