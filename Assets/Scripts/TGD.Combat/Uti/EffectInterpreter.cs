@@ -2643,6 +2643,8 @@ namespace TGD.Combat
             map[prefix + "speed"] = stats.Speed;
             map[prefix + "movespeed"] = stats.MoveSpeed;
             map[prefix + "stamina"] = stats.Stamina;
+            float movement = stats.Movement != 0f ? stats.Movement : stats.MoveSpeed;
+            map[prefix + "movement"] = movement;
             map[prefix + "energy"] = stats.Energy;
             map[prefix + "maxenergy"] = stats.MaxEnergy;
             map[prefix + "energyregen"] = stats.EnergyRegenPer2s;

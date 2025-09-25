@@ -16,17 +16,48 @@ namespace TGD.Combat
         public Stats Stats = new Stats();
         public HexCoord Position;
 
+
         public List<SkillDefinition> Skills = new();
         private readonly Dictionary<string, int> _cdSeconds = new();
         private readonly List<StatusInstance> _statuses = new();
+        int _skillsRevision;
 
         public IReadOnlyList<StatusInstance> Statuses => _statuses;
+        public int SkillsRevision => _skillsRevision;
+
+        public void NotifySkillsChanged()
+        {
+            unchecked
+            {
+                _skillsRevision++;
+            }
+        }
 
         public void SetCooldown(SkillDefinition skill)
         {
             if (skill == null || string.IsNullOrWhiteSpace(skill.skillID))
                 return;
             _cdSeconds[skill.skillID] = Math.Max(0, skill.cooldownSeconds);
+        }
+        public int GetCooldownSeconds(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return 0;
+            return _cdSeconds.TryGetValue(skillId, out var seconds) ? Math.Max(0, seconds) : 0;
+        }
+
+        public void SetCooldownSeconds(string skillId, int seconds)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return;
+            _cdSeconds[skillId] = Math.Max(0, seconds);
+        }
+
+        public void ClearCooldown(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+                return;
+            _cdSeconds.Remove(skillId);
         }
 
         public void TickCooldownSeconds(int deltaSeconds = CombatClock.BaseTurnSeconds)

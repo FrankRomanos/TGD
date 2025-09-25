@@ -1,7 +1,7 @@
 using UnityEngine;
-using TGD.Grid;
 
-namespace TGD.Level
+
+namespace TGD.Grid
 {
     /// <summary>
     /// Authoring for HexGridLayout. Supports global yaw:

@@ -42,6 +42,7 @@ namespace TGD.UI
         readonly List<SkillSlotView> _slots = new();
         readonly List<SkillDefinition> _ordered = new();
         readonly Dictionary<string, SkillDefinition> _byId = new(StringComparer.OrdinalIgnoreCase);
+        int _lastSkillsRevision = -1;
         bool HasActive => _active != null;
         protected override void HandleTurnBegan(Unit u)
         {
@@ -50,6 +51,7 @@ namespace TGD.UI
             targetingController?.CancelSelection();
             BuildBar();
             Refresh();
+            _lastSkillsRevision = _active?.SkillsRevision ?? -1;
             gameObject.SetActive(true);
         }
 
@@ -58,6 +60,7 @@ namespace TGD.UI
             targetingController?.CancelSelection();
             gameObject.SetActive(false);
             _active = null;
+            _lastSkillsRevision = -1;
         }
 
         // ---------- 构建 ----------
@@ -110,9 +113,12 @@ namespace TGD.UI
         // ---------- 刷新（冷却/可交互） ----------
         void Update()
         {
-      
-            // 然后
             if (!HasActive) return;
+            if (_active != null && _lastSkillsRevision != _active.SkillsRevision)
+            {
+                _lastSkillsRevision = _active.SkillsRevision;
+                BuildBar();
+            }
             Refresh();
         }
 
@@ -155,8 +161,6 @@ namespace TGD.UI
             {
                 if (targetingController.BeginSkillSelection(_active, skill))
                     return;
-
-                return;
             }
 
             combat.ExecuteSkill(_active, skill, _active);
@@ -184,88 +188,106 @@ namespace TGD.UI
             if (all.Count == 0)
                 return;
 
-            var available = new List<SkillDefinition>(all);
-
-            bool HasMoveTag(SkillDefinition skill)
-                => skill != null && !string.IsNullOrWhiteSpace(moveTag) &&
-                   (string.Equals(skill.skillTag, moveTag, System.StringComparison.OrdinalIgnoreCase) ||
-                    (skill.tags != null && skill.tags.Exists(t => string.Equals(t, moveTag, System.StringComparison.OrdinalIgnoreCase))));
-
-            void Push(SkillDefinition s)
+            bool IsUsable(SkillDefinition skill)
             {
-                if (s == null || orderedOut.Count >= slotCount) return;
-                if (string.IsNullOrEmpty(s.skillID)) return;
-                if (byIdOut.ContainsKey(s.skillID)) return;
+                if (skill == null || string.IsNullOrEmpty(skill.skillID))
+                    return false;
+                return skill.skillType == SkillType.Active || skill.skillType == SkillType.Mastery;
+            }
+
+            var available = new List<SkillDefinition>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var skill in all)
+            {
+                if (!IsUsable(skill))
+                    continue;
+                if (seen.Contains(skill.skillID))
+                    continue;
+                seen.Add(skill.skillID);
+                available.Add(skill);
+            }
+
+            if (available.Count == 0)
+                return;
+
+            int GetNumericId(SkillDefinition s)
+            {
+                if (s == null || string.IsNullOrEmpty(s.skillID))
+                    return 0;
+                int value = 0;
+                foreach (char c in s.skillID)
+                {
+                    if (char.IsDigit(c))
+                        value = value * 10 + (c - '0');
+                }
+                return value;
+            }
+
+            bool MatchesMoveSkill(SkillDefinition skill)
+            {
+                if (skill == null)
+                    return false;
+                if (!string.IsNullOrWhiteSpace(moveTag))
+                {
+                    if (string.Equals(skill.skillTag, moveTag, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (skill.tags != null && skill.tags.Exists(t => string.Equals(t, moveTag, StringComparison.OrdinalIgnoreCase)))
+                        return true;
+                }
+                if (string.Equals(skill.skillName, "Move", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (string.Equals(skill.skillID, "SK013", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (skill.effects != null && skill.effects.Exists(e => e != null && e.effectType == EffectType.Move))
+                    return true;
+                return false;
+            }
+
+            // 数字序号解析（SK123 -> 123；兜底为 0）
+            SkillDefinition SelectCandidate(Func<SkillDefinition, bool> predicate, bool descending = false)
+            {
+                var candidates = available.Where(predicate).ToList();
+                if (candidates.Count == 0)
+                    return null;
+                return descending
+                    ? candidates.OrderByDescending(GetNumericId).First()
+                    : candidates.OrderBy(GetNumericId).First();
+            }
+
+            void PushSkill(SkillDefinition s)
+            {
+                if (s == null || orderedOut.Count >= slotCount)
+                    return;
+                if (string.IsNullOrEmpty(s.skillID))
+                    return;
+                if (byIdOut.ContainsKey(s.skillID))
+                    return;
                 orderedOut.Add(s);
                 byIdOut[s.skillID] = s;
                 available.Remove(s);
             }
+            PushSkill(SelectCandidate(MatchesMoveSkill));
+            PushSkill(SelectCandidate(_ => true, descending: true));
+            PushSkill(SelectCandidate(s => s.skillType == SkillType.Mastery));
 
-            if (!string.IsNullOrWhiteSpace(moveTag))
+            var colorOrder = new[]
             {
-                var taggedMove = available.FirstOrDefault(HasMoveTag);
-                if (taggedMove != null)
-                    Push(taggedMove);
-            }
+                SkillColor.DeepBlue,
+                SkillColor.DarkYellow,
+                SkillColor.Green,
+                SkillColor.Purple,
+                SkillColor.LightBlue
+            };
 
-            // 数字序号解析（SK123 -> 123；兜底为 0）
-            int Num(SkillDefinition s)
-            {
-                if (s == null || string.IsNullOrEmpty(s.skillID)) return 0;
-                int n = 0;
-                for (int i = 0; i < s.skillID.Length; i++)
-                    if (char.IsDigit(s.skillID[i])) n = n * 10 + (s.skillID[i] - '0');
-                return n;
-            }
+            foreach (var color in colorOrder)
+                PushSkill(SelectCandidate(s => s.skillColor == color));
 
-            SkillDefinition FirstByColor(SkillColor col)
-                => available.Where(s => s != null && s.skillColor == col)
-                            .OrderBy(Num)
-                            .FirstOrDefault();
-
-            IEnumerable<SkillDefinition> Reds()
-                   => available.Where(s => s != null && s.skillColor == SkillColor.Red)
-                            .OrderBy(Num);
-
-            // 1 移动 / 2 普攻：ID 最大的两个
-            var byIdDesc = available.OrderByDescending(Num).ToList();
-            var move = byIdDesc.ElementAtOrDefault(0);
-            Push(move);
-
-            byIdDesc = available.OrderByDescending(Num).ToList();
-            var basic = byIdDesc.ElementAtOrDefault(0);
-
-            // 3 精通：ID 最小
-            var mastery = available.OrderBy(Num).FirstOrDefault();
-
-            // 4~8 五色（按你给的顺序）
-            var deepBlue = FirstByColor(SkillColor.DeepBlue);
-            var darkYellow = FirstByColor(SkillColor.DarkYellow);
-            var green = FirstByColor(SkillColor.Green);
-            var lightBlue = FirstByColor(SkillColor.LightBlue);
-            var purple = FirstByColor(SkillColor.Purple);
-
-            // 9~10 红（大招 / 第二个红）
-            var reds = Reds().ToList();
-            var red1 = reds.ElementAtOrDefault(0);
-            var red2 = reds.ElementAtOrDefault(1);
-
-   
-            Push(basic);
-            Push(mastery);
-            Push(deepBlue);
-            Push(darkYellow);
-            Push(green);
-            Push(lightBlue);
-            Push(purple);
-            Push(red1);
-            Push(red2);
-
-            foreach (var extra in available.OrderBy(Num).ToList())
-            {
-                if (orderedOut.Count >= slotCount) break;
-                Push(extra);
-            }
+            var reds = available.Where(s => s.skillColor == SkillColor.Red)
+                                 .OrderBy(GetNumericId)
+                                 .Take(2)
+                                 .ToList();
+            foreach (var red in reds)
+                PushSkill(red);
 
             while (orderedOut.Count < slotCount)
                 orderedOut.Add(null);

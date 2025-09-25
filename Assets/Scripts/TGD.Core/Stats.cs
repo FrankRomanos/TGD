@@ -81,6 +81,10 @@ namespace TGD.Core
         // Turn speed (seconds) and movement speed.
         public int Speed;
         public int MoveSpeed;
+        /// <summary>
+        /// Number of hex cells travelled per second by default move effects.
+        /// </summary>
+        public float Movement;
 
         // Bonus threat / shred multipliers (0.15f => +15%).
         public float Threat;

@@ -4,9 +4,7 @@ using UnityEngine;
 
 namespace TGD.Level
 {
-    /// <summary>
-    /// Simple helper that displays a pool of ring prefabs on top of hex cells.
-    /// </summary>
+    /// <summary>Displays a pool of ring prefabs on top of hex cells.</summary>
     public class HexRangeIndicator : MonoBehaviour
     {
         [Header("Grid")]
@@ -17,27 +15,28 @@ namespace TGD.Level
         public Transform container;
         public float hoverOffset = 0.05f;
 
+        [Header("Sizing")]
+        public bool fitToGridRadius = true;
+        [Range(0.25f, 4f)] public float scaleMul = 1f;
+
         readonly List<Transform> _pool = new();
         float _cachedYaw;
 
         void Awake()
         {
-            if (!grid)
-                grid = GetComponentInParent<HexGridAuthoring>();
+            if (!grid) grid = GetComponentInParent<HexGridAuthoring>();
         }
 
         public void Show(IEnumerable<HexCoord> coordinates)
         {
-            if (grid?.Layout == null || ringPrefab == null)
-                return;
+            if (grid?.Layout == null || ringPrefab == null) return;
 
             var layout = grid.Layout;
             int index = 0;
 
             foreach (var coord in coordinates)
             {
-                if (!layout.Contains(coord))
-                    continue;
+                if (!layout.Contains(coord)) continue;
 
                 var ring = GetOrCreate(index++);
                 PositionRing(ring, coord);
@@ -46,24 +45,27 @@ namespace TGD.Level
             HideFrom(index);
         }
 
-        public void HideAll()
-        {
-            HideFrom(0);
-        }
+        public void HideAll() => HideFrom(0);
 
         Transform GetOrCreate(int index)
         {
             while (_pool.Count <= index)
             {
                 var parent = container ? container : transform;
-                var instance = Instantiate(ringPrefab, parent);
-                instance.SetActive(false);
-                _pool.Add(instance.transform);
+                var go = Instantiate(ringPrefab, parent);
+                go.SetActive(false);
+
+                // 禁用所有碰撞，避免挡鼠标
+                foreach (var c in go.GetComponentsInChildren<Collider>(true)) c.enabled = false;
+
+                // 首次实例化时按网格半径适配
+                if (fitToGridRadius) FitToRadiusIfNeeded(go.transform);
+
+                _pool.Add(go.transform);
             }
 
             var ring = _pool[index];
-            if (!ring.gameObject.activeSelf)
-                ring.gameObject.SetActive(true);
+            if (!ring.gameObject.activeSelf) ring.gameObject.SetActive(true);
             return ring;
         }
 
@@ -72,21 +74,42 @@ namespace TGD.Level
             for (int i = start; i < _pool.Count; i++)
             {
                 var ring = _pool[i];
-                if (ring && ring.gameObject.activeSelf)
-                    ring.gameObject.SetActive(false);
+                if (ring && ring.gameObject.activeSelf) ring.gameObject.SetActive(false);
             }
         }
 
         void PositionRing(Transform ring, HexCoord coord)
         {
-            if (ring == null || grid?.Layout == null)
-                return;
+            if (ring == null || grid?.Layout == null) return;
 
             var pos = grid.Layout.GetWorldPosition(coord, grid.tileHeightOffset + hoverOffset);
             if (!Mathf.Approximately(_cachedYaw, grid.Layout.YawDegrees))
                 _cachedYaw = grid.Layout.YawDegrees;
 
             ring.SetPositionAndRotation(pos, Quaternion.Euler(0f, _cachedYaw, 0f));
+        }
+
+        void FitToRadiusIfNeeded(Transform ring)
+        {
+            if (!ring || grid?.Layout == null) return;
+
+            // 临时激活拿 bounds
+            bool wasOn = ring.gameObject.activeSelf;
+            if (!wasOn) ring.gameObject.SetActive(true);
+
+            var rend = ring.GetComponentInChildren<Renderer>(true);
+            if (rend)
+            {
+                float worldWidth = rend.bounds.size.x;              // 预制体当前世界宽
+                float target = 2f * grid.Layout.HexRadius;             // Flat-Top：横向直径 = 2r
+                if (worldWidth > 1e-4f)
+                {
+                    float s = (target / worldWidth) * Mathf.Max(0.0001f, scaleMul);
+                    ring.localScale *= s;
+                }
+            }
+
+            if (!wasOn) ring.gameObject.SetActive(false);
         }
     }
 }

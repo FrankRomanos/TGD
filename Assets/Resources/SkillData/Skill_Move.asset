@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   skillID: SK013
   skillName: Move
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 3c32b8e3c0140224e9b46b765e5fc8d9, type: 3}
   classID: CL001
   moduleID: 
   variantKey: 
@@ -152,7 +152,7 @@ MonoBehaviour:
     moveExecution: 0
     moveDirection: 0
     moveDistance: 0
-    moveDistanceExpression: movement
+    moveDistanceExpression: 6
     moveMaxDistance: 0
     moveOffset: {x: 0, y: 0}
     forceMovement: 0

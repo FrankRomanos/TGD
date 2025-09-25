@@ -5,11 +5,15 @@ using System.Linq;
 using UnityEngine;
 using TGD.Core;
 using TGD.Data;
+using TGD.Grid;
+
+
 
 namespace TGD.Combat
 {
     public class CombatLoop : MonoBehaviour
     {
+        
         public static CombatLoop Instance { get; private set; }
 
         [Tooltip("玩家队伍")]
@@ -22,6 +26,16 @@ namespace TGD.Combat
         public CombatLog combatLog;
 
         public bool autoStart = false;   // 用 PartyBootstrapper 启动即可
+
+        [Header("Grid")]
+        public HexGridAuthoring battlefieldGrid;
+
+        public ICombatEventBus EventBus => _eventBus;
+        public HexGridAuthoring ActiveGrid => _gridAuthoring;
+        public HexGridMap<Unit> GridMap => _gridMap;
+        // CombatLoop.cs（属于 TGD.Combat）
+
+
 
         // —— 事件给视图层（桥/飘字）——
         public event Action<Unit> OnTurnBegan;
@@ -37,6 +51,8 @@ namespace TGD.Combat
         private ISkillResolver _skillResolver;
         private IStatusSystem _statusSystem;
         private ICooldownSystem _cooldownSystem;
+        private HexGridMap<Unit> _gridMap;
+        private HexGridAuthoring _gridAuthoring;
 
         void Awake()
         {
@@ -84,6 +100,7 @@ namespace TGD.Combat
             var allUnits = new List<Unit>();
             if (playerParty != null) allUnits.AddRange(playerParty.Where(u => u != null));
             if (enemyParty != null) allUnits.AddRange(enemyParty.Where(u => u != null));
+            InitializeGrid(allUnits);
 
             var movementSystem = new MovementSystem(_eventBus, _logger);
             _statusSystem = new StatusSystem(_eventBus, _combatTime, _logger);
@@ -103,6 +120,8 @@ namespace TGD.Combat
                 _statusSystem, _cooldownSystem,
                 skillModSystem, movementSystem, auraSystem, scheduler
             );
+
+            _turnManager.SetGrid(_gridMap);
 
             // 如果你的 TurnManager 有事件，就转发给视图层；没有也没关系，桥会轮询
             try
@@ -133,8 +152,88 @@ namespace TGD.Combat
                     unit.Skills.Clear();
                     foreach (var skill in skills)
                         unit.Skills.Add(skill);
+                    unit.NotifySkillsChanged();
                 }
             }
+        }
+
+        private void InitializeGrid(IReadOnlyList<Unit> units)
+        {
+            _gridAuthoring = ResolveGridAuthoring();
+            if (_gridAuthoring == null && battlefieldGrid)
+                _gridAuthoring = battlefieldGrid;
+            else if (_gridAuthoring != null)
+                battlefieldGrid = _gridAuthoring;
+
+            var layout = _gridAuthoring?.Layout;
+            if (layout == null)
+            {
+                _gridMap = null;
+                return;
+            }
+
+            _gridMap = new HexGridMap<Unit>(layout);
+            if (units == null)
+                return;
+
+            foreach (var unit in units)
+            {
+                if (unit == null)
+                    continue;
+
+                var coord = unit.Position;
+                if (!layout.Contains(coord))
+                {
+                    if (!TryResolveActorCoordinate(unit, layout, out coord))
+                        coord = layout.ClampToBounds(HexCoord.Zero, coord);
+                }
+                unit.Position = coord;
+                _gridMap.SetPosition(unit, coord);
+            }
+        }
+
+        private bool TryResolveActorCoordinate(Unit unit, HexGridLayout layout, out HexCoord coord)
+        {
+            coord = default;
+            var bridge = CombatViewBridge.Instance;
+            if (bridge != null && bridge.TryGetActor(unit, out var actor) && actor)
+            {
+                var grid = actor.ResolveGrid();
+                var targetLayout = grid?.Layout ?? layout;
+                coord = targetLayout.GetCoordinate(actor.transform.position);
+                if (!layout.Contains(coord))
+                    coord = layout.ClampToBounds(HexCoord.Zero, coord);
+                return true;
+            }
+
+            return false;
+        }
+
+        private HexGridAuthoring ResolveGridAuthoring()
+        {
+            if (battlefieldGrid)
+            {
+                if (battlefieldGrid.Layout == null)
+                    battlefieldGrid.Rebuild();
+                if (battlefieldGrid.Layout != null)
+                    return battlefieldGrid;
+            }
+            var bridge = CombatViewBridge.Instance;
+            if (bridge != null)
+            {
+                foreach (var actor in bridge.EnumerateActors())
+                {
+                    var candidate = actor?.ResolveGrid();
+                    if (candidate && candidate.Layout != null)
+                        return candidate;
+                }
+            }
+
+#if UNITY_2023_1_OR_NEWER
+            return UnityEngine.Object.FindFirstObjectByType<HexGridAuthoring>(FindObjectsInactive.Include);
+#else
+            return UnityEngine.Object.FindObjectOfType<HexGridAuthoring>();
+#endif
         }
 
         // —— UI按钮可调用 —— //

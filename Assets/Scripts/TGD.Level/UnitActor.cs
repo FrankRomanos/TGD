@@ -77,6 +77,23 @@ namespace TGD.Level
             if (TryResolveCoordinate(out var coord))
                 Model.Position = coord;
         }
+
+        public void ApplyCoordinate(HexCoord coord)
+        {
+            var grid = ResolveGrid();
+            if (grid?.Layout != null)
+            {
+                var pos = grid.Layout.GetWorldPosition(coord, grid.tileHeightOffset);
+                transform.position = pos;
+            }
+            else
+            {
+                transform.position = new Vector3(coord.Q, transform.position.y, coord.R);
+            }
+
+            if (Model != null)
+                Model.Position = coord;
+        }
         // —— 与桥的注册（稳妥版，不会因时序丢注册）——
         Coroutine _registerRoutine;
 

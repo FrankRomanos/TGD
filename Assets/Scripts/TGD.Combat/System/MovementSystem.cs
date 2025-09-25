@@ -82,7 +82,13 @@ namespace TGD.Combat
         int DetermineAllowedDistance(Unit unit, MoveOp op, RuntimeCtx ctx)
         {
             int requested = Math.Max(0, op.Distance);
-            float speed = unit?.Stats?.MoveSpeed ?? 0f;
+            float speed = 0f;
+            if (unit?.Stats != null)
+            {
+                speed = unit.Stats.Movement;
+                if (Mathf.Approximately(speed, 0f))
+                    speed = unit.Stats.MoveSpeed;
+            }
             float duration = op.DurationSeconds > 0f ? op.DurationSeconds : ctx.Skill?.timeCostSeconds ?? 0f;
             if (duration <= 0f)
                 duration = 1f;

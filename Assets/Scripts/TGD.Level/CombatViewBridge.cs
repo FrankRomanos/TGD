@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.Combat;
+using TGD.Grid;
 
 
 namespace TGD.Level
@@ -30,6 +31,7 @@ namespace TGD.Level
             new(StringComparer.OrdinalIgnoreCase);
 
         CombatLoop _combat;
+        ICombatEventBus _bus;
         Unit _lastActive;
         float _pollTimer;
 
@@ -38,6 +40,7 @@ namespace TGD.Level
             Instance = this;
 
             _combat = combatLoop ? combatLoop : FindFirstObjectByTypeSafe<CombatLoop>();
+            RefreshEventBus();
 
             BuildUnitIndex();
             SubscribeCombat(true);
@@ -54,11 +57,17 @@ namespace TGD.Level
         void OnDestroy()
         {
             SubscribeCombat(false);
+            if (_bus != null)
+            {
+                _bus.OnUnitPositionChanged -= HandleUnitMoved;
+                _bus = null;
+            }
             if (Instance == this) Instance = null;
         }
 
         void Update()
         {
+            RefreshEventBus();
             // 兜底轮询（ActiveUnit 改变也会触发）
             _pollTimer += Time.deltaTime;
             if (_pollTimer < pollInterval) return;
@@ -117,7 +126,19 @@ namespace TGD.Level
                 _combat.OnDamageNumberRequested -= HandleDamageNumber;
             }
         }
+        void RefreshEventBus()
+        {
+            var next = _combat?.EventBus;
+            if (ReferenceEquals(next, _bus))
+                return;
 
+            if (_bus != null)
+                _bus.OnUnitPositionChanged -= HandleUnitMoved;
+
+            _bus = next;
+            if (_bus != null)
+                _bus.OnUnitPositionChanged += HandleUnitMoved;
+        }
         void HandleTurnBegan(Unit u)
         {
             HideAllRings();
@@ -150,6 +171,16 @@ namespace TGD.Level
                 kind,
                 kind == DamageVisualKind.Crit ? 1.2f : 1f
             );
+        }
+        void HandleUnitMoved(Unit unit, HexCoord from, HexCoord to)
+        {
+            if (unit == null)
+                return;
+
+            if (!_actors.TryGetValue(unit.UnitId, out var actor) || !actor)
+                return;
+
+            actor.ApplyCoordinate(to);
         }
 
         // —— 绑定 —— //

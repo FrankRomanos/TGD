@@ -3,8 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using TGD.Core;
+using TGD.Grid;
 using TGD.Data;
+using TGD.Core;
 
 namespace TGD.Combat
 {
@@ -28,6 +29,7 @@ namespace TGD.Combat
         private readonly List<Unit> _allyBuffer = new();
         private readonly List<Unit> _enemyBuffer = new();
         private readonly Dictionary<Unit, Dictionary<string, int>> _dotHotRounds = new();
+        private HexGridMap<Unit> _grid;
 
         private bool _turnShouldEnd;
         private int _roundIndex;
@@ -77,6 +79,12 @@ namespace TGD.Combat
         }
 
         public Unit ActiveUnit { get; private set; }
+
+        public void SetGrid(HexGridMap<Unit> grid)
+        {
+            _grid = grid;
+            _runtime.Grid = grid;
+        }
 
         public IEnumerator RunLoop()
         {
@@ -209,7 +217,7 @@ namespace TGD.Combat
             _runtime.PrimaryTarget = primaryTarget;
             _runtime.SecondaryTarget = secondaryTarget;
             _runtime.Skill = skill;
-
+            _runtime.Grid = _grid;
             _allyBuffer.Clear();
             _enemyBuffer.Clear();
 

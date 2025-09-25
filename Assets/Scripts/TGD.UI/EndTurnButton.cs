@@ -1,26 +1,51 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TGD.Combat;
-
-public class EndTurnButton : MonoBehaviour
+namespace TGD.UI
 {
-    public CombatLoop combat;
-
-    void Awake()
+    public sealed class EndTurnButton : BaseTurnUiBehaviour
     {
-        if (!combat)
-            combat = FindCombatLoop();
-    }
+        public Button button;
+        Unit _activeUnit;
 
-    public void EndTurn() => combat?.EndActiveTurn();
+        protected override void Awake()
+        {
+            base.Awake();
+            if (!button)
+                button = GetComponent<Button>();
+            if (button)
+            {
+                button.onClick.RemoveListener(EndTurn);
+                button.onClick.AddListener(EndTurn);
+            }
+            UpdateState();
+        }
 
-    static CombatLoop FindCombatLoop()
-    {
-#if UNITY_2023_1_OR_NEWER
-        return UnityEngine.Object.FindFirstObjectByType<CombatLoop>(FindObjectsInactive.Include);
-#else
-        return UnityEngine.Object.FindObjectOfType<CombatLoop>();
-#endif
+        protected override void HandleTurnBegan(Unit u)
+        {
+            _activeUnit = u;
+            UpdateState();
+        }
+
+        protected override void HandleTurnEnded(Unit u)
+        {
+            if (ReferenceEquals(_activeUnit, u))
+                _activeUnit = null;
+            UpdateState();
+        }
+
+        public void EndTurn()
+        {
+            if (_activeUnit != null)
+                combat?.EndActiveTurn();
+        }
+
+        void UpdateState()
+        {
+            if (!button)
+                return;
+            bool interactable = _activeUnit != null;
+            button.interactable = interactable;
+        }
     }
-   
 }
