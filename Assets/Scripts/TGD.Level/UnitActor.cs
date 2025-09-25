@@ -17,6 +17,10 @@ namespace TGD.Level
         public Transform damagePivot;           // 飘字挂点
 
         public Unit Model { get; private set; }
+        // UnitActor.cs （补充）
+  
+        // UnitActor.cs
+        public void ShowRing(bool on) => selectVisual?.SetVisible(on);
 
         void OnEnable() => CombatViewBridge.Instance?.RegisterActor(unitId, this);
         void OnDisable() => CombatViewBridge.Instance?.UnregisterActor(unitId, this);

@@ -18,7 +18,12 @@ namespace TGD.Level
             if (!combat) combat = FindFirstObjectByType<CombatLoop>();
             if (!combat) { Debug.LogError("[PartyBootstrapper] √ª’“µΩ CombatLoop"); return; }
 
-            var actors = FindObjectsOfType<UnitActor>(includeInactive: true);
+
+            var actors = UnityEngine.Object.FindObjectsByType<UnitActor>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None
+            );
+
             var players = new List<Unit>();
             var enemies = new List<Unit>();
 

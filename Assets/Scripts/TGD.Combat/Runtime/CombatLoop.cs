@@ -147,6 +147,7 @@ namespace TGD.Combat
         {
             StopAllCoroutines();
             InitializeSystems();
+            HookTurnCallbacks();
             if (autoStart && _turnManager != null)
                 StartCoroutine(_turnManager.RunLoop());
         }
