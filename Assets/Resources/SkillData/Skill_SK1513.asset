@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK1513
+  m_EditorClassIdentifier: 
+  skillID: SK1513
+  skillName: Sanctuary
+  icon: {fileID: 21300000, guid: d86d3ad3058fe8849b4dbee2bf6f5f0b, type: 3}
+  classID: CL071
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 0
+  actionType: 2
+  targetType: 0
+  energyCost: 2
+  timeCostSeconds: 0
+  cooldownSeconds: 84
+  cooldownRounds: 14
+  range: 7
+  threat: 0
+  namekey: skill_SK1513_name
+  descriptionKey: skill_SK1513_description
+  effectsRaw:
+  - Cost:Insight:2
+  - MakeAllyFrozenAndInvulnerable:Duration:3
+  - IncreaseHealingReceived:100%
+  - ActionTime:0
+  - DarkAspectNotUsable

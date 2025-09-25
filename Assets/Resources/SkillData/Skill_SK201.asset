@@ -1,0 +1,1088 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK201
+  m_EditorClassIdentifier: 
+  skillID: SK201
+  skillName: Tempest
+  icon: {fileID: 21300000, guid: 5665e9beaf939e847a073e5c9fc5d99e, type: 3}
+  classID: CL003
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillTag: none
+  tags: []
+  skillType: 2
+  masteryStatConversionRatio: 1
+  actionType: 6
+  targetType: 5
+  multiTargetCount: 1
+  costs: []
+  useConditions: []
+  timeCostSeconds: -1
+  cooldownSeconds: 0
+  cooldownTurns: 0
+  range: 0
+  threat: 0
+  shredMultiplier: 0
+  namekey: skill_SK201_name
+  descriptionKey: skill_SK201_description
+  skillColor: 6
+  skillLevel: 1
+  skillDuration:
+    duration: 0
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  statusMetadata:
+    accumulatorSettings:
+      enabled: 0
+      source: 0
+      from: 1
+      amount: 0
+      includeDotHot: 1
+      damageSchool: 0
+      windowSeconds: 12
+      variableKey: 
+  effects:
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 7
+    conditionNegate: 1
+    visibleFields: 200
+    conditionSkillStateID: sk209_foucs
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk206
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 1
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk206
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 6
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk206
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 6
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk202
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 6
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk203
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 6
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk204
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  - effectType: 6
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 0
+    duration: 2
+    probability: 
+    condition: 4
+    conditionNegate: 0
+    visibleFields: 202
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: sk203
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs:
+    - sk209
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    statusTransferFlags: 0
+    statusTransferClampToNewMax: 1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    modifyIncludeTags: []
+    modifyExcludeTags: []
+    modifySourceHandle: 
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 0
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 0
+    defenceRedirectTarget: 0
+    defenceReflectUseIncomingDamage: 0
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 6
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  references:
+    version: 2
+    RefIds: []

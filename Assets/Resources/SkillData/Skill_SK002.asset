@@ -1,0 +1,210 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK002
+  m_EditorClassIdentifier: 
+  skillID: SK002
+  skillName: Rallying
+  icon: {fileID: 21300000, guid: 73aed58212f24b34a9477de018b3a9ff, type: 3}
+  classID: CL001
+  moduleID: Rallying
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillTag: none
+  skillType: 0
+  masteryStatConversionRatio: 1
+  actionType: 2
+  targetType: 1
+  multiTargetCount: 1
+  costs:
+  - resourceType: 1
+    amount: 20
+    amountExpression: 
+  - resourceType: 2
+    amount: 1
+    amountExpression: 
+  useConditions: []
+  timeCostSeconds: 2
+  cooldownSeconds: 36
+  cooldownTurns: 6
+  range: 10
+  threat: 0
+  shredMultiplier: 0
+  namekey: skill_SK002_name
+  descriptionKey: skill_SK002_description
+  skillColor: 0
+  skillLevel: 4
+  skillDuration:
+    duration: 2
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  statusMetadata:
+    accumulatorSettings:
+      enabled: 0
+      source: 0
+      from: 1
+      amount: 0
+      includeDotHot: 1
+      damageSchool: 0
+  effects:
+  - effectType: 22
+    target: 2
+    attributeType: 2
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 1
+    actionModifyType: 0
+    actionTypeOverride: 0
+    actionFilterTag: 
+    valueExpression: 
+    value: 100
+    duration: 2
+    probability: 
+    condition: 0
+    visibleFields: 68
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: 
+    conditionTarget: 3
+    conditionDotTarget: 1
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 1
+    consumeStatusOnTrigger: 1
+    damageSchool: 0
+    canCrit: 1
+    perLevel: 1
+    perLevelDuration: 1
+    valueExprLevels:
+    - atk*0.4+discipline*0.1
+    - atk*0.5+discipline*0.1
+    - atk*0.6+discipline*0.1
+    - atk*0.7+discipline*0.1
+    durationLevels: 02000000020000000200000002000000
+    probabilityLvls:
+    - 100%
+    - 100%
+    - 100%
+    - 100%
+    stackCountLevels: 00000000000000000000000000000000
+    stackCount: 1
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 1
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 1
+    randomAllowDuplicates: 1
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 1
+    repeatCountExpression: 
+    repeatResourceType: 2
+    repeatConsumeResource: 1
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 1
+    dotHotTriggerCount: 1
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 1
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 1
+    dotHotAdditionalEffects: []
+    negativeStatuses: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs: []
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: -1
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 1
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 1
+    modifyCostResource: 0
+    resetCooldownToMax: 1
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 1
+    moveDistanceExpression: 
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 1
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 1
+    auraRangeMode: 0
+    auraRadius: 0
+    auraMinRadius: 0
+    auraMaxRadius: 0
+    auraCategories: 0
+    auraTarget: 2
+    auraAffectsImmune: 0
+    auraDuration: 0
+    auraOnEnter: 0
+    auraOnExit: 0
+    auraHeartSeconds: 6
+    auraAdditionalEffects: []
+    defenceMode: 0
+    defenceShieldUsePerSchool: 0
+    defenceShieldBreakdown: []
+    defenceShieldMaxValue: 0
+    defenceShieldMaxExpression: 
+    defenceRedirectExpression: 
+    defenceRedirectRatio: 1
+    defenceRedirectTarget: 2
+    defenceReflectUseIncomingDamage: 1
+    defenceReflectRatioExpression: 
+    defenceReflectRatio: 0
+    defenceReflectFlatExpression: 
+    defenceReflectFlatDamage: 0
+    defenceReflectDamageSchool: 0
+    defenceImmuneSkillIDs: []
+    scalingValuePerResource: 
+    maxStacks: 0
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 1
+      armorToHpRatio: 0.5
+      armorToEnergyRatio: 0.5
+      postureResource: 12
+      postureMaxHealthRatio: 1
+      postureMaxExpression: 
+      masteryScalingExpression: mastery
+      postureRecoveryPercentPerTurn: 0.1
+      postureBreakExtraDamageMultiplier: 1.5
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 1
+      postureBreakSkipsTurn: 1
+  references:
+    version: 2
+    RefIds: []

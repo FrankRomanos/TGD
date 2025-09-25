@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK808
+  m_EditorClassIdentifier: 
+  skillID: SK808
+  skillName: Flag
+  icon: {fileID: 21300000, guid: 83f6d3182aee3434f879029b12171629, type: 3}
+  classID: CL031
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillType: 0
+  actionType: 6
+  targetType: 5
+  costs: []
+  timeCostSeconds: -1
+  cooldownSeconds: 0
+  cooldownRounds: 0
+  range: 0
+  threat: 0
+  shredMultiplier: 0
+  namekey: skill_SK808_name
+  descriptionKey: skill_SK808_description
+  skillColor: 6
+  skillLevel: 1
+  skillDuration:
+    duration: 0
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  effects:
+  - effectType: 11
+    target: 0
+    attributeType: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    valueExpression: 
+    value: 0
+    duration: 0
+    probability: 
+    condition: 0
+    visibleFields: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 0
+    resourceType: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    statusSkillID: 
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    scalingValuePerResource: 
+    maxStacks: 0
+    scalingAttribute: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0

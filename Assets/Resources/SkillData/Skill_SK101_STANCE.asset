@@ -1,0 +1,160 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK101_STANCE
+  m_EditorClassIdentifier: 
+  skillID: SK101_STANCE
+  skillName: Holy Echo  (State)
+  icon: {fileID: 0}
+  classID: CL002
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillType: 3
+  actionType: 0
+  targetType: 2
+  costs: []
+  useConditions: []
+  timeCostSeconds: 0
+  cooldownSeconds: 0
+  cooldownTurns: 0
+  range: 0
+  threat: 0
+  shredMultiplier: 0
+  namekey: 
+  descriptionKey: 
+  skillColor: 6
+  skillLevel: 1
+  skillDuration:
+    duration: 6
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  effects:
+  - effectType: 2
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    valueExpression: 0.5p*damage_dealt
+    value: 0
+    duration: 0
+    probability: 
+    condition: 3
+    visibleFields: 76
+    conditionSkillStateID: 
+    conditionSkillStateCheckStacks: 0
+    conditionSkillStateStackCompare: 0
+    conditionSkillStateStacks: 0
+    conditionSkillUseID: 
+    conditionTarget: 0
+    conditionDotTarget: 0
+    conditionDotSkillIDs: []
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 1
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 0
+    resourceType: 0
+    resourceModifyType: 0
+    resourceStateEnabled: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    statusSkillID: 
+    statusModifyType: 0
+    statusModifySkillIDs: []
+    statusModifyReplacementSkillID: 
+    statusModifyShowStacks: 0
+    statusModifyStacks: 0
+    statusModifyMaxStacks: 0
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    modifyLimitEnabled: 0
+    modifyLimitExpression: 
+    modifyLimitValue: 0
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    auraRadius: 0
+    auraCategories: 0
+    auraTarget: 0
+    auraAffectsImmune: 0
+    auraDuration: 0
+    scalingValuePerResource: 
+    maxStacks: 0
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  references:
+    version: 2
+    RefIds: []

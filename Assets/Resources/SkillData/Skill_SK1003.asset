@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK1003
+  m_EditorClassIdentifier: 
+  skillID: SK1003
+  skillName: Chain
+  icon: {fileID: 21300000, guid: b4da72a9fa6e71a43bc35206fd0ddfb3, type: 3}
+  classID: CL041
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 150
+  actionType: 1
+  targetType: 0
+  energyCost: 50
+  timeCostSeconds: 1
+  cooldownSeconds: 36
+  cooldownRounds: 6
+  range: 5
+  threat: 150
+  namekey: skill_SK1003_name
+  descriptionKey: skill_SK1003_description
+  effectsRaw:
+  - Cost:Energy:50
+  - Damage:50%/55%/60%/65%AD
+  - Range:5
+  - CauseAmbush:Yes
+  - GainComboPoint:1
+  - IfCancelPreviousAction:StillGainPreviousCombo

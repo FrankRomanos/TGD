@@ -14,7 +14,7 @@
 *.png
 *.prefab
 *.meta
-*.asset
+
 *.fbx
 *.fbx.meta
 *.unitypackage
@@ -35,8 +35,10 @@
 *.wlt
 *.pdf
 .vsconfig
+/Assets/AddressableAssetsData
 /Packages/
 /ProjectSettings/
+/Settings/
 # --- Odin Inspector / Sirenix: ignore everything ---
 /Assets/Plugins/Sirenix/
 /Assets/Plugins/Sirenix/**
@@ -113,3 +115,5 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
+Assets/Settings/DefaultVolumeProfile.asset
+/Assets/Settings

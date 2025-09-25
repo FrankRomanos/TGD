@@ -1,0 +1,141 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK1009
+  m_EditorClassIdentifier: 
+  skillID: SK1009
+  skillName: Basic Attack
+  icon: {fileID: 21300000, guid: b4059458bfddadf4c8d691ead58ce2f1, type: 3}
+  classID: CL041
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillType: 0
+  actionType: 0
+  targetType: 0
+  costs: []
+  useConditions: []
+  timeCostSeconds: 1
+  cooldownSeconds: 0
+  cooldownTurns: 0
+  range: 1
+  threat: 100
+  shredMultiplier: 100
+  namekey: skill_SK1009_name
+  descriptionKey: skill_SK1009_description
+  skillColor: 6
+  skillLevel: 1
+  skillDuration:
+    duration: 0
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  effects:
+  - effectType: 12
+    target: 0
+    attributeType: 0
+    immunityScope: 0
+    targetActionType: 0
+    modifierType: 0
+    actionModifyType: 0
+    actionTypeOverride: 0
+    valueExpression: 
+    value: 0
+    duration: 0
+    probability: 
+    condition: 6
+    visibleFields: 0
+    conditionSkillStateID: 
+    conditionSkillUseID: 
+    conditionDotTarget: 1
+    conditionDotSkillIDs:
+    - 
+    conditionDotUseStacks: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    perLevelDuration: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    stackCountLevels: 
+    stackCount: 0
+    resourceType: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    randomRollCount: 0
+    randomAllowDuplicates: 0
+    randomOutcomes: []
+    repeatCountSource: 0
+    repeatCount: 0
+    repeatCountExpression: 
+    repeatResourceType: 0
+    repeatConsumeResource: 0
+    repeatMaxCount: 0
+    repeatEffects: []
+    probabilityModifierMode: 0
+    dotHotOperation: 0
+    dotHotBaseTriggerCount: 0
+    dotHotTriggerCount: 0
+    dotHotAffectsAllies: 0
+    dotHotAffectsEnemies: 0
+    dotHotShowStacks: 0
+    dotHotMaxStacks: 0
+    dotHotAdditionalEffects: []
+    statusSkillID: 
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    cooldownChangeSeconds: 0
+    cooldownTargetScope: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    damageSchoolModifyType: 0
+    damageSchoolFilterEnabled: 0
+    damageSchoolFilter: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    scalingValuePerResource: 
+    maxStacks: 0
+    scalingAttribute: 0
+    scalingOperation: 0
+    masteryPosture:
+      lockArmorToZero: 0
+      armorToHpRatio: 0
+      armorToEnergyRatio: 0
+      postureResource: 0
+      postureMaxHealthRatio: 0
+      postureMaxExpression: 
+      masteryScalingExpression: 
+      postureRecoveryPercentPerTurn: 0
+      postureBreakExtraDamageMultiplier: 0
+      postureBreakStatusSkillID: 
+      postureBreakDurationTurns: 0
+      postureBreakSkipsTurn: 0
+  references:
+    version: 2
+    RefIds: []

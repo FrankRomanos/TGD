@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK704
+  m_EditorClassIdentifier: 
+  skillID: SK704
+  skillName: Warer
+  icon: {fileID: 21300000, guid: 929a754181d192f4aa754508921026cd, type: 3}
+  classID: CL022
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 0
+  actionType: 2
+  targetType: 5
+  energyCost: 20
+  timeCostSeconds: 0
+  cooldownSeconds: 36
+  cooldownRounds: 6
+  range: 5
+  threat: 0
+  namekey: skill_SK704_name
+  descriptionKey: skill_SK704_description
+  effectsRaw:
+  - Cost:Energy:20
+  - ConsumeArtistry:6/5/4/3
+  - ReduceCooldowns:OtherSkills:1
+  - IncreaseSpeed:+1s

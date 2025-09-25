@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK901
+  m_EditorClassIdentifier: 
+  skillID: SK901
+  skillName: Score
+  icon: {fileID: 21300000, guid: 22985bb14b84ff24a942f452310a7f5d, type: 3}
+  classID: CL032
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 0
+  actionType: 7
+  targetType: 5
+  energyCost: 0
+  timeCostSeconds: 0
+  cooldownSeconds: 0
+  cooldownRounds: 0
+  range: 0
+  threat: 0
+  namekey: skill_SK901_name
+  descriptionKey: skill_SK901_description
+  effectsRaw:
+  - State:ScoreMechanic:BleedDamageFormula:%pAD((1+Score)/2):Duration:2

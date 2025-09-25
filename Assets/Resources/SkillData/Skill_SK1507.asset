@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK1507
+  m_EditorClassIdentifier: 
+  skillID: SK1507
+  skillName: Warm Sunshine
+  icon: {fileID: 21300000, guid: f790b19966ec1fc42bec20ffcdb9ea4d, type: 3}
+  classID: CL071
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 0
+  actionType: 0
+  targetType: 1
+  energyCost: 50
+  timeCostSeconds: 2
+  cooldownSeconds: 60
+  cooldownRounds: 10
+  range: 15
+  threat: 0
+  namekey: skill_SK1507_name
+  descriptionKey: skill_SK1507_description
+  effectsRaw:
+  - Cost:Energy:50
+  - HealAllAllies:20%/30%/40%/50%HP
+  - Range:15

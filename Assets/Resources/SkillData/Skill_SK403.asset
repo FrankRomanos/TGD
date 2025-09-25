@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK403
+  m_EditorClassIdentifier: 
+  skillID: SK403
+  skillName: Horizontal
+  icon: {fileID: 21300000, guid: 4115ee22e030a054592f9d298a517b7c, type: 3}
+  classID: CL012
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 100
+  actionType: 0
+  targetType: 0
+  energyCost: 60
+  timeCostSeconds: 2
+  cooldownSeconds: 24
+  cooldownRounds: 4
+  range: 1
+  threat: 100
+  namekey: skill_SK403_name
+  descriptionKey: skill_SK403_description
+  effectsRaw:
+  - Cost:Energy:60
+  - Damage:120%/130%/140%/160%AD
+  - GainIron:1

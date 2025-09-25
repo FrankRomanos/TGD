@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK1004
+  m_EditorClassIdentifier: 
+  skillID: SK1004
+  skillName: Swift
+  icon: {fileID: 21300000, guid: 7a9a2239a6587f141899daeb9394d8b3, type: 3}
+  classID: CL041
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 50
+  actionType: 0
+  targetType: 3
+  energyCost: 20
+  timeCostSeconds: 1
+  cooldownSeconds: 30
+  cooldownRounds: 5
+  range: 2
+  threat: 50
+  namekey: skill_SK1004_name
+  descriptionKey: skill_SK1004_description
+  effectsRaw:
+  - Cost:Energy:20
+  - Damage:20%/25%/30%/40%AD
+  - MoveThroughEnemies:DamageOnPath
+  - CanUseTwiceThisTurn

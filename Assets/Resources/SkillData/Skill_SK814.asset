@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK814
+  m_EditorClassIdentifier: 
+  skillID: SK814
+  skillName: Lucky Gun
+  icon: {fileID: 21300000, guid: a9179b6e97169b34a9c69d9e64e2913d, type: 3}
+  classID: CL031
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  shredMultiplier: 150
+  actionType: 0
+  targetType: 0
+  energyCost: 40
+  timeCostSeconds: 4
+  cooldownSeconds: 6
+  cooldownRounds: 1
+  range: 5
+  threat: 150
+  namekey: skill_SK814_name
+  descriptionKey: skill_SK814_description
+  effectsRaw:
+  - Cost:Energy:40
+  - Cost:BlackPowder:5
+  - Damage:10% ?00%Random
+  - OnCrit:CritDamageMultiplier:4x

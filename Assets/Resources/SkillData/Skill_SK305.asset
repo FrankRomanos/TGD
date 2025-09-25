@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8594d9193c6c14abc3627e4cfda9fb, type: 3}
+  m_Name: Skill_SK305
+  m_EditorClassIdentifier: 
+  skillID: SK305
+  skillName: Swallow
+  icon: {fileID: 21300000, guid: 24a02720e11b75847a46793978ec0e26, type: 3}
+  classID: CL011
+  moduleID: 
+  variantKey: 
+  chainNextID: 
+  resetOnTurnEnd: 0
+  skillType: 0
+  actionType: 1
+  targetType: 5
+  costs: []
+  timeCostSeconds: 2
+  cooldownSeconds: 36
+  cooldownRounds: 6
+  range: 1
+  threat: 50
+  shredMultiplier: 50
+  namekey: skill_SK305_name
+  descriptionKey: skill_SK305_description
+  skillColor: 6
+  skillLevel: 1
+  skillDuration:
+    duration: 0
+    perLevel: 0
+    durationLevels: 00000000000000000000000000000000
+  effects:
+  - effectType: 11
+    target: 0
+    attributeType: 0
+    targetActionType: 0
+    modifierType: 0
+    valueExpression: 
+    value: 0
+    duration: 0
+    probability: 
+    condition: 0
+    visibleFields: 0
+    conditionResourceType: 0
+    conditionMinAmount: 0
+    consumeStatusOnTrigger: 0
+    damageSchool: 0
+    canCrit: 0
+    perLevel: 0
+    valueExprLevels: []
+    durationLevels: 
+    probabilityLvls: []
+    resourceType: 0
+    compareOp: 0
+    compareValue: 0
+    onSuccess: []
+    statusSkillID: 
+    targetSkillID: 
+    replaceSkillID: 
+    inheritReplacedCooldown: 0
+    skillModifyType: 0
+    skillModifyOperation: 0
+    modifyAffectsAllCosts: 0
+    modifyCostResource: 0
+    resetCooldownToMax: 0
+    moveSubject: 0
+    moveExecution: 0
+    moveDirection: 0
+    moveDistance: 0
+    moveMaxDistance: 0
+    moveOffset: {x: 0, y: 0}
+    forceMovement: 0
+    allowPartialMove: 0
+    moveIgnoreObstacles: 0
+    moveStopAdjacentToTarget: 0
+    scalingValuePerResource: 
+    maxStacks: 0
+    scalingAttribute: 0
