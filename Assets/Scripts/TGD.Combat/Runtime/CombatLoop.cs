@@ -141,5 +141,14 @@ namespace TGD.Combat
         // Combat 层只“请求”飘字，UI/Level 来负责渲染
         public void RequestDamageNumber(Unit target, int amount, DamageHint hint = DamageHint.Normal)
             => OnDamageNumberRequested?.Invoke(target, amount, hint);
+
+       
+        public void ReinitializeAndStart()
+        {
+            StopAllCoroutines();
+            InitializeSystems();
+            if (autoStart && _turnManager != null)
+                StartCoroutine(_turnManager.RunLoop());
+        }
     }
 }

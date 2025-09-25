@@ -1,28 +1,28 @@
-ï»¿using TGD.Grid;
+using TGD.Grid;
 using TGD.Level;
 using UnityEngine;
 
 public class HexSelectVisual : MonoBehaviour
 {
     [Header("Refs")]
-    public HexGridAuthoring grid;           // æ‹– HexGridRoot
-    public GameObject ringPrefab;           // æ‹– FX_HexSelectRing å˜ä½“
-    public Transform fxParent;              // å¯é€‰ï¼šFX æ ¹ï¼ˆä¸å¡«åˆ™æŒ‚åœ¨å•ä½ä¸Šï¼‰
+    public HexGridAuthoring grid;           // ÍÏ HexGridRoot
+    public GameObject ringPrefab;           // ÍÏ FX_HexSelectRing ±äÌå
+    public Transform fxParent;              // ¿ÉÑ¡£ºFX ¸ù£¨²»ÌîÔò¹ÒÔÚµ¥Î»ÉÏ£©
 
     [Header("Height / Placement")]
-    public bool placeByRaycast = true;      // æ‰“åœ°é¢å–æœ€é«˜ç‚¹ï¼ˆç²¾å‡†ï¼‰
-    public LayerMask groundMask;            // åªå‹¾ Decorï¼ˆåœ°ç –/è‰æ²¿ï¼‰
-    public float probeHeight = 2f;          // ä»ä¸Šå¾€ä¸‹æ¢æµ‹é«˜åº¦
-    public float hoverOffset = 0.03f;       // ç¦»åœ°æŠ¬èµ·ï¼Œé¿å…é—ªçƒ
+    public bool placeByRaycast = true;      // ´òµØÃæÈ¡×î¸ßµã£¨¾«×¼£©
+    public LayerMask groundMask;            // Ö»¹´ Decor£¨µØ×©/²İÑØ£©
+    public float probeHeight = 2f;          // ´ÓÉÏÍùÏÂÌ½²â¸ß¶È
+    public float hoverOffset = 0.03f;       // ÀëµØÌ§Æğ£¬±ÜÃâÉÁË¸
 
     [Header("Rotation / Size")]
-    [Range(-180, 180)] public float ringYawOffset = 0f; // æ¨¡å‹å·®å‘ï¼Œå¸¸ç”¨ Â±30
-    public bool fitToGridRadius = true;     // æŒ‰ grid.radius é€‚é…å¤§å°
-    public float ringScaleMul = 1.0f;       // åœ¨é€‚é…çš„åŸºç¡€ä¸Šå†ä¹˜ï¼ˆ>1 æ”¾å¤§ï¼‰
+    [Range(-180, 180)] public float ringYawOffset = 0f; // Ä£ĞÍ²îÏò£¬³£ÓÃ ¡À30
+    public bool fitToGridRadius = true;     // °´ grid.radius ÊÊÅä´óĞ¡
+    public float ringScaleMul = 1.0f;       // ÔÚÊÊÅäµÄ»ù´¡ÉÏÔÙ³Ë£¨>1 ·Å´ó£©
 
     [Header("Layer (safe)")]
-    public bool setRingLayer = true;        // æ˜¯å¦ç»™ç¯è®¾ç½®åˆ°æŸå±‚
-    public string ringLayerName = "Decor";  // è‹¥é¡¹ç›®é‡Œæ— è¯¥å±‚ï¼Œä¼šè‡ªåŠ¨è·³è¿‡ï¼Œä¸å†æŠ¥é”™
+    public bool setRingLayer = true;        // ÊÇ·ñ¸ø»·ÉèÖÃµ½Ä³²ã
+    public string ringLayerName = "Decor";  // ÈôÏîÄ¿ÀïÎŞ¸Ã²ã£¬»á×Ô¶¯Ìø¹ı£¬²»ÔÙ±¨´í
 
     Transform ring;
     Renderer ringRenderer;
@@ -38,15 +38,15 @@ public class HexSelectVisual : MonoBehaviour
         var go = Instantiate(ringPrefab, parent);
         ring = go.transform;
 
-        // â€”â€” å®‰å…¨è®¾ç½®å±‚ï¼ˆé˜²æ­¢ NameToLayer è¿”å› -1 æŠ¥é”™ï¼‰â€”â€”
+        // ¡ª¡ª °²È«ÉèÖÃ²ã£¨·ÀÖ¹ NameToLayer ·µ»Ø -1 ±¨´í£©¡ª¡ª
         if (setRingLayer && !string.IsNullOrEmpty(ringLayerName))
         {
             int l = LayerMask.NameToLayer(ringLayerName);
             if (l >= 0 && l <= 31) SetLayerRecursively(go, l);
-            // è‹¥æœªé…ç½®è¯¥å±‚åï¼Œåˆ™ä¿æŒé¢„åˆ¶è‡ªå¸¦å±‚ï¼Œä¸å¼ºè®¾
+            // ÈôÎ´ÅäÖÃ¸Ã²ãÃû£¬Ôò±£³ÖÔ¤ÖÆ×Ô´ø²ã£¬²»Ç¿Éè
         }
 
-        // ç¦ç”¨æ‰€æœ‰ Colliderï¼Œé¿å…æŒ¡é¼ æ ‡/è¢«å‘½ä¸­
+        // ½ûÓÃËùÓĞ Collider£¬±ÜÃâµ²Êó±ê/±»ÃüÖĞ
         foreach (var c in go.GetComponentsInChildren<Collider>(true)) c.enabled = false;
 
         ringRenderer = go.GetComponentInChildren<Renderer>(true);
@@ -73,14 +73,14 @@ public class HexSelectVisual : MonoBehaviour
         if (!fitToGridRadius || ringRenderer == null || grid == null) return;
         if (Mathf.Approximately(cachedRadius, grid.radius)) return;
 
-        // ä¸´æ—¶æ¿€æ´»ç¡®ä¿èƒ½å–åˆ° bounds
+        // ÁÙÊ±¼¤»îÈ·±£ÄÜÈ¡µ½ bounds
         bool on = ring.gameObject.activeSelf;
         if (!on) ring.gameObject.SetActive(true);
 
-        var w = ringRenderer.bounds.size.x; // ä¸–ç•Œå®½åº¦
+        var w = ringRenderer.bounds.size.x; // ÊÀ½ç¿í¶È
         if (w > 1e-5f)
         {
-            var target = 2f * grid.radius;  // Flat-Topï¼šæ¨ªå‘ = 2r
+            var target = 2f * grid.radius;  // Flat-Top£ººáÏò = 2r
             float s = (target / w) * Mathf.Max(0.0001f, ringScaleMul);
             ring.localScale *= s;
             cachedRadius = grid.radius;
@@ -93,11 +93,11 @@ public class HexSelectVisual : MonoBehaviour
     {
         if (!visible || grid == null || grid.Layout == null) return;
 
-        // 1) æ‰¾å•ä½æ‰€åœ¨æ ¼ä¸­å¿ƒï¼ˆä¸åŠ é«˜åº¦ï¼‰
+        // 1) ÕÒµ¥Î»ËùÔÚ¸ñÖĞĞÄ£¨²»¼Ó¸ß¶È£©
         var c = grid.Layout.GetCoordinate(transform.position);
         var p = grid.Layout.GetWorldPosition(c, 0f);
 
-        // 2) é«˜åº¦ï¼šä¼˜å…ˆå°„çº¿ï¼Œå¤±è´¥èµ°å…œåº•ï¼ˆå§‹ç»ˆæŠŠç¯æŠ¬å‡ºåœ°é¢ï¼‰
+        // 2) ¸ß¶È£ºÓÅÏÈÉäÏß£¬Ê§°Ü×ß¶µµ×£¨Ê¼ÖÕ°Ñ»·Ì§³öµØÃæ£©
         float baseY = grid.origin ? grid.origin.position.y : 0f;
         float finalY = baseY + grid.tileHeightOffset + hoverOffset;
 
@@ -106,7 +106,7 @@ public class HexSelectVisual : MonoBehaviour
             Vector3 from = new Vector3(p.x, p.y + probeHeight, p.z);
             if (Physics.Raycast(from, Vector3.down, out var hit,
                                 probeHeight * 2f, groundMask,
-                                QueryTriggerInteraction.Collide)) // å‘½ä¸­ Trigger ä¹Ÿç®—
+                                QueryTriggerInteraction.Collide)) // ÃüÖĞ Trigger Ò²Ëã
             {
                 finalY = hit.point.y + hoverOffset;
             }
@@ -114,7 +114,7 @@ public class HexSelectVisual : MonoBehaviour
 
         p.y = finalY;
 
-        // 3) æ—‹è½¬ä¸ç¼©æ”¾
+        // 3) Ğı×ªÓëËõ·Å
         var yaw = GetGridYaw() + ringYawOffset;
         ring.SetPositionAndRotation(p, Quaternion.Euler(0f, yaw, 0f));
         FitToRadiusNow();
