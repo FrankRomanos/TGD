@@ -3,60 +3,52 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.Combat;
-using TGD.UI;       // DamageNumberManager 用到
+using TGD.UI;   // DamageNumberManager
 
 namespace TGD.Level
 {
     /// <summary>
-    /// 视图桥：把 CombatLoop 的回合/飘字事件，映射到场景里的 UnitActor。
-    /// - 维护 UnitId→UnitActor 映射
-    /// - 回合开始/结束：统一开/关脚下环（只亮当前出手者）
-    /// - 请求飘字：调用 DamageNumberManager
-    /// - 支持运行时重新绑定/刷新
+    /// Combat 视图桥：只亮当前出手者脚下环；显示伤害数字。
+    /// 兼容：即使 CombatLoop 不抛事件，也会用轮询兜底。
     /// </summary>
     public class CombatViewBridge : MonoBehaviour
     {
         public static CombatViewBridge Instance { get; private set; }
 
         [Header("References")]
-        [Tooltip("可选：若留空会自动查找场景中的 CombatLoop")]
-        [SerializeField] private CombatLoop combatLoop;
+        [SerializeField] CombatLoop combatLoop;  // 可空，自动找
 
         [Header("Options")]
-        [Tooltip("Awake 时自动查找并绑定场景中的 UnitActor")]
         public bool autoBindSceneActors = true;
+        [Tooltip("兜底轮询间隔（秒），事件正常时开销极小")]
+        public float pollInterval = 0.05f;
 
-        // —— 索引 —— //
+        // 索引
         readonly Dictionary<string, UnitActor> _actors =
             new(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, Unit> _units =
             new(StringComparer.OrdinalIgnoreCase);
 
         CombatLoop _combat;
+        Unit _lastActive;
+        float _pollTimer;
 
-        // -------------- 生命周期 -------------- //
         void Awake()
         {
             Instance = this;
 
-            // 1) 定位 CombatLoop（优先 Inspector 引用）
-            _combat = combatLoop;
-            if (_combat == null)
-                _combat = FindFirstObjectByTypeSafe<CombatLoop>();
+            _combat = combatLoop ? combatLoop : FindFirstObjectByTypeSafe<CombatLoop>();
 
-            // 2) 根据 CombatLoop 构建 Unit 索引，订阅事件
             BuildUnitIndex();
             SubscribeCombat(true);
 
-            // 3) 绑定场景里的 UnitActor
             if (autoBindSceneActors)
             {
                 foreach (var a in FindObjectsOfTypeSafe<UnitActor>(includeInactive: true))
                     TryBindActor(a);
             }
 
-            // 4) 初始确保环全关
-            HideAllRings();
+            HideAllRings();   // 初始全部关闭
         }
 
         void OnDestroy()
@@ -65,13 +57,30 @@ namespace TGD.Level
             if (Instance == this) Instance = null;
         }
 
-        // -------------- 对外：供 UnitActor 调用 -------------- //
+        void Update()
+        {
+            // 兜底轮询（ActiveUnit 改变也会触发）
+            _pollTimer += Time.deltaTime;
+            if (_pollTimer < pollInterval) return;
+            _pollTimer = 0f;
+
+            var cur = _combat ? _combat.GetActiveUnit() : null;
+            if (!ReferenceEquals(cur, _lastActive))
+            {
+                _lastActive = cur;
+                HideAllRings();
+                if (cur != null && _actors.TryGetValue(cur.UnitId, out var a) && a)
+                    a.ShowRing(true);
+            }
+        }
+
+        // —— 对外：UnitActor 调用 —— //
         public void RegisterActor(string unitId, UnitActor actor)
         {
             if (string.IsNullOrWhiteSpace(unitId) || !actor) return;
             _actors[unitId] = actor;
-            RegisterActor(actor.unitId, actor);
-            actor.ShowRing(false); // 注册时默认关
+            actor.ShowRing(false);
+            TryBindActor(actor);   // 有 CombatLoop 数据就顺带绑定
         }
 
         public void UnregisterActor(string unitId, UnitActor actor)
@@ -81,15 +90,15 @@ namespace TGD.Level
                 _actors.Remove(unitId);
         }
 
-        /// <summary>当你改了 CombatLoop 名单或场景里增删了单位时，手动调用刷新。</summary>
         public void RefreshBindings()
         {
             BuildUnitIndex();
             foreach (var a in _actors.Values) TryBindActor(a);
             HideAllRings();
+            _lastActive = null; // 强制下次轮询立即刷新
         }
 
-        // -------------- Combat 事件 -------------- //
+        // —— Combat 事件（有就用） —— //
         void SubscribeCombat(bool on)
         {
             if (_combat == null) return;
@@ -109,10 +118,10 @@ namespace TGD.Level
 
         void HandleTurnBegan(Unit u)
         {
-            // 先全关，再只亮当前
             HideAllRings();
             if (u != null && _actors.TryGetValue(u.UnitId, out var a) && a)
                 a.ShowRing(true);
+            _lastActive = u; // 让轮询和事件一致
         }
 
         void HandleTurnEnded(Unit u)
@@ -141,67 +150,39 @@ namespace TGD.Level
             );
         }
 
-        // -------------- 绑定/索引 -------------- //
+        // —— 绑定 —— //
         void BuildUnitIndex()
         {
             _units.Clear();
             if (_combat == null) return;
 
             if (_combat.playerParty != null)
-            {
-                foreach (var u in _combat.playerParty.Where(x => x != null && !string.IsNullOrWhiteSpace(x.UnitId)))
+                foreach (var u in _combat.playerParty.Where(Ok))
                     _units[u.UnitId] = u;
-            }
+
             if (_combat.enemyParty != null)
-            {
-                foreach (var u in _combat.enemyParty.Where(x => x != null && !string.IsNullOrWhiteSpace(x.UnitId)))
+                foreach (var u in _combat.enemyParty.Where(Ok))
                     _units[u.UnitId] = u;
-            }
+
+            static bool Ok(Unit u) => u != null && !string.IsNullOrWhiteSpace(u.UnitId);
         }
 
         void TryBindActor(UnitActor actor)
         {
             if (!actor || string.IsNullOrWhiteSpace(actor.unitId)) return;
-            if (!_units.TryGetValue(actor.unitId, out var unit) || unit == null)
+            if (_units.TryGetValue(actor.unitId, out var unit) && unit != null)
             {
-                unit = FindUnit(actor.unitId);
-                if (unit != null)
-                    _units[actor.unitId] = unit;
+                actor.Bind(unit);
+                actor.TryTintRingByTeam(unit.TeamId);
             }
-
-            if (unit != null)
-                actor.Bind(unit); // 内部会顺带根据 TeamId 给环染色
         }
-        private Unit FindUnit(string unitId)
-        {
-            if (string.IsNullOrWhiteSpace(unitId) || _combat == null) return null;
 
-            if (_combat.playerParty != null)
-            {
-                foreach (var u in _combat.playerParty)
-                {
-                    if (u != null && string.Equals(u.UnitId, unitId, StringComparison.OrdinalIgnoreCase))
-                        return u;
-                }
-            }
-
-            if (_combat.enemyParty != null)
-            {
-                foreach (var u in _combat.enemyParty)
-                {
-                    if (u != null && string.Equals(u.UnitId, unitId, StringComparison.OrdinalIgnoreCase))
-                        return u;
-                }
-            }
-
-            return null;
-        }
         void HideAllRings()
         {
             foreach (var kv in _actors) kv.Value.ShowRing(false);
         }
 
-        // -------------- 工具：兼容查找 -------------- //
+        // —— 查找工具（兼容 2023+）—— //
         static T FindFirstObjectByTypeSafe<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER
@@ -219,7 +200,7 @@ namespace TGD.Level
                 FindObjectsSortMode.None);
 #else
             return includeInactive
-                ? Resources.FindObjectsOfTypeAll<T>()   // 包含未激活（编辑器下）
+                ? Resources.FindObjectsOfTypeAll<T>()
                 : UnityEngine.Object.FindObjectsOfType<T>();
 #endif
         }

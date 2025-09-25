@@ -1,29 +1,43 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 using TGD.Combat;
 using TGD.Data;
-using TGD.Core;
 
 namespace TGD.Level
 {
     public class UnitActor : MonoBehaviour
     {
         [Header("Identity")]
-        public string unitId = "knight";   // 与 Unit.UnitId 对应
-        public int teamId = 0;             // 0=我方, 1=敌方...（你随意约定）
-        public string classId = "CL001";   // 职业ID（用来自动拿技能）
+        public string unitId = "knight";   // 必须唯一，CombatLoop/Bridge 都用它匹配
+        public int teamId = 0;             // 0=玩家阵营，1=敌人
+        public string classId = "CL001";   // 职业ID（用于自动装技能）
 
         [Header("Visual (optional)")]
-        public HexSelectVisual selectVisual;    // 脚下环
-        public Transform damagePivot;           // 飘字挂点
+        public HexSelectVisual selectVisual;    // 脚下环（可空）
+        public Transform damagePivot;           // 飘字挂点（可空）
 
         public Unit Model { get; private set; }
-        // UnitActor.cs （补充）
-  
-        // UnitActor.cs
+
+        // —— 对外：桥会调用 —— //
         public void ShowRing(bool on) => selectVisual?.SetVisible(on);
 
-        void OnEnable() => CombatViewBridge.Instance?.RegisterActor(unitId, this);
-        void OnDisable() => CombatViewBridge.Instance?.UnregisterActor(unitId, this);
+        // 给桥/引导器使用：把场景 Actor 转成战斗 Unit
+        public Unit BuildUnit()
+        {
+            var u = new Unit
+            {
+                UnitId = unitId,
+                ClassId = classId,
+                TeamId = teamId,
+                Stats = new TGD.Core.Stats()
+            };
+            u.Stats.Clamp();
+
+            // 自动装载职业技能（来自 Resources/SkillDataJason）
+            var classSkills = SkillDatabase.GetSkillsForClass(classId);
+            u.Skills = new System.Collections.Generic.List<SkillDefinition>(classSkills);
+            return u;
+        }
 
         public void Bind(Unit model)
         {
@@ -41,22 +55,38 @@ namespace TGD.Level
             fx.glowColor = (t == 0) ? ally : enemy;
         }
 
-        // 方便把 Actor 一键转换为战斗模型
-        public Unit BuildUnit()
-        {
-            var u = new Unit
-            {
-                UnitId = unitId,
-                ClassId = classId,
-                TeamId = teamId,
-                Stats = new Stats()
-            };
-            u.Stats.Clamp();
+        // —— 与桥的注册（稳妥版，不会因时序丢注册）——
+        Coroutine _registerRoutine;
 
-            // 给职业自动装技能（来自 Resources/SkillDataJason）
-            var classSkills = SkillDatabase.GetSkillsForClass(classId);
-            u.Skills = new System.Collections.Generic.List<SkillDefinition>(classSkills);
-            return u;
+        void OnEnable()
+        {
+            if (!TryRegisterImmediately())
+                _registerRoutine = StartCoroutine(RegisterWhenReady());
+        }
+
+        void OnDisable()
+        {
+            if (_registerRoutine != null)
+            {
+                StopCoroutine(_registerRoutine);
+                _registerRoutine = null;
+            }
+            CombatViewBridge.Instance?.UnregisterActor(unitId, this);
+        }
+
+        bool TryRegisterImmediately()
+        {
+            var bridge = CombatViewBridge.Instance;
+            if (bridge == null) return false;
+            bridge.RegisterActor(unitId, this);
+            return true;
+        }
+
+        IEnumerator RegisterWhenReady()
+        {
+            while (!TryRegisterImmediately())
+                yield return null;
+            _registerRoutine = null;
         }
 
         public Vector3 DamageWorldPos =>

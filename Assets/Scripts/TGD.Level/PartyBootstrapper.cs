@@ -5,36 +5,35 @@ using TGD.Combat;
 namespace TGD.Level
 {
     /// <summary>
-    /// 开局把场景里的 UnitActor 收集成 Unit，
-    /// 按 teamId 分到 CombatLoop 的 player/enemy，并启动回合循环。
+    /// 开局把场景里的 UnitActor 收集进 CombatLoop 并启动战斗。
     /// </summary>
     public class PartyBootstrapper : MonoBehaviour
     {
-        public CombatLoop combat;          // 不填就自动找
-        public bool clearInspectorParties = true; // 覆盖 Inspector 里原有配置
+        public CombatLoop combat;                 // 可空自动找
+        public bool clearInspectorParties = true; // 是否覆盖 Inspector 里原有
 
         void Start()
         {
             if (!combat) combat = FindFirstObjectByType<CombatLoop>();
             if (!combat) { Debug.LogError("[PartyBootstrapper] 没找到 CombatLoop"); return; }
 
-
+#if UNITY_2023_1_OR_NEWER
             var actors = UnityEngine.Object.FindObjectsByType<UnitActor>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None
-            );
-
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+            var actors = Resources.FindObjectsOfTypeAll<UnitActor>();
+#endif
             var players = new List<Unit>();
             var enemies = new List<Unit>();
 
             foreach (var a in actors)
             {
+                if (!a || !a.gameObject.activeInHierarchy) continue;
                 var u = a.BuildUnit();
                 if (u.TeamId == 0) players.Add(u); else enemies.Add(u);
-                a.Bind(u); // 视觉层绑定战斗模型（脚底环/飘字等）
+                a.Bind(u); // 视觉层也立即绑定（环染色/飘字锚点等）
             }
 
-            // 覆盖 CombatLoop 的队伍并重建系统
             if (clearInspectorParties)
             {
                 combat.playerParty = players;
@@ -46,7 +45,11 @@ namespace TGD.Level
                 combat.enemyParty.AddRange(enemies);
             }
 
-            combat.ReinitializeAndStart(); // 见下方 CombatLoop 的补充方法
+            // 初始化并开跑
+            combat.ReinitializeAndStart();
+
+            // 让桥重新索引并立即能亮环
+            CombatViewBridge.Instance?.RefreshBindings();
         }
     }
 }

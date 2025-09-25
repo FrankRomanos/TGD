@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -7,20 +8,28 @@ using TGD.Data;
 
 namespace TGD.Combat
 {
-    /// <summary>Combat 入口（不引用 UI/Level）。对外暴露事件。</summary>
     public class CombatLoop : MonoBehaviour
     {
-        [Tooltip("玩家队伍（最多4人）")]
+        public static CombatLoop Instance { get; private set; }
+
+        [Tooltip("玩家队伍")]
         public List<Unit> playerParty = new();
 
         [Tooltip("敌人队伍")]
         public List<Unit> enemyParty = new();
 
-        [Tooltip("可选的战斗日志存储对象（如果为空会自动创建临时实例）")]
+        [Tooltip("可选：战斗日志（若空会自动创建临时实例）")]
         public CombatLog combatLog;
 
-        public bool autoStart = true;
+        public bool autoStart = false;   // 用 PartyBootstrapper 启动即可
 
+        // —— 事件给视图层（桥/飘字）——
+        public event Action<Unit> OnTurnBegan;
+        public event Action<Unit> OnTurnEnded;
+        public enum DamageHint { Normal, Crit, Heal }
+        public event Action<Unit, int, DamageHint> OnDamageNumberRequested;
+
+        // —— 内部系统 —— 
         private TurnManager _turnManager;
         private ICombatEventBus _eventBus;
         private ICombatTime _combatTime;
@@ -29,32 +38,35 @@ namespace TGD.Combat
         private IStatusSystem _statusSystem;
         private ICooldownSystem _cooldownSystem;
 
-        // —— 事件：供 UI/Level 订阅 —— //
-        public event Action<Unit> OnTurnBegan;
-        public event Action<Unit> OnTurnEnded;
-
-        // 飘字请求：UI 层订阅后渲染
-        public enum DamageHint { Normal, Crit, Heal }
-        public event Action<Unit, int, DamageHint> OnDamageNumberRequested;
-
-        // 便捷单例（可选）
-        public static CombatLoop Instance { get; private set; }
-
         void Awake()
         {
             Instance = this;
-            InitializeSystems();
-            HookTurnCallbacks();
         }
 
-        void OnDestroy() { if (Instance == this) Instance = null; }
-
-        private void Start()
+        void Start()
         {
-            if (autoStart && _turnManager != null)
+            if (autoStart) ReinitializeAndStart();
+        }
+
+        // —— 对外：给引导器调用，一步初始化并开跑 —— //
+        public void ReinitializeAndStart()
+        {
+            StopAllCoroutines();
+            InitializeSystems();
+            if (_turnManager != null)
                 StartCoroutine(_turnManager.RunLoop());
         }
 
+        // —— 让桥兜底轮询调用 —— //
+        public Unit GetActiveUnit() => _turnManager?.ActiveUnit;
+
+        // —— 在合适位置让 TurnManager 调用（它若没有事件，也可在需要时手动调用）—— //
+        public void RaiseTurnBegan(Unit u) => OnTurnBegan?.Invoke(u);
+        public void RaiseTurnEnded(Unit u) => OnTurnEnded?.Invoke(u);
+        public void RaiseDamageNumber(Unit target, int amount, DamageHint hint) =>
+            OnDamageNumberRequested?.Invoke(target, amount, hint);
+
+        // ================== 你原来的初始化逻辑 ==================
         private void InitializeSystems()
         {
             SkillDatabase.EnsureLoaded();
@@ -66,8 +78,8 @@ namespace TGD.Combat
             _eventBus = new CombatEventBus();
             _combatTime = new CombatTime();
 
-            PopulateUnits(playerParty, teamId: 0);
-            PopulateUnits(enemyParty, teamId: 1);
+            PopulateUnits(playerParty);
+            PopulateUnits(enemyParty);
 
             var allUnits = new List<Unit>();
             if (playerParty != null) allUnits.AddRange(playerParty.Where(u => u != null));
@@ -85,12 +97,23 @@ namespace TGD.Combat
             _skillResolver = new DefaultSkillResolver(SkillDatabase.GetAllSkills());
 
             _turnManager = new TurnManager(
-                playerParty, enemyParty, _eventBus, _logger, _combatTime,
-                _skillResolver, damageSystem, resourceSystem, _statusSystem, _cooldownSystem,
-                skillModSystem, movementSystem, auraSystem, scheduler);
+                playerParty, enemyParty,
+                _eventBus, _logger, _combatTime,
+                _skillResolver, damageSystem, resourceSystem,
+                _statusSystem, _cooldownSystem,
+                skillModSystem, movementSystem, auraSystem, scheduler
+            );
+
+            // 如果你的 TurnManager 有事件，就转发给视图层；没有也没关系，桥会轮询
+            try
+            {
+                _turnManager.OnTurnBegan += u => OnTurnBegan?.Invoke(u);
+                _turnManager.OnTurnEnded += u => OnTurnEnded?.Invoke(u);
+            }
+            catch { /* 没有事件就忽略 */ }
         }
 
-        private void PopulateUnits(IEnumerable<Unit> units, int teamId)
+        private void PopulateUnits(IEnumerable<Unit> units)
         {
             if (units == null) return;
 
@@ -98,20 +121,22 @@ namespace TGD.Combat
             {
                 if (unit == null) continue;
 
-                unit.TeamId = teamId;                // 明确友敌
                 unit.Stats ??= new Stats();
                 unit.Stats.Clamp();
 
                 unit.Skills ??= new List<SkillDefinition>();
+
                 if (!string.IsNullOrWhiteSpace(unit.ClassId))
                 {
                     var skills = SkillDatabase.GetSkillsForClass(unit.ClassId);
                     unit.Skills.Clear();
-                    foreach (var s in skills) unit.Skills.Add(s); // 共享配置即可（冷却由系统管）
+                    foreach (var skill in skills)
+                        unit.Skills.Add(skill);
                 }
             }
         }
 
+        // —— UI按钮可调用 —— //
         public bool ExecuteSkill(Unit caster, string skillId, Unit primaryTarget)
         {
             if (_turnManager == null || caster == null || string.IsNullOrWhiteSpace(skillId))
@@ -124,32 +149,5 @@ namespace TGD.Combat
         }
 
         public void EndActiveTurn() => _turnManager?.EndTurnEarly();
-        public Unit GetActiveUnit() => _turnManager?.ActiveUnit;
-
-        // —— TurnManager 事件转发（如果你 TurnManager 暴露事件，就在此订阅；否则可在 Update 里轮询） —— //
-        private void HookTurnCallbacks()
-        {
-            // 若 TurnManager 没有事件，你也可以用轮询：
-            // StartCoroutine(PollActiveUnit());
-            if (_turnManager == null) return;
-
-            // 示例：你的 TurnManager 若有这两个事件，请在构造或初始化后绑定：
-            _turnManager.OnTurnBegan += u => OnTurnBegan?.Invoke(u);
-            _turnManager.OnTurnEnded += u => OnTurnEnded?.Invoke(u);
-        }
-
-        // Combat 层只“请求”飘字，UI/Level 来负责渲染
-        public void RequestDamageNumber(Unit target, int amount, DamageHint hint = DamageHint.Normal)
-            => OnDamageNumberRequested?.Invoke(target, amount, hint);
-
-       
-        public void ReinitializeAndStart()
-        {
-            StopAllCoroutines();
-            InitializeSystems();
-            HookTurnCallbacks();
-            if (autoStart && _turnManager != null)
-                StartCoroutine(_turnManager.RunLoop());
-        }
     }
 }
