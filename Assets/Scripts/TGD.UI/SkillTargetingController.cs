@@ -157,6 +157,7 @@ namespace TGD.UI
         {
             _unitsByCoord.Clear();
             _coordsByUnit.Clear();
+
             if (!TryEnsureGrid())
                 return;
 
@@ -165,48 +166,27 @@ namespace TGD.UI
             if (combat != null && combat.GridMap != null)
             {
                 foreach (var kv in combat.GridMap.GetAllPositions())
-                    RegisterUnitAt(kv.Key, kv.Value);
+                {
+                    var coord = NormalizeToLayout(kv.Value, layout);
+                    RegisterUnitAt(kv.Key, coord);
+                }
             }
-            if (combat != null)
-            {
-                AddPartyUnits(combat.playerParty);
-                AddPartyUnits(combat.enemyParty);
-            }
+
+            foreach (var unit in EnumerateKnownUnits())
+                TryResolveCoordinate(unit, out _);
 
             if (_bridge != null)
             {
                 foreach (var actor in _bridge.EnumerateActors())
                 {
-                    if (actor == null)
+                    if (!actor)
                         continue;
 
                     var unit = actor.Model;
                     if (unit == null)
                         continue;
 
-                    if (TryResolveActorCoordinate(unit, actor, layout, out var coord))
-                        RegisterUnitAt(unit, coord);
-                }
-            }
-
-            void AddPartyUnits(IEnumerable<Unit> party)
-            {
-                if (party == null)
-                    return;
-
-                foreach (var unit in party)
-                {
-                    if (unit == null)
-                        continue;
-
-                    if (_coordsByUnit.ContainsKey(unit))
-                        continue;
-
-                    var coord = NormalizeToLayout(unit.Position, layout);
-                    if (!layout.Contains(coord) && TryResolveActorCoordinate(unit, null, layout, out var actorCoord))
-                        coord = actorCoord;
-
-                    RegisterUnitAt(unit, coord);
+                    TryResolveCoordinate(unit, actor, out _);
                 }
             }
         }
@@ -255,35 +235,10 @@ namespace TGD.UI
             if (unit == null)
                 return false;
 
-            if (!TryEnsureGrid())
-                return false;
             if (_coordsByUnit.TryGetValue(unit, out coord))
                 return true;
 
-            if (combat != null && combat.GridMap != null && combat.GridMap.TryGetPosition(unit, out coord))
-            {
-                RegisterUnitAt(unit, coord);
-                return true;
-            }
-
-            if (grid?.Layout == null)
-                return false;
-
-            if (grid.Layout.Contains(unit.Position))
-            {
-                coord = unit.Position;
-                RegisterUnitAt(unit, coord);
-                return true;
-            }
-
-            if (_bridge != null && _bridge.TryGetActor(unit, out var actor) && actor &&
-              TryResolveActorCoordinate(unit, actor, grid.Layout, out coord))
-            {
-                RegisterUnitAt(unit, coord);
-                return true;
-            }
-
-            return false;
+            return TryResolveCoordinate(unit, out coord);
         }
 
         bool TryEnsureGrid()
@@ -344,6 +299,70 @@ namespace TGD.UI
             _unitsByCoord[coord] = unit;
         }
 
+        IEnumerable<Unit> EnumerateKnownUnits()
+        {
+            if (combat != null)
+            {
+                if (combat.playerParty != null)
+                {
+                    foreach (var unit in combat.playerParty)
+                    {
+                        if (unit != null)
+                            yield return unit;
+                    }
+                }
+
+                if (combat.enemyParty != null)
+                {
+                    foreach (var unit in combat.enemyParty)
+                    {
+                        if (unit != null)
+                            yield return unit;
+                    }
+                }
+            }
+        }
+
+        bool TryResolveCoordinate(Unit unit, out HexCoord coord)
+            => TryResolveCoordinate(unit, null, out coord);
+
+        bool TryResolveCoordinate(Unit unit, UnitActor actor, out HexCoord coord)
+        {
+            coord = default;
+            if (unit == null)
+                return false;
+
+            if (!TryEnsureGrid())
+                return false;
+
+            var layout = grid.Layout;
+
+            if (combat != null && combat.GridMap != null && combat.GridMap.TryGetPosition(unit, out var mapCoord))
+            {
+                coord = NormalizeToLayout(mapCoord, layout);
+                RegisterUnitAt(unit, coord);
+                return true;
+            }
+
+            if (layout.Contains(unit.Position))
+            {
+                coord = NormalizeToLayout(unit.Position, layout);
+                RegisterUnitAt(unit, coord);
+                return true;
+            }
+
+            if (actor == null && _bridge != null && _bridge.TryGetActor(unit, out var resolved) && resolved)
+                actor = resolved;
+
+            if (actor != null && TryResolveActorCoordinate(unit, actor, layout, out coord))
+            {
+                RegisterUnitAt(unit, coord);
+                return true;
+            }
+
+            return false;
+        }
+
         static HexCoord NormalizeToLayout(HexCoord coord, HexGridLayout layout)
         {
             if (layout == null)
@@ -380,15 +399,7 @@ namespace TGD.UI
 
         void SubscribeEventBus(bool on)
         {
-            var next = combat?.EventBus;
-            if (!on)
-            {
-                if (_eventBus != null)
-                    _eventBus.OnUnitPositionChanged -= HandleUnitMoved;
-                _eventBus = null;
-                return;
-            }
-
+            var next = on ? combat?.EventBus : null;
             if (ReferenceEquals(next, _eventBus))
                 return;
 
@@ -396,8 +407,12 @@ namespace TGD.UI
                 _eventBus.OnUnitPositionChanged -= HandleUnitMoved;
 
             _eventBus = next;
+
             if (_eventBus != null)
+            {
                 _eventBus.OnUnitPositionChanged += HandleUnitMoved;
+                BuildCoordinateMap();
+            }
         }
 
         void HandleUnitMoved(Unit unit, HexCoord from, HexCoord to)
