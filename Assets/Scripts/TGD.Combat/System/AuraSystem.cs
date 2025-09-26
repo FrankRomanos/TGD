@@ -35,6 +35,7 @@ namespace TGD.Combat
 
         IEnumerable<Unit> FilterTargets(Unit anchor, AuraOp op, RuntimeCtx ctx)
         {
+            var anchorCoord = CombatGridUtility.Resolve(anchor, ctx?.Grid);
             var candidates = CollectCandidates(op.AffectedTargets, ctx, anchor);
             foreach (var unit in candidates)
             {
@@ -43,7 +44,8 @@ namespace TGD.Combat
                 if (op.AffectsImmune == false && unit.IsEnemyOf(anchor) && op.Category == AuraEffectCategory.Buff)
                     continue;
 
-                int distance = HexCoord.Distance(unit.Position, anchor.Position);
+                var unitCoord = CombatGridUtility.Resolve(unit, ctx?.Grid);
+                int distance = HexCoord.Distance(unitCoord, anchorCoord);
                 if (MatchesRange(distance, op))
                     yield return unit;
             }

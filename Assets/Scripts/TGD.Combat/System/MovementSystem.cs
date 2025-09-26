@@ -26,13 +26,18 @@ namespace TGD.Combat
             if (unit == null)
                 return;
 
-            var destination = ComputeDestination(unit, op, ctx);
-            if (destination == unit.Position)
+            var grid = ctx.Grid;
+            var current = CombatGridUtility.Resolve(unit, grid);
+            var destination = ComputeDestination(unit, current, op, ctx);
+            if (destination == current)
                 return;
 
-            var from = unit.Position;
+            var from = current;
+            if (grid != null)
+                grid.SetPosition(unit, destination);
+
             unit.Position = destination;
-            ctx.Grid?.SetPosition(unit, destination);
+
             _bus?.EmitUnitPositionChanged(unit, from, destination);
             _logger?.Log("MOVE_COMMIT", unit.UnitId, from, destination);
         }
@@ -48,15 +53,15 @@ namespace TGD.Combat
             };
         }
 
-        HexCoord ComputeDestination(Unit unit, MoveOp op, RuntimeCtx ctx)
+        HexCoord ComputeDestination(Unit unit, HexCoord current, MoveOp op, RuntimeCtx ctx)
         {
-            int distance = DetermineAllowedDistance(unit, op, ctx);
+            int distance = DetermineAllowedDistance(unit, current, op, ctx);
 
-            var offset = ResolveOffset(unit, op, ctx, distance);
+            var offset = ResolveOffset(unit, current, op, ctx, distance);
             if (offset == HexCoord.Zero)
-                return unit.Position;
+                return current;
 
-            var target = unit.Position + offset;
+            var target = current + offset;
             var grid = ctx.Grid;
             if (grid?.Layout != null)
             {
@@ -64,22 +69,22 @@ namespace TGD.Combat
                 if (!layout.Contains(target))
                 {
                     if (!op.AllowPartialMove)
-                        return unit.Position;
-                    target = layout.ClampToBounds(unit.Position, target);
+                        return current;
+                    target = layout.ClampToBounds(current, target);
                 }
 
                 if (!op.ForceMovement && !op.IgnoreObstacles)
                 {
-                    var adjusted = FindLastFree(unit.Position, target, grid, op.AllowPartialMove);
-                    if (adjusted == unit.Position)
-                        return unit.Position;
+                    var adjusted = FindLastFree(current, target, grid, op.AllowPartialMove);
+                    if (adjusted == current)
+                        return current;
                     target = adjusted;
                 }
             }
             return target;
         }
 
-        int DetermineAllowedDistance(Unit unit, MoveOp op, RuntimeCtx ctx)
+        int DetermineAllowedDistance(Unit unit, HexCoord current, MoveOp op, RuntimeCtx ctx)
         {
             int requested = Math.Max(0, op.Distance);
             float speed = 0f;
@@ -118,7 +123,8 @@ namespace TGD.Combat
 
             if (op.StopAdjacentToTarget && ctx.PrimaryTarget != null)
             {
-                int targetDistance = HexCoord.Distance(unit.Position, ctx.PrimaryTarget.Position);
+                var targetCoord = CombatGridUtility.Resolve(ctx.PrimaryTarget, ctx.Grid);
+                int targetDistance = HexCoord.Distance(current, targetCoord);
                 if (targetDistance > 0)
                     distance = Math.Min(distance, Math.Max(0, targetDistance - 1));
             }
@@ -126,7 +132,7 @@ namespace TGD.Combat
             return Math.Max(0, distance);
         }
 
-        HexCoord ResolveOffset(Unit unit, MoveOp op, RuntimeCtx ctx, int distance)
+        HexCoord ResolveOffset(Unit unit, HexCoord current, MoveOp op, RuntimeCtx ctx, int distance)
         {
             if (op.Execution == MoveExecution.Teleport && op.Offset != HexCoord.Zero)
                 return op.Offset;
@@ -150,20 +156,20 @@ namespace TGD.Combat
             {
                 case MoveDirection.TowardTarget:
                     {
-                        var target = ctx.PrimaryTarget?.Position ?? unit.Position;
-                        if (target == unit.Position)
+                        var target = CombatGridUtility.Resolve(ctx.PrimaryTarget, ctx.Grid);
+                        if (target == current)
                             return HexCoord.Zero;
-                        var destination = HexCoord.MoveTowards(unit.Position, target, distance);
-                        return destination - unit.Position;
+                        var destination = HexCoord.MoveTowards(current, target, distance);
+                        return destination - current;
                     }
                 case MoveDirection.AwayFromTarget:
                     {
-                        var anchor = ctx.PrimaryTarget?.Position ?? unit.Position;
-                        if (anchor == unit.Position)
+                        var anchor = CombatGridUtility.Resolve(ctx.PrimaryTarget, ctx.Grid);
+                        if (anchor == current)
                             return HexCoord.Zero;
-                        var mirrored = unit.Position + (unit.Position - anchor);
-                        var destination = HexCoord.MoveTowards(unit.Position, mirrored, distance);
-                        return destination - unit.Position;
+                        var mirrored = current + (current - anchor);
+                        var destination = HexCoord.MoveTowards(current, mirrored, distance);
+                        return destination - current;
                     }
                 case MoveDirection.Forward:
                     return HexCoord.Directions[5] * distance;
