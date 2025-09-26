@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 
@@ -22,10 +23,17 @@ namespace TGD.Grid
 
         [Header("Orientation")]
         public bool useOriginYaw = true;        // 跟随 Plane 的 Y 朝向
-        [Range(-180f, 180f)] public float yawOffset = 30f; // 统一偏移（Flat-Top 常用 ±30）
+        [Range(-180f, 180f)] public float yawOffset = 0f;   // ★ 默认改为 0°
+
         [Range(-180f, 180f)] public float yawDegrees = 0f; // 若不用 Plane，手动填
 
+        [Header("Runtime")]
+        public bool liveRebuildInPlayMode = false;          // ★ 运行时默认不自动重建
+
         public HexGridLayout Layout { get; private set; }
+
+        // ★ 当布局被替换时抛事件，外部（单位锚点）可据此重投影
+        public static event Action<HexGridLayout, HexGridLayout> OnLayoutRebuilt;
 
         void OnEnable() => Rebuild();
         void OnValidate() => Rebuild();

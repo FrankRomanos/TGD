@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TGD.Grid;
 using UnityEngine;
+using static Codice.Client.Commands.WkTree.WorkspaceTreeNode;
 
 namespace TGD.Level
 {
@@ -13,7 +14,7 @@ namespace TGD.Level
         [Header("Visual")]
         public GameObject ringPrefab;
         public Transform container;
-        public float hoverOffset = 0.05f;
+        public float hoverOffset = 0.2f;
 
         [Header("Sizing")]
         public bool fitToGridRadius = true;
@@ -86,7 +87,8 @@ namespace TGD.Level
             if (!Mathf.Approximately(_cachedYaw, grid.Layout.YawDegrees))
                 _cachedYaw = grid.Layout.YawDegrees;
 
-            ring.SetPositionAndRotation(pos, Quaternion.Euler(0f, _cachedYaw, 0f));
+            var rot = Quaternion.AngleAxis(_cachedYaw, Vector3.up) * Quaternion.Euler(90f, 0f, 0f);
+            ring.SetPositionAndRotation(pos, rot);
         }
 
         void FitToRadiusIfNeeded(Transform ring)

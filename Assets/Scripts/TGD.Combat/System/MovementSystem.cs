@@ -83,6 +83,37 @@ namespace TGD.Combat
             }
             return target;
         }
+        // 依据“世界轴方向”挑选最近的六边形邻居方向
+        static HexCoord WorldAxisToHexDirection(HexGridLayout layout, HexCoord current, Vector3 worldAxis)
+        {
+            if (layout == null) return HexCoord.Directions[0];
+
+            var origin = layout.GetWorldPosition(current); // 该格中心的世界坐标
+            worldAxis.y = 0f;
+            if (worldAxis.sqrMagnitude < 1e-6f) return HexCoord.Directions[0];
+            worldAxis.Normalize();
+
+            float bestDot = float.NegativeInfinity;
+            HexCoord best = HexCoord.Directions[0];
+
+            // 遍历六邻，挑与目标世界轴夹角最小者
+            foreach (var dir in HexCoord.Directions)
+            {
+                var neighbor = current + dir;
+                var vec = layout.GetWorldPosition(neighbor) - origin;
+                vec.y = 0f;
+                if (vec.sqrMagnitude < 1e-6f) continue;
+                vec.Normalize();
+
+                float dot = Vector3.Dot(vec, worldAxis);
+                if (dot > bestDot)
+                {
+                    bestDot = dot;
+                    best = dir;
+                }
+            }
+            return best;
+        }
 
         int DetermineAllowedDistance(Unit unit, HexCoord current, MoveOp op, RuntimeCtx ctx)
         {

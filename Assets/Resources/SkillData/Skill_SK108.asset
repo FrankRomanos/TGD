@@ -38,7 +38,7 @@ MonoBehaviour:
   timeCostSeconds: 0
   cooldownSeconds: 0
   cooldownTurns: 0
-  range: 0
+  range: 4
   threat: 0
   shredMultiplier: 0
   namekey: skill_SK108_name

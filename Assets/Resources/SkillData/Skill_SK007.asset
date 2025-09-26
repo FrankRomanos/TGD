@@ -35,7 +35,7 @@ MonoBehaviour:
   timeCostSeconds: 1
   cooldownSeconds: 0
   cooldownTurns: 0
-  range: 1
+  range: 4
   threat: 0
   shredMultiplier: 0
   namekey: skill_SK007_name
@@ -159,8 +159,8 @@ MonoBehaviour:
     moveSubject: 0
     moveExecution: 1
     moveDirection: 1
-    moveDistance: 1
-    moveDistanceExpression: 
+    moveDistance: 0
+    moveDistanceExpression: 4
     moveMaxDistance: 0
     moveOffset: {x: 0, y: 0}
     forceMovement: 1

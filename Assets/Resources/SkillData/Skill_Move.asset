@@ -29,13 +29,13 @@ MonoBehaviour:
   multiTargetCount: 1
   costs:
   - resourceType: 1
-    amount: 1
+    amount: 30
     amountExpression: 
   useConditions: []
   timeCostSeconds: 1
   cooldownSeconds: 0
   cooldownTurns: 0
-  range: 0
+  range: 6
   threat: 0
   shredMultiplier: 0
   namekey: 
@@ -151,8 +151,8 @@ MonoBehaviour:
     moveSubject: 0
     moveExecution: 0
     moveDirection: 0
-    moveDistance: 0
-    moveDistanceExpression: 6
+    moveDistance: 6
+    moveDistanceExpression: movement
     moveMaxDistance: 0
     moveOffset: {x: 0, y: 0}
     forceMovement: 0
