@@ -57,7 +57,6 @@ namespace TGD.Level
         {
             Model = model;
             TryTintRingByTeam(model?.TeamId ?? teamId);
-            SyncModelPosition();
         }
 
         public void TryTintRingByTeam(int t)
@@ -140,7 +139,7 @@ namespace TGD.Level
             return null;
         }
 
-        bool TryResolveCoordinate(out HexCoord coord)
+        public bool TryResolveCoordinate(out HexCoord coord)
         {
             var grid = ResolveGrid();
             if (grid?.Layout != null)

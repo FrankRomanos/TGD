@@ -19,6 +19,7 @@ namespace TGD.Combat
             context.SkillResolver = runtime.SkillResolver;
             context.PrimaryTarget = runtime.PrimaryTarget;
             context.SecondaryTarget = runtime.SecondaryTarget;
+            context.Grid = runtime.Grid;
 
             context.Allies.Clear();
             if (runtime.Allies != null)

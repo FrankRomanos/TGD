@@ -173,22 +173,7 @@ namespace TGD.UI
             }
 
             foreach (var unit in EnumerateKnownUnits())
-                TryResolveCoordinate(unit, out _);
-
-            if (_bridge != null)
-            {
-                foreach (var actor in _bridge.EnumerateActors())
-                {
-                    if (!actor)
-                        continue;
-
-                    var unit = actor.Model;
-                    if (unit == null)
-                        continue;
-
-                    TryResolveCoordinate(unit, actor, out _);
-                }
-            }
+                TryResolveCoordinate(unit, layout, out _);
         }
 
         void BuildValidCoordinates(int range)
@@ -238,7 +223,10 @@ namespace TGD.UI
             if (_coordsByUnit.TryGetValue(unit, out coord))
                 return true;
 
-            return TryResolveCoordinate(unit, out coord);
+            if (!TryEnsureGrid())
+                return false;
+
+            return TryResolveCoordinate(unit, grid.Layout, out coord);
         }
 
         bool TryEnsureGrid()
@@ -323,19 +311,11 @@ namespace TGD.UI
             }
         }
 
-        bool TryResolveCoordinate(Unit unit, out HexCoord coord)
-            => TryResolveCoordinate(unit, null, out coord);
-
-        bool TryResolveCoordinate(Unit unit, UnitActor actor, out HexCoord coord)
+        bool TryResolveCoordinate(Unit unit, HexGridLayout layout, out HexCoord coord)
         {
             coord = default;
             if (unit == null)
                 return false;
-
-            if (!TryEnsureGrid())
-                return false;
-
-            var layout = grid.Layout;
 
             if (combat != null && combat.GridMap != null && combat.GridMap.TryGetPosition(unit, out var mapCoord))
             {
@@ -344,18 +324,9 @@ namespace TGD.UI
                 return true;
             }
 
-            if (layout.Contains(unit.Position))
+            if (_bridge != null && _bridge.TryGetCoordinate(unit, layout, out var probeCoord))
             {
-                coord = NormalizeToLayout(unit.Position, layout);
-                RegisterUnitAt(unit, coord);
-                return true;
-            }
-
-            if (actor == null && _bridge != null && _bridge.TryGetActor(unit, out var resolved) && resolved)
-                actor = resolved;
-
-            if (actor != null && TryResolveActorCoordinate(unit, actor, layout, out coord))
-            {
+                coord = NormalizeToLayout(probeCoord, layout);
                 RegisterUnitAt(unit, coord);
                 return true;
             }
@@ -372,24 +343,6 @@ namespace TGD.UI
                 return coord;
 
             return layout.ClampToBounds(HexCoord.Zero, coord);
-        }
-
-        bool TryResolveActorCoordinate(Unit unit, UnitActor actor, HexGridLayout layout, out HexCoord coord)
-        {
-            coord = default;
-            actor ??= (_bridge != null && unit != null && _bridge.TryGetActor(unit, out var found)) ? found : null;
-            if (actor == null)
-                return false;
-
-            var gridForActor = actor.ResolveGrid();
-            var targetLayout = gridForActor?.Layout ?? layout;
-            if (targetLayout == null)
-                return false;
-
-            coord = targetLayout.GetCoordinate(actor.transform.position);
-            if (layout != null && !ReferenceEquals(layout, targetLayout))
-                coord = NormalizeToLayout(coord, layout);
-            return true;
         }
 
         void RefreshEventBus()

@@ -29,6 +29,19 @@ namespace TGD.Level
             new(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, Unit> _units =
             new(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<Unit, CachedCoordinate> _coordCache = new();
+
+        readonly struct CachedCoordinate
+        {
+            public CachedCoordinate(HexCoord coord, HexGridLayout layout)
+            {
+                Coord = coord;
+                Layout = layout;
+            }
+
+            public HexCoord Coord { get; }
+            public HexGridLayout Layout { get; }
+        }
 
         CombatLoop _combat;
         ICombatEventBus _bus;
@@ -179,6 +192,8 @@ namespace TGD.Level
             if (unit == null)
                 return;
 
+            CacheCoordinate(unit, to, _combat?.GridMap?.Layout);
+
             if (!_actors.TryGetValue(unit.UnitId, out var actor) || !actor)
                 return;
 
@@ -189,6 +204,7 @@ namespace TGD.Level
         void BuildUnitIndex()
         {
             _units.Clear();
+            _coordCache.Clear();
             if (_combat == null) return;
 
             if (_combat.playerParty != null)
@@ -209,7 +225,16 @@ namespace TGD.Level
             {
                 actor.Bind(unit);
                 actor.TryTintRingByTeam(unit.TeamId);
-                actor.SyncModelPosition();
+                var preferredLayout = actor.ResolveGrid()?.Layout;
+                if (TryGetCoordinate(unit, preferredLayout, out var coord))
+                {
+                    actor.ApplyCoordinate(coord);
+                }
+                else if (actor.TryResolveCoordinate(out var fallback))
+                {
+                    unit.Position = fallback;
+                    CacheCoordinate(unit, fallback, preferredLayout);
+                }
             }
         }
 
@@ -252,20 +277,84 @@ namespace TGD.Level
         }
 
         bool ICombatViewProbe.TryResolveUnitCoordinate(Unit unit, HexGridLayout referenceLayout, out HexCoord coord)
+            => TryGetCoordinate(unit, referenceLayout, out coord);
+
+        public bool TryGetCoordinate(Unit unit, out HexCoord coord)
+            => TryGetCoordinate(unit, null, out coord);
+
+        public bool TryGetCoordinate(Unit unit, HexGridLayout preferredLayout, out HexCoord coord)
         {
             coord = default;
-            if (unit == null || referenceLayout == null)
+            if (unit == null)
+                return false;
+
+            var map = _combat?.GridMap;
+            if (map != null && map.TryGetPosition(unit, out var mapped))
+            {
+                CacheCoordinate(unit, mapped, map.Layout);
+                coord = ConvertCoordinate(mapped, map.Layout, preferredLayout);
+                return true;
+            }
+
+            if (_coordCache.TryGetValue(unit, out var cached))
+            {
+                coord = ConvertCoordinate(cached.Coord, cached.Layout, preferredLayout);
+                return true;
+            }
+
+            if (TryResolveActorCoordinate(unit, out var actorCoord, out var actorLayout))
+            {
+                CacheCoordinate(unit, actorCoord, actorLayout);
+                coord = ConvertCoordinate(actorCoord, actorLayout, preferredLayout);
+                return true;
+            }
+
+            return false;
+        }
+
+        void CacheCoordinate(Unit unit, HexCoord coord, HexGridLayout layout)
+        {
+            if (unit == null)
+                return;
+            _coordCache[unit] = new CachedCoordinate(coord, layout);
+        }
+
+        bool TryResolveActorCoordinate(Unit unit, out HexCoord coord, out HexGridLayout layout)
+        {
+            coord = default;
+            layout = null;
+            if (unit == null)
                 return false;
 
             if (!_actors.TryGetValue(unit.UnitId, out var actor) || !actor)
                 return false;
 
             var grid = actor.ResolveGrid();
-            var layout = grid?.Layout ?? referenceLayout;
+            layout = grid?.Layout;
+            if (layout == null)
+                return false;
+
             coord = layout.GetCoordinate(actor.transform.position);
-            if (!referenceLayout.Contains(coord))
-                coord = referenceLayout.ClampToBounds(HexCoord.Zero, coord);
             return true;
+        }
+
+        static HexCoord ConvertCoordinate(HexCoord coord, HexGridLayout sourceLayout, HexGridLayout targetLayout)
+        {
+            if (targetLayout == null)
+                return coord;
+
+            if (ReferenceEquals(sourceLayout, targetLayout) || sourceLayout == null)
+            {
+                if (targetLayout.Contains(coord))
+                    return coord;
+                return targetLayout.ClampToBounds(HexCoord.Zero, coord);
+            }
+
+            var world = sourceLayout.GetWorldPosition(coord);
+            var converted = targetLayout.GetCoordinate(world);
+            if (!targetLayout.Contains(converted))
+                converted = targetLayout.ClampToBounds(HexCoord.Zero, converted);
+            return converted;
         }
 
 

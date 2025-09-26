@@ -187,9 +187,16 @@ namespace TGD.Combat
                     if (!TryResolveActorCoordinate(unit, layout, out coord))
                         coord = layout.ClampToBounds(HexCoord.Zero, coord);
                 }
-                unit.Position = coord;
+
                 _gridMap.SetPosition(unit, coord);
+                unit.Position = coord;
             }
+        }
+
+        public bool TryGetUnitCoordinate(Unit unit, out HexCoord coord)
+        {
+            coord = default;
+            return unit != null && _gridMap != null && _gridMap.TryGetPosition(unit, out coord);
         }
 
         private bool TryResolveActorCoordinate(Unit unit, HexGridLayout layout, out HexCoord coord)

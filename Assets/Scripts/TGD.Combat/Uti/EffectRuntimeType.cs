@@ -119,6 +119,7 @@ namespace TGD.Combat
         public Dictionary<ConditionTarget, float> ConditionDistances { get; }
         public Dictionary<ConditionTarget, bool> ConditionPathBlocked { get; }
         public Unit ConditionEventTarget { get; set; }
+        public HexGridMap<Unit> Grid { get; set; }
         private int skillLevelOverride;
 
         public bool HasSkillLevelOverride => skillLevelOverride > 0;
@@ -157,6 +158,7 @@ namespace TGD.Combat
             {
                 PrimaryTarget = PrimaryTarget,
                 SecondaryTarget = SecondaryTarget,
+                Grid = Grid,
                 IncomingDamage = IncomingDamage,
                 IncomingHealing = IncomingHealing,
                 IncomingDamageMitigated = IncomingDamageMitigated,

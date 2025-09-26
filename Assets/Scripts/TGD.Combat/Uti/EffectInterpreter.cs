@@ -45,7 +45,8 @@ namespace TGD.Combat
                     OutgoingHealing = workingContext.OutgoingHealing,
                     SkillResolver = workingContext.SkillResolver,
                     PrimaryTarget = workingContext.PrimaryTarget,
-                    SecondaryTarget = workingContext.SecondaryTarget
+                    SecondaryTarget = workingContext.SecondaryTarget,
+                    Grid = workingContext.Grid
                 };
 
                 workingContext.Allies.Clear();
@@ -2545,14 +2546,25 @@ namespace TGD.Combat
             if (context == null)
                 return 0f;
             var caster = context.Caster;
+            var grid = context.Grid;
+
+            HexCoord Resolve(Unit unit)
+            {
+                if (unit == null)
+                    return HexCoord.Zero;
+                if (grid != null && grid.TryGetPosition(unit, out var coord))
+                    return coord;
+                return unit.Position;
+            }
+
             if (target == null)
             {
                 if (caster != null && context.PrimaryTarget != null)
-                    return HexCoord.Distance(caster.Position, context.PrimaryTarget.Position);
+                    return HexCoord.Distance(Resolve(caster), Resolve(context.PrimaryTarget));
 
                 float stored = context.GetDistance(ConditionTarget.PrimaryTarget);
                 if (stored <= 0f && caster != null && context.SecondaryTarget != null)
-                    stored = HexCoord.Distance(caster.Position, context.SecondaryTarget.Position);
+                    stored = HexCoord.Distance(Resolve(caster), Resolve(context.SecondaryTarget));
                 if (stored <= 0f)
                     stored = context.GetDistance(ConditionTarget.Any);
                 return stored;
@@ -2562,7 +2574,7 @@ namespace TGD.Combat
                 return 0f;
             if (caster != null)
             {
-                float direct = HexCoord.Distance(caster.Position, target.Position);
+                float direct = HexCoord.Distance(Resolve(caster), Resolve(target));
                 if (direct > 0f)
                     return direct;
             }
@@ -2585,7 +2597,7 @@ namespace TGD.Combat
 
             float fallback = context.GetDistance(ConditionTarget.Any);
             if (fallback <= 0f && caster != null && context.PrimaryTarget != null)
-                fallback = HexCoord.Distance(caster.Position, context.PrimaryTarget.Position);
+                fallback = HexCoord.Distance(Resolve(caster), Resolve(context.PrimaryTarget));
             return fallback;
         }
         private readonly struct MasteryValues

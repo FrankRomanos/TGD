@@ -58,6 +58,7 @@ namespace TGD.Combat
             if (effCtx == null)
                 return;
 
+            effCtx.Grid = _ctx?.Grid;
             effCtx.ConditionOnEffectEnd = true;
             effCtx.ConditionEventTarget ??= _owner.Target;
 
