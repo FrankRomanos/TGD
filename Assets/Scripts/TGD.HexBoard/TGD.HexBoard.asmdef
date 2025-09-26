@@ -1,0 +1,17 @@
+{
+    "name": "TGD.HexBoard",
+    "rootNamespace": "",
+    "references": [
+        "GUID:b8b46cd88c815d5469de6fd64204603c",
+        "GUID:b8197eabc112cb14f8c18bc27f294233"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
