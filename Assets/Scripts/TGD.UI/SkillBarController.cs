@@ -9,23 +9,18 @@ using TGD.Data;
 namespace TGD.UI
 {
     /// <summary>
-    /// 10¸ñ¼¼ÄÜÌõ£¨µã»÷ÔİÊ±Ö±½Ó¶Ô×Ô¼ºÊÍ·Å£¬ÏÈÅÜÁ÷³Ì£©£º
-    /// 1 ÒÆ¶¯£¨ClassÀï×î´óµÄ skillID£©
-    /// 2 ÆÕ¹¥£¨µÚ¶ş´ó£©
-    /// 3 ¾«Í¨£¨×îĞ¡£©
-    /// 4 DeepBlue
-    /// 5 DarkYellow
-    /// 6 Green
-    /// 7 LightBlue
-    /// 8 Purple
-    /// 9 Red£¨´óÕĞ£©
-    /// 10 Red£¨µÚ¶ş¸öºì£¬ÖÎÁÆÀà£©
+    /// 10æ ¼æŠ€èƒ½æ¡ï¼š
+    /// 1 Moveï¼ˆskillID = Moveï¼Œå…¨èŒä¸šå…±ç”¨ï¼‰
+    /// 2 æ™®æ”»ï¼ˆClass å†…ç¼–å·æœ€å¤§ï¼‰
+    /// 3 Class æŠ€èƒ½ä¸­ç¼–å·æœ€å°
+    /// 4~8 æŒ‰é¢œè‰²ï¼šDeepBlueã€DarkYellowã€Greenã€LightBlueã€Purpleï¼ˆæ¯ç§é¢œè‰²åªå–ä¸€ä¸ªï¼‰
+    /// 9~10 Redï¼šä¼˜å…ˆå–æœ€é«˜ç¼–å·ä½œä¸ºå¤§æ‹›ï¼Œå†å–ç¬¬äºŒä¸ªï¼ˆå¤šä¸ºæ²»ç–—ï¼‰
     /// </summary>
     public sealed class SkillBarController : BaseTurnUiBehaviour
     {
         [Header("UI")]
-        public Transform slotsRoot;         // HorizontalLayoutGroup ÈİÆ÷
-        public GameObject slotPrefab;       // Äã×öºÃµÄ UI_SkillSlot Ô¤ÖÆ
+        public Transform slotsRoot;         // HorizontalLayoutGroup å®¹å™¨
+        public GameObject slotPrefab;       // ä½ åšå¥½çš„ UI_SkillSlot é¢„åˆ¶
         public int totalSlots = 10;
 
         [Header("Hotkeys (optional)")]
@@ -37,7 +32,7 @@ namespace TGD.UI
         public SkillTargetingController targetingController;
 
 
-        // ÔËĞĞÌ¬
+        // è¿è¡Œæ€
         Unit _active;
         readonly List<SkillSlotView> _slots = new();
         readonly List<SkillDefinition> _ordered = new();
@@ -57,13 +52,16 @@ namespace TGD.UI
 
         protected override void HandleTurnEnded(Unit u)
         {
+            if (!ReferenceEquals(_active, u))
+                return;
+
             targetingController?.CancelSelection();
             gameObject.SetActive(false);
             _active = null;
             _lastSkillsRevision = -1;
         }
 
-        // ---------- ¹¹½¨ ----------
+        // ---------- æ„å»º ----------
         void BuildBar()
         {
             EnsureSlotViews();
@@ -97,7 +95,7 @@ namespace TGD.UI
 
         void EnsureSlotViews()
         {
-            // Çå¿Õ/²¹×ã
+            // æ¸…ç©º/è¡¥è¶³
             _slots.Clear();
             for (int i = slotsRoot.childCount - 1; i >= 0; --i)
                 Destroy(slotsRoot.GetChild(i).gameObject);
@@ -110,7 +108,7 @@ namespace TGD.UI
             }
         }
 
-        // ---------- Ë¢ĞÂ£¨ÀäÈ´/¿É½»»¥£© ----------
+        // ---------- åˆ·æ–°ï¼ˆå†·å´/å¯äº¤äº’ï¼‰ ----------
         void Update()
         {
             if (!HasActive) return;
@@ -166,8 +164,8 @@ namespace TGD.UI
             combat.ExecuteSkill(_active, skill, _active);
         }
 
-        // ---------- ¹æÔòÌôÑ¡ ----------
-        static void PickSkillsFor(Unit u, string moveTag, int slotCount, List<SkillDefinition> orderedOut,
+        // ---------- è§„åˆ™æŒ‘é€‰ ----------
+        static void PickSkillsFor(Unit u, string moveId, int slotCount, List<SkillDefinition> orderedOut,
                                  Dictionary<string, SkillDefinition> byIdOut)
         {
             orderedOut.Clear();
@@ -180,117 +178,202 @@ namespace TGD.UI
             if (slotCount == 0)
                 return;
 
-            // Ö°Òµ¼¼ÄÜ£ºÓÅÏÈÓÃ Unit.Skills£¬·ñÔòÊı¾İ¿â²é ClassId
-            var all = (u.Skills != null && u.Skills.Count > 0)
-                ? new List<SkillDefinition>(u.Skills.Where(s => s != null))
-                : new List<SkillDefinition>(SkillDatabase.GetSkillsForClass(u.ClassId));
-
-            if (all.Count == 0)
+            var pool = BuildInitialPool(u);
+            if (pool.Count == 0)
                 return;
 
-            bool IsUsable(SkillDefinition skill)
-            {
-                if (skill == null || string.IsNullOrEmpty(skill.skillID))
-                    return false;
-                return skill.skillType == SkillType.Active || skill.skillType == SkillType.Mastery;
-            }
+            var picked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var available = new List<SkillDefinition>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in all)
+            void Push(SkillDefinition skill)
             {
-                if (!IsUsable(skill))
-                    continue;
-                if (seen.Contains(skill.skillID))
-                    continue;
-                seen.Add(skill.skillID);
-                available.Add(skill);
-            }
-
-            if (available.Count == 0)
-                return;
-
-            int GetNumericId(SkillDefinition s)
-            {
-                if (s == null || string.IsNullOrEmpty(s.skillID))
-                    return 0;
-                int value = 0;
-                foreach (char c in s.skillID)
-                {
-                    if (char.IsDigit(c))
-                        value = value * 10 + (c - '0');
-                }
-                return value;
-            }
-
-            bool MatchesMoveSkill(SkillDefinition skill)
-            {
-                if (skill == null)
-                    return false;
-                if (!string.IsNullOrWhiteSpace(moveTag))
-                {
-                    if (string.Equals(skill.skillTag, moveTag, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                    if (skill.tags != null && skill.tags.Exists(t => string.Equals(t, moveTag, StringComparison.OrdinalIgnoreCase)))
-                        return true;
-                }
-                if (string.Equals(skill.skillName, "Move", StringComparison.OrdinalIgnoreCase))
-                    return true;
-                if (string.Equals(skill.skillID, "SK013", StringComparison.OrdinalIgnoreCase))
-                    return true;
-                if (skill.effects != null && skill.effects.Exists(e => e != null && e.effectType == EffectType.Move))
-                    return true;
-                return false;
-            }
-
-            // Êı×ÖĞòºÅ½âÎö£¨SK123 -> 123£»¶µµ×Îª 0£©
-            SkillDefinition SelectCandidate(Func<SkillDefinition, bool> predicate, bool descending = false)
-            {
-                var candidates = available.Where(predicate).ToList();
-                if (candidates.Count == 0)
-                    return null;
-                return descending
-                    ? candidates.OrderByDescending(GetNumericId).First()
-                    : candidates.OrderBy(GetNumericId).First();
-            }
-
-            void PushSkill(SkillDefinition s)
-            {
-                if (s == null || orderedOut.Count >= slotCount)
+                if (skill == null || orderedOut.Count >= slotCount)
                     return;
-                if (string.IsNullOrEmpty(s.skillID))
+                if (string.IsNullOrEmpty(skill.skillID))
                     return;
-                if (byIdOut.ContainsKey(s.skillID))
+                if (!picked.Add(skill.skillID))
                     return;
-                orderedOut.Add(s);
-                byIdOut[s.skillID] = s;
-                available.Remove(s);
+
+                orderedOut.Add(skill);
+                byIdOut[skill.skillID] = skill;
+                RemoveFromPool(skill);
             }
-            PushSkill(SelectCandidate(MatchesMoveSkill));
-            PushSkill(SelectCandidate(_ => true, descending: true));
-            PushSkill(SelectCandidate(s => s.skillType == SkillType.Mastery));
+
+            SkillDefinition moveSkill = ResolveMoveSkill(moveId);
+            Push(moveSkill);
+
+            Push(TakeFromPool(s => !IsMoveSkill(s), descending: true));
+            Push(TakeFromPool(s => !IsMoveSkill(s), descending: false));
 
             var colorOrder = new[]
             {
                 SkillColor.DeepBlue,
                 SkillColor.DarkYellow,
                 SkillColor.Green,
-                SkillColor.Purple,
-                SkillColor.LightBlue
+                SkillColor.LightBlue,
+                SkillColor.Purple
             };
 
             foreach (var color in colorOrder)
-                PushSkill(SelectCandidate(s => s.skillColor == color));
+                Push(TakeColor(color));
 
-            var reds = available.Where(s => s.skillColor == SkillColor.Red)
-                                 .OrderBy(GetNumericId)
-                                 .Take(2)
-                                 .ToList();
-            foreach (var red in reds)
-                PushSkill(red);
+            Push(TakeColor(SkillColor.Red, preferHighest: true));
+            Push(TakeColor(SkillColor.Red, preferHighest: true));
 
             while (orderedOut.Count < slotCount)
                 orderedOut.Add(null);
+
+            List<SkillDefinition> BuildInitialPool(Unit unit)
+            {
+                var list = new List<SkillDefinition>();
+                IReadOnlyList<SkillDefinition> source = SkillDatabase.GetSkillsForClass(unit?.ClassId);
+
+                if (source == null || source.Count == 0)
+                {
+                    if (unit?.Skills != null)
+                        source = unit.Skills;
+                }
+
+                if (source == null)
+                    return list;
+
+                var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var skill in source)
+                {
+                    if (!IsEligible(skill))
+                        continue;
+                    if (!seenIds.Add(skill.skillID))
+                        continue;
+                    list.Add(skill);
+                }
+                return list;
+            }
+
+            SkillDefinition ResolveMoveSkill(string requestedId)
+            {
+                SkillDefinition candidate = pool.FirstOrDefault(IsMoveSkill);
+                if (candidate != null)
+                    return candidate;
+
+                if (!string.IsNullOrWhiteSpace(requestedId))
+                {
+                    candidate = SkillDatabase.GetSkillById(requestedId);
+                    if (IsEligible(candidate) && IsMoveSkill(candidate))
+                        return candidate;
+                }
+
+                foreach (var skill in SkillDatabase.GetAllSkills())
+                {
+                    if (IsEligible(skill) && IsMoveSkill(skill))
+                        return skill;
+                }
+
+                return null;
+            }
+
+            SkillDefinition TakeFromPool(Func<SkillDefinition, bool> predicate, bool descending)
+            {
+                SkillDefinition best = null;
+                int bestValue = descending ? int.MinValue : int.MaxValue;
+
+                foreach (var skill in pool)
+                {
+                    if (skill == null || !predicate(skill))
+                        continue;
+
+                    int value = GetNumericId(skill);
+                    if (best == null || (descending ? value > bestValue : value < bestValue))
+                    {
+                        best = skill;
+                        bestValue = value;
+                    }
+                }
+
+                if (best != null)
+                    RemoveFromPool(best);
+
+                return best;
+            }
+
+            SkillDefinition TakeColor(SkillColor color, bool preferHighest = false)
+            {
+                return TakeFromPool(s => s.skillColor == color && !IsMoveSkill(s), descending: preferHighest);
+            }
+
+            void RemoveFromPool(SkillDefinition pickedSkill)
+            {
+                if (pickedSkill == null)
+                    return;
+
+                for (int index = pool.Count - 1; index >= 0; index--)
+                {
+                    var candidate = pool[index];
+                    if (candidate == null)
+                        continue;
+
+                    bool sameId = string.Equals(candidate.skillID, pickedSkill.skillID, StringComparison.OrdinalIgnoreCase);
+                    bool sameModule = !string.IsNullOrWhiteSpace(pickedSkill.moduleID) &&
+                                      !string.IsNullOrWhiteSpace(candidate.moduleID) &&
+                                      string.Equals(candidate.moduleID, pickedSkill.moduleID, StringComparison.OrdinalIgnoreCase) &&
+                                      candidate.skillColor == pickedSkill.skillColor;
+
+                    if (sameId || sameModule)
+                        pool.RemoveAt(index);
+                }
+            }
+
+            bool IsEligible(SkillDefinition skill)
+            {
+                if (skill == null || string.IsNullOrEmpty(skill.skillID))
+                    return false;
+                if (skill.skillType != SkillType.Active && skill.skillType != SkillType.Mastery)
+                    return false;
+
+                string id = skill.skillID;
+                if (id.IndexOf("_STANCE", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return false;
+                if (id.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return true;
+            }
+
+            bool IsMoveSkill(SkillDefinition skill)
+            {
+                if (skill == null)
+                    return false;
+
+                if (!string.IsNullOrWhiteSpace(moveId) &&
+                    string.Equals(skill.skillID, moveId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (!string.IsNullOrWhiteSpace(moveId) &&
+                    string.Equals(skill.skillName, moveId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (!string.IsNullOrWhiteSpace(skill.skillTag) &&
+                    string.Equals(skill.skillTag, moveId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (skill.tags != null && skill.tags.Exists(t => string.Equals(t, moveId, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+
+                return string.Equals(skill.skillName, "Move", StringComparison.OrdinalIgnoreCase);
+            }
+
+            int GetNumericId(SkillDefinition skill)
+            {
+                if (skill == null || string.IsNullOrEmpty(skill.skillID))
+                    return 0;
+
+                int value = 0;
+                foreach (char c in skill.skillID)
+                {
+                    if (char.IsDigit(c))
+                        value = value * 10 + (c - '0');
+                }
+
+                return value;
+            }
         }
     }
 }
