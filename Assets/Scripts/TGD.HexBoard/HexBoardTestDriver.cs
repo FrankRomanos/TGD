@@ -22,6 +22,7 @@ namespace TGD.HexBoard
         HexBoardMap<Unit> map;
         MovementSystem mover;
         Unit unit;
+        public bool showHUD = false;
 
         bool _inited = false;
         public bool IsReady => _inited && layout != null && unit != null && mover != null;
@@ -71,12 +72,13 @@ namespace TGD.HexBoard
 
         void OnGUI()
         {
+            if (!showHUD) return;
             EnsureInit();
             if (!IsReady) return;
-
             var w = layout.World(unit.Position, y);
             GUI.Label(new Rect(10, 10, 780, 22),
               $"Unit {unit.Id}  Hex=({unit.Position.q},{unit.Position.r})  World=({w.x:F2},{w.z:F2})  Facing={unit.Facing}  [¡ü¡ý¡û¡ú move, A/D face, Space snap]");
+           
         }
         public static Facing4 FacingFromYaw4(float yawDegrees)
         {

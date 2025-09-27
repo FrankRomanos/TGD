@@ -1,10 +1,9 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    // ============ ÄÚÖÃ£º¼«¼òÏûºÄ½Ó¿Ú£¨Èô¹¤³ÌÒÑÓĞÍ¬Ãû½Ó¿Ú£¬É¾µôÕâÀïÕâ¶Î£© ============
     public interface IMoveCostService
     {
         bool IsOnCooldown(Unit unit, MoveActionConfig cfg);
@@ -12,45 +11,43 @@ namespace TGD.HexBoard
         void Pay(Unit unit, MoveActionConfig cfg);
     }
 
-    // ============ ÄÚÖÃ£ºÒÆ¶¯¶¯×÷ÅäÖÃ£¨Èô¹¤³ÌÒÑÓĞÍ¬ÃûÀà£¬É¾µôÕâÀïÕâ¶Î£© ============
     [CreateAssetMenu(menuName = "TGD/Combat/Move Action Config")]
     public class MoveActionConfig : ScriptableObject
     {
-        [Header("Costs")]
-        public int energyCost = 10;
+        [Header("Costs")] public int energyCost = 10;
         public float timeCostSeconds = 1f;
         public float cooldownSeconds = 0f;
         public string actionId = "Move";
 
-        [Header("Distance")]
-        public int fallbackSteps = 3;   // ÏÈÓÃËü£»µÈ½ÓÈë Stats ºóÔÙ¸Ä
+        [Header("Distance")] public int fallbackSteps = 3;
         public int stepsCap = 12;
 
-        [Header("Facing")]
-        public float keepDeg = 45f;
+        [Header("Facing")] public float keepDeg = 45f;
         public float turnDeg = 135f;
         public float turnSpeedDegPerSec = 720f;
     }
 
     /// <summary>
-    /// µã»÷ÒÆ¶¯£¨Íæ¼ÒÇı¶¯£©¡ª¡ª¿É´ïÔ²ÅÌ(BFS) + Ò»´ÎĞÔ×ªÏò(45¡ãÉÈÇø) + Öğ¸ñTween¡£
-    /// Óë¡°Ç¿ÖÆÎ»ÒÆ¡±³¹µ×½âñî£»Ç¿ÖÆÎ»ÒÆÇëÓÃ MovementSystem.ExecuteForced(...)
+    /// æ­£å¼ç‰ˆç‚¹å‡»ç§»åŠ¨ï¼šæ—  OnGUI / æ—  HUDã€‚
+    /// éœ€è¦æ˜¾ç¤ºå¯è¾¾èŒƒå›´æ—¶ï¼Œå¤–éƒ¨ UI è°ƒç”¨ ShowRange()/HideRange()ã€‚
     /// </summary>
     public sealed class HexClickMover : MonoBehaviour
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
-        public HexBoardTestDriver driver;
-        public HexBoardTiler tiler;
+        public HexBoardTestDriver driver;   // æä¾› Unit/Map/Sync
+        public HexBoardTiler tiler;    // ç“¦ç‰‡ç€è‰²
 
         [Header("Action Config & Cost")]
-        public MoveActionConfig config;        // Ö±½ÓÔÚ Project Àï½¨Ò»¸ö×ÊÔ´ÍÏÉÏÀ´
-        public MonoBehaviour costProvider;  // ¿ÉÑ¡£ºÊµÏÖ IMoveCostService µÄ×é¼ş
+        public MoveActionConfig config;
+        public MonoBehaviour costProvider;
         IMoveCostService _cost;
 
-        [Header("Raycast")]
-        public LayerMask groundMask = ~0;
-        public float rayMaxDistance = 1000f;
+        [Header("Picking")]
+        public Camera pickCamera;               // å¯æ‰‹åŠ¨æŒ‡å®šï¼›ä¸ºç©ºåˆ™ç”¨ Camera.main
+        public LayerMask pickMask = ~0;            // åœ°é¢/ç“¦ç‰‡å±‚
+        public float rayMaxDistance = 2000f;
+        public float pickPlaneY = 0.01f;       // å°„çº¿æ²¡å‘½ä¸­æ—¶å›é€€æ°´å¹³é¢
 
         [Header("Motion")]
         public float stepSeconds = 0.12f;
@@ -69,14 +66,19 @@ namespace TGD.HexBoard
         public Color rangeColor = new(0.2f, 0.8f, 1f, 0.85f);
         public Color invalidColor = new(1f, 0.3f, 0.3f, 0.7f);
 
-        // ÔËĞĞÌ¬
+        // runtime
         bool _showing = false, _moving = false;
         readonly Dictionary<Hex, List<Hex>> _paths = new();
-        readonly List<GameObject> _tinted = new();
+        HexAreaPainter _painter;
 
-        void Awake() { _cost = costProvider as IMoveCostService; }
+        void Awake()
+        {
+            _cost = costProvider as IMoveCostService;
+            _painter = new HexAreaPainter(tiler);
+        }
+
         void Start() { driver?.EnsureInit(); }
-        void OnDisable() { ClearVisuals(); _paths.Clear(); _showing = false; }
+        void OnDisable() { _painter?.Clear(); _paths.Clear(); _showing = false; }
 
         void Update()
         {
@@ -87,128 +89,73 @@ namespace TGD.HexBoard
             {
                 var h = PickHexUnderMouse();
                 if (!h.HasValue) return;
-                if (_paths.TryGetValue(h.Value, out var path))
+                if (_paths.TryGetValue(h.Value, out var path) && path != null && path.Count >= 2)
                     StartCoroutine(RunPathTween(path));
             }
         }
 
-        void OnGUI()
-        {
-            if (authoring == null || driver == null) return;
-            var r = new Rect(10, 40, 240, 32);
-            if (GUI.Button(r, _showing ? "Hide Movables" : "Show Movables"))
-            {
-                if (_showing) HideRange(); else ShowRange();
-            }
-        }
-
-        // ===== ÏÔÊ¾/Òş²Ø¿É´ï =====
+        // ===== æä¾›ç»™å¤–éƒ¨ UI è°ƒç”¨ =====
         public void ShowRange()
         {
             if (authoring == null || driver == null || !driver.IsReady) return;
 
-            ClearVisuals();
+            _painter.Clear();
             _paths.Clear();
 
-            // ÏÈÓÃÅäÖÃ²½Êı£»µÈÄã½ÓÈë Stats ÔÙÇĞ»»
             int steps = (config != null) ? Mathf.Clamp(config.fallbackSteps, 0, config.stepsCap) : 3;
 
             var layout = authoring.Layout;
             var start = driver.UnitRef.Position;
 
-            var frontier = new Queue<Hex>();
-            var cameFrom = new Dictionary<Hex, Hex>();
-            var dist = new Dictionary<Hex, int>();
-            frontier.Enqueue(start);
-            cameFrom[start] = start;
-            dist[start] = 0;
+            // ç»Ÿä¸€é˜»æŒ¡ï¼ˆå«è¶Šç•Œï¼‰
+            var defaultBlocker = HexAreaUtil.MakeDefaultBlocker(
+                authoring, driver?.Map, start,
+                blockByUnits, blockByPhysics,
+                obstacleMask, physicsRadiusScale, physicsProbeHeight, includeTriggerColliders, y
+            );
+            bool BlockOrOOB(Hex cell) => (layout != null && !layout.Contains(cell)) || defaultBlocker(cell);
 
-            while (frontier.Count > 0)
-            {
-                var cur = frontier.Dequeue();
-                int d = dist[cur];
+            // BFSï¼šå¯è¾¾ + è·¯å¾„ + è¢«æ‹¦
+            var result = HexMovableRange.Compute(layout, driver.Map, start, steps, BlockOrOOB);
 
-                foreach (var nb in SixNeighbors(cur))
-                {
-                    if (dist.ContainsKey(nb)) continue;
-                    if (d + 1 > steps) continue;
+            foreach (var kv in result.Paths) _paths[kv.Key] = kv.Value;
 
-                    if (IsCellBlocked(nb, start))
-                    {
-                        if (showBlockedAsRed && tiler != null && tiler.TryGetTile(nb, out var blockedGo))
-                            Tint(blockedGo, invalidColor);
-                        continue;
-                    }
-
-                    dist[nb] = d + 1;
-                    frontier.Enqueue(nb);
-                    cameFrom[nb] = cur;
-                }
-            }
-
-            foreach (var kv in dist)
-            {
-                var cell = kv.Key; int d = kv.Value;
-                if (d == 0 || d > steps) continue;
-
-                var path = new List<Hex> { cell };
-                var cur = cell;
-                while (!cur.Equals(start))
-                {
-                    cur = cameFrom[cur];
-                    path.Add(cur);
-                }
-                path.Reverse();
-                _paths[cell] = path;
-
-                if (tiler != null && tiler.TryGetTile(cell, out var go))
-                {
-                    Tint(go, rangeColor);
-                    _tinted.Add(go);
-                }
-            }
+            _painter.Paint(result.Paths.Keys, rangeColor);
+            if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor);
 
             _showing = true;
         }
 
         public void HideRange()
         {
-            ClearVisuals();
+            _painter.Clear();
             _paths.Clear();
             _showing = false;
         }
 
-        void ClearVisuals()
-        {
-            foreach (var go in _tinted) if (go) Tint(go, Color.white);
-            _tinted.Clear();
-        }
-
-        // ===== Öğ¸ñÒÆ¶¯ + Æğ²½Ò»´ÎĞÔ×ªÏò =====
+        // ===== é€æ ¼ç§»åŠ¨ + èµ·æ­¥ä¸€æ¬¡æ€§è½¬å‘ =====
         IEnumerator RunPathTween(List<Hex> path)
         {
             if (path == null || path.Count < 2) yield break;
             if (authoring == null || driver == null || !driver.IsReady) yield break;
 
-            // ³É±¾/ÀäÈ´£¨¿ÉÑ¡£©
+            // æˆæœ¬
             if (_cost != null && config != null)
             {
-                if (_cost.IsOnCooldown(driver.UnitRef, config) || !_cost.HasEnough(driver.UnitRef, config))
-                    yield break;
+                if (_cost.IsOnCooldown(driver.UnitRef, config) || !_cost.HasEnough(driver.UnitRef, config)) yield break;
                 _cost.Pay(driver.UnitRef, config);
             }
 
             _moving = true;
 
-            // Æğ²½Ò»´ÎĞÔ×ªÏò£¨45¡ã/135¡ã ÉÈÇø£©
+            // èµ·æ­¥ä¸€æ¬¡æ€§è½¬å‘ï¼ˆ45Â°/135Â° æ‰‡åŒºï¼‰
             if (driver.unitView != null)
             {
-                // Æğ²½Ò»´ÎĞÔ×ªÏò£¨Ê¹ÓÃ HexFacingUtil£©
                 var fromW = authoring.Layout.World(path[0], y);
                 var toW = authoring.Layout.World(path[^1], y);
-                float keep = (config != null) ? config.keepDeg : 45f;
-                float turn = (config != null) ? config.turnDeg : 135f;
-                float speed = (config != null) ? config.turnSpeedDegPerSec : 720f;
+                float keep = config ? config.keepDeg : 45f;
+                float turn = config ? config.turnDeg : 135f;
+                float speed = config ? config.turnSpeedDegPerSec : 720f;
 
                 var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
@@ -216,6 +163,8 @@ namespace TGD.HexBoard
             }
 
             var layout = authoring.Layout;
+            var unit = driver.UnitRef;
+
             for (int i = 1; i < path.Count; i++)
             {
                 var from = path[i - 1];
@@ -228,81 +177,41 @@ namespace TGD.HexBoard
                 while (t < 1f)
                 {
                     t += Time.deltaTime / Mathf.Max(0.01f, stepSeconds);
-                    driver.unitView.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+                    if (driver.unitView != null)
+                        driver.unitView.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
                     yield return null;
                 }
 
-                driver.UnitRef.Position = to;
+                // é€»è¾‘ä½ç½® & åœ°å›¾å ä½ â€”â€” Move å¤±è´¥å…œåº• Set
+                if (driver.Map != null)
+                {
+                    if (!driver.Map.Move(unit, to))
+                        driver.Map.Set(unit, to);
+                }
+
+                unit.Position = to;
                 driver.SyncView();
             }
 
             _moving = false;
-            if (_showing) ShowRange();
+
+            if (_showing) ShowRange(); // åˆ·æ–°
         }
 
-        // ===== ×èµ² =====
-        bool IsCellBlocked(Hex cell, Hex startCell)
-        {
-            var layout = authoring.Layout;
-
-            if (!layout.Contains(cell)) return true;
-
-            if (blockByUnits && driver?.Map != null)
-            {
-                if (!driver.Map.IsFree(cell) && !cell.Equals(startCell))
-                    return true;
-            }
-
-            if (blockByPhysics && obstacleMask.value != 0)
-            {
-                float rin = authoring.cellSize * 0.8660254f * physicsRadiusScale;
-                var qti = includeTriggerColliders ? QueryTriggerInteraction.Collide
-                                                  : QueryTriggerInteraction.Ignore;
-
-                Vector3 c = layout.World(cell, y);
-                if (Physics.CheckSphere(c + Vector3.up * 0.5f, rin, obstacleMask, qti))
-                    return true;
-
-                Vector3 p1 = c + Vector3.up * 0.1f;
-                Vector3 p2 = c + Vector3.up * physicsProbeHeight;
-                if (Physics.CheckCapsule(p1, p2, rin, obstacleMask, qti))
-                    return true;
-            }
-
-            return false;
-        }
-
-        // ===== ¹¤¾ß =====
+        // ===== æ‹¾å–ï¼šä¼˜å…ˆ pickCamera -> Camera.mainï¼›å¤±è´¥å›é€€æ°´å¹³é¢ =====
         Hex? PickHexUnderMouse()
         {
-            var cam = Camera.main; if (!cam) return null;
+            var cam = pickCamera ? pickCamera : Camera.main;
+            if (!cam) return null;
+
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit, rayMaxDistance, groundMask, QueryTriggerInteraction.Ignore))
+
+            if (Physics.Raycast(ray, out var hit, rayMaxDistance, pickMask, QueryTriggerInteraction.Ignore))
                 return authoring.Layout.HexAt(hit.point);
-            return null;
-        }
 
-        static IEnumerable<Hex> SixNeighbors(Hex h)
-        {
-            yield return new Hex(h.q + 1, h.r + 0);
-            yield return new Hex(h.q + 1, h.r - 1);
-            yield return new Hex(h.q + 0, h.r - 1);
-            yield return new Hex(h.q - 1, h.r + 0);
-            yield return new Hex(h.q - 1, h.r + 1);
-            yield return new Hex(h.q + 0, h.r + 1);
-        }
-
-        void Tint(GameObject go, Color c)
-        {
-            var rends = go.GetComponentsInChildren<Renderer>(true);
-            foreach (var r in rends)
-            {
-                var mpb = new MaterialPropertyBlock();
-                r.GetPropertyBlock(mpb);
-                mpb.SetColor("_Color", c);
-                mpb.SetColor("_BaseColor", c);
-                r.SetPropertyBlock(mpb);
-            }
+            var plane = new Plane(Vector3.up, new Vector3(0f, pickPlaneY, 0f));
+            if (!plane.Raycast(ray, out float dist)) return null;
+            return authoring.Layout.HexAt(ray.GetPoint(dist));
         }
     }
 }

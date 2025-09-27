@@ -39,7 +39,7 @@ namespace TGD.HexBoard
                 if (showLabels)
                 {
                     Handles.color = Color.white;
-                    Handles.Label(w, $"({h.q},{h.r})  [{w.x:F2},{w.z:F2}]", style);
+                    Handles.Label(w, $"({h.q},{h.r})", style);
                 }
 #endif
             }
