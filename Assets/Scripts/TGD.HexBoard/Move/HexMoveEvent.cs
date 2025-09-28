@@ -15,6 +15,7 @@ namespace TGD.HexBoard
         NotEnoughResource,  // 资源不足
         NoSteps,            // 本次可走步数为 0
         PathBlocked,        // 选中格不可达/被拦
+        NoBudget
     }
 
     /// 点击移动相关的事件。你在别处订阅这些事件，绘制自己的 UI 即可

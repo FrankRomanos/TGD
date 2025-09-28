@@ -5,6 +5,66 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
+    // ========================= Move 内核（纯算法） =========================
+    static class MoveSimulator
+    {
+        public sealed class Result
+        {
+            public readonly List<Hex> ReachedPath = new(); // 含起点
+            public float UsedSeconds;                      // 实际消耗
+            public int RefundedSeconds;                    // 返还整秒
+            public bool Arrived;                           // 是否走到原始终点
+        }
+
+        /// 逐格模拟：stepCost = 1 / (baseMoveRate * envMult)
+        /// - budgetSeconds 用整数秒（不足一格不前进/舍去）
+        /// - refundThresholdSeconds：累计节省 ≥ 阈值返还 1s（可多次）
+        public static Result Run(
+            IList<Hex> path, float baseMoveRate, int budgetSeconds,
+            System.Func<Hex, float> getEnvMult,
+            float refundThresholdSeconds = 0.8f)
+        {
+            var res = new Result();
+            if (path == null || path.Count == 0 || baseMoveRate <= 0f || budgetSeconds <= 0)
+                return res;
+
+            float budget = budgetSeconds;
+            float saved = 0f;
+            int refunds = 0;
+
+            res.ReachedPath.Add(path[0]);
+
+            float baseStepCost = 1f / Mathf.Max(0.01f, baseMoveRate);
+
+            for (int i = 1; i < path.Count; i++)
+            {
+                var to = path[i];
+                float mult = Mathf.Clamp(getEnvMult != null ? getEnvMult(to) : 1f, 0.1f, 5f);
+                float actualCost = 1f / Mathf.Max(0.01f, baseMoveRate * mult);
+
+                if (budget + 1e-6f < actualCost) break;      // 不足一格，停止（舍去）
+
+                budget -= actualCost;
+                res.ReachedPath.Add(to);
+
+                // 加速退款累计
+                float stepSaved = Mathf.Max(0f, baseStepCost - actualCost);
+                saved += stepSaved;
+                while (saved >= refundThresholdSeconds)
+                {
+                    saved -= 1f;
+                    refunds += 1;
+                    budget += 1f;
+                }
+            }
+
+            res.UsedSeconds = budgetSeconds - budget;
+            res.RefundedSeconds = refunds;
+            res.Arrived = (res.ReachedPath.Count == path.Count);
+            return res;
+        }
+    }
+
     public interface IMoveCostService
     {
         bool IsOnCooldown(Unit unit, MoveActionConfig cfg);
@@ -43,6 +103,9 @@ namespace TGD.HexBoard
         public MoveActionConfig config;
         public MonoBehaviour costProvider;
         IMoveCostService _cost;
+      
+        [Tooltip("精准移动：进入减速地形时永久降低 MoveRate（无时间系统的临时方案）")]
+        public bool applyPermanentSlowInPreciseMove = true;
 
         [Header("Picking")]
         public Camera pickCamera;
@@ -70,6 +133,14 @@ namespace TGD.HexBoard
         [Header("Stats V2 (optional)")]
         public CoreV2.StatsV2 statsV2;
 
+        [Header("Environment (optional)")]
+        public HexEnvironmentSystem env;                 // 可不挂，按1倍速
+        [Tooltip("精准移动：进入减速地形后只减速一次（测试期临时规则）")]
+        public bool slowApplyOnlyOnce = true;
+
+        bool _slowAppliedOnce = false;    // 运行时旗标
+        [Tooltip("加速累计节省 ≥ 阈值返还 1s")]
+        public float refundThresholdSeconds = 0.8f;
         public HexOccupancyService occService;
 
         // runtime
@@ -87,6 +158,13 @@ namespace TGD.HexBoard
 
         string _hudMsg;
         float _hudMsgUntil;
+        float GetBaseMoveRate()
+        {
+            if (statsV2 != null) return Mathf.Max(0.01f, statsV2.EffectiveMoveRate);
+            int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int steps = Mathf.Max(1, (config != null ? Mathf.Clamp(config.fallbackSteps, 1, 9999) : 3));
+            return (float)steps / timeSec; // 无 Stats 时用 fallback 估算
+        }
         static int ComputeSteps(MoveActionConfig cfg, CoreV2.StatsV2 stats)
         {
             // 缠绕：禁止主动移动
@@ -156,7 +234,7 @@ namespace TGD.HexBoard
                 if (_paths.TryGetValue(h.Value, out var path) && path != null && path.Count >= 2)
                     StartCoroutine(RunPathTween(path));
                 else
-                    TGD.HexBoard.HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, null);
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, null);
             }
         }
 
@@ -164,7 +242,7 @@ namespace TGD.HexBoard
         public void ShowRange()
         {
             if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null)
-            { TGD.HexBoard.HexMoveEvents.RaiseRejected(driver ? driver.UnitRef : null, MoveBlockReason.NotReady, null); return; }
+            { HexMoveEvents.RaiseRejected(driver ? driver.UnitRef : null, MoveBlockReason.NotReady, null); return; }
 
             _painter.Clear();
             _paths.Clear();
@@ -203,6 +281,8 @@ namespace TGD.HexBoard
                 if (layout != null && !layout.Contains(cell)) return true;
                 if (blockByUnits && _occ.IsBlocked(cell, _actor)) return true;
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
+                // ★ 新增：Pit 覆盖为障碍（不显示、不可达、BFS 会绕开）
+                if (env != null && env.IsPit(cell)) return true;
                 return false;
             }
 
@@ -235,21 +315,31 @@ namespace TGD.HexBoard
             if (_cost != null && config != null)
             {
                 if (_cost.IsOnCooldown(driver.UnitRef, config))
-                { TGD.HexBoard.HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
+                { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
                 if (!_cost.HasEnough(driver.UnitRef, config))
-                { TGD.HexBoard.HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
+                { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
                 _cost.Pay(driver.UnitRef, config);
-
             }
 
-            _moving = true;
-            HexMoveEvents.RaiseMoveStarted(driver.UnitRef, path);
+            // —— 用 MoveSimulator 按环境倍率截断路径（预览从不看环境，这里才看）——
+            int budgetSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            float baseMR = GetBaseMoveRate();
+            float EnvMult(Hex h) => env != null ? env.GetSpeedMult(h) : 1f;
 
-            // 起步一次性转向（45°/135°）
+            var sim = MoveSimulator.Run(path, baseMR, budgetSec, EnvMult, Mathf.Max(0.01f, refundThresholdSeconds));
+            var reached = sim.ReachedPath;
+
+            if (reached == null || reached.Count < 2)
+                yield break; // 预算不足以前进一步，保持静止（不报错）
+
+            _moving = true;
+            HexMoveEvents.RaiseMoveStarted(driver.UnitRef, reached);
+
+            // 起步一次性转向（45/135）
             if (driver.unitView != null)
             {
-                var fromW = authoring.Layout.World(path[0], y);
-                var toW = authoring.Layout.World(path[^1], y);
+                var fromW = authoring.Layout.World(reached[0], y);
+                var toW = authoring.Layout.World(reached[^1], y);
                 float keep = config ? config.keepDeg : 45f;
                 float turn = config ? config.turnDeg : 135f;
                 float speed = config ? config.turnSpeedDegPerSec : 720f;
@@ -263,20 +353,27 @@ namespace TGD.HexBoard
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
 
-            for (int i = 1; i < path.Count; i++)
+            for (int i = 1; i < reached.Count; i++)
             {
-                // RunPathTween(...) 循环内
                 if (statsV2 != null && statsV2.IsEntangled)
                 {
                     HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, "Break Move!");
                     break;
                 }
-                var from = path[i - 1];
-                var to = path[i];
-                HexMoveEvents.RaiseMoveStep(unit, from, to, i, path.Count - 1);
-                // 占位能否移动（整组）
-                if (!_occ.CanPlace(_actor, to, _actor.Facing, ignore: _actor))
+
+                var from = reached[i - 1];
+                var to = reached[i];
+
+                // ✅ 执行期单位阻挡（忽略自己）
+                if (_occ.IsBlocked(to, _actor))
                     break;
+                if (env != null && env.IsPit(to))
+                {
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, "Pit");
+                    break;
+                }
+
+                HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
 
                 var fromW = layout.World(from, y);
                 var toW = layout.World(to, y);
@@ -290,25 +387,24 @@ namespace TGD.HexBoard
                     yield return null;
                 }
 
-                // 占位提交
+                // 占位提交 + 旧 Map 同步
                 _occ.TryMove(_actor, to);
-
-                // （可选）保持旧 Map 同步，便于其它旧逻辑过渡
+                // === 新增：进入该格后，如果是减速地形，永久降低 MoveRate ===
+                ApplyPermanentSlowIfNeeded(to);
                 if (driver.Map != null)
                 {
                     if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
                 }
-
                 unit.Position = to;
                 driver.SyncView();
             }
 
             _moving = false;
-            // —— 结束后：抛出【完成移动】事件 ——  ★新增
             HexMoveEvents.RaiseMoveFinished(driver.UnitRef, driver.UnitRef.Position);
 
             if (_showing) ShowRange(); // 刷新
         }
+
 
         // ===== 拾取 =====
         Hex? PickHexUnderMouse()
@@ -333,5 +429,28 @@ namespace TGD.HexBoard
             s.offsets = new() { new L2(0, 0) };
             return s;
         }
+        void ApplyPermanentSlowIfNeeded(Hex cell)
+        {
+            if (env == null || statsV2 == null) return;
+
+            // 只减速一次的保护
+            if (slowApplyOnlyOnce && _slowAppliedOnce) return;
+
+            float mult = Mathf.Clamp(env.GetSpeedMult(cell), 0.1f, 5f);
+            if (mult >= 0.999f) return; // 非减速，不处理
+
+            // MoveRate（格/秒，不低于 1，且只“舍不入”）
+            float cur = statsV2.MoveRate;
+            int lowered = Mathf.Max(1, Mathf.FloorToInt(cur * mult));
+
+            if (lowered < cur)  // 只有降低才写回
+            {
+                statsV2.MoveRate = lowered;
+                _slowAppliedOnce = true; // 标记：已减速过
+                Debug.Log($"[ClickMove] Permanent slow applied: MoveRate {cur} -> {lowered} (mult={mult})");
+            }
+        }
+
+
     }
 }

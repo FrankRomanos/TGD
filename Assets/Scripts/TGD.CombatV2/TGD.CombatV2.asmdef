@@ -1,0 +1,17 @@
+{
+    "name": "TGD.CombatV2",
+    "rootNamespace": "",
+    "references": [
+        "GUID:a1b5b619a2c3db644bba9df3442b0243",
+        "GUID:a444cd44765d7a0479ba247d904b43c2"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
