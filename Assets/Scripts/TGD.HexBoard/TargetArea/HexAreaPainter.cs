@@ -1,9 +1,9 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// °ÑÒ»×é Hex ¸ßÁÁµ½ Tiler£¨ÓëËã·¨/½»»¥½âñî£©
+    /// ï¿½ï¿½Ò»ï¿½ï¿½ Hex ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Tilerï¿½ï¿½ï¿½ï¿½ï¿½ã·¨/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î£©
     public sealed class HexAreaPainter
     {
         readonly HexBoardTiler tiler;
@@ -11,11 +11,14 @@ namespace TGD.HexBoard
 
         public HexAreaPainter(HexBoardTiler tiler) { this.tiler = tiler; }
 
+
         public void Paint(IEnumerable<Hex> cells, Color color)
         {
+            
             if (tiler == null || cells == null) return;
             foreach (var h in cells)
                 if (tiler.TryGetTile(h, out var go) && go) { var old = Color.white; Set(go, color); tinted.Add((go, old)); }
+
         }
 
         public void Clear()

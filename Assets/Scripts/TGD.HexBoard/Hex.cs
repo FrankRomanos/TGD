@@ -12,6 +12,7 @@ namespace TGD.HexBoard
         public Hex(int q, int r) { this.q = q; this.r = r; }
         public static readonly Hex Zero = new Hex(0, 0);
 
+
         public static Hex operator +(Hex a, Hex b) => new Hex(a.q + b.q, a.r + b.r);
         public static Hex operator -(Hex a, Hex b) => new Hex(a.q - b.q, a.r - b.r);
         public static Hex operator *(Hex a, int k) => new Hex(a.q * k, a.r * k);

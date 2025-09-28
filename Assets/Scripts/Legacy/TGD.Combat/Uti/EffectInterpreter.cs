@@ -1073,7 +1073,7 @@ namespace TGD.Combat
                         return preview.LimitEnabled ? message + limitSuffix : message;
                     }
             }
-            return string.Empty;
+
         }
 
         private static string GetSkillModifyCategory(SkillModifyType type)
