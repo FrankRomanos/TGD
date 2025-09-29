@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.CombatV2
 {
     /// 移动被拒绝的原因（可按需再扩）
     public enum MoveBlockReason
@@ -29,6 +30,11 @@ namespace TGD.HexBoard
         public static event Action<Unit, List<Hex>> MoveStarted;
         public static event Action<Unit, Hex, Hex, int, int> MoveStep; // (unit, from, to, stepIndex(1~n), total)
         public static event Action<Unit, Hex> MoveFinished;
+        // ★ 新增：时间返还（比如加速累计达到阈值，+N 秒）
+        public static event Action<Unit, int> TimeRefunded;
+
+        // ★ 新增：没有更多时间（预算耗尽）
+        public static event Action<Unit> NoMoreTime;
 
         // 被拒绝
         public static event Action<Unit, MoveBlockReason, string> MoveRejected;
@@ -40,5 +46,11 @@ namespace TGD.HexBoard
         internal static void RaiseMoveStep(Unit u, Hex from, Hex to, int i, int n) => MoveStep?.Invoke(u, from, to, i, n);
         internal static void RaiseMoveFinished(Unit u, Hex end) => MoveFinished?.Invoke(u, end);
         internal static void RaiseRejected(Unit u, MoveBlockReason r, string msg) => MoveRejected?.Invoke(u, r, msg);
+        internal static void RaiseTimeRefunded(Unit u, int seconds)
+    => TimeRefunded?.Invoke(u, seconds);
+
+        internal static void RaiseNoMoreTime(Unit u)
+            => NoMoreTime?.Invoke(u);
+
     }
 }

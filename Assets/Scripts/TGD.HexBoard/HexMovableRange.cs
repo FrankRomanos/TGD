@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.CombatV2
 {
     public sealed class MovableRangeResult
     {

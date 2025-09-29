@@ -1,98 +1,76 @@
+﻿// File: TGD.HexBoard/HexBoardTestDriver.cs
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace TGD.HexBoard
 {
-
+    /// 最小运行时上下文：聚合 Unit/Layout/Map/View，供移动/攻击等系统引用
+    [DisallowMultipleComponent]
     public sealed class HexBoardTestDriver : MonoBehaviour
     {
-        public HexBoardMap<Unit> Map => map;
-
         public HexBoardAuthoringLite authoring;
         public Transform unitView;
         public int startQ = 9, startR = 7;
         public Facing4 startFacing = Facing4.PlusQ;
         public float y = 0.01f;
 
-        public Unit UnitRef => unit;
-        public MovementSystem Movement => mover;
-        public HexBoardLayout Layout => layout;
+        // 给外部系统用的入口
+        public Unit UnitRef => _unit;
+        public HexBoardLayout Layout => _layout;
+        public HexBoardMap<Unit> Map => _map;
 
-        HexBoardLayout layout;
-        HexBoardMap<Unit> map;
-        MovementSystem mover;
-        Unit unit;
-        public bool showHUD = false;
+        // 可选：把视图朝向同步回数据（默认开启，便于动画驱动朝向）
+        public bool syncFacingFromView = true;
 
-        bool _inited = false;
-        public bool IsReady => _inited && layout != null && unit != null && mover != null;
-        public bool syncFacingFromView = true; // Inspector �ɹ�ѡ
+        HexBoardLayout _layout;
+        HexBoardMap<Unit> _map;
+        Unit _unit;
+        bool _inited;
+
+        public bool IsReady => _inited && _layout != null && _unit != null && _map != null;
+
         public void EnsureInit()
         {
             if (_inited) return;
             if (authoring == null || authoring.Layout == null) return;
 
-            layout = authoring.Layout;
-            map = new HexBoardMap<Unit>(layout);
-            unit = new Unit("U1", new Hex(startQ, startR), startFacing);
-            map.Set(unit, unit.Position);
-            mover = new MovementSystem(layout, map);
+            _layout = authoring.Layout;
+            _map = new HexBoardMap<Unit>(_layout);
+            _unit = new Unit("U1", new Hex(startQ, startR), startFacing);
+            _map.Set(_unit, _unit.Position);
+
             _inited = true;
             SyncView();
         }
 
-        void Start() { EnsureInit(); }
+        void Start() => EnsureInit();
+
         void Update()
         {
             EnsureInit();
             if (!IsReady) return;
+
             if (syncFacingFromView && unitView != null)
-            {
-                unit.Facing = FacingFromYaw4(unitView.eulerAngles.y);
-            }
-
-            if (Input.GetKeyDown(KeyCode.UpArrow)) { mover.Execute(new MoveOp(unit, MoveCardinal.Forward, 1)); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.DownArrow)) { mover.Execute(new MoveOp(unit, MoveCardinal.Backward, 1)); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.LeftArrow)) { mover.Execute(new MoveOp(unit, MoveCardinal.Left, 1)); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.RightArrow)) { mover.Execute(new MoveOp(unit, MoveCardinal.Right, 1)); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.A)) { unit.Facing = RotateLeft(unit.Facing); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.D)) { unit.Facing = RotateRight(unit.Facing); SyncView(); }
-            if (Input.GetKeyDown(KeyCode.Space)) { SyncView(); }
+                _unit.Facing = FacingFromYaw4(unitView.eulerAngles.y);
         }
-
-        Facing4 RotateLeft(Facing4 f) => f switch { Facing4.PlusQ => Facing4.PlusR, Facing4.PlusR => Facing4.MinusQ, Facing4.MinusQ => Facing4.MinusR, _ => Facing4.PlusQ };
-        Facing4 RotateRight(Facing4 f) => f switch { Facing4.PlusQ => Facing4.MinusR, Facing4.MinusR => Facing4.MinusQ, Facing4.MinusQ => Facing4.PlusR, _ => Facing4.PlusQ };
 
         public void SyncView()
         {
-            if (!IsReady) return;
-            if (unitView != null)
-                unitView.position = layout.World(unit.Position, y);
+            if (!IsReady || unitView == null) return;
+            unitView.position = _layout.World(_unit.Position, y);
+            // 朝向交由动画/其他系统控制，这里不强制写回
         }
 
-        void OnGUI()
-        {
-            if (!showHUD) return;
-            EnsureInit();
-            if (!IsReady) return;
-            var w = layout.World(unit.Position, y);
-            GUI.Label(new Rect(10, 10, 780, 22),
-              $"Unit {unit.Id}  Hex=({unit.Position.q},{unit.Position.r})  World=({w.x:F2},{w.z:F2})  Facing={unit.Facing}  [�������� move, A/D face, Space snap]");
-           
-        }
         public static Facing4 FacingFromYaw4(float yawDegrees)
         {
-            // ������ 0/90/180/270
             int a = Mathf.RoundToInt(Mathf.Repeat(yawDegrees, 360f) / 90f) * 90;
             switch (a % 360)
             {
-                case 0: return Facing4.MinusR; // ����
-                case 90: return Facing4.PlusQ;  // ����
-                case 180: return Facing4.PlusR;  // ����
-                case 270: return Facing4.MinusQ; // ����
-                default: return Facing4.MinusR; // ���۲��ᵽ
+                case 0: return Facing4.MinusR;  // +Z
+                case 90: return Facing4.PlusQ;   // +X
+                case 180: return Facing4.PlusR;   // -Z
+                case 270: return Facing4.MinusQ;  // -X
+                default: return Facing4.MinusR;
             }
         }
     }
-
 }

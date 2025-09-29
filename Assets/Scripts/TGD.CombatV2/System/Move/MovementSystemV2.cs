@@ -1,6 +1,7 @@
 using System;
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.CombatV2
 {
     public enum MoveCardinal { Forward, Backward, Left, Right }
 
@@ -19,12 +20,12 @@ namespace TGD.HexBoard
     /// 强制位移专用（击退/拖拽/冲锋等）。
     /// Flat-Top：R 竖直（↑↓），Q 水平（←→）；±Q 采用“两步修正”保持水平直线。
     /// </summary>
-    public sealed class MovementSystem
+    public sealed class MovementSystemV2
     {
         readonly HexBoardLayout layout;
         readonly HexBoardMap<Unit> map;
 
-        public MovementSystem(HexBoardLayout layout, HexBoardMap<Unit> map)
+        public MovementSystemV2(HexBoardLayout layout, HexBoardMap<Unit> map)
         { this.layout = layout; this.map = map; }
 
         public bool ExecuteForced(Unit unit, MoveCardinal dir, int distance, bool allowPartial = true)

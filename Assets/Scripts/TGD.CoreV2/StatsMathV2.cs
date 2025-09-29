@@ -40,8 +40,26 @@ namespace TGD.CoreV2
             return Mathf.Clamp(drAtT + rest * inc, 0f, cap);
         }
 
-        // 秒→轮
-        public static int CooldownToRounds(int seconds)
+        // 秒→回合
+        public static int CooldownToTurns(int seconds)
             => (seconds <= 0) ? 0 : (seconds + BaseTurnSeconds - 1) / BaseTurnSeconds;
+
+        // —— 移速工具 ——
+
+        // 把倍数换成“加到 base 上的加法”，并且最终有效值≥1（只舍不入）
+        public static int EnvAddFromMultiplier(int plannedBaseMoveRate, float mult)
+        {
+            int baseR = Mathf.Max(1, plannedBaseMoveRate);
+            float eff = baseR * Mathf.Clamp(mult, 0.1f, 5f);
+            int effInt = Mathf.Max(1, Mathf.FloorToInt(eff));
+            return effInt - baseR; // 可正可负（加速>0，减速<0）
+        }
+
+        // 把若干加法叠加到 base 上得到有效移速（≥1）
+        public static int MoveRateWithAdds(int baseMoveRate, int addSum)
+        {
+            return Mathf.Max(1, baseMoveRate + addSum);
+        }
+
     }
 }

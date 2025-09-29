@@ -16,6 +16,9 @@ namespace TGD.CombatV2
         [Tooltip("是否临时忽略同回合叠加（被天赋/技能移除）")]
         public bool ignoreSameTurnPenalty = false;
 
+        [Header("Debug")] // ★ 新增：控制台打印开关
+        public bool debugLogCosts = true;   // ★
+
         int _attacksThisTurn = 0;
         CooldownStoreV2 Store => cooldownHub ? cooldownHub.store : null;
 
@@ -45,7 +48,14 @@ namespace TGD.CombatV2
         {
             if (stats == null || cfg == null) return true; // 未配面板则放行测试
             int need = CalcCost(cfg);
-            return stats.Energy >= need;
+            // ★ 可选：不足时也打一条
+            bool ok = stats.Energy >= need;
+
+            // ★ 可选：不足时也打一条
+            if (debugLogCosts && !ok)
+                Debug.Log($"[AttackCost] NOT ENOUGH energy (need={need}, have={stats.Energy})", this);
+
+            return ok;
         }
 
         public void Pay(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
@@ -53,8 +63,13 @@ namespace TGD.CombatV2
             if (stats != null && cfg != null)
             {
                 int need = CalcCost(cfg);
+                int before = stats.Energy;
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
+                // ★ 打印你要的日志格式
+                if (debugLogCosts)
+                    Debug.Log($"[AttackCost] cost={need}  energy {before}->{stats.Energy}  (attacksThisTurn={_attacksThisTurn})", this);
             }
+           
             // 攻击冷却目前=0，跳过
             _attacksThisTurn++; // 累计同回合次数
         }

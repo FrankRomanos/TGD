@@ -3,7 +3,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
-namespace TGD.UI
+namespace TGD.CombatV2
 {
     /// 监听 HexMoveEvents，用 TextMeshPro 做消息提示
     [DisallowMultipleComponent]
@@ -33,7 +33,7 @@ namespace TGD.UI
 
         void OnEnable()
         {
-            TGD.HexBoard.HexMoveEvents.MoveRejected += OnRejected;
+            HexMoveEvents.MoveRejected += OnRejected;
             // 你愿意也可以显示其它事件：
             // TGD.HexBoard.HexMoveEvents.RangeShown += OnRangeShown;
             // TGD.HexBoard.HexMoveEvents.RangeHidden += _ => SetVisible(false);
@@ -41,11 +41,11 @@ namespace TGD.UI
 
         void OnDisable()
         {
-            TGD.HexBoard.HexMoveEvents.MoveRejected -= OnRejected;
+            HexMoveEvents.MoveRejected -= OnRejected;
             // HexMoveEvents.RangeShown  / RangeHidden 如上要么也退订
         }
 
-        void OnRejected(TGD.HexBoard.Unit unit, TGD.HexBoard.MoveBlockReason reason, string msg)
+        void OnRejected(TGD.HexBoard.Unit unit, MoveBlockReason reason, string msg)
         {
             if (!uiText || !root) return;
 
@@ -54,12 +54,13 @@ namespace TGD.UI
                 // 兜底英文
                 msg = reason switch
                 {
-                    TGD.HexBoard.MoveBlockReason.Entangled => "I can't move!",
-                    TGD.HexBoard.MoveBlockReason.NoSteps => "Not now!",
-                    TGD.HexBoard.MoveBlockReason.OnCooldown => "Move is on cooldown.",
-                    TGD.HexBoard.MoveBlockReason.NotEnoughResource => "Not enough energy.",
-                    TGD.HexBoard.MoveBlockReason.PathBlocked => "That path is blocked.",
-                    _ => "Can't move."
+                    MoveBlockReason.Entangled => "I can't move!",
+                    MoveBlockReason.NoSteps => "Not now!",
+                    MoveBlockReason.OnCooldown => "Move is on cooldown.",
+                    MoveBlockReason.NotEnoughResource => "Not enough energy.",
+                    MoveBlockReason.PathBlocked => "That path is blocked.",
+                    MoveBlockReason.NoBudget => "No More Time",
+                _ => "Can't move."
                 };
             }
 

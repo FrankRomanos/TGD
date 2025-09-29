@@ -9,15 +9,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
-  m_Name: Move
-  m_EditorClassIdentifier: TGD.CombatV2:TGD.CombatV2:MoveActionConfig
-  energyCost: 10
-  timeCostSeconds: 1
-  cooldownSeconds: 0
-  actionId: Move
-  fallbackSteps: 3
-  stepsCap: 12
+  m_Script: {fileID: 11500000, guid: 9f396e3f6ad253947a4a25cb6acd4191, type: 3}
+  m_Name: Attack30
+  m_EditorClassIdentifier: 
+  baseTimeSeconds: 3
+  refundThresholdSeconds: 0.8
+  baseEnergyCost: 30
+  applySameTurnPenalty: 1
+  sameTurnPenaltyRate: 0.5
+  meleeRange: 1
   keepDeg: 45
   turnDeg: 135
   turnSpeedDegPerSec: 720

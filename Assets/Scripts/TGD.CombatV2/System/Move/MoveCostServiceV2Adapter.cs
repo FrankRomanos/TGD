@@ -1,7 +1,8 @@
 using UnityEngine;
 using TGD.CoreV2; // 引用 CoreV2（HexBoard.asmdef 需添加对 CoreV2.asmdef 的引用）
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.CombatV2
 {
     /// <summary>
     /// 让 HexClickMover 通过 IMoveCostService 接入 StatsV2 + CooldownStoreV2。
@@ -35,12 +36,24 @@ namespace TGD.HexBoard
             // 扣能量
             stats.Energy = Mathf.Clamp(stats.Energy - cfg.energyCost, 0, stats.MaxEnergy);
 
-            // 开冷却（秒→轮；Move 通常 0）
+            // 开冷却（秒→回合；Move 通常 0）
             if (Store != null && cfg.cooldownSeconds > 0f)
             {
-                int rounds = StatsMathV2.CooldownToRounds(Mathf.CeilToInt(cfg.cooldownSeconds));
+                int rounds = StatsMathV2.CooldownToTurns(Mathf.CeilToInt(cfg.cooldownSeconds));
                 Store.Start(Key(cfg), rounds);
             }
+        }
+        public void RefundSeconds(Unit unit, MoveActionConfig cfg, int seconds)
+        {
+            if (stats == null || cfg == null || seconds <= 0) return;
+
+            // 约定：MoveActionConfig.energyCost 表示“每秒移动消耗”的能量
+            int refund = Mathf.Max(0, cfg.energyCost) * seconds;
+            int before = stats.Energy;
+            stats.Energy = Mathf.Clamp(stats.Energy + refund, 0, stats.MaxEnergy);
+
+            Debug.Log($"[MoveCost] Refund {seconds}s => +{refund} Energy ({before}->{stats.Energy})",
+                      this);
         }
     }
 }

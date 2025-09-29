@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.CombatV2
 {
     /// <summary>
     /// 根据 HexClickMover 的实际移动速度，自动调节 Animator.speed，

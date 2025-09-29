@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.CombatV2;
 
 namespace TGD.HexBoard
 {

@@ -1,37 +1,44 @@
+// File: TGD.Level/HexCameraControllerHB.cs
 using UnityEngine;
-using Unity.Cinemachine;          // v3: CinemachineCamera / CinemachineFollow
-using TGD.HexBoard;               // 引入 HexBoardLayout / Hex / Authoring
+using Unity.Cinemachine;
+using TGD.HexBoard;
 
 namespace TGD.Level
 {
-    /// <summary>
-    /// 适配 HexBoard 的相机控制：
-    /// - WASD 平移（相机朝向的水平面）
-    /// - Q/E 旋转（可选 60° 网格对齐）
-    /// - 滚轮缩放（CinemachineFollow.y 或本地距离）
-    /// - FocusOn(Hex) / GetFocusCoordinate()
-    /// </summary>
+    /// 纯鼠标相机控制（适配六边形棋盘）
+    /// - 鼠标中键拖拽：水平旋转（Yaw）
+    /// - 鼠标右键拖拽：平移（沿相机 Forward/Right 的水平投影）
+    /// - 鼠标滚轮：缩放（CinemachineFollow.y 或本地距离）
+    /// - 可选：松开中键后 Snap 到 60°（hex 友好）
+    [DisallowMultipleComponent]
     public class HexCameraControllerHB : MonoBehaviour
     {
         [Header("Refs")]
-        [SerializeField] CinemachineCamera cineCam;          // 你的 CM Camera
-        [SerializeField] Transform pivot;                    // 相机公转的枢轴；留空则自动创建
-        [SerializeField] HexBoardAuthoringLite authoring;    // 可选：自动拿 Layout
-        [SerializeField] HexBoardLayout layout;              // 也可直接拖 Layout
+        [SerializeField] CinemachineCamera cineCam;          // CM v3 Camera
+        [SerializeField] Transform pivot;                    // 公转枢轴（相机作为其子物体）
+        [SerializeField] HexBoardAuthoringLite authoring;    // 可选：拿到 Layout
+        [SerializeField] HexBoardLayout layout;
 
-        [Header("Move / Rotate / Zoom")]
-        [SerializeField] float moveSpeed = 12f;
-        [SerializeField] float rotateSpeed = 100f;
+        [Header("Mouse Controls")]
+        [SerializeField, Tooltip("右键拖拽的平移灵敏度（世界单位/像素，自动随高度微调）")]
+        float panSensitivity = 0.02f;
+        [SerializeField, Tooltip("中键拖拽的旋转灵敏度（度/像素）")]
+        float rotateSensitivity = 0.25f;
+
+        [Header("Zoom")]
         [SerializeField] float zoomSpeed = 6f;
         [SerializeField] float minFollowY = 1f;
         [SerializeField] float maxFollowY = 30f;
 
         [Header("Quality of Life")]
-        [SerializeField] bool snapYawTo60 = false;           // 旋转松手后对齐 60°
+        [SerializeField, Tooltip("松开中键时对齐到 60° 的倍数")]
+        bool snapYawTo60 = true;
 
-        // 内部
-        float _distance = 15f; // 非 Cinemachine 模式下用
+        // 内部状态
         bool _rotating = false;
+        bool _panning = false;
+        Vector3 _lastMousePos;
+        float _distance = 15f; // 非 CM 模式下备用
 
         void Awake()
         {
@@ -46,18 +53,18 @@ namespace TGD.Level
                 transform.SetParent(pivot, worldPositionStays: true);
             }
 
-            // 初始对齐：相机看向 pivot 水平
+            // 初始对齐：相机看 pivot 的水平位置
             transform.LookAt(new Vector3(pivot.position.x, transform.position.y, pivot.position.z));
         }
 
         void Update()
         {
-            HandleMovement();
-            HandleRotation();
+            HandleMouseRotate();
+            HandleMousePan();
             HandleZoom();
         }
 
-        // ======== Public API ========
+        // ========== Public API ==========
         public Hex GetFocusCoordinate()
         {
             if (layout == null) return Hex.Zero;
@@ -78,51 +85,74 @@ namespace TGD.Level
             pivot.position = w;
         }
 
-        // ======== Controls ========
-        void HandleMovement()
+        // ========== Mouse ==========
+
+        // 中键拖拽：水平旋转
+        void HandleMouseRotate()
         {
-            Vector3 input = Vector3.zero;
-            if (Input.GetKey(KeyCode.W)) input.z += 1f;
-            if (Input.GetKey(KeyCode.S)) input.z -= 1f;
-            if (Input.GetKey(KeyCode.A)) input.x -= 1f;
-            if (Input.GetKey(KeyCode.D)) input.x += 1f;
-            if (input.sqrMagnitude == 0f) return;
-
-            Vector3 fwd = pivot.forward; fwd.y = 0f; fwd.Normalize();
-            Vector3 right = pivot.right; right.y = 0f; right.Normalize();
-            Vector3 delta = (fwd * input.z + right * input.x) * moveSpeed * Time.deltaTime;
-
-            pivot.position += delta;
-        }
-
-        void HandleRotation()
-        {
-            float dir = 0f;
-            if (Input.GetKey(KeyCode.Q)) dir += 1f;
-            if (Input.GetKey(KeyCode.E)) dir -= 1f;
-
-            if (Mathf.Approximately(dir, 0f))
+            if (Input.GetMouseButtonDown(2))
             {
-                if (_rotating && snapYawTo60 && !Input.GetKey(KeyCode.Q) && !Input.GetKey(KeyCode.E))
+                _rotating = true;
+                _lastMousePos = Input.mousePosition;
+            }
+            else if (Input.GetMouseButtonUp(2))
+            {
+                if (_rotating && snapYawTo60)
                 {
-                    _rotating = false;
                     float yaw = pivot.eulerAngles.y;
                     float snapped = Mathf.Round(yaw / 60f) * 60f;
                     pivot.rotation = Quaternion.Euler(0f, snapped, 0f);
                 }
-                return;
+                _rotating = false;
             }
 
-            _rotating = true;
-            pivot.Rotate(0f, dir * rotateSpeed * Time.deltaTime, 0f, Space.World);
+            if (!_rotating) return;
+
+            var cur = Input.mousePosition;
+            var delta = cur - _lastMousePos;
+            _lastMousePos = cur;
+
+            float yawDelta = delta.x * rotateSensitivity; // 仅水平旋转
+            pivot.Rotate(0f, yawDelta, 0f, Space.World);
         }
 
+        // 右键拖拽：平移
+        void HandleMousePan()
+        {
+            if (Input.GetMouseButtonDown(1))
+            {
+                _panning = true;
+                _lastMousePos = Input.mousePosition;
+            }
+            else if (Input.GetMouseButtonUp(1))
+            {
+                _panning = false;
+            }
+
+            if (!_panning) return;
+
+            var cur = Input.mousePosition;
+            var delta = cur - _lastMousePos;
+            _lastMousePos = cur;
+
+            // 根据高度适配平移速度：越高走得越远
+            float height = CurrentCameraHeight();
+            float heightFactor = Mathf.Clamp(height * 0.02f, 0.5f, 3f);
+
+            Vector3 fwd = pivot.forward; fwd.y = 0f; fwd.Normalize();
+            Vector3 right = pivot.right; right.y = 0f; right.Normalize();
+
+            // 屏幕像素到世界位移：X→右，Y→前（上为正）
+            Vector3 worldDelta = (right * delta.x + fwd * delta.y) * panSensitivity * heightFactor;
+            pivot.position += worldDelta;
+        }
+
+        // 滚轮：缩放
         void HandleZoom()
         {
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Approximately(wheel, 0f)) return;
 
-            // 优先适配 Cinemachine v3
             if (cineCam != null)
             {
                 var follow = cineCam.GetComponent<CinemachineFollow>();
@@ -135,10 +165,20 @@ namespace TGD.Level
                 }
             }
 
-            // 兜底：非 CM 模式下直接拉近/远
+            // 非 CM 模式兜底
             _distance = Mathf.Clamp(_distance - wheel * zoomSpeed, minFollowY, maxFollowY);
             transform.localPosition = new Vector3(0f, _distance, -_distance);
             transform.LookAt(new Vector3(pivot.position.x, transform.position.y, pivot.position.z));
+        }
+
+        float CurrentCameraHeight()
+        {
+            if (cineCam != null)
+            {
+                var follow = cineCam.GetComponent<CinemachineFollow>();
+                if (follow != null) return follow.FollowOffset.y;
+            }
+            return Mathf.Max(1f, transform.position.y - pivot.position.y);
         }
     }
 }
