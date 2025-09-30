@@ -67,5 +67,62 @@ namespace TGD.HexBoard
             res.Arrived = (res.ReachedPath.Count == path.Count);
             return res;
         }
+        // File: TGD.HexBoard/MoveSimulator.cs （在文件末尾追加一个重载）
+        public static Result RunAdditive(
+            IList<Hex> path,
+            int baseBaseMoveRate,                // 纯“基础移速”（ctx.BaseMoveRate）
+            int effectiveBaseNoEnv,              // 基础 +（基于基础的 buff/黏性等）之后的 MR（不含环境）
+            int budgetSeconds,                   // 整秒
+            System.Func<Hex, float> getEnvMult, // 环境倍率（>0）
+            float refundThresholdSeconds = 0.8f,
+            bool debug = false)
+        {
+            var res = new Result();
+            if (path == null || path.Count == 0 || effectiveBaseNoEnv <= 0)
+                return res;
+
+            res.ReachedPath.Add(path[0]);
+            float budget = Mathf.Max(0f, budgetSeconds);
+            float saved = 0f;
+            int refunds = 0;
+
+            // “计划速度” = 不含环境的有效 MR
+            float baseStepCost = 1f / Mathf.Max(0.01f, effectiveBaseNoEnv);
+
+            for (int i = 1; i < path.Count; i++)
+            {
+                var from = path[i - 1];
+                var to = path[i];
+
+                float multFrom = Mathf.Clamp(getEnvMult != null ? getEnvMult(from) : 1f, 0.1f, 5f);
+
+                // 把倍率转成“基于基础移速”的加法增量：floor(baseR * (m-1))
+                int envAdd = Mathf.FloorToInt(Mathf.Max(1, baseBaseMoveRate) * (multFrom - 1f));
+
+                int effMR = Mathf.Max(1, effectiveBaseNoEnv + envAdd); // 本步有效 MR（加法口径）
+                float actualCost = 1f / Mathf.Max(0.01f, effMR);
+
+                if (budget + 1e-6f < actualCost) break;
+
+                budget -= actualCost;
+                res.ReachedPath.Add(to);
+
+                float stepSaved = Mathf.Max(0f, baseStepCost - actualCost);
+                saved += stepSaved;
+                while (saved >= refundThresholdSeconds)
+                {
+                    saved -= refundThresholdSeconds;
+                    refunds += 1;
+                    budget += 1f;
+                    if (debug) Debug.Log($"[MoveSim+Add] refund+1 thr={refundThresholdSeconds:F2} saved={saved:F3} budg={budget:F3} effMR={effMR}");
+                }
+            }
+
+            res.UsedSeconds = budgetSeconds - budget;
+            res.RefundedSeconds = refunds;
+            res.Arrived = (res.ReachedPath.Count == path.Count);
+            return res;
+        }
+
     }
 }

@@ -1,44 +1,41 @@
+// File: TGD.HexBoard/Environment/HexEnvironmentSystem.cs
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// <summary>
-    /// 环境系统（最小可用版）：
-    /// - GetSpeedMult(Hex) → 加速/减速带影响“可达范围（加权寻路）”
-    /// - 预留 Hazards/边界接口，以后逐步接入
-    /// </summary>
-    public sealed class HexEnvironmentSystem : MonoBehaviour
+    public sealed class HexEnvironmentSystem : MonoBehaviour, IStickyMoveSource
     {
         [Header("Refs")]
-        public HexBoardAuthoringLite authoring; // 为了读 layout
-        [System.Serializable]
+        public HexBoardAuthoringLite authoring;
+
+        [Serializable]
         public struct HazardZone
         {
             public HazardType type;
             public int q, r;
-            [Min(0)] public int radius;     // hex 距离；0=只中心
-            public bool centerOnly;         // 勾选则只中心
+            [Min(0)] public int radius;
+            public bool centerOnly;
             public Hex Center => new Hex(q, r);
         }
 
         [Header("Hazards (optional)")]
         public List<HazardZone> hazards = new();
-        // 查询
+
         public bool HasHazard(Hex h, HazardKind kind)
         {
             if (hazards == null) return false;
             for (int i = 0; i < hazards.Count; i++)
             {
                 var z = hazards[i];
-                if (!z.type) continue;
-                if (z.type.kind != kind) continue;
+                if (!z.type || z.type.kind != kind) continue;
                 bool inRange = z.centerOnly ? h.Equals(z.Center) : (Hex.Distance(h, z.Center) <= z.radius);
                 if (inRange) return true;
             }
             return false;
         }
+
         public bool IsTrap(Hex h) => HasHazard(h, HazardKind.Trap);
         public bool IsPit(Hex h) => HasHazard(h, HazardKind.Pit);
 
@@ -51,8 +48,12 @@ namespace TGD.HexBoard
         {
             public int q;
             public int r;
-            [Min(0)] public int radius; // 以 Hex 距离
+            [Min(0)] public int radius;
             [Range(0.1f, 5f)] public float mult;
+
+            [Tooltip("进入该区时附着的持续回合数（>0时生效，仅用于 mult>1 的加速）")]
+            public int stickyTurnsOnEnter;
+
             public Hex Center => new Hex(q, r);
         }
 
@@ -65,11 +66,9 @@ namespace TGD.HexBoard
         }
 
         public static HexEnvironmentSystem FindInScene()
-        {
-            return FindFirstObjectByType<HexEnvironmentSystem>();
-        }
+            => FindFirstObjectByType<HexEnvironmentSystem>();
 
-        /// <summary> 读取某格的速度倍率（可叠加补丁，采用乘法叠加）。</summary>
+        /// 读某格的“区域速度倍率”（只影响站在区域内的实时速度；不含黏性）
         public float GetSpeedMult(Hex h)
         {
             float m = Mathf.Clamp(defaultSpeedMult, 0.1f, 5f);
@@ -85,18 +84,61 @@ namespace TGD.HexBoard
             return Mathf.Clamp(m, 0.1f, 5f);
         }
 
-        /// <summary>（预留）是否结构阻挡。第一步返回 false，继续用你现有占位/物理/边界判定。</summary>
         public bool IsStructBlocked(Hex h) => false;
-
-        /// <summary>（预留）是否致命格（坑/悬崖等）。第一步不启用。</summary>
         public bool IsLethalOnEnter(Hex h) => false;
 
-        // ========= Hazards（预留；后续步骤接入） =========
-        // 先放接口：以后把“燃烧/酸液”等放进来
+        // ========= 黏性移速接口实现 =========
+        // 规则：
+        // - Trap 命中：若 stickyDurationTurns>0，则返回其 stickyMoveMult / stickyDurationTurns（常用于“毒池”→黏性减速）
+        // - SpeedPatch 命中：当 mult>1 且 stickyTurnsOnEnter>0 时，返回 mult / stickyTurnsOnEnter（黏性加速）
+        // - 区域减速（mult<1）不附着（离开即恢复）
+        public bool TryGetSticky(Hex cell, out float multiplier, out int durationTurns)
+        {
+            // Trap（优先级高）
+            if (hazards != null)
+            {
+                for (int i = 0; i < hazards.Count; i++)
+                {
+                    var z = hazards[i];
+                    if (!z.type || z.type.kind != HazardKind.Trap) continue;
+                    bool inRange = z.centerOnly ? cell.Equals(z.Center) : (Hex.Distance(cell, z.Center) <= z.radius);
+                    if (!inRange) continue;
+
+                    if (z.type.stickyDurationTurns > 0 && z.type.stickyMoveMult > 0f && !Mathf.Approximately(z.type.stickyMoveMult, 1f))
+                    {
+                        multiplier = z.type.stickyMoveMult;
+                        durationTurns = z.type.stickyDurationTurns;
+                        return true;
+                    }
+                }
+            }
+
+            // SpeedPatch：仅对加速且配置了附着回合的情况返回
+            if (patches != null)
+            {
+                for (int i = 0; i < patches.Count; i++)
+                {
+                    var p = patches[i];
+                    if (Hex.Distance(cell, p.Center) > p.radius) continue;
+
+                    if (p.mult > 1.001f && p.stickyTurnsOnEnter > 0)
+                    {
+                        multiplier = p.mult;
+                        durationTurns = p.stickyTurnsOnEnter;
+                        return true;
+                    }
+                }
+            }
+
+            multiplier = 1f;
+            durationTurns = 0;
+            return false;
+        }
+
+        // 预留：把“燃烧/酸液”等按圈应用
         public void ApplyHazardCircle(Hex center, int radius, HazardType type, int durationSeconds)
         {
-            // 第一步不实现；留空即可
+            // TODO
         }
     }
 }
-

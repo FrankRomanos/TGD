@@ -82,8 +82,6 @@ namespace TGD.CombatV2
         [Min(0.001f)] public float minStepSeconds = 0.06f;  // 新增：每步最小时长，避免视觉闪烁
         public float y = 0.01f;
 
-
-
         [Header("Blocking")]
         public bool blockByUnits = true;
         public bool blockByPhysics = true;
@@ -104,6 +102,10 @@ namespace TGD.CombatV2
 
         bool _learnedHaste = false;  // 地形正向学习已发生？
         bool _learnedSlow = false;  // 地形负向学习已发生？
+        [Header("Sticky Slow (optional)")]
+        public MoveRateStatusRuntime status;        // 黏性修饰器运行时（可选）
+        public MonoBehaviour stickySource;          // 任意实现了 IStickySlowSource 的组件
+        IStickyMoveSource _sticky;
 
         //occ
         public HexOccupancyService occService;
@@ -201,14 +203,24 @@ namespace TGD.CombatV2
             int steps = Mathf.Max(1, (config != null ? Mathf.Clamp(config.fallbackSteps, 1, 9999) : 3));
             return (float)steps / timeSec; // 无 Stats 时用 fallback 估算
         }
+        float GetStickyMultiplierNow()
+        {
+            float m = 1f;
+            if (status != null)
+            {
+                foreach (var x in status.GetActiveMultipliers())
+                    m *= Mathf.Clamp(x, 0.1f, 5f);
+            }
+            return Mathf.Clamp(m, 0.1f, 5f);
+        }
 
         void Awake()
-        {
+        {           
             _cost = costProvider as IMoveCostService;
             _painter = new HexAreaPainter(tiler);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
-
+            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
         }
 
         void Start()
@@ -271,11 +283,13 @@ namespace TGD.CombatV2
                 int timeSec = Mathf.Max(1, Mathf.CeilToInt(config.timeCostSeconds));
                 int baseR = Mathf.Max(1, ctx.BaseMoveRate);
                 float buffMult = 1f + Mathf.Max(-0.99f, ctx.MoveRatePctAdd);
+                // 黏性倍率（已附着在身上的，如毒池/加速贴附），预览要体现“当下”
+                float stickyMult = GetStickyMultiplierNow();
                 int flat = ctx.MoveRateFlatAdd;
                 float startMult = (env != null) ? Mathf.Clamp(env.GetSpeedMult(start), 0.1f, 5f) : 1f;
 
                 // 预览只看“当下”：基础 +（基于基础的 buff 增减）+（起点环境增减）
-                int mr = StatsMathV2.EffectiveMoveRateFromBase(baseR, new[] { buffMult, startMult }, flat);
+                int mr = StatsMathV2.EffectiveMoveRateFromBase(baseR, new[] { buffMult, stickyMult, startMult }, flat);
                 steps = Mathf.Min(config.stepsCap, StatsMathV2.StepsAllowed(mr, timeSec));
 
                 if (debugLog) Debug.Log($"[ClickMove] ShowRange baseR={baseR} buffMult={buffMult:F2} startMult={startMult:F2} flat={flat} → mr={mr} steps={steps}", this);
@@ -450,6 +464,7 @@ namespace TGD.CombatV2
 
                 // ★ 与 MoveSimulator 保持一致：按“起点格 from”的环境倍率
                 float fromMult = Mathf.Clamp(EnvMult(from), 0.1f, 5f);
+                float stickyNow = GetStickyMultiplierNow();
                 float effMR = Mathf.Max(0.01f, baseMR) * fromMult;       // 本步有效移速（格/秒
                 float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
 
@@ -466,23 +481,14 @@ namespace TGD.CombatV2
 
 
                 _occ.TryMove(_actor, to);
-
-                // 地形“学习一次”：只对加速写回基础，减速不写回，避免被困
-                if (terrainLearnOnce && env != null && ctx != null)
+                // 进入 to 后，尝试贴附“黏性移速”（毒池/加速贴附）——本次行动预算不改，只影响后续行动/下一次 Aim
+                if (_sticky != null && status != null && _sticky.TryGetSticky(to, out var stickM, out var stickTurns))
                 {
-                    float multTo = Mathf.Clamp(env.GetSpeedMult(to), 0.1f, 5f);
-                    if (multTo > 1.001f && !_learnedHaste)
+                    if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                     {
-                        int baseR = Mathf.Max(1, ctx.BaseMoveRate);
-                        int add = TGD.CoreV2.StatsMathV2.EnvAddFromMultiplier(baseR, multTo);
-                        if (add > 0)
-                        {
-                            ctx.BaseMoveRate = Mathf.Max(1, baseR + add);
-                            _learnedHaste = true;
-                            Debug.Log($"[ClickMove] Terrain haste learned once: Base {baseR} -> {ctx.BaseMoveRate} (mult={multTo})");
-                        }
+                        status.ApplyStickyMultiplier(stickM, stickTurns); 
+                        if (debugLog) Debug.Log($"[ClickMove] Sticky applied (deferred): mult={stickM:F2}, turns={stickTurns}, at={to}", this);
                     }
-                    // 减速(multTo < 1)：仅执行期生效，不永久写回，避免“极慢地形把人困住”的情况
                 }
 
                 if (driver.Map != null)
@@ -517,7 +523,13 @@ namespace TGD.CombatV2
             }
             // 交互口径：若当前仍处于 Aim（由外部 Manager 控制），可选择性刷新
             if (_showing) ShowRange(); // 刷新可达
-      
+                                       // 黏性持续递减：按本次净耗时
+            if (status != null && spentSec > 0)
+            {
+                status.ConsumeSeconds(spentSec);
+            }
+
+
         }
 
         // 若没指定占位，临时造一个“单格”占位
