@@ -35,6 +35,9 @@ namespace TGD.CoreV2
                 else fallbackMoveRate = v;
             }
         }
+
+        public float MoveRatePctAdd => stats != null ? stats.MoveRatePctAdd : 0f;
+        public int MoveRateFlatAdd => stats != null ? stats.MoveRateFlatAdd : 0;
         //speed
         public int Speed => (stats != null) ? stats.Speed : 0;
         // ！！ 嬬楚 ！！ 

@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 
 namespace TGD.CoreV2
@@ -46,20 +47,36 @@ namespace TGD.CoreV2
 
         // —— 移速工具 ——
 
-        // 把倍数换成“加到 base 上的加法”，并且最终有效值≥1（只舍不入）
-        public static int EnvAddFromMultiplier(int plannedBaseMoveRate, float mult)
+        // ===== 移速统一口径（基于“基础移速”只做加减，不连乘）=====
+
+        /// <summary>
+        /// 把倍率 m(>0) 转成“基于基础移速 baseR 的增量”：floor(baseR * (m - 1))
+        /// 例如 baseR=5, m=2.0 → +5；m=0.2 → -4
+        /// </summary>
+        public static int EnvAddFromMultiplier(int baseR, float multiplier)
         {
-            int baseR = Mathf.Max(1, plannedBaseMoveRate);
-            float eff = baseR * Mathf.Clamp(mult, 0.1f, 5f);
-            int effInt = Mathf.Max(1, Mathf.FloorToInt(eff));
-            return effInt - baseR; // 可正可负（加速>0，减速<0）
+            int b = Mathf.Max(1, baseR);
+            if (multiplier <= 0f) return 0;
+            float add = b * (multiplier - 1f);
+            return Mathf.FloorToInt(add);
         }
 
-        // 把若干加法叠加到 base 上得到有效移速（≥1）
-        public static int MoveRateWithAdds(int baseMoveRate, int addSum)
-        {
-            return Mathf.Max(1, baseMoveRate + addSum);
-        }
+        /// <summary>
+        /// 以“基础移速 baseR”为参照，收集所有倍率（都相对基础），与平坦加成合并。
+        /// 注意：多个倍率的“增量”都基于同一个基础 b 计算，然后再一次性相加，避免连乘。
+        /// </summary>
 
+
+        public static int EffectiveMoveRateFromBase(int baseR, System.Collections.Generic.IEnumerable<float> pctMultipliers, int flatAdd)
+        {
+            int b = Mathf.Max(1, baseR);
+            int sum = flatAdd;
+            if (pctMultipliers != null)
+            {
+                foreach (var m in pctMultipliers)
+                    sum += EnvAddFromMultiplier(b, m);
+            }
+            return Mathf.Max(1, b + sum);
+        }
     }
 }

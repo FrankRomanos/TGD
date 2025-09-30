@@ -1,5 +1,7 @@
 // File: Assets/Scripts/TGD.UI/MoveHudListenerTMP.cs
+using System;
 using System.Collections;
+using TGD.HexBoard;
 using TMPro;
 using UnityEngine;
 
@@ -34,6 +36,7 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             HexMoveEvents.MoveRejected += OnRejected;
+            HexMoveEvents.TimeRefunded += OnRefunded;
             // 你愿意也可以显示其它事件：
             // TGD.HexBoard.HexMoveEvents.RangeShown += OnRangeShown;
             // TGD.HexBoard.HexMoveEvents.RangeHidden += _ => SetVisible(false);
@@ -42,7 +45,16 @@ namespace TGD.CombatV2
         void OnDisable()
         {
             HexMoveEvents.MoveRejected -= OnRejected;
+            HexMoveEvents.TimeRefunded -= OnRefunded;
             // HexMoveEvents.RangeShown  / RangeHidden 如上要么也退订
+        }
+
+        private void OnRefunded(Unit u, int sec)
+        {
+            if (!uiText || !root) return;
+            uiText.text = $"+{sec}s refunded";
+            if (_co != null) StopCoroutine(_co);
+            _co = StartCoroutine(ShowThenHide());
         }
 
         void OnRejected(TGD.HexBoard.Unit unit, MoveBlockReason reason, string msg)

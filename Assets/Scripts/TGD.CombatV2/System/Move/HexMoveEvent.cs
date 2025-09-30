@@ -35,7 +35,8 @@ namespace TGD.CombatV2
 
         // ★ 新增：没有更多时间（预算耗尽）
         public static event Action<Unit> NoMoreTime;
-
+        // 新增：每步视觉速度提示（解耦，Attack/Move 都能发）
+        public static event Action<Unit, float, float> StepSpeedHint;
         // 被拒绝
         public static event Action<Unit, MoveBlockReason, string> MoveRejected;
 
@@ -51,6 +52,7 @@ namespace TGD.CombatV2
 
         internal static void RaiseNoMoreTime(Unit u)
             => NoMoreTime?.Invoke(u);
+        internal static void RaiseStepSpeed(Unit u, float effMR, float baseMR) => StepSpeedHint?.Invoke(u, effMR, baseMR);
 
     }
 }

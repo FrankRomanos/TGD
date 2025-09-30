@@ -22,7 +22,8 @@ namespace TGD.HexBoard
             float baseMoveRate,           // 格/秒
             int budgetSeconds,            // 整秒
             System.Func<Hex, float> getEnvMult,
-            float refundThresholdSeconds = 0.8f)
+            float refundThresholdSeconds = 0.8f,
+            bool debug = false)
         {
             var res = new Result();
             if (path == null || path.Count == 0 || baseMoveRate <= 0f )
@@ -34,16 +35,16 @@ namespace TGD.HexBoard
             float budget = Mathf.Max(0f, budgetSeconds); // ★ 允许为 0
             float saved = 0f;
             int refunds = 0;
-
-            res.ReachedPath.Add(path[0]);
             float baseStepCost = 1f / Mathf.Max(0.01f, baseMoveRate);
 
             for (int i = 1; i < path.Count; i++)
             {
-                if (budget <= 0f) break; // ★ 预算为 0 时不会前进
+              
+                var from = path[i - 1];
                 var to = path[i];
-                float mult = Mathf.Clamp(getEnvMult != null ? getEnvMult(to) : 1f, 0.1f, 5f);
-                float actualCost = 1f / Mathf.Max(0.01f, baseMoveRate * mult);
+                // ★ 与执行期一致：按 from 的环境倍率结算该步成本
+                float multFrom = Mathf.Clamp(getEnvMult != null ? getEnvMult(from) : 1f, 0.1f, 5f);
+                float actualCost = 1f / Mathf.Max(0.01f, baseMoveRate * multFrom);
 
                 if (budget + 1e-6f < actualCost) break; // 预算不足一格
 
@@ -54,9 +55,10 @@ namespace TGD.HexBoard
                 saved += stepSaved;
                 while (saved >= refundThresholdSeconds)
                 {
-                    saved -= 1f;
+                    saved -= refundThresholdSeconds;
                     refunds += 1;
                     budget += 1f;
+                    if (debug) Debug.Log($"[MoveSim] refund+1 (threshold={refundThresholdSeconds:F2}) → refunds={refunds} savedLeft={saved:F3} budget={budget:F3}");
                 }
             }
 

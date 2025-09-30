@@ -1,6 +1,7 @@
+using System.Buffers.Text;
 using System.Collections.Generic;
-using UnityEngine;
 using TGD.HexBoard;
+using UnityEngine;
 
 namespace TGD.CombatV2
 {
@@ -35,12 +36,14 @@ namespace TGD.CombatV2
         {
             HexMoveEvents.MoveStarted += OnMoveStarted;
             HexMoveEvents.MoveFinished += OnMoveFinished;
+            HexMoveEvents.StepSpeedHint += OnStepSpeedHint;
         }
 
         void OnDisable()
         {
             HexMoveEvents.MoveStarted -= OnMoveStarted;
             HexMoveEvents.MoveFinished -= OnMoveFinished;
+            HexMoveEvents.StepSpeedHint -= OnStepSpeedHint;
             ResetSpeed();
         }
 
@@ -53,6 +56,8 @@ namespace TGD.CombatV2
         void OnMoveStarted(Unit u, List<Hex> path)
         {
             if (!IsThisUnit(u) || mover == null || mover.authoring == null || animator == null) return;
+            // 启动时先恢复默认=1，随后每步由 StepSpeedHint 驱动微调
+            ResetSpeed();
             if (path == null || path.Count < 2) { ResetSpeed(); return; }
 
             var L = mover.authoring.Layout;
@@ -88,6 +93,16 @@ namespace TGD.CombatV2
             animator.speed = 1f;
             if (!string.IsNullOrEmpty(animatorSpeedParam))
                 animator.SetFloat(animatorSpeedParam, 1f);
+        }
+        void OnStepSpeedHint(Unit u, float effMR, float baseMR)
+        {
+            if (!IsThisUnit(u) || animator == null) return;
+            // 以 MoveRate 比值驱动动画速度（和世界位移解耦）
+            float ratio = (baseMR <= 0f) ? 1f : Mathf.Max(0.01f, effMR / baseMR);
+            float sp = Mathf.Clamp(ratio, minAnimatorSpeed, maxAnimatorSpeed);
+            animator.speed = sp;
+            if (!string.IsNullOrEmpty(animatorSpeedParam))
+                animator.SetFloat(animatorSpeedParam, sp);
         }
     }
 }
