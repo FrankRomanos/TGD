@@ -17,3 +17,5 @@ MonoBehaviour:
   vfxPrefab: {fileID: 0}
   tickTimes: -1
   maxStacks: -1
+  stickyMoveMult: 2
+  stickyDurationTurns: 2
