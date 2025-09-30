@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Attack10
   m_EditorClassIdentifier: 
   baseTimeSeconds: 1
+  timeCostSeconds: 1
   refundThresholdSeconds: 0.8
   baseEnergyCost: 10
   applySameTurnPenalty: 1
