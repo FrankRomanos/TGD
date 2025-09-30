@@ -14,7 +14,6 @@ namespace TGD.CombatV2
 
         public void OnEnterAim()
         {
-            EnsureTurnTimeInited(); // ★ 新增：保证有时间槽
             _hover = null;
             _painter.Clear();
             AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
@@ -52,29 +51,6 @@ namespace TGD.CombatV2
         public MonoBehaviour costProvider;     // 赋 AttackCostServiceV2Adapter
         IAttackCostService _cost;
 
-        // === Fuzzy 移动所需 ===
-        [Header("Fuzzy Move (when no hit)")]
-        public MoveActionConfig moveConfig;           // 拖 AccurateMove 用的同一份 SO（每秒10能量）
-        public MonoBehaviour moveCostProvider;        // 拖 AccurateMove 的 MoveCostServiceV2Adapter
-        IMoveCostService _moveCost;
-
-        // === 回合时间（与 AccurateMove 一样的本地槽即可）===
-        [Header("Turn Time (TEMP no-TM)")]
-        public bool simulateTurnTime = true;
-        public int baseTurnSeconds = 6;
-        [SerializeField] int _turnSecondsLeft = -1;
-        int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
-        void EnsureTurnTimeInited()
-        {
-            if (!simulateTurnTime) return;
-            if (_turnSecondsLeft < 0)
-            {
-                _turnSecondsLeft = MaxTurnSeconds;
-                Debug.Log($"[Attack/Fuzzy] Init TurnTime = {_turnSecondsLeft}s (base={baseTurnSeconds} + speed={(ctx ? ctx.Speed : 0)})", this);
-            }
-        }
-
-
         [Header("Aim & Picking")]
         public Camera pickCamera;
         public LayerMask pickMask = ~0;
@@ -101,7 +77,6 @@ namespace TGD.CombatV2
             _painter = new HexAreaPainter(tiler);
             _cost = costProvider as IAttackCostService;
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
-            _moveCost = moveCostProvider as IMoveCostService;  // ★ 新增
         }
 
         void Start()
@@ -185,56 +160,6 @@ namespace TGD.CombatV2
         {
             if (_moving) yield break;
             _moving = true;
-            // ====== Ground (空格子) 直达分支 ======
-            bool targetPit = (env != null && env.IsPit(target));
-            bool canStandOnTarget = _occ != null && _occ.CanPlace(_actor, target, _actor.Facing, ignore: null);
-
-            // “空格子且可落位且不是坑” → 直接做“模糊移动到目标格”
-            // （不走 AttackPlanner 的“目标落脚环”逻辑）
-            if (!targetPit && canStandOnTarget)
-            {
-                // 用 Runner 自带的 BFS 构造路径：起点→目标格
-                var start = driver.UnitRef.Position;
-                var raw = FuzzyMoveRunner.BuildShortestPath(
-                    authoring.Layout, _occ, _actor, start, target,
-                    h => env != null && env.IsPit(h));
-
-                if (raw == null || raw.Count < 2)
-                {
-                    AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NoPath, "Path blocked.");
-                    _moving = false; yield break;
-                }
-
-                EnsureTurnTimeInited();
-                var args = new FuzzyMoveRunner.Args
-                {
-                    layout = authoring.Layout,
-                    env = env,
-                    driver = driver,
-                    occ = _occ,
-                    actor = _actor,
-                    ctx = ctx,
-
-                    moveConfig = moveConfig,
-                    moveCost = _moveCost,
-
-                    rawPath = raw,
-                    stepSeconds = stepSeconds,
-                    y = y,
-
-                    simulateTurnTime = simulateTurnTime,
-                    getTimeLeft = () => _turnSecondsLeft,
-                    setTimeLeft = v => _turnSecondsLeft = v,
-                    refundThresholdSeconds = moveConfig ? moveConfig.refundThresholdSeconds : 0.8f,
-
-                    debug = true
-                };
-
-                yield return FuzzyMoveRunner.Run(args);
-                _moving = false;
-                yield break;
-            }
-
 
             // —— 规划：缠绕=移动预算 0 —— //
             float baseMR = (ctx != null) ? Mathf.Max(0.01f, ctx.MoveRate) : 3f;
@@ -342,35 +267,8 @@ namespace TGD.CombatV2
             }
             else
             {
-                EnsureTurnTimeInited();
-
-                var args = new FuzzyMoveRunner.Args
-                {
-                    layout = authoring.Layout,
-                    env = env,
-                    driver = driver,
-                    occ = _occ,
-                    actor = _actor,
-                    ctx = ctx,
-
-                    moveConfig = moveConfig,
-                    moveCost = _moveCost,
-
-                    rawPath = plan.rawShortestPath,
-                    stepSeconds = stepSeconds,
-                    y = y,
-
-                    simulateTurnTime = simulateTurnTime,
-                    getTimeLeft = () => _turnSecondsLeft,
-                    setTimeLeft = v => _turnSecondsLeft = v,
-                    refundThresholdSeconds = moveConfig ? moveConfig.refundThresholdSeconds : 0.8f,
-
-                    debug = true
-                };
-
-                yield return FuzzyMoveRunner.Run(args);
-                _moving = false;
-                yield break;
+                AttackEventsV2.RaiseMiss(driver.UnitRef, "Out of reach.");
+                Debug.Log($"[AttackV2] Miss. stopped early after {plan.usedSeconds:0.##}s");
             }
 
             _moving = false;
