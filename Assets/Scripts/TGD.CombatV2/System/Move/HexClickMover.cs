@@ -111,6 +111,7 @@ namespace TGD.CombatV2
         const float ENV_MAX = 5f;
         const float MULT_MIN = 0.01f;
         const float MULT_MAX = 100f;
+        IStickyMoveSource _sticky;
 
         struct MoveRateSnapshot
         {
