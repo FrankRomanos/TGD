@@ -315,21 +315,43 @@ namespace TGD.CombatV2
             }
 
             var rates = BuildMoveRates(startHex);
-            int steps;
-            if (config != null)
+
+            // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
+            const float MR_MIN = 1f, MR_MAX = 12f;
+            const float ENV_MIN = 0.1f, ENV_MAX = 5f;
+
+            // 起点格是否会施加 sticky（turns>0 且倍率!=1）
+            bool startGivesSticky = false;
+            if (_sticky != null && _sticky.TryGetSticky(startHex, out var sMul, out var sTurns, out var sTag))
+                startGivesSticky = (sTurns > 0) && !Mathf.Approximately(sMul, 1f);
+
+
+            // 基线 MR（不含起点地形）：base * buff * sticky 之后再 + flat，并做上下限
+            float mrNoEnv = Mathf.Clamp(rates.baseRate * rates.buffMult * rates.stickyMult, MR_MIN, MR_MAX);
+            mrNoEnv = Mathf.Clamp(mrNoEnv + rates.flatAfter, MR_MIN, MR_MAX);
+
+            // 只有当“起点格不施加 sticky”时，才把起点地形乘进预览
+            float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
+
+            // 最终用于预览的 MR
+            float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
+
+            // 计算步数
+            int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int cap = config ? config.stepsCap : 12;
+            int steps = Mathf.Min(cap, StatsMathV2.StepsAllowedF32(mrPreview, timeSec));
+
+            if (debugLog)
             {
-                int timeSec = Mathf.Max(1, Mathf.CeilToInt(config.timeCostSeconds));
-                steps = Mathf.Min(config.stepsCap, StatsMathV2.StepsAllowedF32(rates.mrClick, timeSec));
-                if (debugLog)
-                    Debug.Log($"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} sticky={rates.stickyMult:F2} start={rates.startEnvMult:F2} flatAfter={rates.flatAfter} -> MR_click={rates.mrClick:F2} steps={steps}", this);
+                Debug.Log(
+                    $"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
+                    $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} " +
+                    $"startRaw={rates.startEnvMult:F2} startIsSticky={startGivesSticky} " +
+                    $"=> MR_noEnv={mrNoEnv:F2} MR_preview={mrPreview:F2} steps={steps}",
+                    this
+                );
             }
-            else
-            {
-                int timeSec = 1;
-                steps = Mathf.Min(12, StatsMathV2.StepsAllowedF32(rates.mrClick, timeSec));
-                if (debugLog)
-                    Debug.Log($"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} sticky={rates.stickyMult:F2} start={rates.startEnvMult:F2} flatAfter={rates.flatAfter} -> MR_click={rates.mrClick:F2} steps={steps} (default config)", this);
-            }
+
 
             var physicsBlocker =
                 (blockByPhysics && obstacleMask != 0)
