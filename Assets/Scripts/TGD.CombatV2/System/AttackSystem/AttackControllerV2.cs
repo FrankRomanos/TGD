@@ -2,38 +2,20 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
-using TGD.CoreV2; // 已有
 
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : MonoBehaviour,IActionToolV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2
     {
+        const float MR_MIN = 1f;
+        const float MR_MAX = 12f;
+        const float ENV_MIN = 0.1f;
+        const float ENV_MAX = 5f;
+
         public string Id => "Attack";
-
-        public void OnEnterAim()
-        {
-            _hover = null;
-            _painter.Clear();
-            AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
-        }
-
-        public void OnExitAim()
-        {
-            _painter.Clear();
-            AttackEventsV2.RaiseAimHidden();
-        }
-
-        public void OnHover(Hex hex)
-        {
-            HighlightLandingRing(hex); // 你原来的落脚环预览
-        }
-
-        public IEnumerator OnConfirm(Hex hex)
-        {
-            yield return PlanAndRunMeleeTo(hex); // 直接沿用你现有的协程
-        }
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -45,248 +27,801 @@ namespace TGD.CombatV2
 
         [Header("Context (optional)")]
         public UnitRuntimeContext ctx;
+        public MoveRateStatusRuntime status;
+        public MonoBehaviour stickySource;
 
         [Header("Config")]
-        public AttackActionConfigV2 config;
-        public MonoBehaviour costProvider;     // 赋 AttackCostServiceV2Adapter
-        IAttackCostService _cost;
+        public AttackActionConfigV2 attackConfig;
+        public MoveActionConfig moveConfig;
+        public MonoBehaviour enemyProvider;
 
-        [Header("Aim & Picking")]
-        public Camera pickCamera;
-        public LayerMask pickMask = ~0;
-        public float rayMaxDistance = 2000f;
-        public float pickPlaneY = 0.01f;
+        [Header("Costs & Turn")]
+        public bool simulateTurnTime = true;
+        public int baseTurnSeconds = 6;
 
-        [Header("Visuals")]
-        public Color landingRingColor = new(1f, 0.9f, 0.2f, 0.85f);
+        [Header("Animation")]
         public float stepSeconds = 0.12f;
+        public float minStepSeconds = 0.06f;
         public float y = 0.01f;
 
-        // runtime
+        [Header("Visuals")]
+        public Color previewColor = new(1f, 0.9f, 0.2f, 0.85f);
+        public Color invalidColor = new(1f, 0.3f, 0.3f, 0.7f);
+
+        [Header("Debug")]
+        public bool debugLog = true;
+
         HexAreaPainter _painter;
         HexOccupancy _occ;
         IGridActor _actor;
-        bool _aiming = false;
-        bool _moving = false;
+        IStickyMoveSource _sticky;
+        IEnemyLocator _enemyLocator;
+
+        bool _aiming;
+        bool _moving;
+        PreviewData _currentPreview;
         Hex? _hover;
 
-        bool _guardPushed = false;
+        float _turnSecondsLeft = -1f;
+        int _attacksThisTurn;
+
+        float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
+
+        struct MoveRatesSnapshot
+        {
+            public int baseRate;
+            public float buffMult;
+            public float stickyMult;
+            public int flatAfter;
+            public float startEnvMult;
+            public float mrNoEnv;
+            public float mrClick;
+            public bool startIsSticky;
+        }
+
+        sealed class PreviewData
+        {
+            public bool valid;
+            public bool targetIsEnemy;
+            public Hex targetHex;
+            public Hex landingHex;
+            public List<Hex> path;
+            public int steps;
+            public int moveSecsPred;
+            public int moveSecsCharge;
+            public int attackSecsCharge;
+            public int moveEnergyCost;
+            public int attackEnergyCost;
+            public float mrClick;
+            public float mrNoEnv;
+            public MoveRatesSnapshot rates;
+            public AttackRejectReasonV2 rejectReason;
+            public string rejectMessage;
+        }
 
         void Awake()
         {
             _painter = new HexAreaPainter(tiler);
-            _cost = costProvider as IAttackCostService;
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
+            if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
+            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+            _enemyLocator = enemyProvider as IEnemyLocator;
+            if (_enemyLocator == null)
+                _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
         }
 
         void Start()
         {
             tiler?.EnsureBuilt();
             driver?.EnsureInit();
-            if (authoring?.Layout == null || driver == null || !driver.IsReady) { enabled = false; return; }
+
+            if (authoring?.Layout == null || driver == null || !driver.IsReady)
+            {
+                enabled = false;
+                return;
+            }
 
             _occ = occService ? occService.Get() : new HexOccupancy(authoring.Layout);
             var fp = footprintForActor ? footprintForActor : CreateSingleFallback();
             _actor = new UnitGridAdapter(driver.UnitRef, fp);
+            if (!_occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing))
+                _occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing);
         }
 
-        void OnDisable() 
-        { 
-            _painter?.Clear(); 
-
-        }
-
-        void Update()
+        void OnDisable()
         {
-            if (authoring == null || driver == null || !driver.IsReady) return;
-
-            if (!_aiming || _moving) return;
-
-            // hover 目标格
-            var h = PickHexUnderMouse();
-            if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
-            {
-                _hover = h;
-                HighlightLandingRing(h.Value);  // ★ 内部已处理“缠绕只显示当前格是否可打”
-            }
-
-            // 左键执行
-            if (Input.GetMouseButtonDown(0) && _hover.HasValue)
-            {
-                StartCoroutine(PlanAndRunMeleeTo(_hover.Value));
-                _aiming = false;
-                _painter.Clear();
-                AttackEventsV2.RaiseAimHidden();
-            }
-
-            // 右键/ESC 取消
-            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
-            {
-                _aiming = false;
-                _painter.Clear();
-                _hover = null;
-                AttackEventsV2.RaiseAimHidden();
-            }
+            _painter?.Clear();
+            _currentPreview = null;
+            _hover = null;
         }
 
-        // —— 预览：只高亮“合法落脚点”；缠绕时仅允许当前格作为落脚 —— //
-        void HighlightLandingRing(Hex target)
+        void EnsureTurnTimeInited()
         {
-            var L = authoring.Layout;
-            int range = config ? Mathf.Max(1, config.meleeRange) : 1;
-            var ring = new List<Hex>();
+            if (!simulateTurnTime) return;
+            if (_turnSecondsLeft >= 0f) return;
+            _turnSecondsLeft = MaxTurnSeconds;
+            if (debugLog)
+                Debug.Log($"[Attack] Init TurnTime = {_turnSecondsLeft}s (base={baseTurnSeconds} + speed={(ctx ? ctx.Speed : 0)})", this);
+        }
 
-            var start = _actor != null ? _actor.Anchor : driver.UnitRef.Position;   // ★ 当前格
-            bool entangled = (ctx != null && ctx.Entangled);                        // ★
+        bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _actor != null;
 
-            foreach (var h in Hex.Ring(target, range))
+        public void OnEnterAim()
+        {
+            EnsureTurnTimeInited();
+            if (!IsReady)
             {
-                if (!L.Contains(h)) continue;
-                if (env != null && env.IsPit(h)) continue;
-
-                // 缠绕：仅允许当前格被高亮
-                if (entangled && !h.Equals(start)) continue;                         // ★
-
-                if (!_occ.CanPlace(_actor, h, _actor.Facing, ignore: null)) continue;
-                ring.Add(h);
+                AttackEventsV2.RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                return;
             }
 
+            _aiming = true;
+            _hover = null;
+            _currentPreview = null;
             _painter.Clear();
-            if (ring.Count > 0) _painter.Paint(ring, landingRingColor);
-            AttackEventsV2.RaiseAimShown(driver.UnitRef, ring);
+            AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
         }
 
-        IEnumerator PlanAndRunMeleeTo(Hex target)
+        public void OnExitAim()
         {
-            if (_moving) yield break;
-            _moving = true;
+            _aiming = false;
+            _hover = null;
+            _currentPreview = null;
+            _painter.Clear();
+            AttackEventsV2.RaiseAimHidden();
+        }
 
-            // —— 规划：缠绕=移动预算 0 —— //
-            float baseMR = (ctx != null) ? Mathf.Max(0.01f, ctx.MoveRate) : 3f;
-            bool entangled = (ctx != null && ctx.Entangled);                       // ★
-            int baseBudget = Mathf.Max(1, config ? config.baseTimeSeconds : 2);
-            int budget = entangled ? 0 : baseBudget;                               // ★ 缠绕时禁止移动
+        public void OnHover(Hex hex)
+        {
+            if (!_aiming || _moving) return;
+            if (!IsReady) return;
+            if (_hover.HasValue && _hover.Value.Equals(hex) && _currentPreview != null) return;
+            _hover = hex;
+            _currentPreview = BuildPreview(hex, false);
+            RenderPreview(_currentPreview);
+        }
 
-            var plan = AttackPlannerV2.PlanMeleeApproach(
-                authoring.Layout, _occ, _actor,
-                driver.UnitRef.Position, target,
-                config ? config.meleeRange : 1,
-                isPit: (h) => env != null && env.IsPit(h),
-                budgetSeconds: budget,                                             // ★ 允许 0
-                baseMoveRate: baseMR,
-                getEnvMult: (h) => env != null ? env.GetSpeedMult(h) : 1f,
-                refundThresholdSeconds: config ? config.refundThresholdSeconds : 0.8f
-            );
+        public IEnumerator OnConfirm(Hex hex)
+        {
+            EnsureTurnTimeInited();
+            if (!IsReady)
+            {
+                AttackEventsV2.RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                yield break;
+            }
+            if (_moving)
+            {
+                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.Busy, "Attack in progress.");
+                yield break;
+            }
 
-            // —— 缠绕保险：若规划仍需要移动，则拒绝 —— //
-            bool needsMove = plan.truncatedPath != null && plan.truncatedPath.Count > 1; // ★
-            if (entangled && needsMove)                                                  // ★
+            var preview = (_currentPreview != null && _currentPreview.valid && _currentPreview.targetHex.Equals(hex))
+                ? ClonePreview(_currentPreview)
+                : BuildPreview(hex, true);
+
+            if (preview == null || !preview.valid)
+            {
+                AttackEventsV2.RaiseRejected(driver.UnitRef,
+                    preview != null ? preview.rejectReason : AttackRejectReasonV2.NoPath,
+                    preview != null ? preview.rejectMessage : "Invalid target.");
+                yield break;
+            }
+
+            if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
                 AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.");
-                _moving = false;
                 yield break;
             }
 
-            if (plan.truncatedPath == null || plan.truncatedPath.Count < 1)
+            preview.moveEnergyCost = Mathf.Max(0, preview.moveSecsCharge) * MoveEnergyPerSecond();
+            if (preview.targetIsEnemy)
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NoPath, "Can't get close.");
-                _moving = false;
+                preview.attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0;
+            }
+            else
+            {
+                preview.attackEnergyCost = 0;
+                preview.attackSecsCharge = 0;
+            }
+
+            bool attackPlanned = preview.targetIsEnemy;
+            int moveSecsCharge = Mathf.Max(0, preview.moveSecsCharge);
+            int attackSecsCharge = preview.targetIsEnemy ? Mathf.Max(0, preview.attackSecsCharge) : 0;
+            int moveEnergyCost = Mathf.Max(0, preview.moveEnergyCost);
+            int attackEnergyCost = preview.targetIsEnemy ? Mathf.Max(0, preview.attackEnergyCost) : 0;
+
+            if (simulateTurnTime)
+            {
+                if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
+                {
+                    AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    yield break;
+                }
+                if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
+                {
+                    attackPlanned = false;
+                    attackSecsCharge = 0;
+                    attackEnergyCost = 0;
+                    if (debugLog)
+                        Debug.Log("[Attack] Not enough time for attack. Downgrade to move-only.", this);
+                }
+            }
+
+            var stats = ctx != null ? ctx.stats : null;
+            int energyAvailable = stats != null ? stats.Energy : int.MaxValue;
+            if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
+            {
+                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
+                yield break;
+            }
+            energyAvailable -= moveEnergyCost;
+            if (attackPlanned && attackEnergyCost > 0 && energyAvailable < attackEnergyCost)
+            {
+                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
                 yield break;
             }
 
-            // —— 费用：资源不足/冷却中直接拒绝 —— 
-            if (_cost != null && config != null)
+            SpendEnergy(moveEnergyCost);
+            int attackEnergySpent = 0;
+            if (attackPlanned && attackEnergyCost > 0)
             {
-                if (_cost.IsOnCooldown(driver.UnitRef, config))
-                { AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.OnCooldown, "Attack on cooldown."); _moving = false; yield break; }
-
-                if (!_cost.HasEnough(driver.UnitRef, config))
-                { AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy."); _moving = false; yield break; }
-
-                _cost.Pay(driver.UnitRef, config);
+                SpendEnergy(attackEnergyCost);
+                attackEnergySpent = attackEnergyCost;
+                _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
             }
 
-            // —— 起手转向（即使不移动也先朝向目标） —— 
-            if (driver.unitView != null)
+            if (simulateTurnTime)
             {
-                var fromW = authoring.Layout.World(plan.truncatedPath[0], y);
-                var tgtW = authoring.Layout.World(target, y);
-                float keep = config ? config.keepDeg : 45f;
-                float turn = config ? config.turnDeg : 135f;
-                float speed = config ? config.turnSpeedDegPerSec : 720f;
+                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
+                if (attackPlanned)
+                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
+            }
 
-                var (nf, yaw) = HexBoard.HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, tgtW, keep, turn);
-                yield return HexBoard.HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+            if (debugLog)
+            {
+                Debug.Log($"[Attack] PayMove secs={moveSecsCharge} energy={moveEnergyCost}; " +
+                          $"PayAttack secs={attackSecsCharge} energy={attackEnergyCost}", this);
+            }
+
+            _currentPreview = null;
+            _hover = null;
+            _painter.Clear();
+            AttackEventsV2.RaiseAimHidden();
+
+            _moving = true;
+            yield return RunAttack(preview, attackPlanned, moveSecsCharge, moveEnergyCost, attackSecsCharge, attackEnergySpent);
+            _moving = false;
+        }
+
+        void RenderPreview(PreviewData preview)
+        {
+            _painter.Clear();
+            if (preview == null)
+            {
+                AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
+                return;
+            }
+
+            if (!preview.valid || preview.path == null)
+            {
+                if (_hover.HasValue)
+                    _painter.Paint(new[] { _hover.Value }, invalidColor);
+                AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
+                if (preview.rejectReason != AttackRejectReasonV2.NotReady)
+                    AttackEventsV2.RaiseRejected(driver.UnitRef, preview.rejectReason, preview.rejectMessage);
+                return;
+            }
+
+            _painter.Paint(preview.path, previewColor);
+            AttackEventsV2.RaiseAimShown(driver.UnitRef, preview.path);
+        }
+
+        PreviewData BuildPreview(Hex target, bool logInvalid)
+        {
+            if (!IsReady)
+            {
+                return new PreviewData
+                {
+                    valid = false,
+                    rejectReason = AttackRejectReasonV2.NotReady,
+                    rejectMessage = "Not ready."
+                };
+            }
+
+            var layout = authoring.Layout;
+            var unit = driver.UnitRef;
+            var start = unit.Position;
+
+            var rates = BuildMoveRates(start);
+            var preview = new PreviewData
+            {
+                targetHex = target,
+                rates = rates,
+                mrClick = rates.mrClick,
+                mrNoEnv = rates.mrNoEnv,
+                attackSecsCharge = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0,
+                attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0
+            };
+
+            if (!layout.Contains(target))
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.NoPath;
+                preview.rejectMessage = "Target out of board.";
+                return preview;
+            }
+            if (env != null && env.IsPit(target))
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.NoPath;
+                preview.rejectMessage = "Target is pit.";
+                return preview;
+            }
+
+            bool isEnemy = IsEnemyHex(target);
+            preview.targetIsEnemy = isEnemy;
+
+            List<Hex> path = null;
+            Hex landing = target;
+
+            if (isEnemy)
+            {
+                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                if (!TryFindMeleePath(start, target, range, out landing, out path))
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "No landing.";
+                    return preview;
+                }
+            }
+            else
+            {
+                if (_occ != null && _occ.IsBlocked(target, _actor))
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "Cell occupied.";
+                    return preview;
+                }
+
+                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target));
+                if (path == null)
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "No path.";
+                    return preview;
+                }
+            }
+
+            preview.landingHex = landing;
+            preview.path = path;
+            preview.steps = Mathf.Max(0, (path?.Count ?? 1) - 1);
+
+            float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
+            int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
+            int chargeSecs = predSecs;
+            if (isEnemy)
+            {
+                float charge = Mathf.Max(0f, predSecs - 0.2f);
+                chargeSecs = Mathf.CeilToInt(charge);
+            }
+
+            preview.moveSecsPred = predSecs;
+            preview.moveSecsCharge = chargeSecs;
+            preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
+
+            preview.valid = true;
+
+            if (debugLog)
+            {
+                Debug.Log(
+                    $"[Attack/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
+                    $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} startRaw={rates.startEnvMult:F2} " +
+                    $"startIsSticky={rates.startIsSticky} => MR_click={rates.mrClick:F2} steps={preview.steps} " +
+                    $"predSecs={preview.moveSecsPred} chargeSecs={preview.moveSecsCharge}",
+                    this);
+            }
+
+            return preview;
+        }
+
+        PreviewData ClonePreview(PreviewData src)
+        {
+            if (src == null) return null;
+            return new PreviewData
+            {
+                valid = src.valid,
+                targetIsEnemy = src.targetIsEnemy,
+                targetHex = src.targetHex,
+                landingHex = src.landingHex,
+                path = src.path != null ? new List<Hex>(src.path) : null,
+                steps = src.steps,
+                moveSecsPred = src.moveSecsPred,
+                moveSecsCharge = src.moveSecsCharge,
+                attackSecsCharge = src.attackSecsCharge,
+                moveEnergyCost = src.moveEnergyCost,
+                attackEnergyCost = src.attackEnergyCost,
+                mrClick = src.mrClick,
+                mrNoEnv = src.mrNoEnv,
+                rates = src.rates,
+                rejectReason = src.rejectReason,
+                rejectMessage = src.rejectMessage
+            };
+        }
+
+        IEnumerator RunAttack(
+            PreviewData preview,
+            bool attackPlanned,
+            int moveSecsCharge,
+            int moveEnergyPaid,
+            int attackSecsCharge,
+            int attackEnergyPaid)
+        {
+            if (preview == null || preview.path == null || preview.path.Count == 0)
+                yield break;
+
+            var layout = authoring.Layout;
+            var unit = driver.UnitRef;
+            Transform view = driver.unitView != null ? driver.unitView : transform;
+
+            var path = preview.path;
+            var start = path[0];
+
+            if (view != null && path.Count >= 2)
+            {
+                var fromW = layout.World(path[0], y);
+                var toW = layout.World(path[^1], y);
+                float keep = attackConfig ? attackConfig.keepDeg : 45f;
+                float turn = attackConfig ? attackConfig.turnDeg : 135f;
+                float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
                 driver.UnitRef.Facing = nf;
                 _actor.Facing = nf;
             }
 
-            // —— 逐格推进（不穿人、不踩 pit）——
-            AttackEventsV2.RaiseMoveStarted(driver.UnitRef, plan.truncatedPath);
+            float startEnv = preview.rates.startEnvMult;
+            float mrNoEnv = preview.mrNoEnv;
+            float refundThreshold = attackConfig ? Mathf.Max(0.01f, attackConfig.refundThresholdSeconds) : 0.8f;
 
-            var L = authoring.Layout;
-            var unit = driver.UnitRef;
-            var path = plan.truncatedPath;
+            float EnvMult(Hex h) => env != null ? env.GetSpeedMult(h) : 1f;
 
-            for (int i = 1; i < path.Count; i++)
+            var sim = MoveSimulator.Run(
+                path,
+                mrNoEnv,
+                startEnv,
+                moveSecsCharge,
+                EnvMult,
+                refundThreshold,
+                debugLog);
+
+            var reached = sim.ReachedPath ?? new List<Hex>();
+            int refundedSeconds = Mathf.Max(0, sim.RefundedSeconds);
+            float usedSeconds = Mathf.Max(0f, sim.UsedSeconds);
+
+            if (reached.Count <= 1)
             {
-                var from = path[i - 1];
-                var to = path[i];
+                RefundMoveEnergy(moveEnergyPaid);
+                if (simulateTurnTime)
+                {
+                    float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                    if (refundMove > 0f)
+                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                }
+                if (moveSecsCharge > 0)
+                    HexMoveEvents.RaiseTimeRefunded(unit, moveSecsCharge);
 
-                if (_occ.IsBlocked(to, _actor)) break;
-                if (env != null && env.IsPit(to)) break;
+                HexMoveEvents.RaiseMoveFinished(unit, unit.Position);
 
-                AttackEventsV2.RaiseMoveStep(unit, from, to, i, path.Count - 1);
+                AttackEventsV2.RaiseMoveFinished(unit, unit.Position);
 
-                var fromW = L.World(from, y);
-                var toW = L.World(to, y);
+                if (attackPlanned)
+                {
+                    AttackEventsV2.RaiseHit(unit, preview.targetHex);
+                }
+                else if (attackEnergyPaid > 0)
+                {
+                    RefundAttackEnergy(attackEnergyPaid);
+                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                }
+
+                yield break;
+            }
+
+            AttackEventsV2.RaiseMoveStarted(unit, reached);
+            HexMoveEvents.RaiseMoveStarted(unit, reached);
+
+            bool truncated = reached.Count < path.Count;
+            bool stoppedByExternal = false;
+            bool attackRolledBack = false;
+
+            for (int i = 1; i < reached.Count; i++)
+            {
+                if (ctx != null && ctx.Entangled)
+                {
+                    stoppedByExternal = true;
+                    break;
+                }
+
+                var from = reached[i - 1];
+                var to = reached[i];
+
+                if (_occ.IsBlocked(to, _actor))
+                {
+                    stoppedByExternal = true;
+                    break;
+                }
+                if (env != null && env.IsPit(to))
+                {
+                    stoppedByExternal = true;
+                    break;
+                }
+
+                AttackEventsV2.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+                HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+
+                float fromMult = Mathf.Clamp(EnvMult(from), ENV_MIN, ENV_MAX);
+                float effMR = Mathf.Clamp(mrNoEnv * fromMult, MR_MIN, MR_MAX);
+                float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
+
+                HexMoveEvents.RaiseStepSpeed(unit, effMR, mrNoEnv);
+
+                if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
+                {
+                    if (debugLog)
+                        Debug.Log($"[Attack] rollback: effMR={effMR:F2} < MR_click={preview.mrClick:F2} at step i={i}", this);
+                    attackRolledBack = true;
+                    RefundAttackEnergy(attackEnergyPaid);
+                    if (simulateTurnTime)
+                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                    AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
+                }
+
+                var fromW = layout.World(from, y);
+                var toW = layout.World(to, y);
 
                 float t = 0f;
                 while (t < 1f)
                 {
-                    t += Time.deltaTime / Mathf.Max(0.3f, stepSeconds);
-                    if (driver.unitView != null)
-                        driver.unitView.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+                    t += Time.deltaTime / stepDuration;
+                    if (view != null)
+                        view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
                     yield return null;
                 }
 
                 _occ.TryMove(_actor, to);
                 if (driver.Map != null)
-                { if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to); }
+                {
+                    if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
+                }
                 unit.Position = to;
                 driver.SyncView();
+
+                if (_sticky != null && status != null && _sticky.TryGetSticky(to, out var mult, out var turns, out var tag))
+                {
+                    if (turns > 0 && !Mathf.Approximately(mult, 1f))
+                    {
+                        status.ApplyOrRefreshExclusive(tag, mult, turns);
+                        if (debugLog)
+                            Debug.Log($"[Sticky] tag={tag} mult={mult:F2} turns={turns} (applied/refreshed) at={to}", this);
+                    }
+                }
             }
 
-            AttackEventsV2.RaiseMoveFinished(driver.UnitRef, driver.UnitRef.Position);
+            AttackEventsV2.RaiseMoveFinished(unit, unit.Position);
+            HexMoveEvents.RaiseMoveFinished(unit, unit.Position);
 
-            // —— 命中/未命中占位 —— 
-            if (plan.canHit)
+            if (simulateTurnTime)
             {
-                AttackEventsV2.RaiseHit(driver.UnitRef, target);
-                Debug.Log($"[AttackV2] Hit! landing={plan.chosenLanding} used={plan.usedSeconds:0.##}s refunded={plan.refundedSeconds}");
-            }
-            else
-            {
-                AttackEventsV2.RaiseMiss(driver.UnitRef, "Out of reach.");
-                Debug.Log($"[AttackV2] Miss. stopped early after {plan.usedSeconds:0.##}s");
+                float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                if (refundMove > 0f)
+                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
             }
 
-            _moving = false;
+            if (refundedSeconds > 0)
+            {
+                RefundMoveEnergy(refundedSeconds * MoveEnergyPerSecond());
+                HexMoveEvents.RaiseTimeRefunded(unit, refundedSeconds);
+            }
+
+            if (status != null && usedSeconds > 0f)
+                status.ConsumeSeconds(usedSeconds);
+
+            if (truncated && !stoppedByExternal)
+                HexMoveEvents.RaiseNoMoreTime(unit);
+
+            bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
+            if (attackSuccess)
+            {
+                AttackEventsV2.RaiseHit(unit, preview.targetHex);
+            }
+            else if (attackPlanned)
+            {
+                if (!attackRolledBack)
+                {
+                    if (attackEnergyPaid > 0) RefundAttackEnergy(attackEnergyPaid);
+                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                    AttackEventsV2.RaiseMiss(unit, "Out of reach.");
+                    if (simulateTurnTime)
+                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                }
+            }
         }
 
-        // —— 拾取 —— //
-        Hex? PickHexUnderMouse()
+        MoveRatesSnapshot BuildMoveRates(Hex start)
         {
-            var cam = pickCamera ? pickCamera : Camera.main;
-            if (!cam) return null;
+            int baseRate = ctx != null ? Mathf.Max(1, ctx.BaseMoveRate) : GetFallbackBaseRate();
+            baseRate = Mathf.Clamp(baseRate, (int)MR_MIN, (int)MR_MAX);
 
-            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit, rayMaxDistance, pickMask, QueryTriggerInteraction.Ignore))
-                return authoring.Layout.HexAt(hit.point);
+            float buffMult = 1f;
+            int flatAfter = 0;
+            if (ctx != null)
+            {
+                buffMult = 1f + Mathf.Max(-0.99f, ctx.MoveRatePctAdd);
+                flatAfter = ctx.MoveRateFlatAdd;
+            }
 
-            var plane = new Plane(Vector3.up, new Vector3(0f, pickPlaneY, 0f));
-            if (!plane.Raycast(ray, out float dist)) return null;
-            return authoring.Layout.HexAt(ray.GetPoint(dist));
+            float stickyMult = status != null ? status.GetProduct() : 1f;
+
+            float startEnv = env != null ? env.GetSpeedMult(start) : 1f;
+            startEnv = Mathf.Clamp(startEnv, ENV_MIN, ENV_MAX);
+
+            bool startIsSticky = false;
+            if (_sticky != null && _sticky.TryGetSticky(start, out var stickM, out var stickTurns, out _))
+                startIsSticky = stickTurns > 0 && !Mathf.Approximately(stickM, 1f);
+
+            float mrNoEnv = Mathf.Clamp(baseRate * buffMult * stickyMult + flatAfter, MR_MIN, MR_MAX);
+            float startUse = startIsSticky ? 1f : startEnv;
+            startUse = Mathf.Clamp(startUse, ENV_MIN, ENV_MAX);
+            float mrClick = Mathf.Clamp(mrNoEnv * startUse, MR_MIN, MR_MAX);
+
+            return new MoveRatesSnapshot
+            {
+                baseRate = baseRate,
+                buffMult = buffMult,
+                stickyMult = stickyMult,
+                flatAfter = flatAfter,
+                startEnvMult = startEnv,
+                mrNoEnv = mrNoEnv,
+                mrClick = mrClick,
+                startIsSticky = startIsSticky
+            };
+        }
+
+        int GetFallbackBaseRate()
+        {
+            if (ctx != null) return ctx.BaseMoveRate;
+            return 3;
+        }
+
+        int MoveEnergyPerSecond() => moveConfig != null ? Mathf.Max(0, moveConfig.energyCost) : 0;
+
+        bool IsEnemyHex(Hex hex)
+        {
+            if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
+                return true;
+            if (_occ != null)
+            {
+                var actor = _occ.Get(hex);
+                if (actor != null && actor != _actor)
+                    return true;
+            }
+            return false;
+        }
+
+        bool IsBlockedForMove(Hex cell, Hex start, Hex landing)
+        {
+            if (authoring?.Layout == null) return true;
+            if (!authoring.Layout.Contains(cell)) return true;
+            if (env != null && env.IsPit(cell)) return true;
+            if (cell.Equals(start)) return false;
+            if (cell.Equals(landing)) return false;
+            return _occ != null && _occ.IsBlocked(cell, _actor);
+        }
+
+        bool TryFindMeleePath(Hex start, Hex target, int range, out Hex landing, out List<Hex> bestPath)
+        {
+            landing = target;
+            bestPath = null;
+            int bestLen = int.MaxValue;
+
+            foreach (var candidate in Hex.Ring(target, range))
+            {
+                if (!authoring.Layout.Contains(candidate)) continue;
+                if (env != null && env.IsPit(candidate)) continue;
+                if (_occ != null && !_occ.CanPlace(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
+
+                var path = ShortestPath(start, candidate, cell => IsBlockedForMove(cell, start, candidate));
+                if (path == null) continue;
+                int len = path.Count;
+                if (len < bestLen)
+                {
+                    bestLen = len;
+                    bestPath = path;
+                    landing = candidate;
+                }
+            }
+
+            return bestPath != null;
+        }
+
+        static readonly Hex[] Neigh =
+        {
+            new Hex(+1, 0),
+            new Hex(+1, -1),
+            new Hex(0, -1),
+            new Hex(-1, 0),
+            new Hex(-1, +1),
+            new Hex(0, +1)
+        };
+
+        List<Hex> ShortestPath(Hex start, Hex goal, System.Func<Hex, bool> isBlocked)
+        {
+            var came = new Dictionary<Hex, Hex>();
+            var q = new Queue<Hex>();
+            q.Enqueue(start);
+            came[start] = start;
+
+            while (q.Count > 0)
+            {
+                var cur = q.Dequeue();
+                if (cur.Equals(goal)) break;
+                for (int i = 0; i < Neigh.Length; i++)
+                {
+                    var nb = new Hex(cur.q + Neigh[i].q, cur.r + Neigh[i].r);
+                    if (came.ContainsKey(nb)) continue;
+                    if (isBlocked != null && isBlocked(nb)) continue;
+                    came[nb] = cur;
+                    q.Enqueue(nb);
+                }
+            }
+
+            if (!came.ContainsKey(goal)) return null;
+            var path = new List<Hex> { goal };
+            var c = goal;
+            while (!c.Equals(start))
+            {
+                c = came[c];
+                path.Add(c);
+            }
+            path.Reverse();
+            return path;
+        }
+
+        void SpendEnergy(int amount)
+        {
+            if (amount <= 0) return;
+            var stats = ctx != null ? ctx.stats : null;
+            if (stats == null) return;
+            int before = stats.Energy;
+            stats.Energy = Mathf.Clamp(stats.Energy - amount, 0, stats.MaxEnergy);
+            if (debugLog)
+                Debug.Log($"[Attack] SpendEnergy {amount} => {before}->{stats.Energy}", this);
+        }
+
+        void RefundMoveEnergy(int amount)
+        {
+            if (amount <= 0) return;
+            var stats = ctx != null ? ctx.stats : null;
+            if (stats == null) return;
+            int before = stats.Energy;
+            stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
+            if (debugLog)
+                Debug.Log($"[Attack] Refund move energy +{amount} ({before}->{stats.Energy})", this);
+        }
+
+        void RefundAttackEnergy(int amount)
+        {
+            if (amount <= 0) return;
+            var stats = ctx != null ? ctx.stats : null;
+            if (stats == null) return;
+            int before = stats.Energy;
+            stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
+            if (debugLog)
+                Debug.Log($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})", this);
         }
 
         static FootprintShape CreateSingleFallback()
