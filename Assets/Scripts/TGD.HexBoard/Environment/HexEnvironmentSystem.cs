@@ -14,9 +14,11 @@ namespace TGD.HexBoard
         public struct HazardZone
         {
             public HazardType type;
-            public int q, r;
+            public int q;
+            public int r;
             [Min(0)] public int radius;
             public bool centerOnly;
+
             public Hex Center => new Hex(q, r);
         }
 
@@ -30,7 +32,8 @@ namespace TGD.HexBoard
             {
                 var z = hazards[i];
                 if (!z.type || z.type.kind != kind) continue;
-                bool inRange = z.centerOnly ? h.Equals(z.Center) : (Hex.Distance(h, z.Center) <= z.radius);
+
+                bool inRange = z.centerOnly ? h.Equals(z.Center) : Hex.Distance(h, z.Center) <= z.radius;
                 if (inRange) return true;
             }
             return false;
@@ -39,9 +42,8 @@ namespace TGD.HexBoard
         public bool IsTrap(Hex h) => HasHazard(h, HazardKind.Trap);
         public bool IsPit(Hex h) => HasHazard(h, HazardKind.Pit);
 
-
         [Header("Default")]
-        [Tooltip("»´Õºƒ¨»œÀŸ∂»±∂¬ £®1=’˝≥££¨0.5=ºıÀŸ50%£¨1.5=º”ÀŸ50%£©")]
+        [Tooltip("ÂÖ®Â±ÄÈªòËÆ§Âú∞ÂΩ¢ÈÄüÂ∫¶ÂÄçÁéá„ÄÇ1 = Ê≠£Â∏∏ÈÄüÂ∫¶Ôºå0.5 = ÂáèÈÄü 50%Ôºå1.5 = Âä†ÈÄü 50%„ÄÇ")]
         [Range(0.1f, 5f)] public float defaultSpeedMult = 1f;
 
         [Serializable]
@@ -51,8 +53,7 @@ namespace TGD.HexBoard
             public int r;
             [Min(0)] public int radius;
             [Range(0.1f, 5f)] public float mult;
-
-            [Tooltip("Ω¯»Î∏√«¯ ±∏Ω◊≈µƒ≥÷–¯ªÿ∫œ ˝£®>0 ±…˙–ß£¨Ωˆ”√”⁄ mult>1 µƒº”ÀŸ£©")]
+            [Tooltip("ËøõÂÖ•ËØ•Âú∞ÂùóÊó∂Âà∑Êñ∞Á≤òÊªûÊåÅÁª≠ÂõûÂêà„ÄÇ>0 Êó∂ÁîüÊïà„ÄÇ")]
             public int stickyTurnsOnEnter;
 
             public Hex Center => new Hex(q, r);
@@ -69,7 +70,6 @@ namespace TGD.HexBoard
         public static HexEnvironmentSystem FindInScene()
             => FindFirstObjectByType<HexEnvironmentSystem>();
 
-        /// ∂¡ƒ≥∏Òµƒ°∞«¯”ÚÀŸ∂»±∂¬ °±£®÷ª”∞œÏ’æ‘⁄«¯”Úƒ⁄µƒ µ ±ÀŸ∂»£ª≤ª∫¨§–‘£©
         public float GetSpeedMult(Hex h)
         {
             float m = Mathf.Clamp(defaultSpeedMult, 0.1f, 5f);
@@ -88,48 +88,48 @@ namespace TGD.HexBoard
         public bool IsStructBlocked(Hex h) => false;
         public bool IsLethalOnEnter(Hex h) => false;
 
-        // ========= §–‘“∆ÀŸΩ”ø⁄ µœ÷ =========
-        // πÊ‘Ú£∫
-        // - Trap √¸÷–£∫»Ù stickyDurationTurns>0£¨‘Ú∑µªÿ∆‰ stickyMoveMult / stickyDurationTurns£®≥£”√”⁄°∞∂æ≥ÿ°±°˙§–‘ºıÀŸ£©
-        // - SpeedPatch √¸÷–£∫µ± mult>1 «“ stickyTurnsOnEnter>0  ±£¨∑µªÿ mult / stickyTurnsOnEnter£®§–‘º”ÀŸ£©
-        // - «¯”ÚºıÀŸ£®mult<1£©≤ª∏Ω◊≈£®¿Îø™º¥ª÷∏¥£©
-        // ‘⁄ HexEnvironmentSystem ¿‡…˘√˜¥¶º”£∫public sealed class HexEnvironmentSystem : MonoBehaviour, IStickyMoveSource
-
-        // ¿‡ƒ⁄◊∑º”£∫
         public bool TryGetSticky(Hex at, out float multiplier, out int durationTurns, out string tag)
         {
-            multiplier = 1f; durationTurns = 0; tag = null;
+            multiplier = 1f;
+            durationTurns = 0;
+            tag = null;
 
-            // ÷ª∂‘°∞º”ÀŸ Patch°±∏≥”Ë 1 ªÿ∫œÃ˘∏Ω£ªºıÀŸ Patch ≤ªÃ˘∏Ω
             if (patches != null)
             {
                 for (int i = 0; i < patches.Count; i++)
                 {
                     var p = patches[i];
-                    if (Hex.Distance(at, p.Center) <= p.radius)
+                    if (Hex.Distance(at, p.Center) > p.radius) continue;
+
+                    float m = Mathf.Clamp(p.mult, 0.01f, 100f);
+                    bool isHaste = m > 1f + 1e-4f;
+                    bool isSlow = m < 1f - 1e-4f;
+
+                    if (isHaste)
                     {
-                        float m = Mathf.Clamp(p.mult, 0.01f, 100f);
-                        if (m > 1.001f)
-                        {
-                            multiplier = m;
-                            durationTurns = 1; // πÊ‘Ú£∫º”ÀŸ÷¡…Ÿ“ªªÿ∫œ
-                            tag = $"Patch@{p.q},{p.r}";
-                            return true;
-                        }
+                        int turns = Mathf.Max(1, p.stickyTurnsOnEnter);
+                        multiplier = m;
+                        durationTurns = turns;
+                        tag = $"Patch@{p.q},{p.r}";
+                        return true;
+                    }
+
+                    if (isSlow && p.stickyTurnsOnEnter > 0)
+                    {
+                        multiplier = m;
+                        durationTurns = p.stickyTurnsOnEnter;
+                        tag = $"Patch@{p.q},{p.r}";
+                        return true;
                     }
                 }
             }
 
-            // £®»Áπ˚ƒ„“‘∫Ûœ£Õ˚ƒ≥–© Hazard “≤Ã˘∏Ω£¨’‚¿Ô‘Ÿ≈–∂® HazardZone£¨≤¢…Ë tag="Hazard@{type.hazardId}@{center.q},{center.r}"£©
-
             return false;
         }
 
-
-        // ‘§¡Ù£∫∞—°∞»º…’/À·“∫°±µ»∞¥»¶”¶”√
         public void ApplyHazardCircle(Hex center, int radius, HazardType type, int durationSeconds)
         {
-            // TODO
+            // TODO: runtime hazard spawning not implemented yet.
         }
     }
 }
