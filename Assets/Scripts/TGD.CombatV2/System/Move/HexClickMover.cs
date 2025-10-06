@@ -1,4 +1,4 @@
-﻿// File: TGD.HexBoard/HexClickMover.cs
+// File: TGD.HexBoard/HexClickMover.cs
 using System.Collections;
 using System.Collections.Generic;
 using TGD.HexBoard;
@@ -105,7 +105,23 @@ namespace TGD.CombatV2
         [Header("Sticky Slow (optional)")]
         public MoveRateStatusRuntime status;        // 黏性修饰器运行时（可选）
         public MonoBehaviour stickySource;          // 任意实现了 IStickySlowSource 的组件
-        IStickyMoveSource _sticky;
+        const float MR_MIN = 1f;
+        const float MR_MAX = 12f;
+        const float ENV_MIN = 0.1f;
+        const float ENV_MAX = 5f;
+        const float MULT_MIN = 0.01f;
+        const float MULT_MAX = 100f;
+
+        struct MoveRateSnapshot
+        {
+            public int baseRate;
+            public float buffMult;
+            public float stickyMult;
+            public int flatAfter;
+            public float baseNoEnv;
+            public float startEnvMult;
+            public float mrClick;
+        }
 
         //occ
         public HexOccupancyService occService;
@@ -132,7 +148,7 @@ namespace TGD.CombatV2
             if (debugLog)
             {
                 var start = (driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
-                float m = (env != null) ? Mathf.Clamp(env.GetSpeedMult(start), 0.1f, 5f) : 1f;
+                float m = (env != null) ? Mathf.Clamp(env.GetSpeedMult(start), ENV_MIN, ENV_MAX) : 1f;
                 Debug.Log($"[ClickMove] RefreshStateForAim start={start} envMult={m:F2} baseR={(ctx ? ctx.BaseMoveRate : -1)}", this);
             }
         }
@@ -189,17 +205,6 @@ namespace TGD.CombatV2
             }
         }
 
-        float GetStickyMultiplierNow()
-        {
-            float m = 1f;
-            if (status != null)
-            {
-                foreach (var x in status.GetActiveMultipliers())
-                    m *= Mathf.Clamp(x, 0.1f, 5f);
-            }
-            return Mathf.Clamp(m, 0.1f, 5f);
-        }
-
         void Awake()
         {           
             _cost = costProvider as IMoveCostService;
@@ -243,6 +248,52 @@ namespace TGD.CombatV2
             if (authoring == null || driver == null || !driver.IsReady) return;//短路返回
         }
 
+        MoveRateSnapshot BuildMoveRates(Hex start)
+        {
+            int baseRate = ctx != null ? ctx.BaseMoveRate : GetFallbackBaseRate();
+            baseRate = Mathf.Clamp(baseRate, (int)MR_MIN, (int)MR_MAX);
+
+            float buffMult = 1f;
+            int flatAfter = 0;
+            if (ctx != null)
+            {
+                buffMult = 1f + Mathf.Max(-0.99f, ctx.MoveRatePctAdd);
+                flatAfter = ctx.MoveRateFlatAdd;
+            }
+
+            float stickyMult = status != null ? status.GetProduct() : 1f;
+            buffMult = Mathf.Clamp(buffMult, MULT_MIN, MULT_MAX);
+            stickyMult = Mathf.Clamp(stickyMult, MULT_MIN, MULT_MAX);
+
+            float combined = Mathf.Clamp(buffMult * stickyMult, MULT_MIN, MULT_MAX);
+            float baseNoEnv = StatsMathV2.MR_MultiThenFlat(baseRate, new[] { combined }, flatAfter);
+            baseNoEnv = Mathf.Clamp(baseNoEnv, MR_MIN, MR_MAX);
+
+            float startEnv = env != null ? Mathf.Clamp(env.GetSpeedMult(start), ENV_MIN, ENV_MAX) : 1f;
+            float mrClick = Mathf.Clamp(baseNoEnv * startEnv, MR_MIN, MR_MAX);
+
+            return new MoveRateSnapshot
+            {
+                baseRate = baseRate,
+                buffMult = buffMult,
+                stickyMult = stickyMult,
+                flatAfter = flatAfter,
+                baseNoEnv = baseNoEnv,
+                startEnvMult = startEnv,
+                mrClick = mrClick
+            };
+        }
+
+        int GetFallbackBaseRate()
+        {
+            if (ctx != null) return ctx.BaseMoveRate;
+
+            int steps = config != null ? Mathf.Max(1, config.fallbackSteps) : 3;
+            float seconds = config != null ? Mathf.Max(0.1f, config.timeCostSeconds) : 1f;
+            float mr = steps / Mathf.Max(0.1f, seconds);
+            return Mathf.Clamp(Mathf.RoundToInt(mr), (int)MR_MIN, (int)MR_MAX);
+        }
+
         // ===== 外部 UI 调用 =====
         public void ShowRange()
         {
@@ -253,9 +304,8 @@ namespace TGD.CombatV2
             _paths.Clear();
 
             var layout = authoring.Layout;
-            var start = (driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
+            var startHex = (driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
 
-            // 缠绕/无配置兜底
             if (ctx != null && ctx.Entangled)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, null);
@@ -263,46 +313,33 @@ namespace TGD.CombatV2
                 return;
             }
 
+            var rates = BuildMoveRates(startHex);
             int steps;
-            // ShowRange() 内，计算 steps 处改为：
-            if (ctx != null && config != null)
+            if (config != null)
             {
                 int timeSec = Mathf.Max(1, Mathf.CeilToInt(config.timeCostSeconds));
-                int baseR = Mathf.Max(1, ctx.BaseMoveRate);
-
-                float buffMult = 1f + Mathf.Max(-0.99f, ctx.MoveRatePctAdd);
-                float stickyMult = (status != null) ? status.GetProduct() : 1f; // ← 当前已贴附乘积
-                float startMult = (env != null) ? Mathf.Clamp(env.GetSpeedMult(start), 0.01f, 100f) : 1f;
-                int flatAfter = ctx.MoveRateFlatAdd; // ← 现在规定为“乘法后平加”
-
-                // MR_click = baseR * buff * sticky * start + flatAfter
-                float mrClick = StatsMathV2.MR_MultiThenFlat(baseR, new[] { buffMult * stickyMult * startMult }, flatAfter);
-                // 新增：统一上下限（下限1，上限12；你以后改成职业可调就放到常量里）
-                mrClick = Mathf.Clamp(mrClick, 1, 12);   // ← 关键
- 
-
-                steps = Mathf.Min(config.stepsCap, StatsMathV2.StepsAllowedF32(mrClick, timeSec));
-
+                steps = Mathf.Min(config.stepsCap, StatsMathV2.StepsAllowedF32(rates.mrClick, timeSec));
                 if (debugLog)
-                    Debug.Log($"[ClickMove/Preview] baseR={baseR} buff={buffMult:F2} sticky={stickyMult:F2} start={startMult:F2} flatAfter={flatAfter} → MR_click={mrClick:F2} steps={steps}", this);
+                    Debug.Log($"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} sticky={rates.stickyMult:F2} start={rates.startEnvMult:F2} flatAfter={rates.flatAfter} -> MR_click={rates.mrClick:F2} steps={steps}", this);
             }
             else
             {
-                steps = (config != null) ? Mathf.Clamp(config.fallbackSteps, 0, config.stepsCap) : 3;
+                int timeSec = 1;
+                steps = Mathf.Min(12, StatsMathV2.StepsAllowedF32(rates.mrClick, timeSec));
+                if (debugLog)
+                    Debug.Log($"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} sticky={rates.stickyMult:F2} start={rates.startEnvMult:F2} flatAfter={rates.flatAfter} -> MR_click={rates.mrClick:F2} steps={steps} (default config)", this);
             }
 
-
-            // ✅ 预览阶段：只有当 blockByPhysics 且 obstacleMask != 0 才启用物理阻挡
             var physicsBlocker =
                 (blockByPhysics && obstacleMask != 0)
                 ? HexAreaUtil.MakeDefaultBlocker(
-                      authoring, driver?.Map, start,
-                      blockByUnits: false,                  // 占位交给 _occ
+                      authoring, driver?.Map, startHex,
+                      blockByUnits: false,
                       blockByPhysics: true,
                       obstacleMask: obstacleMask,
                       physicsRadiusScale: physicsRadiusScale,
                       physicsProbeHeight: physicsProbeHeight,
-                      includeTriggerColliders: false,      // 预览忽略触发器，避免特效误判
+                      includeTriggerColliders: false,
                       y: y)
                 : null;
 
@@ -310,19 +347,17 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                // ✅ 用“能否整组落位”，并忽略自己
                 if (blockByUnits && !_occ.CanPlace(_actor, cell, _actor.Facing, ignore: _actor))
                     return true;
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
 
-                // ✅ 坑洞直接当硬障碍，移动/预览都不显示
                 if (env != null && env.IsPit(cell)) return true;
 
                 return false;
             }
 
-            var result = HexMovableRange.Compute(layout, driver.Map, start, steps, Block);
+            var result = HexMovableRange.Compute(layout, driver.Map, startHex, steps, Block);
             foreach (var kv in result.Paths) _paths[kv.Key] = kv.Value;
 
             _painter.Paint(result.Paths.Keys, rangeColor);
@@ -331,7 +366,6 @@ namespace TGD.CombatV2
             HexMoveEvents.RaiseRangeShown(driver.UnitRef, result.Paths.Keys);
             _showing = true;
         }
-
 
         public void HideRange()
         {
@@ -350,7 +384,6 @@ namespace TGD.CombatV2
 
             int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
-            // 再兜底：时间
             if (simulateTurnTime && _turnSecondsLeft < requiredSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
@@ -358,7 +391,6 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            // 成本（先扣）
             if (_cost != null && config != null)
             {
                 if (_cost.IsOnCooldown(driver.UnitRef, config))
@@ -370,30 +402,18 @@ namespace TGD.CombatV2
                 Debug.Log($"[ClickMove] Pay: {config.energyCost} energy for {requiredSec}s move.", this);
             }
 
-            // —— 执行期：MoveSimulator 做环境结算 + 返还 —— //
+            var rates = BuildMoveRates(path[0]);
 
-            // 1) 基础与不含环境的有效 MR（含 buff / 已有 sticky / 平加；不含地块环境）
-            // RunPathTween_WithTime(...) 里“执行期模拟器”那段整体替换为：
-
-            // 1) 本次行动开始时的“不含地形”乘法部分（buff * sticky）
-            int baseR = Mathf.Max(1, ctx != null ? ctx.BaseMoveRate : Mathf.FloorToInt(config ? config.fallbackSteps / Mathf.Max(0.1f, config.timeCostSeconds) : 3));
-            float buffMult = (ctx != null) ? (1f + Mathf.Max(-0.99f, ctx.MoveRatePctAdd)) : 1f;
-            float stickyMult = (status != null) ? status.GetProduct() : 1f;
-            float noEnvMultNow = Mathf.Clamp(buffMult * stickyMult, 0.01f, 100f);
-            int flatAfter = (ctx != null) ? ctx.MoveRateFlatAdd : 0;
-
-            // 2) 地形倍率（每步用 from）
             float EnvMult(Hex h) => env != null ? env.GetSpeedMult(h) : 1f;
+            float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
-            // 3) 新模拟器（乘后再加）
-            var sim = MoveSimulator.RunMultiThenFlat(
+            var sim = MoveSimulator.Run(
                 path,
-                baseR,
-                noEnvMultNow,
-                flatAfter,
+                rates.baseNoEnv,
+                rates.startEnvMult,
                 requiredSec,
                 EnvMult,
-                Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f)),
+                refundThreshold,
                 debugLog
             );
             var reached = sim.ReachedPath;
@@ -412,7 +432,6 @@ namespace TGD.CombatV2
 
 
             _moving = true;
-            // 起步一次性转向（与旧逻辑一致）
             if (driver.unitView != null)
             {
                 var fromW = authoring.Layout.World(reached[0], y);
@@ -432,9 +451,8 @@ namespace TGD.CombatV2
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
             Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
-            // sim / reached 已经算出来了
-            bool truncatedByBudget = (reached.Count < path.Count); // ★ 少于原计划，表示预算截断
-            bool stoppedByExternal = false;                         // ★ 外因打断标记（占位/坑/缠绕）
+            bool truncatedByBudget = (reached.Count < path.Count);
+            bool stoppedByExternal = false;
 
             for (int i = 1; i < reached.Count; i++)
             {
@@ -465,28 +483,26 @@ namespace TGD.CombatV2
                 var fromW = layout.World(from, y);
                 var toW = layout.World(to, y);
 
-                // for 循环里 from/to 之间，计算步速：
-                float fromMult = Mathf.Clamp(EnvMult(from), 0.01f, 100f);
-                float effMR = StatsMathV2.MR_MultiThenFlat(baseR, new[] { noEnvMultNow * fromMult }, flatAfter);
+                float fromMult = Mathf.Clamp(EnvMult(from), ENV_MIN, ENV_MAX);
+                float effMR = Mathf.Clamp(rates.baseNoEnv * fromMult, MR_MIN, MR_MAX);
                 float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
- 
+
 
                 float t = 0f;
                 while (t < 1f)
                 {
-                    t += Time.deltaTime / stepDuration;                        // 真正决定速度的地方
+                    t += Time.deltaTime / stepDuration;
                     if (view != null) view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
                     yield return null;
                 }
 
 
                 _occ.TryMove(_actor, to);
-                // 进入 to 后，尝试贴附“黏性移速”（毒池/加速贴附）——本次行动预算不改，只影响后续行动/下一次 Aim
                 if (_sticky != null && status != null && _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag))
                 {
-                    if (stickTurns != 0 && !Mathf.Approximately(stickM, 1f))
+                    if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                     {
-                        status.ApplyOrRefresh(tag, stickM, stickTurns);
+                        status.ApplyOrRefreshExclusive(tag, stickM, stickTurns);
                         if (debugLog) Debug.Log($"[Sticky] tag={tag} mult={stickM:F2} turns={stickTurns} (applied/refreshed) at={to}", this);
                     }
                 }
@@ -499,14 +515,12 @@ namespace TGD.CombatV2
 
             _moving = false;
             HexMoveEvents.RaiseMoveFinished(driver.UnitRef, driver.UnitRef.Position);
-            // ★ 仅当“预算截断”且“不是外因打断”时，广播没时间
             if (truncatedByBudget && !stoppedByExternal)
             {
                 HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
                 Debug.Log("[ClickMove] No more time.");
             }
 
-            // —— 扣除净时间 & 能量返还 —— //
             if (simulateTurnTime)
             {
                 _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
@@ -521,9 +535,7 @@ namespace TGD.CombatV2
             {
                 Debug.Log($"[ClickMove] Spent {spentSec}s, Refunded {refunded}s. TimeLeft={_turnSecondsLeft}s", this);
             }
-            // 交互口径：若当前仍处于 Aim（由外部 Manager 控制），可选择性刷新
-            if (_showing) ShowRange(); // 刷新可达
-                                       // 黏性持续递减：按本次净耗时
+            if (_showing) ShowRange();
             if (status != null && spentSec > 0)
             {
                 status.ConsumeSeconds(spentSec);
@@ -531,6 +543,8 @@ namespace TGD.CombatV2
 
 
         }
+
+
 
         // 若没指定占位，临时造一个“单格”占位
         static FootprintShape CreateSingleFallback()

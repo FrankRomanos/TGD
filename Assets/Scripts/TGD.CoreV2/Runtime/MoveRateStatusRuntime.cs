@@ -10,14 +10,13 @@ namespace TGD.CoreV2
         [System.Serializable]
         public sealed class Mod
         {
-            public string tag;           // 同源去重Key（例如 "Patch@q,r" 或 "Hazard@id@q,r"）
-            public float multiplier = 1f;   // 例如 0.8f, 1.2f
-            public float secondsLeft = -1f; // <0 永久；>=0 逐步递减
+            public string tag;
+            public float multiplier = 1f;
+            public float secondsLeft = -1f;
         }
 
         readonly Dictionary<string, Mod> _modsByTag = new();
 
-        /// 当前所有“持续型”修饰的乘数（>0）
         public IEnumerable<float> GetActiveMultipliers()
         {
             foreach (var kv in _modsByTag)
@@ -28,7 +27,6 @@ namespace TGD.CoreV2
             }
         }
 
-        /// 乘数连乘值（调试/UI可用）
         public float GetProduct()
         {
             float p = 1f;
@@ -36,7 +34,6 @@ namespace TGD.CoreV2
             return Mathf.Clamp(p, 0.01f, 100f);
         }
 
-        /// 添加或刷新同源贴附（durationTurns<0=永久；否则按秒）
         public void ApplyOrRefresh(string tag, float multiplier, int durationTurns)
         {
             if (string.IsNullOrEmpty(tag) || multiplier <= 0f) return;
@@ -45,12 +42,11 @@ namespace TGD.CoreV2
 
             if (_modsByTag.TryGetValue(tag, out var exist))
             {
-                // 刷新持续
                 if (exist.secondsLeft >= 0f && secs >= 0f)
                     exist.secondsLeft = Mathf.Max(exist.secondsLeft, secs);
                 else
-                    exist.secondsLeft = secs; // 永久覆盖临时，或反之
-                exist.multiplier = multiplier; // 同源更新倍率
+                    exist.secondsLeft = secs;
+                exist.multiplier = multiplier;
             }
             else
             {
@@ -58,13 +54,39 @@ namespace TGD.CoreV2
             }
         }
 
-        /// 兼容旧调用：无 tag 时用“Untyped”聚类（不建议）
-        public void ApplyStickyMultiplier(float multiplier, int durationTurns)
+        public void ApplyOrRefreshExclusive(string tag, float multiplier, int durationTurns)
         {
-            ApplyOrRefresh("Untyped", multiplier, durationTurns);
+            if (string.IsNullOrEmpty(tag)) return;
+
+            float clamped = Mathf.Clamp(multiplier, 0.01f, 100f);
+            if (Mathf.Approximately(clamped, 1f)) return;
+
+            bool isHaste = clamped > 1f;
+            var toRemove = new List<string>();
+            foreach (var kv in _modsByTag)
+            {
+                if (kv.Key == tag) continue;
+                var mod = kv.Value;
+                if (mod == null) continue;
+
+                float m = mod.multiplier;
+                bool modIsHaste = m > 1f + 1e-4f;
+                bool modIsSlow = m < 1f - 1e-4f;
+                if (isHaste && modIsHaste) toRemove.Add(kv.Key);
+                else if (!isHaste && modIsSlow) toRemove.Add(kv.Key);
+            }
+
+            for (int i = 0; i < toRemove.Count; i++)
+                _modsByTag.Remove(toRemove[i]);
+
+            ApplyOrRefresh(tag, clamped, durationTurns);
         }
 
-        /// 扣除已消耗秒数（动作结束时调用）
+        public void ApplyStickyMultiplier(float multiplier, int durationTurns)
+        {
+            ApplyOrRefreshExclusive("Untyped", multiplier, durationTurns);
+        }
+
         public void ConsumeSeconds(float seconds)
         {
             if (seconds <= 0f) return;
@@ -81,7 +103,6 @@ namespace TGD.CoreV2
                 }
             }
         }
-
 
         public void ClearAll() => _modsByTag.Clear();
     }
