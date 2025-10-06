@@ -4,29 +4,27 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    /// <summary>
-    ///  AttackAction  StatsV2 / CooldownHubV2 Ô½Ó£Â¼ØºÏ¹
-    /// </summary>
+    /// ½« AttackAction Óë StatsV2 / CooldownHubV2 ¶Ô½Ó£»¼ÇÂ¼¡°±¾»ØºÏ¹¥»÷´ÎÊý¡±
     [DisallowMultipleComponent]
     public sealed class AttackCostServiceV2Adapter : MonoBehaviour, IAttackCostService
     {
         [Header("Refs")]
         public StatsV2 stats;
-        public CooldownHubV2 cooldownHub;   // Ä¿Ç°È´=0
+        public CooldownHubV2 cooldownHub;   // Ä¿Ç°¹¥»÷ÀäÈ´=0£¬¿ÉÁô¿Õ
 
         [Header("Overrides (optional)")]
-        [Tooltip("Ç·Ê±Í¬ØºÏµÓ£ì¸³/Æ³")]
+        [Tooltip("ÊÇ·ñÁÙÊ±ºöÂÔÍ¬»ØºÏµþ¼Ó£¨±»Ìì¸³/¼¼ÄÜÒÆ³ý£©")]
         public bool ignoreSameTurnPenalty = false;
 
-        [Header("Debug")] //  Ì¨Ó¡
-        public bool debugLogCosts = true;   //
+        [Header("Debug")] // ¡ï ÐÂÔö£º¿ØÖÆÌ¨´òÓ¡¿ª¹Ø
+        public bool debugLogCosts = true;   // ¡ï
 
         int _attacksThisTurn = 0;
         CooldownStoreV2 Store => cooldownHub ? cooldownHub.store : null;
 
         public bool IsOnCooldown(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
-            // Ä¬Ï¹È´=0
+            // Ä¬ÈÏ¹¥»÷ÀäÈ´=0
             return false;
         }
 
@@ -37,23 +35,23 @@ namespace TGD.CombatV2
 
             if (cfg.applySameTurnPenalty && !ignoreSameTurnPenalty)
             {
-                // Ò»Î£+0Ú¶Î£+50%Î£+100%...
+                // µÚÒ»´Î£º+0£»µÚ¶þ´Î£º+50%£»µÚÈý´Î£º+100%...
                 // cost = base * (1 + rate * (_attacksThisTurn))
                 cost = cfg.baseEnergyCost * (1f + cfg.sameTurnPenaltyRate * Mathf.Max(0, _attacksThisTurn));
             }
 
-            //  intÈ¡
+            // Äã¼ÒÄÜÁ¿ÊÇ int£¬ÏòÉÏÈ¡Õû¸ü±£ÊØ
             return Mathf.CeilToInt(cost);
         }
 
-        public int PreviewCost(AttackActionConfigV2 cfg) => CalcCost(cfg);
-
         public bool HasEnough(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
-            if (stats == null || cfg == null) return true; // Î´Ð²
+            if (stats == null || cfg == null) return true; // Î´ÅäÃæ°åÔò·ÅÐÐ²âÊÔ
             int need = CalcCost(cfg);
+            // ¡ï ¿ÉÑ¡£º²»×ãÊ±Ò²´òÒ»Ìõ
             bool ok = stats.Energy >= need;
 
+            // ¡ï ¿ÉÑ¡£º²»×ãÊ±Ò²´òÒ»Ìõ
             if (debugLogCosts && !ok)
                 Debug.Log($"[AttackCost] NOT ENOUGH energy (need={need}, have={stats.Energy})", this);
 
@@ -67,30 +65,18 @@ namespace TGD.CombatV2
                 int need = CalcCost(cfg);
                 int before = stats.Energy;
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
+                // ¡ï ´òÓ¡ÄãÒªµÄÈÕÖ¾¸ñÊ½
                 if (debugLogCosts)
                     Debug.Log($"[AttackCost] cost={need}  energy {before}->{stats.Energy}  (attacksThisTurn={_attacksThisTurn})", this);
             }
-
-            _attacksThisTurn++;
-        }
-
-        public void Refund(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
-        {
-            if (_attacksThisTurn > 0) _attacksThisTurn--;
-
-            if (stats != null && cfg != null)
-            {
-                int refund = CalcCost(cfg);
-                int before = stats.Energy;
-                stats.Energy = Mathf.Clamp(stats.Energy + refund, 0, stats.MaxEnergy);
-                if (debugLogCosts)
-                    Debug.Log($"[AttackCost] refund={refund}  energy {before}->{stats.Energy}  (attacksThisTurn={_attacksThisTurn})", this);
-            }
+           
+            // ¹¥»÷ÀäÈ´Ä¿Ç°=0£¬Ìø¹ý
+            _attacksThisTurn++; // ÀÛ¼ÆÍ¬»ØºÏ´ÎÊý
         }
 
         public void ResetForNewTurn() => _attacksThisTurn = 0;
 
-        // Ô±
+        // ²âÊÔ±ã½Ý
         [ContextMenu("Debug/Reset Attack Count This Turn")]
         void DebugReset() => _attacksThisTurn = 0;
     }

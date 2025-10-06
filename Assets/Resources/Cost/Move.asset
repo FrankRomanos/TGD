@@ -21,3 +21,4 @@ MonoBehaviour:
   keepDeg: 45
   turnDeg: 135
   turnSpeedDegPerSec: 720
+  refundThresholdSeconds: 0.8

@@ -7,47 +7,29 @@ namespace TGD.CombatV2
     public class AttackActionConfigV2 : ScriptableObject
     {
         [Header("Timing / Budget")]
-        [Tooltip("Î¹Ú¡Î»Æ¡Ê±Ô¤ã£¨ë£¬È¡")]
-        public int baseTimeSeconds = 2;               // 2 / 3 / 1
+        [Tooltip("±¾´Î¹¥»÷¿ÉÓÃÓÚ¡¾Î»ÒÆ¡¿µÄÊ±¼äÔ¤Ëã£¨Ãë£¬È¡Õû£©")]
+        public int baseTimeSeconds = 2;               // Àý£º2 / 3 / 1
 
-        [Tooltip("æ”»å‡»åŠ¨ä½œæœ¬ä½“è€—æ—¶ï¼ˆç§’ï¼‰ï¼Œç”¨äºŽç¡®è®¤é˜¶æ®µçš„æ—¶é—´é¢„ç®—ä¸Žæ‰£è´¹ã€‚")]
-        public float timeCostSeconds = 1f;
-
-        [Tooltip("Û¼Æ½Ê¡  Öµ 1s")]
+        [Tooltip("¼ÓËÙÀÛ¼Æ½ÚÊ¡ ¡Ý ãÐÖµ·µ»¹ 1s")]
         [Range(0.1f, 1.0f)] public float refundThresholdSeconds = 0.8f;
 
         [Header("Energy Cost")]
-        [Tooltip("Ä£2s=203s=301s=5")]
+        [Tooltip("»ù´¡ÄÜÁ¿ÏûºÄ£¨Àý£º2s=20£¬3s=30£¬1s=5£©")]
         public int baseEnergyCost = 20;
 
-        [Tooltip("ØºÏµÚ¶Ã¿ +50% Ä£É¹Ø±")]
+        [Tooltip("±¾»ØºÏµÚ¶þ´ÎÆðÃ¿´Î +50% »ù´¡ÏûºÄ£»¿É¹Ø±Õ")]
         public bool applySameTurnPenalty = true;
 
-        [Tooltip("Í¬ØºÏµÏµÄ¬ 0.5 = +50%/Î£")]
+        [Tooltip("Í¬»ØºÏµþ¼ÓÏµÊý£¨Ä¬ÈÏ 0.5 = +50%/´Î£©")]
         [Range(0f, 1f)] public float sameTurnPenaltyRate = 0.5f;
 
         [Header("Reach")]
-        [Tooltip("Õ½à£¨1=Ú£")]
+        [Tooltip("½üÕ½¸ñ¾à£¨1=ÏàÁÚ£©")]
         public int meleeRange = 1;
 
         [Header("Facing")]
         public float keepDeg = 45f;
         public float turnDeg = 135f;
         public float turnSpeedDegPerSec = 720f;
-
-        public float AttackTimeSeconds
-        {
-            get
-            {
-                if (timeCostSeconds > 0f) return timeCostSeconds;
-                return Mathf.Max(0f, baseTimeSeconds);
-            }
-        }
-
-        void OnValidate()
-        {
-            if (timeCostSeconds <= 0f)
-                timeCostSeconds = Mathf.Max(0f, baseTimeSeconds);
-        }
     }
 }

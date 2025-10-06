@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -9,8 +10,6 @@ namespace TGD.CoreV2
 
         // 时间 / 步数
         public static int TurnTime(int speedSeconds) => BaseTurnSeconds + Mathf.Max(0, speedSeconds);
-        public static int StepsAllowed(int effectiveMoveRate, int timeCostSeconds)
-            => Mathf.Max(0, effectiveMoveRate) * Mathf.Max(0, timeCostSeconds);
 
         // 暴击
         public static float CritChanceRaw(float baseChance, int rating, float addPct, float ratingPer1Pct = 30f)
@@ -47,36 +46,49 @@ namespace TGD.CoreV2
 
         // —— 移速工具 ——
 
-        // ===== 移速统一口径（基于“基础移速”只做加减，不连乘）=====
-
         /// <summary>
-        /// 把倍率 m(>0) 转成“基于基础移速 baseR 的增量”：floor(baseR * (m - 1))
-        /// 例如 baseR=5, m=2.0 → +5；m=0.2 → -4
+        /// 乘法后再加法：MR = baseR * Π(mults) + flatAfter
+        /// - baseR: 面板基础
+        /// - mults: 战斗中/贴附/地形等百分比（乘法）
+        /// - flatAfter: 高贵平加（在乘法之后加）
         /// </summary>
-        public static int EnvAddFromMultiplier(int baseR, float multiplier)
+        public static float MR_MultiThenFlat(int baseR, IEnumerable<float> mults, float flatAfter)
         {
-            int b = Mathf.Max(1, baseR);
-            if (multiplier <= 0f) return 0;
-            float add = b * (multiplier - 1f);
-            return Mathf.FloorToInt(add);
+            float M = 1f;
+            if (mults != null)
+            {
+                foreach (var m in mults)
+                    M *= Mathf.Clamp(m, 0.01f, 100f);
+            }
+            float mr = baseR * M + Mathf.Max(0f, flatAfter);
+            return Mathf.Max(0.01f, mr);
         }
 
-        /// <summary>
-        /// 以“基础移速 baseR”为参照，收集所有倍率（都相对基础），与平坦加成合并。
-        /// 注意：多个倍率的“增量”都基于同一个基础 b 计算，然后再一次性相加，避免连乘。
-        /// </summary>
-
-
-        public static int EffectiveMoveRateFromBase(int baseR, System.Collections.Generic.IEnumerable<float> pctMultipliers, int flatAdd)
+        /// <summary>给“显示/预览”用：某 MR 在 timeSec 秒内可走步数（向下取整）。</summary>
+        public static int StepsAllowedF32(float mr, int timeSec)
         {
-            int b = Mathf.Max(1, baseR);
-            int sum = flatAdd;
-            if (pctMultipliers != null)
-            {
-                foreach (var m in pctMultipliers)
-                    sum += EnvAddFromMultiplier(b, m);
-            }
-            return Mathf.Max(1, b + sum);
+            return Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(0.01f, mr) * Mathf.Max(1, timeSec)));
+        }
+
+        // ====== 为兼容旧调用，保留旧 API，内部走新公式 ======
+
+        /// <summary>
+        /// 旧：基础+（与基础相关的百分比）+平加 —— 现在等价为：平加当作“乘后平加”
+        /// </summary>
+        public static int EffectiveMoveRateFromBase(int baseR, IEnumerable<float> percentMults, int flatAddLegacy)
+        {
+            float mr = MR_MultiThenFlat(
+                Mathf.Max(1, baseR),
+                percentMults,
+                flatAddLegacy // 旧的“平加”当作高贵平加使用（乘法后再加）
+            );
+            return Mathf.Max(1, Mathf.FloorToInt(mr + 1e-3f));
+        }
+
+        /// <summary>旧：给“显示/预览”用的步数计算（int 版），内部转 float。</summary>
+        public static int StepsAllowed(int mrInt, int timeSec)
+        {
+            return StepsAllowedF32(Mathf.Max(1, mrInt), timeSec);
         }
     }
 }
