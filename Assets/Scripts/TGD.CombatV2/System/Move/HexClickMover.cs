@@ -122,6 +122,7 @@ namespace TGD.CombatV2
             public float baseNoEnv;
             public float startEnvMult;
             public float mrClick;
+            public bool startIsSticky;
         }
 
         //occ
@@ -270,8 +271,11 @@ namespace TGD.CombatV2
             float baseNoEnv = StatsMathV2.MR_MultiThenFlat(baseRate, new[] { combined }, flatAfter);
             baseNoEnv = Mathf.Clamp(baseNoEnv, MR_MIN, MR_MAX);
 
-            float startEnv = env != null ? Mathf.Clamp(env.GetSpeedMult(start), ENV_MIN, ENV_MAX) : 1f;
-            float mrClick = Mathf.Clamp(baseNoEnv * startEnv, MR_MIN, MR_MAX);
+            var startSample = SampleStepModifier(start);
+            float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, ENV_MIN, ENV_MAX);
+            float startUse = startSample.Sticky ? 1f : startEnv;
+            startUse = Mathf.Clamp(startUse, ENV_MIN, ENV_MAX);
+            float mrClick = Mathf.Clamp(baseNoEnv * startUse, MR_MIN, MR_MAX);
 
             return new MoveRateSnapshot
             {
@@ -281,8 +285,38 @@ namespace TGD.CombatV2
                 flatAfter = flatAfter,
                 baseNoEnv = baseNoEnv,
                 startEnvMult = startEnv,
-                mrClick = mrClick
+                mrClick = mrClick,
+                startIsSticky = startSample.Sticky
             };
+        }
+
+        MoveSimulator.StickySample SampleStepModifier(Hex hex)
+        {
+            float mult = 1f;
+            bool sticky = false;
+            bool hasStickySource = false;
+
+            if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out _))
+            {
+                if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
+                {
+                    mult *= stickM;
+                    sticky = true;
+                    hasStickySource = true;
+                }
+            }
+
+            if (!hasStickySource && env != null)
+            {
+                float envMult = Mathf.Clamp(env.GetSpeedMult(hex), ENV_MIN, ENV_MAX);
+                if (!Mathf.Approximately(envMult, 1f))
+                {
+                    mult *= envMult;
+                    sticky = true;
+                }
+            }
+
+            return new MoveSimulator.StickySample(mult, sticky);
         }
 
         int GetFallbackBaseRate()
@@ -320,20 +354,12 @@ namespace TGD.CombatV2
             const float MR_MIN = 1f, MR_MAX = 12f;
             const float ENV_MIN = 0.1f, ENV_MAX = 5f;
 
-            // 起点格是否会施加 sticky（turns>0 且倍率!=1）
-            bool startGivesSticky = false;
-            if (_sticky != null && _sticky.TryGetSticky(startHex, out var sMul, out var sTurns, out var sTag))
-                startGivesSticky = (sTurns > 0) && !Mathf.Approximately(sMul, 1f);
+            bool startGivesSticky = rates.startIsSticky;
 
+            float mrNoEnv = Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
 
-            // 基线 MR（不含起点地形）：base * buff * sticky 之后再 + flat，并做上下限
-            float mrNoEnv = Mathf.Clamp(rates.baseRate * rates.buffMult * rates.stickyMult, MR_MIN, MR_MAX);
-            mrNoEnv = Mathf.Clamp(mrNoEnv + rates.flatAfter, MR_MIN, MR_MAX);
-
-            // 只有当“起点格不施加 sticky”时，才把起点地形乘进预览
             float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
 
-            // 最终用于预览的 MR
             float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
 
             // 计算步数
@@ -427,15 +453,14 @@ namespace TGD.CombatV2
 
             var rates = BuildMoveRates(path[0]);
 
-            float EnvMult(Hex h) => env != null ? env.GetSpeedMult(h) : 1f;
             float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
             var sim = MoveSimulator.Run(
                 path,
                 rates.baseNoEnv,
-                rates.startEnvMult,
+                rates.mrClick,
                 requiredSec,
-                EnvMult,
+                SampleStepModifier,
                 refundThreshold,
                 debugLog
             );
@@ -443,6 +468,7 @@ namespace TGD.CombatV2
 
             int refunded = Mathf.Max(0, sim.RefundedSeconds);
             int spentSec = Mathf.Max(0, requiredSec - refunded);
+            var stepRates = sim.StepEffectiveRates;
 
             if (reached == null || reached.Count < 2)
             {
@@ -506,8 +532,9 @@ namespace TGD.CombatV2
                 var fromW = layout.World(from, y);
                 var toW = layout.World(to, y);
 
-                float fromMult = Mathf.Clamp(EnvMult(from), ENV_MIN, ENV_MAX);
-                float effMR = Mathf.Clamp(rates.baseNoEnv * fromMult, MR_MIN, MR_MAX);
+                float effMR = (stepRates != null && (i - 1) < stepRates.Count)
+                    ? stepRates[i - 1]
+                    : Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
                 float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
 
 
