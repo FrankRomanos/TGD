@@ -687,6 +687,7 @@ namespace TGD.CombatV2
             };
         }
 
+
         MoveSimulator.StickySample SampleStepModifier(Hex hex)
         {
             float mult = 1f;
@@ -709,7 +710,6 @@ namespace TGD.CombatV2
                 if (!Mathf.Approximately(envMult, 1f))
                 {
                     mult *= envMult;
-                    sticky = true;
                 }
             }
 

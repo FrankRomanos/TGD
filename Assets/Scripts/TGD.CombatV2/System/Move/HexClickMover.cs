@@ -312,7 +312,6 @@ namespace TGD.CombatV2
                 if (!Mathf.Approximately(envMult, 1f))
                 {
                     mult *= envMult;
-                    sticky = true;
                 }
             }
 
