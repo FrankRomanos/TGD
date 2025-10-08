@@ -28,7 +28,7 @@ namespace TGD.CombatV2
             System.Func<Hex, bool> isPit,
             int budgetSeconds,
             float baseMoveRate,
-            System.Func<Hex, float> getEnvMult,
+            System.Func<Hex, MoveSimulator.StickySample> getStepModifier,
             float refundThresholdSeconds = 0.8f)
         {
             var plan = new Plan { target = target };
@@ -74,15 +74,17 @@ namespace TGD.CombatV2
             plan.rawShortestPath = best;
             if (best == null || best.Count < 2) return plan;
 
-            float startEnv = getEnvMult != null ? getEnvMult(best[0]) : 1f;
-            startEnv = Mathf.Clamp(startEnv, 0.1f, 5f);
+            var startSample = getStepModifier != null ? getStepModifier(best[0]) : MoveSimulator.StickySample.None;
+            float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, 0.1f, 5f);
+            float startUse = startSample.Sticky ? 1f : startEnv;
+            float mrPlanned = Mathf.Clamp(baseMoveRate * startUse, 1f, 12f);
 
             var sim = MoveSimulator.Run(
                 best,
                 baseMoveRate,
-                startEnv,
+                mrPlanned,
                 Mathf.Max(0, budgetSeconds),
-                getEnvMult,
+                getStepModifier,
                 refundThresholdSeconds
             );
 
