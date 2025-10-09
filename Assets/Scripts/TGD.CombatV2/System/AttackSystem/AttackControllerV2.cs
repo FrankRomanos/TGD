@@ -159,6 +159,7 @@ namespace TGD.CombatV2
             _hover = null;
             _currentPreview = null;
             _painter.Clear();
+
             AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
         }
 
@@ -414,15 +415,15 @@ namespace TGD.CombatV2
 
             preview.valid = true;
 
-            if (debugLog)
-            {
-                Debug.Log(
-                    $"[Attack/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
-                    $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} startRaw={rates.startEnvMult:F2} " +
-                    $"startIsSticky={rates.startIsSticky} => MR_click={rates.mrClick:F2} steps={preview.steps} " +
-                    $"predSecs={preview.moveSecsPred} chargeSecs={preview.moveSecsCharge}",
-                    this);
-            }
+            //if (debugLog)
+            //{
+            //    Debug.Log(
+            //        $"[Attack/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
+            //        $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} startRaw={rates.startEnvMult:F2} " +
+            //        $"startIsSticky={rates.startIsSticky} => MR_click={rates.mrClick:F2} steps={preview.steps} " +
+            //        $"predSecs={preview.moveSecsPred} chargeSecs={preview.moveSecsCharge}",
+            //        this);
+            //}
 
             return preview;
         }
@@ -517,6 +518,7 @@ namespace TGD.CombatV2
 
                 if (attackPlanned)
                 {
+                    TriggerAttackAnimation(unit);
                     AttackEventsV2.RaiseHit(unit, preview.targetHex);
                 }
                 else if (attackEnergyPaid > 0)
@@ -635,6 +637,7 @@ namespace TGD.CombatV2
             bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
             if (attackSuccess)
             {
+                TriggerAttackAnimation(unit);
                 AttackEventsV2.RaiseHit(unit, preview.targetHex);
             }
             else if (attackPlanned)
@@ -694,13 +697,17 @@ namespace TGD.CombatV2
             bool sticky = false;
             bool hasStickySource = false;
 
-            if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out _))
+            if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out var tag))
             {
                 if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                 {
-                    mult *= stickM;
-                    sticky = true;
                     hasStickySource = true;
+                    bool alreadyActive = status != null && status.HasActiveTag(tag);
+                    if (!alreadyActive)
+                    {
+                        mult *= stickM;
+                        sticky = true;
+                    }
                 }
             }
 
@@ -735,6 +742,31 @@ namespace TGD.CombatV2
                     return true;
             }
             return false;
+        }
+        Hex? FindDefaultAttackTarget()
+        {
+            if (_enemyLocator == null) return null;
+            var enemies = _enemyLocator.AllEnemies;
+            if (enemies == null) return null;
+
+            var unit = driver != null ? driver.UnitRef : null;
+            Hex start = unit != null ? unit.Position : Hex.Zero;
+
+            Hex? best = null;
+            int bestDist = int.MaxValue;
+
+            foreach (var hex in enemies)
+            {
+                if (best.HasValue && hex.Equals(best.Value)) continue;
+                int dist = unit != null ? Hex.Distance(start, hex) : int.MaxValue;
+                if (!best.HasValue || dist < bestDist)
+                {
+                    best = hex;
+                    bestDist = dist;
+                }
+            }
+
+            return best;
         }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing)
@@ -855,6 +887,12 @@ namespace TGD.CombatV2
             s.name = "Footprint_Single_Runtime";
             s.offsets = new() { new L2(0, 0) };
             return s;
+        }
+        void TriggerAttackAnimation(Unit unit)
+        {
+            if (unit == null) return;
+            int comboIndex = Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 3);
+            AttackEventsV2.RaiseAnimation(unit, comboIndex);
         }
     }
 }

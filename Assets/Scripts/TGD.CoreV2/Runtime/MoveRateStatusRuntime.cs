@@ -87,6 +87,14 @@ namespace TGD.CoreV2
             ApplyOrRefreshExclusive("Untyped", multiplier, durationTurns);
         }
 
+        public bool HasActiveTag(string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return false;
+            if (!_modsByTag.TryGetValue(tag, out var mod) || mod == null) return false;
+            if (mod.multiplier <= 0f) return false;
+            if (mod.secondsLeft < 0f) return true;
+            return mod.secondsLeft > 0f;
+        }
         public void ConsumeSeconds(float seconds)
         {
             if (seconds <= 0f) return;

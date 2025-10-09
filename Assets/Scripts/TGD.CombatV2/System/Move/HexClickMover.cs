@@ -296,13 +296,17 @@ namespace TGD.CombatV2
             bool sticky = false;
             bool hasStickySource = false;
 
-            if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out _))
+            if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out var tag))
             {
                 if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                 {
-                    mult *= stickM;
-                    sticky = true;
                     hasStickySource = true;
+                    bool alreadyActive = status != null && status.HasActiveTag(tag);
+                    if (!alreadyActive)
+                    {
+                        mult *= stickM;
+                        sticky = true;
+                    }
                 }
             }
 
