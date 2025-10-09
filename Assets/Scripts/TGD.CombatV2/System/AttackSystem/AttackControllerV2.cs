@@ -146,12 +146,36 @@ namespace TGD.CombatV2
 
         bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _actor != null;
 
+        void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message, MoveBlockReason? moveOverride = null, bool relayMoveEvent = true)
+        {
+            AttackEventsV2.RaiseRejected(unit, reason, message);
+            if (!relayMoveEvent) return;
+
+            var moveReason = moveOverride ?? MapMoveReason(reason);
+            if (moveReason != MoveBlockReason.None)
+                HexMoveEvents.RaiseRejected(unit, moveReason, message);
+        }
+
+        static MoveBlockReason MapMoveReason(AttackRejectReasonV2 reason)
+        {
+            return reason switch
+            {
+                AttackRejectReasonV2.NotReady => MoveBlockReason.NotReady,
+                AttackRejectReasonV2.Busy => MoveBlockReason.Busy,
+                AttackRejectReasonV2.OnCooldown => MoveBlockReason.OnCooldown,
+                AttackRejectReasonV2.NotEnoughResource => MoveBlockReason.NotEnoughResource,
+                AttackRejectReasonV2.NoPath => MoveBlockReason.PathBlocked,
+                AttackRejectReasonV2.CantMove => MoveBlockReason.Entangled,
+                _ => MoveBlockReason.None
+            };
+        }
+
         public void OnEnterAim()
         {
             EnsureTurnTimeInited();
             if (!IsReady)
             {
-                AttackEventsV2.RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
                 return;
             }
 
@@ -187,12 +211,12 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             if (!IsReady)
             {
-                AttackEventsV2.RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
                 yield break;
             }
             if (_moving)
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.Busy, "Attack in progress.");
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.Busy, "Attack in progress.");
                 yield break;
             }
 
@@ -202,7 +226,7 @@ namespace TGD.CombatV2
 
             if (preview == null || !preview.valid)
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef,
+                RaiseRejected(driver.UnitRef,
                     preview != null ? preview.rejectReason : AttackRejectReasonV2.NoPath,
                     preview != null ? preview.rejectMessage : "Invalid target.");
                 yield break;
@@ -210,7 +234,7 @@ namespace TGD.CombatV2
 
             if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.");
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.", MoveBlockReason.Entangled);
                 yield break;
             }
 
@@ -235,7 +259,7 @@ namespace TGD.CombatV2
             {
                 if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
                 {
-                    AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.", MoveBlockReason.NoBudget);
                     yield break;
                 }
                 if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
@@ -252,13 +276,13 @@ namespace TGD.CombatV2
             int energyAvailable = stats != null ? stats.Energy : int.MaxValue;
             if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.", MoveBlockReason.NotEnoughResource);
                 yield break;
             }
             energyAvailable -= moveEnergyCost;
             if (attackPlanned && attackEnergyCost > 0 && energyAvailable < attackEnergyCost)
             {
-                AttackEventsV2.RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.", relayMoveEvent: false);
                 yield break;
             }
 
@@ -309,7 +333,7 @@ namespace TGD.CombatV2
                     _painter.Paint(new[] { _hover.Value }, invalidColor);
                 AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
                 if (preview.rejectReason != AttackRejectReasonV2.NotReady)
-                    AttackEventsV2.RaiseRejected(driver.UnitRef, preview.rejectReason, preview.rejectMessage);
+                    RaiseRejected(driver.UnitRef, preview.rejectReason, preview.rejectMessage);
                 return;
             }
 
