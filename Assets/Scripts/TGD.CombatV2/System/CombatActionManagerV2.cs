@@ -17,12 +17,114 @@ namespace TGD.CombatV2
         public float pickPlaneY = 0.01f;
         public float rayMaxDistance = 2000f;
 
-        [Header("Tools (drag any components that implement IActionToolV2)")]
-        public List<MonoBehaviour> tools = new();  // ÍÏ ClickMover, AttackControllerV2 µÈ
+        [Header("Turn Runtime")]
+        public TurnManagerV2 turnManager;
+        public HexBoardTestDriver unitDriver;
 
-        [Header("Keybinds")]
-        public KeyCode keyMoveAim = KeyCode.V;
-        public KeyCode keyAttackAim = KeyCode.A;
+        [Header("Tools (drag any components that implement IActionToolV2)")]
+        Unit ResolveUnit(IActionToolV2 tool)
+        {
+            if (tool is HexClickMover mover && mover != null && mover.driver != null)
+                return mover.driver.UnitRef;
+            if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
+                return attack.driver.UnitRef;
+            return unitDriver != null ? unitDriver.UnitRef : null;
+        }
+
+        bool Precheck(Unit unit, IActionToolV2 tool)
+        {
+            if (turnManager == null || unit == null) return true;
+
+            var budget = turnManager.GetBudget(unit);
+            var resources = turnManager.GetResources(unit);
+            var cooldowns = turnManager.GetCooldowns(unit);
+
+            if (tool is HexClickMover mover)
+            {
+                var cfg = mover.config;
+                string actionId = ResolveActionId(mover);
+                if (cooldowns != null && !cooldowns.Ready(actionId))
+                {
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.OnCooldown, null);
+                    return false;
+                }
+
+                int energyNeed = Mathf.Max(0, cfg != null ? cfg.energyCost : 0);
+                if (resources != null && energyNeed > 0 && !resources.Has("Energy", energyNeed))
+                {
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                    return false;
+                }
+
+                int timeNeed = Mathf.Max(0, Mathf.CeilToInt(cfg != null ? cfg.timeCostSeconds : 0f));
+                if (budget != null && timeNeed > 0 && !budget.HasTime(timeNeed))
+                {
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, null);
+                    return false;
+                }
+            }
+            else if (tool is AttackControllerV2 attack)
+            {
+                var cfg = attack.attackConfig;
+                string actionId = cfg != null ? cfg.name : attack.Id;
+                if (cooldowns != null && !cooldowns.Ready(actionId))
+                {
+                    AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.OnCooldown, "On cooldown.");
+                    return false;
+                }
+
+                int energyNeed = cfg != null ? Mathf.CeilToInt(cfg.baseEnergyCost) : 0;
+                if (resources != null && energyNeed > 0 && !resources.Has("Energy", energyNeed))
+                {
+                    AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void ApplyTurnBudgets(Unit unit, IActionToolV2 tool)
+        {
+            var budget = turnManager != null ? turnManager.GetBudget(unit) : null;
+            if (budget == null) return;
+
+            int spend = EstimateUsedSeconds(tool);
+            if (spend > 0) budget.SpendTime(spend);
+
+            int refund = EstimateRefundSeconds(tool);
+            if (refund > 0) budget.RefundTime(refund);
+        }
+
+        int EstimateUsedSeconds(IActionToolV2 tool)
+        {
+            if (tool is HexClickMover mover && mover.config != null)
+                return Mathf.Max(0, Mathf.CeilToInt(mover.config.timeCostSeconds));
+            if (tool is AttackControllerV2 attack && attack.attackConfig != null)
+                return Mathf.Max(0, attack.attackConfig.baseTimeSeconds);
+            return 0;
+        }
+
+        int EstimateRefundSeconds(IActionToolV2 tool) => 0;
+
+        string ResolveActionId(HexClickMover mover)
+        {
+            if (mover == null) return "Move";
+            if (!string.IsNullOrEmpty(mover.actionIdOverride))
+                return mover.actionIdOverride;
+            return mover.config != null ? mover.config.actionId : mover.Id;
+        }
+
+            var unit = ResolveUnit(_activeTool);
+            if (!Precheck(unit, _activeTool)) return;
+
+            StartCoroutine(RunBusy(_activeTool, h.Value, unit));
+        IEnumerator RunBusy(IActionToolV2 tool, Hex h, Unit unit)
+            yield return tool.OnConfirm(h);
+
+            if (turnManager != null && unit != null)
+                ApplyTurnBudgets(unit, tool);
+
 
         ActionModeV2 _mode = ActionModeV2.Idle;
         readonly Dictionary<string, IActionToolV2> _toolById = new();
@@ -41,14 +143,14 @@ namespace TGD.CombatV2
 
         void Update()
         {
-            // ¡ª¡ª Ä£Ê½ÇĞ»»£¨»¥³â£©¡ª¡ª
+            // â€”â€” æ¨¡å¼åˆ‡æ¢ï¼ˆäº’æ–¥ï¼‰â€”â€”
             if (_mode != ActionModeV2.Busy)
             {
                 if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
                 if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
             }
 
-            // ¡ª¡ª Ãé×¼ÖĞ£ºHover / Confirm / Cancel ¡ª¡ª 
+            // â€”â€” ç„å‡†ä¸­ï¼šHover / Confirm / Cancel â€”â€” 
             if (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim)
             {
                 var h = PickHexUnderMouse();
@@ -58,24 +160,24 @@ namespace TGD.CombatV2
                     _activeTool?.OnHover(h.Value);
                 }
 
-                if (Input.GetMouseButtonDown(0)) Confirm();      // ×ó¼üÈ·ÈÏ
-                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // ÓÒ¼ü/ESC È¡Ïû
+                if (Input.GetMouseButtonDown(0)) Confirm();      // å·¦é”®ç¡®è®¤
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // å³é”®/ESC å–æ¶ˆ
             }
         }
 
-        // ===== Íâ²¿ UI Ò²¿ÉÒÔÖ±½ÓÓÃÕâÁ© API =====
+        // ===== å¤–éƒ¨ UI ä¹Ÿå¯ä»¥ç›´æ¥ç”¨è¿™ä¿© API =====
         public void RequestAim(string toolId)
         {
-            // Ã¦ÂµÆÚ²»ÄÜ¿ªÆôĞÂ¶¯×÷
+            // å¿™ç¢ŒæœŸä¸èƒ½å¼€å¯æ–°åŠ¨ä½œ
             if (_mode == ActionModeV2.Busy) return;
 
-            // ÖØ¸´°´£ºÇĞ»»»Ø Idle
+            // é‡å¤æŒ‰ï¼šåˆ‡æ¢å› Idle
             if (_activeTool != null && _activeTool.Id == toolId)
             {
                 Cancel(); return;
             }
 
-            // ÇĞ»»¹¤¾ß£ºÏÈÈ¡Ïû¾ÉµÄ
+            // åˆ‡æ¢å·¥å…·ï¼šå…ˆå–æ¶ˆæ—§çš„
             if (_activeTool != null) Cancel();
 
             if (!_toolById.TryGetValue(toolId, out var tool)) return;
@@ -104,7 +206,7 @@ namespace TGD.CombatV2
             var h = _hover ?? PickHexUnderMouse();
             if (!h.HasValue) return;
 
-            // ½øÈë Busy£º²»ÔÙÏìÓ¦ÆäËû°´¼ü£¬Ö±µ½Ğ­³Ì½áÊø
+            // è¿›å…¥ Busyï¼šä¸å†å“åº”å…¶ä»–æŒ‰é”®ï¼Œç›´åˆ°åç¨‹ç»“æŸ
             StartCoroutine(RunBusy(_activeTool, h.Value));
         }
 
@@ -113,15 +215,15 @@ namespace TGD.CombatV2
             _mode = ActionModeV2.Busy;
             _hover = null;
 
-            yield return tool.OnConfirm(h);   // ¹¤¾ßÖ´ĞĞ£¨ÒÆ¶¯/¿¿½üµÈ£©
+            yield return tool.OnConfirm(h);   // å·¥å…·æ‰§è¡Œï¼ˆç§»åŠ¨/é è¿‘ç­‰ï¼‰
             tool.OnExitAim();
             _hover = null;
-            // Ö´ĞĞÍê±Ï£º»Ö¸´ Idle
+            // æ‰§è¡Œå®Œæ¯•ï¼šæ¢å¤ Idle
             if (_activeTool == tool) _activeTool = null;
             _mode = ActionModeV2.Idle;
         }
 
-        // ===== Ê°È¡Í³Ò»ÔÚ Manager ×ö£¬Ò»´¦ĞŞ¾ÍÈ«ĞŞ =====
+        // ===== æ‹¾å–ç»Ÿä¸€åœ¨ Manager åšï¼Œä¸€å¤„ä¿®å°±å…¨ä¿® =====
         Hex? PickHexUnderMouse()
         {
             var cam = pickCamera ? pickCamera : Camera.main;

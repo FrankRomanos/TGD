@@ -4,27 +4,34 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    /// ½« AttackAction Óë StatsV2 / CooldownHubV2 ¶Ô½Ó£»¼ÇÂ¼¡°±¾»ØºÏ¹¥»÷´ÎÊý¡±
+    ///  AttackAction  StatsV2 / CooldownHubV2 Ô½Ó£Â¼ØºÏ¹
     [DisallowMultipleComponent]
     public sealed class AttackCostServiceV2Adapter : MonoBehaviour, IAttackCostService
     {
         [Header("Refs")]
         public StatsV2 stats;
-        public CooldownHubV2 cooldownHub;   // Ä¿Ç°¹¥»÷ÀäÈ´=0£¬¿ÉÁô¿Õ
+        public CooldownHubV2 cooldownHub;   // Ä¿Ç°È´=0
+        public TurnManagerV2 turnManager;
+        public UnitRuntimeContext ctx;
 
         [Header("Overrides (optional)")]
-        [Tooltip("ÊÇ·ñÁÙÊ±ºöÂÔÍ¬»ØºÏµþ¼Ó£¨±»Ìì¸³/¼¼ÄÜÒÆ³ý£©")]
+        [Tooltip("Ç·Ê±Í¬ØºÏµÓ£ì¸³/Æ³")]
         public bool ignoreSameTurnPenalty = false;
 
-        [Header("Debug")] // ¡ï ÐÂÔö£º¿ØÖÆÌ¨´òÓ¡¿ª¹Ø
-        public bool debugLogCosts = true;   // ¡ï
+        [Header("Debug")] //  Ì¨Ó¡
+        public bool debugLogCosts = true;   //
 
         int _attacksThisTurn = 0;
         CooldownStoreV2 Store => cooldownHub ? cooldownHub.store : null;
 
         public bool IsOnCooldown(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
-            // Ä¬ÈÏ¹¥»÷ÀäÈ´=0
+            if (turnManager != null && unit != null)
+            {
+                var cds = turnManager.GetCooldowns(unit);
+                if (cds != null)
+                    return !cds.Ready(cfg != null ? cfg.name : "Attack");
+            }
             return false;
         }
 
@@ -35,48 +42,69 @@ namespace TGD.CombatV2
 
             if (cfg.applySameTurnPenalty && !ignoreSameTurnPenalty)
             {
-                // µÚÒ»´Î£º+0£»µÚ¶þ´Î£º+50%£»µÚÈý´Î£º+100%...
+                // Ò»Î£+0Ú¶Î£+50%Î£+100%...
                 // cost = base * (1 + rate * (_attacksThisTurn))
                 cost = cfg.baseEnergyCost * (1f + cfg.sameTurnPenaltyRate * Mathf.Max(0, _attacksThisTurn));
             }
 
-            // Äã¼ÒÄÜÁ¿ÊÇ int£¬ÏòÉÏÈ¡Õû¸ü±£ÊØ
+            //  intÈ¡
             return Mathf.CeilToInt(cost);
         }
 
         public bool HasEnough(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
-            if (stats == null || cfg == null) return true; // Î´ÅäÃæ°åÔò·ÅÐÐ²âÊÔ
             int need = CalcCost(cfg);
-            // ¡ï ¿ÉÑ¡£º²»×ãÊ±Ò²´òÒ»Ìõ
-            bool ok = stats.Energy >= need;
+            if (turnManager != null && unit != null)
+            {
+                var pool = turnManager.GetResources(unit);
+                if (pool != null)
+                {
+                    bool ok = pool.Has("Energy", need);
+                    if (debugLogCosts && !ok)
+                        Debug.Log($"[AttackCost] NOT ENOUGH energy (need={need})", this);
+                    return ok;
+                }
+            }
 
-            // ¡ï ¿ÉÑ¡£º²»×ãÊ±Ò²´òÒ»Ìõ
-            if (debugLogCosts && !ok)
+            if (stats == null || cfg == null) return true; // Î´Ð²
+            bool has = stats.Energy >= need;
+
+            if (debugLogCosts && !has)
                 Debug.Log($"[AttackCost] NOT ENOUGH energy (need={need}, have={stats.Energy})", this);
 
-            return ok;
+            return has;
         }
 
         public void Pay(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
+            int need = CalcCost(cfg);
+            if (turnManager != null && unit != null)
+            {
+                var pool = turnManager.GetResources(unit);
+                pool?.Spend("Energy", need, "Attack");
+                // Ä¬Ã»cooldown seconds, È´Ê±Ô¤ç•™
+                _attacksThisTurn++;
+                if (debugLogCosts)
+                    Debug.Log($"[AttackCost] cost={need} (turn attacks={_attacksThisTurn})", this);
+                return;
+            }
+
             if (stats != null && cfg != null)
             {
-                int need = CalcCost(cfg);
                 int before = stats.Energy;
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
-                // ¡ï ´òÓ¡ÄãÒªµÄÈÕÖ¾¸ñÊ½
+                //  Ó¡ÒªÖ¾Ê½
                 if (debugLogCosts)
                     Debug.Log($"[AttackCost] cost={need}  energy {before}->{stats.Energy}  (attacksThisTurn={_attacksThisTurn})", this);
             }
-           
-            // ¹¥»÷ÀäÈ´Ä¿Ç°=0£¬Ìø¹ý
-            _attacksThisTurn++; // ÀÛ¼ÆÍ¬»ØºÏ´ÎÊý
+
+            // È´Ä¿Ç°=0
+            _attacksThisTurn++; // Û¼Í¬ØºÏ´
         }
 
         public void ResetForNewTurn() => _attacksThisTurn = 0;
 
-        // ²âÊÔ±ã½Ý
+        // Ô±
         [ContextMenu("Debug/Reset Attack Count This Turn")]
         void DebugReset() => _attacksThisTurn = 0;
     }
