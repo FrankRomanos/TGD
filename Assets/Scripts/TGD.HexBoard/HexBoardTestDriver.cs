@@ -3,22 +3,20 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// 最小运行时上下文：聚合 Unit/Layout/Map/View，供移动/攻击等系统引用
     [DisallowMultipleComponent]
     public sealed class HexBoardTestDriver : MonoBehaviour
     {
         public HexBoardAuthoringLite authoring;
         public Transform unitView;
+        public string unitId = "P1";                 // ★ 新增：每个驱动唯一 Id
         public int startQ = 9, startR = 7;
         public Facing4 startFacing = Facing4.PlusQ;
         public float y = 0.01f;
 
-        // 给外部系统用的入口
         public Unit UnitRef => _unit;
         public HexBoardLayout Layout => _layout;
         public HexBoardMap<Unit> Map => _map;
 
-        // 可选：把视图朝向同步回数据（默认开启，便于动画驱动朝向）
         public bool syncFacingFromView = true;
 
         HexBoardLayout _layout;
@@ -35,7 +33,8 @@ namespace TGD.HexBoard
 
             _layout = authoring.Layout;
             _map = new HexBoardMap<Unit>(_layout);
-            _unit = new Unit("U1", new Hex(startQ, startR), startFacing);
+            if (string.IsNullOrEmpty(unitId)) unitId = gameObject.name;   // ★ 兜底
+            _unit = new Unit(unitId, new Hex(startQ, startR), startFacing); // ★ 用唯一 Id
             _map.Set(_unit, _unit.Position);
 
             _inited = true;
@@ -57,7 +56,6 @@ namespace TGD.HexBoard
         {
             if (!IsReady || unitView == null) return;
             unitView.position = _layout.World(_unit.Position, y);
-            // 朝向交由动画/其他系统控制，这里不强制写回
         }
 
         public static Facing4 FacingFromYaw4(float yawDegrees)
@@ -65,10 +63,10 @@ namespace TGD.HexBoard
             int a = Mathf.RoundToInt(Mathf.Repeat(yawDegrees, 360f) / 90f) * 90;
             switch (a % 360)
             {
-                case 0: return Facing4.MinusR;  // +Z
-                case 90: return Facing4.PlusQ;   // +X
-                case 180: return Facing4.PlusR;   // -Z
-                case 270: return Facing4.MinusQ;  // -X
+                case 0: return Facing4.MinusR;
+                case 90: return Facing4.PlusQ;
+                case 180: return Facing4.PlusR;
+                case 270: return Facing4.MinusQ;
                 default: return Facing4.MinusR;
             }
         }

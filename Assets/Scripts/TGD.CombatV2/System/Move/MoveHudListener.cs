@@ -1,4 +1,3 @@
-// File: Assets/Scripts/TGD.UI/MoveHudListenerTMP.cs
 using System;
 using System.Collections;
 using TGD.HexBoard;
@@ -7,16 +6,15 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
-    /// 监听 HexMoveEvents，用 TextMeshPro 做消息提示
     [DisallowMultipleComponent]
     public sealed class MoveHudListenerTMP : MonoBehaviour
     {
         [Header("Targets")]
-        [Tooltip("要显示文字的 TMP_Text")]
         public TMP_Text uiText;
-
-        [Tooltip("整体容器（建议挂 CanvasGroup 做淡出），不填则用 uiText 的 Transform")]
         public RectTransform root;
+
+        [Header("Filter")]
+        public HexBoardTestDriver driver;   // ★ 新增：只显示属于自己的事件
 
         [Header("Behavior")]
         [Min(0.2f)] public float showSeconds = 1.6f;
@@ -28,8 +26,9 @@ namespace TGD.CombatV2
         void Awake()
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
-            if (!root) root = (uiText ? uiText.rectTransform : null);
+            if (!root && uiText) root = uiText.rectTransform;
             if (root) _cg = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ★
             SetVisible(false, true);
         }
 
@@ -37,33 +36,32 @@ namespace TGD.CombatV2
         {
             HexMoveEvents.MoveRejected += OnRejected;
             HexMoveEvents.TimeRefunded += OnRefunded;
-            // 你愿意也可以显示其它事件：
-            // TGD.HexBoard.HexMoveEvents.RangeShown += OnRangeShown;
-            // TGD.HexBoard.HexMoveEvents.RangeHidden += _ => SetVisible(false);
         }
 
         void OnDisable()
         {
             HexMoveEvents.MoveRejected -= OnRejected;
             HexMoveEvents.TimeRefunded -= OnRefunded;
-            // HexMoveEvents.RangeShown  / RangeHidden 如上要么也退订
+            if (_co != null) { StopCoroutine(_co); _co = null; }
+            SetVisible(false);
         }
 
-        private void OnRefunded(Unit u, int sec)
+        bool Match(Unit u) => driver && driver.UnitRef == u;
+
+        void OnRefunded(Unit u, int sec)
         {
-            if (!uiText || !root) return;
+            if (!Match(u) || !uiText || !root) return;
             uiText.text = $"+{sec}s refunded";
             if (_co != null) StopCoroutine(_co);
             _co = StartCoroutine(ShowThenHide());
         }
 
-        void OnRejected(TGD.HexBoard.Unit unit, MoveBlockReason reason, string msg)
+        void OnRejected(Unit u, MoveBlockReason reason, string msg)
         {
-            if (!uiText || !root) return;
+            if (!Match(u) || !uiText || !root) return;
 
             if (string.IsNullOrEmpty(msg))
             {
-                // 兜底英文
                 msg = reason switch
                 {
                     MoveBlockReason.Entangled => "I can't move!",
@@ -72,10 +70,9 @@ namespace TGD.CombatV2
                     MoveBlockReason.NotEnoughResource => "Not enough energy.",
                     MoveBlockReason.PathBlocked => "That path is blocked.",
                     MoveBlockReason.NoBudget => "No More Time",
-                _ => "Can't move."
+                    _ => "Can't move."
                 };
             }
-
             uiText.text = msg;
             if (_co != null) StopCoroutine(_co);
             _co = StartCoroutine(ShowThenHide());
@@ -88,8 +85,7 @@ namespace TGD.CombatV2
 
             if (!fadeOut) { SetVisible(false); yield break; }
 
-            float t = 0f;
-            const float dur = 0.25f;
+            float t = 0f, dur = 0.25f;
             while (t < dur)
             {
                 t += Time.unscaledDeltaTime;

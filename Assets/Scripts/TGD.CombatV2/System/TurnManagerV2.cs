@@ -158,6 +158,15 @@ namespace TGD.CombatV2
             if (_runtimeByUnit.TryGetValue(unit, out var runtime))
                 runtime.Bind(context);
         }
+        public UnitRuntimeContext GetContext(Unit unit)
+        {
+            if (unit == null) return null;
+            if (_contextByUnit.TryGetValue(unit, out var context))
+                return context;
+            if (_runtimeByUnit.TryGetValue(unit, out var runtime))
+                return runtime.Context;
+            return null;
+        }
 
         public void StartBattle(List<Unit> players, Unit boss)
         {

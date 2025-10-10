@@ -29,7 +29,8 @@ namespace TGD.CombatV2
         public KeyCode keyAttackAim = KeyCode.A;
 
         ActionModeV2 _mode = ActionModeV2.Idle;
-        readonly Dictionary<string, IActionToolV2> _toolById = new();
+        readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
+        Unit _currentUnit; // ★ 记录当前回合单位
         IActionToolV2 _activeTool;
         Hex? _hover;
 
@@ -38,9 +39,34 @@ namespace TGD.CombatV2
             foreach (var mb in tools)
             {
                 if (!mb) continue;
-                if (mb is IActionToolV2 tool && !_toolById.ContainsKey(tool.Id))
-                    _toolById.Add(tool.Id, tool);
+                if (mb is IActionToolV2 tool)
+                {
+                    if (!_toolsById.TryGetValue(tool.Id, out var list))
+                    {
+                        list = new List<IActionToolV2>();
+                        _toolsById[tool.Id] = list;
+                    }
+                    list.Add(tool);
+                }
             }
+        }
+        void OnEnable()
+        {
+            if (turnManager != null) turnManager.TurnStarted += OnTurnStarted;
+        }
+        void OnDisable()
+        {
+            if (turnManager != null) turnManager.TurnStarted -= OnTurnStarted;
+        }
+        void OnTurnStarted(TGD.HexBoard.Unit u) => _currentUnit = u;
+
+        // —— 选择“属于当前回合单位”的工具 —— 
+        IActionToolV2 SelectTool(string id)
+        {
+            if (!_toolsById.TryGetValue(id, out var list)) return null;
+            foreach (var t in list)
+                if (ResolveUnit(t) == _currentUnit) return t;
+            return list.Count > 0 ? list[0] : null;
         }
 
         void Update()
@@ -136,24 +162,17 @@ namespace TGD.CombatV2
         // ===== 外部 UI 也可以直接用这俩 API =====
         public void RequestAim(string toolId)
         {
-            // 忙碌期不能开启新动作
             if (_mode == ActionModeV2.Busy) return;
 
-            // 重复按：切换回 Idle
-            if (_activeTool != null && _activeTool.Id == toolId)
-            {
-                Cancel(); return;
-            }
+            var tool = SelectTool(toolId);
+            if (tool == null) return;
 
-            // 切换工具：先取消旧的
+            if (_activeTool == tool) { Cancel(); return; }
             if (_activeTool != null) Cancel();
-
-            if (!_toolById.TryGetValue(toolId, out var tool)) return;
 
             _activeTool = tool;
             _hover = null;
             _activeTool.OnEnterAim();
-
             _mode = (toolId == "Attack") ? ActionModeV2.AttackAim : ActionModeV2.MoveAim;
         }
 

@@ -5,15 +5,15 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
-    /// <summary>
-    /// Displays attack related HUD hints driven by <see cref="AttackEventsV2"/>.
-    /// </summary>
     [DisallowMultipleComponent]
     public sealed class AttackHudListenerTMP : MonoBehaviour
     {
         [Header("Targets")]
         public TMP_Text uiText;
         public RectTransform root;
+
+        [Header("Filter")]
+        public HexBoardTestDriver driver;   // ¡ï ÐÂÔö
 
         [Header("Behavior")]
         [Min(0.2f)] public float showSeconds = 1.6f;
@@ -26,6 +26,7 @@ namespace TGD.CombatV2
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
         }
 
         void Awake()
@@ -33,6 +34,7 @@ namespace TGD.CombatV2
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
             if (root) _canvasGroup = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
             SetVisible(false, true);
         }
 
@@ -46,17 +48,15 @@ namespace TGD.CombatV2
         {
             AttackEventsV2.AttackRejected -= OnRejected;
             AttackEventsV2.AttackMiss -= OnMiss;
-            if (_co != null)
-            {
-                StopCoroutine(_co);
-                _co = null;
-            }
+            if (_co != null) { StopCoroutine(_co); _co = null; }
             SetVisible(false);
         }
 
+        bool Match(Unit u) => driver && driver.UnitRef == u;
+
         void OnRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
-            if (!uiText || !root) return;
+            if (!Match(unit) || !uiText || !root) return;
 
             if (string.IsNullOrEmpty(message))
             {
@@ -71,15 +71,13 @@ namespace TGD.CombatV2
                     _ => "Attack unavailable."
                 };
             }
-
             Show(message);
         }
 
         void OnMiss(Unit unit, string message)
         {
-            if (!uiText || !root) return;
-            if (string.IsNullOrEmpty(message)) message = "Attack missed.";
-            Show(message);
+            if (!Match(unit) || !uiText || !root) return;
+            Show(string.IsNullOrEmpty(message) ? "Attack missed." : message);
         }
 
         void Show(string text)
@@ -94,22 +92,15 @@ namespace TGD.CombatV2
             SetVisible(true, true);
             yield return new WaitForSeconds(showSeconds);
 
-            if (!fadeOut)
-            {
-                SetVisible(false);
-                _co = null;
-                yield break;
-            }
+            if (!fadeOut) { SetVisible(false); _co = null; yield break; }
 
-            float t = 0f;
-            const float duration = 0.25f;
+            float t = 0f, duration = 0.25f;
             while (t < duration)
             {
                 t += Time.unscaledDeltaTime;
                 if (_canvasGroup) _canvasGroup.alpha = Mathf.Lerp(1f, 0f, t / duration);
                 yield return null;
             }
-
             SetVisible(false);
             _co = null;
         }
