@@ -22,16 +22,10 @@ namespace TGD.CombatV2
         public bool debugLogCosts = true;   // ★
 
         int _attacksThisTurn = 0;
-        CooldownStoreV2 Store => cooldownHub ? cooldownHub.store : null;
+        CooldownStoreSecV2 Store => cooldownHub ? cooldownHub.secStore : null;
 
         public bool IsOnCooldown(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
-            if (turnManager != null && unit != null)
-            {
-                var cds = turnManager.GetCooldowns(unit);
-                if (cds != null)
-                    return !cds.Ready(cfg != null ? cfg.name : "Attack");
-            }
             return false;
         }
 
@@ -53,18 +47,9 @@ namespace TGD.CombatV2
 
         public bool HasEnough(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
+            if (turnManager != null)
+                return true;
             int need = CalcCost(cfg);
-            if (turnManager != null && unit != null)
-            {
-                var pool = turnManager.GetResources(unit);
-                if (pool != null)
-                {
-                    bool ok = pool.Has("Energy", need);
-                    if (debugLogCosts && !ok)
-                        Debug.Log($"[AttackCost] NOT ENOUGH energy (need={need})", this);
-                    return ok;
-                }
-            }
 
             if (stats == null || cfg == null) return true; // δв
             bool has = stats.Energy >= need;
@@ -78,13 +63,11 @@ namespace TGD.CombatV2
         public void Pay(TGD.HexBoard.Unit unit, AttackActionConfigV2 cfg)
         {
             int need = CalcCost(cfg);
-            if (turnManager != null && unit != null)
+            if (turnManager != null)
             {
-                var pool = turnManager.GetResources(unit);
-                pool?.Spend("Energy", need, "Attack");
                 _attacksThisTurn++;
                 if (debugLogCosts)
-                    Debug.Log($"[AttackCost] cost={need} (turn attacks={_attacksThisTurn})", this);
+                    Debug.Log($"[AttackCost] defer cost={need} (turn attacks={_attacksThisTurn})", this);
                 return;
             }
 

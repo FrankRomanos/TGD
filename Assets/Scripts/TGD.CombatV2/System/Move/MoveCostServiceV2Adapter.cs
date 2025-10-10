@@ -18,58 +18,36 @@ namespace TGD.CombatV2
         [Header("Options")]
         public string actionIdOverride = ""; // 留空则用 MoveActionConfig.actionId
 
-        CooldownStoreV2 Store => cooldownHub != null ? cooldownHub.store : null;
+        CooldownStoreSecV2 Store => cooldownHub != null ? cooldownHub.secStore : null;
         string Key(MoveActionConfig cfg)
             => string.IsNullOrEmpty(actionIdOverride) ? (cfg != null ? cfg.actionId : "Move") : actionIdOverride;
 
         public bool IsOnCooldown(Unit unit, MoveActionConfig cfg)
         {
+            if (turnManager != null)
+                return false;
             string key = Key(cfg);
-            if (turnManager != null && unit != null)
-            {
-                var cds = turnManager.GetCooldowns(unit);
-                if (cds != null)
-                    return !cds.Ready(key);
-            }
-            return Store != null && Store.RoundsLeft(key) > 0;
+            return Store != null && !Store.Ready(key);
         }
 
         public bool HasEnough(Unit unit, MoveActionConfig cfg)
         {
             if (cfg == null) return true;
+            if (turnManager != null)
+                return true;
+
             int need = Mathf.Max(0, cfg.energyCost);
-
-            if (turnManager != null && unit != null)
-            {
-                var pool = turnManager.GetResources(unit);
-                if (pool != null)
-                    return pool.Has("Energy", need);
-            }
-
-            if (stats == null) return true; 
+            if (stats == null) return true;
             return stats.Energy >= need;
         }
 
         public void Pay(Unit unit, MoveActionConfig cfg)
         {
             if (cfg == null) return;
-
+            if (turnManager != null)
+                return;
             int need = Mathf.Max(0, cfg.energyCost);
             string key = Key(cfg);
-
-            if (turnManager != null && unit != null)
-            {
-                var pool = turnManager.GetResources(unit);
-                pool?.Spend("Energy", need, "Move");
-
-                if (cfg.cooldownSeconds > 0f)
-                {
-                    int seconds = Mathf.CeilToInt(cfg.cooldownSeconds);
-                    var cds = turnManager.GetCooldowns(unit);
-                    cds?.StartSeconds(key, seconds);
-                }
-                return;
-            }
 
             if (stats != null)
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
@@ -77,26 +55,19 @@ namespace TGD.CombatV2
             // 开冷却（秒→回合；Move 通常 0）
             if (Store != null && cfg.cooldownSeconds > 0f)
             {
-                int turns = StatsMathV2.CooldownToTurns(Mathf.CeilToInt(cfg.cooldownSeconds));
-                Store.Start(key, turns);
+                int seconds = Mathf.CeilToInt(cfg.cooldownSeconds);
+                Store.StartSeconds(key, seconds);
             }
         }
         public void RefundSeconds(Unit unit, MoveActionConfig cfg, int seconds)
         {
-            if (stats == null || cfg == null || seconds <= 0) return;
+            if (cfg == null || seconds <= 0) return;
 
-            // 约定：MoveActionConfig.energyCost 表示“每秒移动消耗”的能量
-            int refund = Mathf.Max(0, cfg.energyCost) * seconds;
-
-            if (turnManager != null && unit != null)
-            {
-                var pool = turnManager.GetResources(unit);
-                pool?.Refund("Energy", refund, "MoveRefund");
+            if (turnManager != null)
                 return;
-            }
-
+            
             if (stats == null) return;
-
+            int refund = Mathf.Max(0, cfg.energyCost) * seconds;
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(stats.Energy + refund, 0, stats.MaxEnergy);
 

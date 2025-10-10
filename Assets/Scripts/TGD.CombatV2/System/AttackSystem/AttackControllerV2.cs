@@ -8,7 +8,7 @@ using TGD.HexBoard;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         const float MR_MIN = 1f;
         const float MR_MAX = 12f;
@@ -64,6 +64,11 @@ namespace TGD.CombatV2
 
         float _turnSecondsLeft = -1f;
         int _attacksThisTurn;
+        int _reportUsedSeconds;
+        int _reportRefundedSeconds;
+        bool _reportPending;
+        int _reportComboBaseCount;
+        int _pendingComboBaseCount;
 
         struct PendingAttack
         {
@@ -75,6 +80,23 @@ namespace TGD.CombatV2
         }
 
         PendingAttack _pendingAttack;
+        void ClearExecReport()
+        {
+            _reportUsedSeconds = 0;
+            _reportRefundedSeconds = 0;
+            _reportPending = false;
+            _reportComboBaseCount = 0;
+            _pendingComboBaseCount = 0;
+        }
+
+        void SetExecReport(int used, int refunded, bool attackExecuted)
+        {
+            _reportUsedSeconds = Mathf.Max(0, used);
+            _reportRefundedSeconds = Mathf.Max(0, refunded);
+            _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
+            _reportPending = true;
+            _pendingComboBaseCount = 0;
+        }
 
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
 
@@ -229,6 +251,7 @@ namespace TGD.CombatV2
 
         public IEnumerator OnConfirm(Hex hex)
         {
+            ClearExecReport();
             EnsureTurnTimeInited();
             if (!IsReady)
             {
@@ -271,6 +294,7 @@ namespace TGD.CombatV2
             }
 
             bool attackPlanned = preview.targetIsEnemy;
+            _pendingComboBaseCount = attackPlanned ? Mathf.Max(0, _attacksThisTurn) : 0;
             int moveSecsCharge = Mathf.Max(0, preview.moveSecsCharge);
             int attackSecsCharge = preview.targetIsEnemy ? Mathf.Max(0, preview.attackSecsCharge) : 0;
             int moveEnergyCost = Mathf.Max(0, preview.moveEnergyCost);
@@ -288,6 +312,7 @@ namespace TGD.CombatV2
                     attackPlanned = false;
                     attackSecsCharge = 0;
                     attackEnergyCost = 0;
+                    _pendingComboBaseCount = 0;
                     if (debugLog)
                         Debug.Log("[Attack] Not enough time for attack. Downgrade to move-only.", this);
                 }
@@ -700,7 +725,21 @@ namespace TGD.CombatV2
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                 }
             }
+            int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
+            int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
+            int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
+            int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
+            SetExecReport(moveUsedSeconds + attackUsedSeconds, moveRefundSeconds + attackRefundSeconds, attackSuccess);
         }
+        int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
+        int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
+
+        void IActionExecReportV2.Consume()
+        {
+            ClearExecReport();
+        }
+
+        public int ReportComboBaseCount => _reportComboBaseCount;
 
         MoveRatesSnapshot BuildMoveRates(Hex start)
         {

@@ -30,7 +30,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -144,6 +144,23 @@ namespace TGD.CombatV2
         string _hudMsg;
         float _hudMsgUntil;
         public string Id => "Move";
+        int _reportUsedSeconds;
+        int _reportRefundedSeconds;
+        bool _reportPending;
+
+        void ClearExecReport()
+        {
+            _reportUsedSeconds = 0;
+            _reportRefundedSeconds = 0;
+            _reportPending = false;
+        }
+
+        void SetExecReport(int used, int refunded)
+        {
+            _reportUsedSeconds = Mathf.Max(0, used);
+            _reportRefundedSeconds = Mathf.Max(0, refunded);
+            _reportPending = true;
+        }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim()
         {
@@ -179,6 +196,7 @@ namespace TGD.CombatV2
 
         public IEnumerator OnConfirm(Hex hex)
         {
+            ClearExecReport();
             EnsureTurnTimeInited();
             RefreshStateForAim();
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
@@ -471,6 +489,7 @@ namespace TGD.CombatV2
 
             int refunded = Mathf.Max(0, sim.RefundedSeconds);
             int spentSec = Mathf.Max(0, requiredSec - refunded);
+            int usedSeconds = Mathf.Max(0, Mathf.CeilToInt(sim.UsedSeconds));
             var stepRates = sim.StepEffectiveRates;
 
             if (reached == null || reached.Count < 2)
@@ -482,7 +501,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-
+            SetExecReport(usedSeconds, refunded);
             _moving = true;
             if (driver.unitView != null)
             {
@@ -594,10 +613,14 @@ namespace TGD.CombatV2
                 status.ConsumeSeconds(spentSec);
             }
 
-
         }
+        int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
+        int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
 
-
+        void IActionExecReportV2.Consume()
+        {
+            ClearExecReport();
+        }
 
         // 若没指定占位，临时造一个“单格”占位
         static FootprintShape CreateSingleFallback()
