@@ -39,6 +39,7 @@ namespace TGD.CombatV2
             foreach (var mb in tools)
             {
                 if (!mb) continue;
+                WireTurnManager(mb);
                 if (mb is IActionToolV2 tool)
                 {
                     if (!_toolsById.TryGetValue(tool.Id, out var list))
@@ -49,6 +50,33 @@ namespace TGD.CombatV2
                     list.Add(tool);
                 }
             }
+        }
+
+        void WireTurnManager(MonoBehaviour mb)
+        {
+            if (turnManager == null || mb == null) return;
+
+            switch (mb)
+            {
+                case AttackControllerV2 attack:
+                    attack.AttachTurnManager(turnManager);
+                    break;
+                case HexClickMover mover:
+                    WireMoveCostAdapter(mover.costProvider as MoveCostServiceV2Adapter);
+                    break;
+                case MoveCostServiceV2Adapter moveAdapter:
+                    WireMoveCostAdapter(moveAdapter);
+                    break;
+                case AttackCostServiceV2Adapter attackAdapter:
+                    attackAdapter.turnManager = turnManager;
+                    break;
+            }
+        }
+
+        void WireMoveCostAdapter(MoveCostServiceV2Adapter adapter)
+        {
+            if (adapter == null) return;
+            adapter.turnManager = turnManager;
         }
         void OnEnable()
         {
@@ -148,18 +176,10 @@ namespace TGD.CombatV2
                         }
                     case AttackControllerV2 attack when attack.attackConfig != null:
                         {
-                            float rate = Mathf.Max(0f, attack.attackConfig.baseEnergyCost);
-                            if (rate > 0f)
-                            {
-                                int baseCount = Mathf.Max(0, attack.ReportComboBaseCount);
-                                float mult = attack.attackConfig.applySameTurnPenalty
-                                    ? 1f + attack.attackConfig.sameTurnPenaltyRate * baseCount
-                                    : 1f;
-                                int spend = Mathf.CeilToInt(used * rate * mult);
-                                int refund = Mathf.RoundToInt(refunded * rate);
-                                if (spend > 0) resources.Spend("Energy", spend, "Attack");
-                                if (refund > 0) resources.Refund("Energy", refund, "AttackRefund");
-                            }
+                            int moveEnergy = Mathf.Max(0, attack.ReportMoveEnergyNet);
+                            int attackEnergy = Mathf.Max(0, attack.ReportAttackEnergyNet);
+                            if (moveEnergy > 0) resources.Spend("Energy", moveEnergy, "AttackMove");
+                            if (attackEnergy > 0) resources.Spend("Energy", attackEnergy, "Attack");
                             break;
                         }
                 }
