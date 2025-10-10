@@ -58,15 +58,21 @@ namespace TGD.CombatV2
         {
             if (turnManager != null) turnManager.TurnStarted -= OnTurnStarted;
         }
-        void OnTurnStarted(TGD.HexBoard.Unit u) => _currentUnit = u;
+        void OnTurnStarted(TGD.HexBoard.Unit u)
+        {
+            _currentUnit = u;
+            if (_activeTool != null && ResolveUnit(_activeTool) != _currentUnit)
+                Cancel();
+        }
 
         // —— 选择“属于当前回合单位”的工具 —— 
         IActionToolV2 SelectTool(string id)
         {
             if (!_toolsById.TryGetValue(id, out var list)) return null;
             foreach (var t in list)
-                if (ResolveUnit(t) == _currentUnit) return t;
-            return list.Count > 0 ? list[0] : null;
+                if (ResolveUnit(t) == _currentUnit)
+                    return t;
+            return null;
         }
 
         void Update()
@@ -104,6 +110,8 @@ namespace TGD.CombatV2
         bool Precheck(Unit unit, IActionToolV2 tool)
         {
             if (turnManager == null || unit == null) return true;
+            if (_currentUnit != null && unit != _currentUnit)
+                return false;
             if (tool is IActionExecReportV2)
                 return true;
             // Future fixed-cost actions can hook into this branch.
