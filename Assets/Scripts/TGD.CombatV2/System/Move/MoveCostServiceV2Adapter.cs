@@ -22,6 +22,13 @@ namespace TGD.CombatV2
         string Key(MoveActionConfig cfg)
             => string.IsNullOrEmpty(actionIdOverride) ? (cfg != null ? cfg.actionId : "Move") : actionIdOverride;
 
+        Unit ResolveUnit(Unit unit)
+        {
+            if (unit != null) return unit;
+            var driver = GetComponentInParent<HexBoardTestDriver>();
+            return driver != null ? driver.UnitRef : null;
+        }
+
         public bool IsOnCooldown(Unit unit, MoveActionConfig cfg)
         {
             if (turnManager != null)
@@ -33,12 +40,19 @@ namespace TGD.CombatV2
         public bool HasEnough(Unit unit, MoveActionConfig cfg)
         {
             if (cfg == null) return true;
-            if (turnManager != null)
-                return true;
 
             int need = Mathf.Max(0, cfg.energyCost);
-            if (stats == null) return true;
-            return stats.Energy >= need;
+            if (turnManager != null)
+            {
+                unit = ResolveUnit(unit);
+                var pool = unit != null ? turnManager.GetResources(unit) : null;
+                if (pool != null)
+                    return pool.Has("Energy", need);
+            }
+
+            var sourceStats = stats != null ? stats : (ctx != null ? ctx.stats : null);
+            if (sourceStats == null) return true;
+            return sourceStats.Energy >= need;
         }
 
         public void Pay(Unit unit, MoveActionConfig cfg)
