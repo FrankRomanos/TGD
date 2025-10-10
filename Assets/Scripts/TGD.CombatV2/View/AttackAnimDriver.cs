@@ -8,6 +8,9 @@ namespace TGD.CombatV2
     public sealed class AttackAnimDriver : MonoBehaviour
     {
         public Animator anim;
+          [Header("Optional")]
+    public HexBoardTestDriver driver;         // 允许拖引用（没有也行）
+    public bool requireUnitMatch = false;     // 默认不强制校验 Unit
 
         [Header("State Names")]
         public string stateAttack1 = "Attack1";
@@ -47,20 +50,22 @@ namespace TGD.CombatV2
 
         void OnAnimRequested(Unit unit, int combo)
         {
-            ResolveUnit();
-            if (_unit != unit || anim == null)
-                return;
-            if (_busy)
-                return;
+            // 先确保有 Animator
+            if (anim == null) return;
+
+            // 只有在需要严格校验时才比较 Unit
+            if (requireUnitMatch)
+            {
+                ResolveUnit();
+                if (_unit == null || _unit != unit) return;
+            }
+
+            if (_busy) return;
 
             _currentCombo = combo;
-            string state = combo >= 4
-                ? stateJump
-                : combo == 1
-                    ? stateAttack1
-                    : combo == 2
-                        ? stateAttack2
-                        : stateAttack3;
+            string state = combo >= 4 ? stateJump :
+                           (combo == 1 ? stateAttack1 :
+                           (combo == 2 ? stateAttack2 : stateAttack3));
 
             _busy = true;
             anim.CrossFadeInFixedTime(state, crossFade, 0, 0f);
@@ -84,10 +89,10 @@ namespace TGD.CombatV2
 
         void ResolveUnit()
         {
-            if (_unit != null)
-                return;
+            if (_unit != null) return;
 
-            var drv = GetComponentInParent<HexBoardTestDriver>();
+            // ✅ 先用 inspector 里拖的 driver；没有再向上找
+            var drv = driver != null ? driver : GetComponentInParent<HexBoardTestDriver>();
             if (drv != null)
             {
                 drv.EnsureInit();

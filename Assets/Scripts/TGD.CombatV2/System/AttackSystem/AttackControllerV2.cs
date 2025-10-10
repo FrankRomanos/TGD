@@ -560,13 +560,22 @@ namespace TGD.CombatV2
 
                 if (attackPlanned)
                 {
+                    // （可选）面向目标；不需要可删
+                    if (authoring?.Layout != null && driver?.unitView != null)
+                    {
+                        var fromW = authoring.Layout.World(unit.Position, y);
+                        var toW = authoring.Layout.World(preview.targetHex, y);
+                        float keep = attackConfig ? attackConfig.keepDeg : 45f;
+                        float turn = attackConfig ? attackConfig.turnDeg : 135f;
+                        float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                        var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                        yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+                        driver.UnitRef.Facing = nf;
+                        _actor.Facing = nf;
+                    }
                     TriggerAttackAnimation(unit, preview.targetHex);
                 }
-                else if (attackEnergyPaid > 0)
-                {
-                    RefundAttackEnergy(attackEnergyPaid);
-                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                }
+
 
                 yield break;
             }
@@ -1008,7 +1017,7 @@ namespace TGD.CombatV2
 
         int ResolveComboIndex()
         {
-            return Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 3);
+            return Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 4);
         }
 
         void TriggerAttackAnimation(Unit unit, Hex target)
