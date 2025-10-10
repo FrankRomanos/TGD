@@ -117,3 +117,4 @@ crashlytics-build.properties
 
 Assets/Settings/DefaultVolumeProfile.asset
 /Assets/Settings
+*.anim
