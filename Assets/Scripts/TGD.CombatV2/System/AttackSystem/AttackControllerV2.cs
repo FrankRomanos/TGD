@@ -764,31 +764,6 @@ namespace TGD.CombatV2
             }
             return false;
         }
-        Hex? FindDefaultAttackTarget()
-        {
-            if (_enemyLocator == null) return null;
-            var enemies = _enemyLocator.AllEnemies;
-            if (enemies == null) return null;
-
-            var unit = driver != null ? driver.UnitRef : null;
-            Hex start = unit != null ? unit.Position : Hex.Zero;
-
-            Hex? best = null;
-            int bestDist = int.MaxValue;
-
-            foreach (var hex in enemies)
-            {
-                if (best.HasValue && hex.Equals(best.Value)) continue;
-                int dist = unit != null ? Hex.Distance(start, hex) : int.MaxValue;
-                if (!best.HasValue || dist < bestDist)
-                {
-                    best = hex;
-                    bestDist = dist;
-                }
-            }
-
-            return best;
-        }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing)
         {
