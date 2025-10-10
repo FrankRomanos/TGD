@@ -22,6 +22,50 @@ namespace TGD.CombatV2
         public HexBoardTestDriver unitDriver;
 
         [Header("Tools (drag any components that implement IActionToolV2)")]
+        public List<MonoBehaviour> tools = new();  // ÍÏ ClickMover, AttackControllerV2 µÈ
+
+        [Header("Keybinds")]
+        public KeyCode keyMoveAim = KeyCode.V;
+        public KeyCode keyAttackAim = KeyCode.A;
+
+        ActionModeV2 _mode = ActionModeV2.Idle;
+        readonly Dictionary<string, IActionToolV2> _toolById = new();
+        IActionToolV2 _activeTool;
+        Hex? _hover;
+
+        void Awake()
+        {
+            foreach (var mb in tools)
+            {
+                if (!mb) continue;
+                if (mb is IActionToolV2 tool && !_toolById.ContainsKey(tool.Id))
+                    _toolById.Add(tool.Id, tool);
+            }
+        }
+
+        void Update()
+        {
+            // ¡ª¡ª Ä£Ê½ÇĞ»»£¨»¥³â£©¡ª¡ª
+            if (_mode != ActionModeV2.Busy)
+            {
+                if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
+                if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
+            }
+
+            // ¡ª¡ª Ãé×¼ÖĞ£ºHover / Confirm / Cancel ¡ª¡ª 
+            if (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim)
+            {
+                var h = PickHexUnderMouse();
+                if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
+                {
+                    _hover = h;
+                    _activeTool?.OnHover(h.Value);
+                }
+
+                if (Input.GetMouseButtonDown(0)) Confirm();      // ×ó¼üÈ·ÈÏ
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // ÓÒ¼ü/ESC È¡Ïû
+            }
+        }
         Unit ResolveUnit(IActionToolV2 tool)
         {
             if (tool is HexClickMover mover && mover != null && mover.driver != null)
@@ -115,69 +159,19 @@ namespace TGD.CombatV2
             return mover.config != null ? mover.config.actionId : mover.Id;
         }
 
-            var unit = ResolveUnit(_activeTool);
-            if (!Precheck(unit, _activeTool)) return;
-
-            StartCoroutine(RunBusy(_activeTool, h.Value, unit));
-        IEnumerator RunBusy(IActionToolV2 tool, Hex h, Unit unit)
-            yield return tool.OnConfirm(h);
-
-            if (turnManager != null && unit != null)
-                ApplyTurnBudgets(unit, tool);
-
-
-        ActionModeV2 _mode = ActionModeV2.Idle;
-        readonly Dictionary<string, IActionToolV2> _toolById = new();
-        IActionToolV2 _activeTool;
-        Hex? _hover;
-
-        void Awake()
-        {
-            foreach (var mb in tools)
-            {
-                if (!mb) continue;
-                if (mb is IActionToolV2 tool && !_toolById.ContainsKey(tool.Id))
-                    _toolById.Add(tool.Id, tool);
-            }
-        }
-
-        void Update()
-        {
-            // â€”â€” æ¨¡å¼åˆ‡æ¢ï¼ˆäº’æ–¥ï¼‰â€”â€”
-            if (_mode != ActionModeV2.Busy)
-            {
-                if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
-                if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
-            }
-
-            // â€”â€” ç„å‡†ä¸­ï¼šHover / Confirm / Cancel â€”â€” 
-            if (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim)
-            {
-                var h = PickHexUnderMouse();
-                if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
-                {
-                    _hover = h;
-                    _activeTool?.OnHover(h.Value);
-                }
-
-                if (Input.GetMouseButtonDown(0)) Confirm();      // å·¦é”®ç¡®è®¤
-                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // å³é”®/ESC å–æ¶ˆ
-            }
-        }
-
-        // ===== å¤–éƒ¨ UI ä¹Ÿå¯ä»¥ç›´æ¥ç”¨è¿™ä¿© API =====
+        // ===== Íâ²¿ UI Ò²¿ÉÒÔÖ±½ÓÓÃÕâÁ© API =====
         public void RequestAim(string toolId)
         {
-            // å¿™ç¢ŒæœŸä¸èƒ½å¼€å¯æ–°åŠ¨ä½œ
+            // Ã¦ÂµÆÚ²»ÄÜ¿ªÆôĞÂ¶¯×÷
             if (_mode == ActionModeV2.Busy) return;
 
-            // é‡å¤æŒ‰ï¼šåˆ‡æ¢å› Idle
+            // ÖØ¸´°´£ºÇĞ»»»Ø Idle
             if (_activeTool != null && _activeTool.Id == toolId)
             {
                 Cancel(); return;
             }
 
-            // åˆ‡æ¢å·¥å…·ï¼šå…ˆå–æ¶ˆæ—§çš„
+            // ÇĞ»»¹¤¾ß£ºÏÈÈ¡Ïû¾ÉµÄ
             if (_activeTool != null) Cancel();
 
             if (!_toolById.TryGetValue(toolId, out var tool)) return;
@@ -206,24 +200,29 @@ namespace TGD.CombatV2
             var h = _hover ?? PickHexUnderMouse();
             if (!h.HasValue) return;
 
-            // è¿›å…¥ Busyï¼šä¸å†å“åº”å…¶ä»–æŒ‰é”®ï¼Œç›´åˆ°åç¨‹ç»“æŸ
-            StartCoroutine(RunBusy(_activeTool, h.Value));
+            // ½øÈë Busy£º²»ÔÙÏìÓ¦ÆäËû°´¼ü£¬Ö±µ½Ğ­³Ì½áÊø
+            var unit = ResolveUnit(_activeTool);
+            if (!Precheck(unit, _activeTool)) return;
+
+            StartCoroutine(RunBusy(_activeTool, h.Value, unit));
         }
 
-        IEnumerator RunBusy(IActionToolV2 tool, Hex h)
+        IEnumerator RunBusy(IActionToolV2 tool, Hex h, Unit unit)
         {
             _mode = ActionModeV2.Busy;
             _hover = null;
 
-            yield return tool.OnConfirm(h);   // å·¥å…·æ‰§è¡Œï¼ˆç§»åŠ¨/é è¿‘ç­‰ï¼‰
+            yield return tool.OnConfirm(h);   // ¹¤¾ßÖ´ĞĞ£¨ÒÆ¶¯/¿¿½üµÈ£©
+            if (turnManager != null && unit != null)
+                ApplyTurnBudgets(unit, tool);
             tool.OnExitAim();
             _hover = null;
-            // æ‰§è¡Œå®Œæ¯•ï¼šæ¢å¤ Idle
+            // Ö´ĞĞÍê±Ï£º»Ö¸´ Idle
             if (_activeTool == tool) _activeTool = null;
             _mode = ActionModeV2.Idle;
         }
 
-        // ===== æ‹¾å–ç»Ÿä¸€åœ¨ Manager åšï¼Œä¸€å¤„ä¿®å°±å…¨ä¿® =====
+        // ===== Ê°È¡Í³Ò»ÔÚ Manager ×ö£¬Ò»´¦ĞŞ¾ÍÈ«ĞŞ =====
         Hex? PickHexUnderMouse()
         {
             var cam = pickCamera ? pickCamera : Camera.main;

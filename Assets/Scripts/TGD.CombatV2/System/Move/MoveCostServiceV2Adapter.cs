@@ -1,22 +1,22 @@
 using UnityEngine;
-using TGD.CoreV2; //  CoreV2HexBoard.asmdef Ӷ CoreV2.asmdef ã
+using TGD.CoreV2; // 引用 CoreV2（HexBoard.asmdef 需添加对 CoreV2.asmdef 的引用）
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
     /// <summary>
-    ///  HexClickMover ͨ IMoveCostService  StatsV2 + CooldownStoreV2
+    /// 让 HexClickMover 通过 IMoveCostService 接入 StatsV2 + CooldownStoreV2。
     /// </summary>
     public sealed class MoveCostServiceV2Adapter : MonoBehaviour, IMoveCostService
     {
         [Header("Refs")]
-        public StatsV2 stats;              // λ CoreV2
-        public CooldownHubV2 cooldownHub;  // ͬ/ͬһ
+        public StatsV2 stats;              // 本单位的 CoreV2 面板
+        public CooldownHubV2 cooldownHub;  // 场景里同物体/同父物体挂一份
         public TurnManagerV2 turnManager;
         public UnitRuntimeContext ctx;
 
         [Header("Options")]
-        public string actionIdOverride = ""; //  MoveActionConfig.actionId
+        public string actionIdOverride = ""; // 留空则用 MoveActionConfig.actionId
 
         CooldownStoreV2 Store => cooldownHub != null ? cooldownHub.store : null;
         string Key(MoveActionConfig cfg)
@@ -46,7 +46,7 @@ namespace TGD.CombatV2
                     return pool.Has("Energy", need);
             }
 
-            if (stats == null) return true; // δУڲ
+            if (stats == null) return true; 
             return stats.Energy >= need;
         }
 
@@ -74,17 +74,18 @@ namespace TGD.CombatV2
             if (stats != null)
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
 
+            // 开冷却（秒→回合；Move 通常 0）
             if (Store != null && cfg.cooldownSeconds > 0f)
             {
-                int rounds = StatsMathV2.CooldownToTurns(Mathf.CeilToInt(cfg.cooldownSeconds));
-                Store.Start(key, rounds);
+                int turns = StatsMathV2.CooldownToTurns(Mathf.CeilToInt(cfg.cooldownSeconds));
+                Store.Start(key, turns);
             }
         }
-
         public void RefundSeconds(Unit unit, MoveActionConfig cfg, int seconds)
         {
-            if (cfg == null || seconds <= 0) return;
+            if (stats == null || cfg == null || seconds <= 0) return;
 
+            // 约定：MoveActionConfig.energyCost 表示“每秒移动消耗”的能量
             int refund = Mathf.Max(0, cfg.energyCost) * seconds;
 
             if (turnManager != null && unit != null)
@@ -104,3 +105,4 @@ namespace TGD.CombatV2
         }
     }
 }
+
