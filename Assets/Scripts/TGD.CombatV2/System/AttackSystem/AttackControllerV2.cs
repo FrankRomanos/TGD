@@ -804,26 +804,92 @@ namespace TGD.CombatV2
         {
             landing = target;
             bestPath = null;
-            int bestLen = int.MaxValue;
 
-            foreach (var candidate in Hex.Ring(target, range))
+            var enemyCells = GetEnemyCellsForTarget(target);
+            int meleeRange = Mathf.Max(1, range);
+
+            foreach (var cell in enemyCells)
             {
-                if (!authoring.Layout.Contains(candidate)) continue;
-                if (env != null && env.IsPit(candidate)) continue;
-                if (_occ != null && !_occ.CanPlace(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
-
-                var path = ShortestPath(start, candidate, cell => IsBlockedForMove(cell, start, candidate));
-                if (path == null) continue;
-                int len = path.Count;
-                if (len < bestLen)
+                if (Hex.Distance(start, cell) <= meleeRange)
                 {
-                    bestLen = len;
-                    bestPath = path;
-                    landing = candidate;
+                    landing = start;
+                    bestPath = new List<Hex> { start };
+                    return true;
                 }
             }
 
-            return bestPath != null;
+            var candidates = new HashSet<Hex>();
+            int bestEnemyDist = int.MaxValue;
+            int bestLen = int.MaxValue;
+            Hex bestLanding = target;
+            foreach (var cell in enemyCells)
+            {
+                for (int dist = 1; dist <= meleeRange; dist++)
+                {
+                    foreach (var candidate in Hex.Ring(cell, dist))
+                    {
+                        if (!candidates.Add(candidate)) continue;
+                        if (!authoring.Layout.Contains(candidate)) continue;
+                        if (env != null && env.IsPit(candidate)) continue;
+                        if (_occ != null && !_occ.CanPlace(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
+
+                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate));
+                        if (path == null) continue;
+
+                        int enemyDist = DistanceToEnemy(candidate, enemyCells);
+                        if (enemyDist > meleeRange) continue;
+
+                        int len = path.Count;
+                        if (enemyDist < bestEnemyDist || (enemyDist == bestEnemyDist && len < bestLen))
+                        {
+                            bestEnemyDist = enemyDist;
+                            bestLen = len;
+                            bestPath = path;
+                            bestLanding = candidate;
+                        }
+                    }
+                }
+            }
+
+            if (bestPath != null)
+            {
+                landing = bestLanding;
+                return true;
+            }
+
+            landing = target;
+            bestPath = null;
+            return false;
+        }
+
+        static int DistanceToEnemy(Hex candidate, IReadOnlyList<Hex> enemyCells)
+        {
+            int best = int.MaxValue;
+            if (enemyCells == null) return best;
+            for (int i = 0; i < enemyCells.Count; i++)
+            {
+                int dist = Hex.Distance(candidate, enemyCells[i]);
+                if (dist < best)
+                    best = dist;
+            }
+
+            return best;
+        }
+
+        IReadOnlyList<Hex> GetEnemyCellsForTarget(Hex target)
+        {
+            if (_occ == null)
+                return new[] { target };
+
+            var enemy = _occ.Get(target);
+            if (enemy == null || enemy == _actor)
+                return new[] { target };
+
+            var cells = _occ.CellsOf(enemy);
+            if (cells != null && cells.Count > 0)
+                return cells;
+
+            return new[] { target };
         }
 
         static readonly Hex[] Neigh =
