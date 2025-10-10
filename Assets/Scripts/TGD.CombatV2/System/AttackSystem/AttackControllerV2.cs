@@ -332,9 +332,6 @@ namespace TGD.CombatV2
                 if (_hover.HasValue)
                     _painter.Paint(new[] { _hover.Value }, invalidColor);
                 AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
-                if (preview.rejectReason != AttackRejectReasonV2.NotReady)
-                    RaiseRejected(driver.UnitRef, preview.rejectReason, preview.rejectMessage);
-                return;
             }
 
             _painter.Paint(preview.path, previewColor);
