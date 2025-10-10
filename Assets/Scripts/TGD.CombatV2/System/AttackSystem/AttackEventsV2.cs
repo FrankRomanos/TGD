@@ -26,6 +26,8 @@ namespace TGD.CombatV2
 
         public static event Action<Unit, Hex> AttackHit;
         public static event Action<Unit, int> AttackAnimationRequested;
+        public static event Action<Unit, int> AttackStrikeFired;
+        public static event Action<Unit, int> AttackAnimationEnded;
         public static event Action<Unit, string> AttackMiss; // msg
 
         public static event Action<Unit, AttackRejectReasonV2, string> AttackRejected;
@@ -38,7 +40,9 @@ namespace TGD.CombatV2
         internal static void RaiseMoveFinished(Unit u, Hex end) => AttackMoveFinished?.Invoke(u, end);
 
         internal static void RaiseHit(Unit u, Hex target) => AttackHit?.Invoke(u, target);
-        internal static void RaiseAnimation(Unit u, int comboIndex) => AttackAnimationRequested?.Invoke(u, comboIndex);
+        internal static void RaiseAttackAnimation(Unit u, int comboIndex) => AttackAnimationRequested?.Invoke(u, comboIndex);
+        internal static void RaiseAttackStrike(Unit u, int comboIndex) => AttackStrikeFired?.Invoke(u, comboIndex);
+        internal static void RaiseAttackAnimEnded(Unit u, int comboIndex) => AttackAnimationEnded?.Invoke(u, comboIndex);
         internal static void RaiseMiss(Unit u, string msg) => AttackMiss?.Invoke(u, msg);
 
         internal static void RaiseRejected(Unit u, AttackRejectReasonV2 r, string msg) => AttackRejected?.Invoke(u, r, msg);

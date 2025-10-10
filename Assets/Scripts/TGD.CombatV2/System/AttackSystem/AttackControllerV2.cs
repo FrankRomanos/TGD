@@ -65,6 +65,17 @@ namespace TGD.CombatV2
         float _turnSecondsLeft = -1f;
         int _attacksThisTurn;
 
+        struct PendingAttack
+        {
+            public bool active;
+            public bool strikeProcessed;
+            public Unit unit;
+            public Hex target;
+            public int comboIndex;
+        }
+
+        PendingAttack _pendingAttack;
+
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
 
         struct MoveRatesSnapshot
@@ -110,6 +121,13 @@ namespace TGD.CombatV2
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
         }
 
+        void OnEnable()
+        {
+            ClearPendingAttack();
+            AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
+            AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
+        }
+
         void Start()
         {
             tiler?.EnsureBuilt();
@@ -130,6 +148,9 @@ namespace TGD.CombatV2
 
         void OnDisable()
         {
+            AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
+            AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
+            ClearPendingAttack();
             _painter?.Clear();
             _currentPreview = null;
             _hover = null;
@@ -539,8 +560,7 @@ namespace TGD.CombatV2
 
                 if (attackPlanned)
                 {
-                    TriggerAttackAnimation(unit);
-                    AttackEventsV2.RaiseHit(unit, preview.targetHex);
+                    TriggerAttackAnimation(unit, preview.targetHex);
                 }
                 else if (attackEnergyPaid > 0)
                 {
@@ -658,8 +678,7 @@ namespace TGD.CombatV2
             bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
             if (attackSuccess)
             {
-                TriggerAttackAnimation(unit);
-                AttackEventsV2.RaiseHit(unit, preview.targetHex);
+                TriggerAttackAnimation(unit, preview.targetHex);
             }
             else if (attackPlanned)
             {
@@ -950,11 +969,62 @@ namespace TGD.CombatV2
             s.offsets = new() { new L2(0, 0) };
             return s;
         }
-        void TriggerAttackAnimation(Unit unit)
+        void OnAttackStrikeFired(Unit unit, int comboIndex)
         {
-            if (unit == null) return;
-            int comboIndex = Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 3);
-            AttackEventsV2.RaiseAnimation(unit, comboIndex);
+            if (!_pendingAttack.active || _pendingAttack.unit != unit)
+                return;
+            if (_pendingAttack.strikeProcessed)
+                return;
+            if (_pendingAttack.comboIndex > 0 && comboIndex > 0 && comboIndex != _pendingAttack.comboIndex)
+                return;
+            if (!IsEnemyHex(_pendingAttack.target))
+            {
+                ClearPendingAttack();
+                return;
+            }
+
+            AttackEventsV2.RaiseHit(unit, _pendingAttack.target);
+            _pendingAttack.strikeProcessed = true;
+        }
+
+        void OnAttackAnimationEnded(Unit unit, int comboIndex)
+        {
+            if (_pendingAttack.unit != unit)
+                return;
+            if (_pendingAttack.comboIndex > 0 && comboIndex > 0 && comboIndex != _pendingAttack.comboIndex)
+                return;
+
+            ClearPendingAttack();
+        }
+
+        void ClearPendingAttack()
+        {
+            _pendingAttack.active = false;
+            _pendingAttack.strikeProcessed = false;
+            _pendingAttack.unit = null;
+            _pendingAttack.target = default;
+            _pendingAttack.comboIndex = 0;
+        }
+
+        int ResolveComboIndex()
+        {
+            return Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 3);
+        }
+
+        void TriggerAttackAnimation(Unit unit, Hex target)
+        {
+            if (unit == null)
+                return;
+
+            int comboIndex = ResolveComboIndex();
+            ClearPendingAttack();
+            _pendingAttack.active = true;
+            _pendingAttack.strikeProcessed = false;
+            _pendingAttack.unit = unit;
+            _pendingAttack.target = target;
+            _pendingAttack.comboIndex = comboIndex;
+
+            AttackEventsV2.RaiseAttackAnimation(unit, comboIndex);
         }
     }
 }
