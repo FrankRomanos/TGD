@@ -35,9 +35,10 @@ namespace TGD.CombatV2
         internal static void RaiseAimShown(Unit u, IEnumerable<Hex> cells) => AimShown?.Invoke(u, cells);
         internal static void RaiseAimHidden() => AimHidden?.Invoke();
 
-        internal static void RaiseMoveStarted(Unit u, List<Hex> p) => AttackMoveStarted?.Invoke(u, p);
-        internal static void RaiseMoveStep(Unit u, Hex f, Hex t, int i, int n) => AttackMoveStep?.Invoke(u, f, t, i, n);
-        internal static void RaiseMoveFinished(Unit u, Hex end) => AttackMoveFinished?.Invoke(u, end);
+        internal static void RaiseAttackMoveStarted(Unit u, List<Hex> path) => AttackMoveStarted?.Invoke(u, path);
+        internal static void RaiseAttackMoveStep(Unit u, Hex from, Hex to, int stepIndex, int stepCount)
+            => AttackMoveStep?.Invoke(u, from, to, stepIndex, stepCount);
+        internal static void RaiseAttackMoveFinished(Unit u, Hex end) => AttackMoveFinished?.Invoke(u, end);
 
         internal static void RaiseHit(Unit u, Hex target) => AttackHit?.Invoke(u, target);
         internal static void RaiseAttackAnimation(Unit u, int comboIndex) => AttackAnimationRequested?.Invoke(u, comboIndex);

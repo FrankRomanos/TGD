@@ -16,10 +16,8 @@ namespace TGD.HexBoard
         [Header("Root Motion 策略")]
         public bool manageRootMotion = true;
         public bool rootMotionForNormalMove = true;
-        public bool rootMotionForAttackMove = false;
 
         int _runningId;
-        bool _attackMoveActive;
         bool _prevRM;
 
         void Reset()
@@ -33,15 +31,13 @@ namespace TGD.HexBoard
         {
             _runningId = Animator.StringToHash(runningBoolName);
             if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (animator) _prevRM = animator.applyRootMotion;
         }
 
         void OnEnable()
         {
             HexMoveEvents.MoveStarted += OnMoveStarted;
             HexMoveEvents.MoveFinished += OnMoveFinished;
-
-            AttackEventsV2.AttackMoveStarted += OnAttackMoveStarted;
-            AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
         }
 
         void OnDisable()
@@ -49,10 +45,8 @@ namespace TGD.HexBoard
             HexMoveEvents.MoveStarted -= OnMoveStarted;
             HexMoveEvents.MoveFinished -= OnMoveFinished;
 
-            AttackEventsV2.AttackMoveStarted -= OnAttackMoveStarted;
-            AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
-
-            _attackMoveActive = false;
+            if (animator && manageRootMotion)
+                animator.applyRootMotion = _prevRM;
         }
 
         // ★ 统一按 Unit 过滤（优先 driver.UnitRef；次选 mover.driver.UnitRef）
@@ -62,16 +56,6 @@ namespace TGD.HexBoard
             return my != null && u == my;
         }
 
-        void OnAttackMoveStarted(Unit u, System.Collections.Generic.List<Hex> _)
-        {
-            if (Match(u)) _attackMoveActive = true;
-        }
-
-        void OnAttackMoveFinished(Unit u, Hex _)
-        {
-            if (Match(u)) _attackMoveActive = false;
-        }
-
         void OnMoveStarted(Unit u, System.Collections.Generic.List<Hex> _)
         {
             if (!Match(u) || !animator) return;
@@ -79,8 +63,7 @@ namespace TGD.HexBoard
             if (manageRootMotion)
             {
                 _prevRM = animator.applyRootMotion;
-                animator.applyRootMotion = _attackMoveActive ? rootMotionForAttackMove
-                                                             : rootMotionForNormalMove;
+                animator.applyRootMotion = rootMotionForNormalMove;
             }
             animator.SetBool(_runningId, true);
         }
@@ -92,9 +75,7 @@ namespace TGD.HexBoard
             animator.SetBool(_runningId, false);
 
             if (manageRootMotion)
-                animator.applyRootMotion = rootMotionForNormalMove;
-
-            _attackMoveActive = false;
+                animator.applyRootMotion = _prevRM;
         }
     }
 }
