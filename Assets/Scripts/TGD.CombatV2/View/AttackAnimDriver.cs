@@ -21,6 +21,9 @@ namespace TGD.CombatV2
 
         [Header("Play")]
         public float crossFade = 0.06f;
+        [Header("Safety")]
+        public bool forceReturnToIdle = true;       // ★ 兜底开关
+        public float endThreshold = 0.98f;          // ★ 认为动画“结束”的阈值
 
         bool _busy;
         int _currentCombo;
@@ -86,8 +89,23 @@ namespace TGD.CombatV2
             if (_unit != null)
                 AttackEventsV2.RaiseAttackAnimEnded(_unit, _currentCombo);
             _currentCombo = 0;
-            // ✅ 强制把基态切回 idle，后续 IsRunning 一打勾就能走 run 过渡
-            if (anim) anim.CrossFadeInFixedTime(stateIdle, crossFade, 0, 0f);
+          
+            if (anim) anim.CrossFadeInFixedTime(stateIdle, crossFade, 0, 0f); // ★ 强制回 Idle
+        }
+        // ★★★ 兜底：如果动画到头了但没收到事件，主动调用 Anim_End
+        void LateUpdate()
+        {
+            if (!forceReturnToIdle || !_busy || !anim) return;
+
+            var st = anim.GetCurrentAnimatorStateInfo(0);
+            bool inAttack =
+                st.IsName(stateAttack1) || st.IsName(stateAttack2) ||
+                st.IsName(stateAttack3) || st.IsName(stateJump);
+
+            if (inAttack && st.normalizedTime >= endThreshold)
+            {
+                Anim_End(); // 等价于动画事件
+            }
         }
 
         void ResolveUnit()
