@@ -280,28 +280,9 @@ namespace TGD.CombatV2
 
         bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _actor != null;
 
-        void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message, MoveBlockReason? moveOverride = null, bool relayMoveEvent = true)
+        void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
             AttackEventsV2.RaiseRejected(unit, reason, message);
-            if (!relayMoveEvent) return;
-
-            var moveReason = moveOverride ?? MapMoveReason(reason);
-            if (moveReason != MoveBlockReason.None)
-                HexMoveEvents.RaiseRejected(unit, moveReason, message);
-        }
-
-        static MoveBlockReason MapMoveReason(AttackRejectReasonV2 reason)
-        {
-            return reason switch
-            {
-                AttackRejectReasonV2.NotReady => MoveBlockReason.NotReady,
-                AttackRejectReasonV2.Busy => MoveBlockReason.Busy,
-                AttackRejectReasonV2.OnCooldown => MoveBlockReason.OnCooldown,
-                AttackRejectReasonV2.NotEnoughResource => MoveBlockReason.NotEnoughResource,
-                AttackRejectReasonV2.NoPath => MoveBlockReason.PathBlocked,
-                AttackRejectReasonV2.CantMove => MoveBlockReason.Entangled,
-                _ => MoveBlockReason.None
-            };
         }
 
         public void OnEnterAim()
@@ -369,7 +350,7 @@ namespace TGD.CombatV2
 
             if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.", MoveBlockReason.Entangled);
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.");
                 yield break;
             }
 
@@ -396,7 +377,7 @@ namespace TGD.CombatV2
                 int timeLeft = ExternalTimeRemaining();
                 if (timeLeft + 1e-4f < moveSecsCharge)
                 {
-                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.", MoveBlockReason.NoBudget);
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
                     yield break;
                 }
                 if (attackPlanned && timeLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
@@ -413,7 +394,7 @@ namespace TGD.CombatV2
             {
                 if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
                 {
-                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.", MoveBlockReason.NoBudget);
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
                     yield break;
                 }
                 if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
@@ -431,12 +412,12 @@ namespace TGD.CombatV2
             int energyAvailable = ResolveEnergyAvailable(resourcePool);
             if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.", MoveBlockReason.NotEnoughResource);
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
                 yield break;
             }
             if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.", relayMoveEvent: false);
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
                 yield break;
             }
 
@@ -677,6 +658,8 @@ namespace TGD.CombatV2
             float usedSeconds = Mathf.Max(0f, sim.UsedSeconds);
             var stepRates = sim.StepEffectiveRates;
 
+            AttackEventsV2.RaiseAttackMoveStarted(unit, reached);
+
             int moveEnergyNet = Mathf.Max(0, moveEnergyPaid);
             int attackEnergyNet = Mathf.Max(0, attackEnergyPaid);
             int moveEnergyRate = MoveEnergyPerSecond();
@@ -691,12 +674,7 @@ namespace TGD.CombatV2
                     if (refundMove > 0f)
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                 }
-                if (moveSecsCharge > 0)
-                    HexMoveEvents.RaiseTimeRefunded(unit, moveSecsCharge);
-
-                HexMoveEvents.RaiseMoveFinished(unit, unit.Position);
-
-                AttackEventsV2.RaiseMoveFinished(unit, unit.Position);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
                 if (attackPlanned)
                 {
@@ -719,9 +697,6 @@ namespace TGD.CombatV2
 
                 yield break;
             }
-
-            AttackEventsV2.RaiseMoveStarted(unit, reached);
-            HexMoveEvents.RaiseMoveStarted(unit, reached);
 
             bool truncated = reached.Count < path.Count;
             bool stoppedByExternal = false;
@@ -749,15 +724,12 @@ namespace TGD.CombatV2
                     break;
                 }
 
-                AttackEventsV2.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
-                HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+                AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
 
                 float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                     ? stepRates[i - 1]
                     : Mathf.Clamp(mrNoEnv, MR_MIN, MR_MAX);
                 float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
-
-                HexMoveEvents.RaiseStepSpeed(unit, effMR, mrNoEnv);
 
                 if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                 {
@@ -804,8 +776,7 @@ namespace TGD.CombatV2
                 }
             }
 
-            AttackEventsV2.RaiseMoveFinished(unit, unit.Position);
-            HexMoveEvents.RaiseMoveFinished(unit, unit.Position);
+            AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
             if (ManageTurnTimeLocally)
             {
@@ -820,14 +791,15 @@ namespace TGD.CombatV2
                 moveEnergyNet = Mathf.Max(0, moveEnergyNet - refundEnergy);
                 if (ManageEnergyLocally && refundEnergy > 0)
                     RefundMoveEnergy(refundEnergy);
-                HexMoveEvents.RaiseTimeRefunded(unit, refundedSeconds);
             }
 
             if (status != null && usedSeconds > 0f)
                 status.ConsumeSeconds(usedSeconds);
 
-            if (truncated && !stoppedByExternal)
-                HexMoveEvents.RaiseNoMoreTime(unit);
+            if (truncated && !stoppedByExternal && debugLog)
+            {
+                Debug.Log("[Attack] Attack move truncated (no more time).", this);
+            }
 
             bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
             if (attackSuccess)
