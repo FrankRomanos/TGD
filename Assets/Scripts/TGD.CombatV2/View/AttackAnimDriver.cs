@@ -17,6 +17,7 @@ namespace TGD.CombatV2
         public string stateAttack2 = "Attack2";
         public string stateAttack3 = "Attack3";
         public string stateJump = "jumpattack"; // 4段及以上用这个
+        public string stateIdle = "stand";   // ✅ 新增：Idle/Stand
 
         [Header("Play")]
         public float crossFade = 0.06f;
@@ -85,6 +86,8 @@ namespace TGD.CombatV2
             if (_unit != null)
                 AttackEventsV2.RaiseAttackAnimEnded(_unit, _currentCombo);
             _currentCombo = 0;
+            // ✅ 强制把基态切回 idle，后续 IsRunning 一打勾就能走 run 过渡
+            if (anim) anim.CrossFadeInFixedTime(stateIdle, crossFade, 0, 0f);
         }
 
         void ResolveUnit()
