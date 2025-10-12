@@ -82,6 +82,7 @@ namespace TGD.CombatV2
         bool _reportPending;
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
+        readonly HashSet<Hex> _tempReservedThisAction = new();
 
         struct PendingAttack
         {
@@ -129,7 +130,10 @@ namespace TGD.CombatV2
         public void AttachTurnManager(TurnManagerV2 manager)
         {
             if (_boundTurnManager != null)
+            {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
+                _boundTurnManager.SideEnded -= OnSideEnded;
+            }
 
             turnManager = manager;
             _boundTurnManager = null;
@@ -145,6 +149,7 @@ namespace TGD.CombatV2
                 return;
 
             turnManager.TurnStarted += OnTurnStarted;
+            turnManager.SideEnded += OnSideEnded;
             _boundTurnManager = turnManager;
         }
 
@@ -233,6 +238,7 @@ namespace TGD.CombatV2
             ClearPendingAttack();
             AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
+            AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
             AttachTurnManager(turnManager);
         }
 
@@ -258,12 +264,15 @@ namespace TGD.CombatV2
         {
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
+            AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
+                _boundTurnManager.SideEnded -= OnSideEnded;
                 _boundTurnManager = null;
             }
             ClearPendingAttack();
+            ClearTempReservations("OnDisable");
             _painter?.Clear();
             _currentPreview = null;
             _hover = null;
@@ -637,6 +646,8 @@ namespace TGD.CombatV2
             if (preview == null || preview.path == null || preview.path.Count == 0)
                 yield break;
 
+            ClearTempReservations("PreAction");
+
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
             Transform view = driver.unitView != null ? driver.unitView : transform;
@@ -784,6 +795,7 @@ namespace TGD.CombatV2
                 }
                 unit.Position = to;
                 driver.SyncView();
+                _tempReservedThisAction.Add(to);
 
                 if (_sticky != null && status != null &&
            _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
@@ -955,6 +967,7 @@ namespace TGD.CombatV2
             if (env != null && env.IsPit(cell)) return true;
             if (cell.Equals(start)) return false;
             if (cell.Equals(landing)) return false;
+            if (_tempReservedThisAction.Contains(cell)) return true;
             return _occ != null && _occ.IsBlocked(cell, _actor);
         }
 
@@ -1156,7 +1169,28 @@ namespace TGD.CombatV2
 
             ClearPendingAttack();
         }
+        void OnAttackMoveFinished(Unit unit, Hex end)
+        {
+            if (!IsMyUnit(unit))
+                return;
+            ClearTempReservations("AttackMoveFinished", true);
+        }
 
+        void OnSideEnded(bool isPlayerSide)
+        {
+            if (!UseTurnManager || turnManager == null || driver == null)
+                return;
+
+            var unit = driver.UnitRef;
+            if (unit == null)
+                return;
+
+            bool belongs = isPlayerSide ? turnManager.IsPlayerUnit(unit) : turnManager.IsEnemyUnit(unit);
+            if (!belongs)
+                return;
+
+            ClearTempReservations("SideEnd", true);
+        }
         void ClearPendingAttack()
         {
             _pendingAttack.active = false;
@@ -1165,11 +1199,24 @@ namespace TGD.CombatV2
             _pendingAttack.target = default;
             _pendingAttack.comboIndex = 0;
         }
+        bool IsMyUnit(Unit unit) => driver != null && driver.UnitRef == unit;
+
+        void ClearTempReservations(string reason, bool logAlways = false)
+        {
+            int count = _tempReservedThisAction.Count;
+            if (logAlways || count > 0)
+            {
+                string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
+                Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
+            }
+            _tempReservedThisAction.Clear();
+        }
 
         int ResolveComboIndex()
         {
             return Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 4);
         }
+
 
         void TriggerAttackAnimation(Unit unit, Hex target)
         {

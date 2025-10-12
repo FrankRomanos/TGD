@@ -375,5 +375,20 @@ namespace TGD.CombatV2
                 return any ? sb.ToString() : "none";
             }
         }
+        public void RefreshFromTerrain(Unit unit, Hex at, float multiplier, int turns, string tagOverride = null)
+        {
+            if (turns == 0)
+                return;
+
+            float clampedMult = Mathf.Clamp(multiplier, 0.01f, 100f);
+            if (Mathf.Approximately(clampedMult, 1f))
+                return;
+
+            string resolvedTag = !string.IsNullOrEmpty(tagOverride)
+                ? tagOverride
+                : $"Patch@{at.q},{at.r}";
+
+            ApplyOrRefreshExclusive(resolvedTag, clampedMult, turns, at.ToString());
+        }
     }
 }
