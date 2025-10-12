@@ -115,6 +115,13 @@ namespace TGD.CombatV2
             _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
             _reportPending = true;
             _pendingComboBaseCount = 0;
+            LogAttackSummary();
+        }
+        void LogAttackSummary()
+        {
+            var unit = driver != null ? driver.UnitRef : null;
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            Debug.Log($"[Attack] Use moveSecs={_reportMoveUsedSeconds} atkSecs={_reportAttackUsedSeconds} energyMove={ReportMoveEnergyNet} energyAtk={ReportAttackEnergyNet} U={label}", this);
         }
 
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
@@ -901,15 +908,11 @@ namespace TGD.CombatV2
 
             if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out var tag))
             {
-                if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
+                if (!Mathf.Approximately(stickM, 1f))
                 {
+                    mult *= stickM;
                     hasStickySource = true;
-                    bool alreadyActive = status != null && status.HasActiveTag(tag);
-                    if (!alreadyActive)
-                    {
-                        mult *= stickM;
-                        sticky = true;
-                    }
+                    sticky = stickTurns > 0;
                 }
             }
 
@@ -921,8 +924,8 @@ namespace TGD.CombatV2
                     mult *= envMult;
                 }
             }
-
-            return new MoveSimulator.StickySample(mult, sticky);
+            bool isSticky = sticky && !Mathf.Approximately(mult, 1f);
+            return new MoveSimulator.StickySample(mult, isSticky);
         }
 
         int GetFallbackBaseRate()

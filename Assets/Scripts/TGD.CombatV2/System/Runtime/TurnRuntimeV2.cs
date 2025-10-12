@@ -47,8 +47,20 @@ namespace TGD.CombatV2
         public void ResetBudget()
         {
             int tt = TurnTime;
-            int remain = Mathf.Max(0, tt - Mathf.Max(0, PrepaidTime));
-            RemainingTime = remain;
+            RemainingTime = Mathf.Clamp(tt, 0, tt);
+        }
+
+        public void BeginTurn()
+        {
+            int tt = TurnTime;
+            int prepaid = Mathf.Clamp(PrepaidTime, 0, tt);
+            RemainingTime = Mathf.Clamp(tt - prepaid, 0, tt);
+            PrepaidTime = 0;
+        }
+
+        public void FinishTurn()
+        {
+            RemainingTime = 0;
         }
 
         public void SpendTime(int seconds)
@@ -65,13 +77,11 @@ namespace TGD.CombatV2
         public void ApplyPrepaid(int seconds)
         {
             PrepaidTime = Mathf.Max(0, PrepaidTime + Mathf.Max(0, seconds));
-            ResetBudget();
         }
 
         public void ClearPrepaid()
         {
             PrepaidTime = 0;
-            ResetBudget();
         }
     }
 }

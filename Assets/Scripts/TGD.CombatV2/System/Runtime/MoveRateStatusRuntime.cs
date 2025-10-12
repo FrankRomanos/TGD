@@ -26,7 +26,19 @@ namespace TGD.CombatV2
         float _product = 1f;
         TurnManagerV2 _subscribedManager;
 
-        Unit UnitRef => driver ? driver.UnitRef : null;
+        public Unit UnitRef => driver ? driver.UnitRef : null;
+
+        public readonly struct EntrySnapshot
+        {
+            public readonly string tag;
+            public readonly int remainingTurns;
+
+            public EntrySnapshot(string tag, int remainingTurns)
+            {
+                this.tag = tag;
+                this.remainingTurns = remainingTurns;
+            }
+        }
 
         void Awake()
         {
@@ -45,6 +57,7 @@ namespace TGD.CombatV2
             if (_subscribedManager != null)
             {
                 _subscribedManager.TurnEnded -= OnTurnEnded;
+                _subscribedManager.UnregisterMoveRateStatus(this);
                 _subscribedManager = null;
             }
         }
@@ -60,6 +73,8 @@ namespace TGD.CombatV2
         public void AttachDriver(HexBoardTestDriver drv)
         {
             driver = drv;
+            if (_subscribedManager != null)
+                _subscribedManager.RegisterMoveRateStatus(this);
         }
 
         public void AttachTurnManager(TurnManagerV2 manager)
@@ -68,7 +83,10 @@ namespace TGD.CombatV2
                 return;
 
             if (_subscribedManager != null)
+            {
                 _subscribedManager.TurnEnded -= OnTurnEnded;
+                _subscribedManager.UnregisterMoveRateStatus(this);
+            }
 
             _subscribedManager = null;
             turnManager = manager;
@@ -76,6 +94,7 @@ namespace TGD.CombatV2
             if (manager != null && isActiveAndEnabled)
             {
                 manager.TurnEnded += OnTurnEnded;
+                manager.RegisterMoveRateStatus(this);
                 _subscribedManager = manager;
             }
         }
@@ -86,7 +105,7 @@ namespace TGD.CombatV2
                 return;
             if (UnitRef == null || unit != UnitRef)
                 return;
-            TickEndOfTurn(unit);
+            TickOneTurn();
         }
 
         public IEnumerable<float> GetActiveMultipliers()
@@ -132,6 +151,9 @@ namespace TGD.CombatV2
                 return;
             }
 
+            if (turns == 0)
+                return;
+
             int normalizedTurns = turns < 0 ? -1 : Mathf.Max(1, turns);
             var entry = GetOrCreateEntry(tag, exclusive, clampedMult, normalizedTurns, source);
             if (entry == null)
@@ -145,6 +167,7 @@ namespace TGD.CombatV2
 
         Entry GetOrCreateEntry(string tag, bool exclusive, float mult, int turns, string source)
         {
+            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
             if (_entriesByTag.TryGetValue(tag, out var existing) && existing != null)
             {
                 existing.mult = mult;
@@ -156,8 +179,7 @@ namespace TGD.CombatV2
                 else
                     existing.remainingTurns = Mathf.Max(existing.remainingTurns, turns);
 
-                if (debugLog)
-                    Debug.Log($"[Env] Refresh tag={tag} mult={mult:F2} turns={FormatTurns(existing.remainingTurns)}{FormatSource(source)}", this);
+                Debug.Log($"[Sticky] Refresh U={unitLabel} tag={tag} mult={mult:F2} turns={FormatTurns(existing.remainingTurns)}", this);
                 return existing;
             }
 
@@ -171,8 +193,7 @@ namespace TGD.CombatV2
             _entries.Add(entry);
             _entriesByTag[tag] = entry;
 
-            if (debugLog)
-                Debug.Log($"[Env] Apply tag={tag} mult={mult:F2} turns={FormatTurns(turns)}{FormatSource(source)}", this);
+            Debug.Log($"[Sticky] Apply  U={unitLabel} tag={tag} mult={mult:F2} turns={FormatTurns(turns)}", this);
 
             return entry;
         }
@@ -200,7 +221,7 @@ namespace TGD.CombatV2
 
                 if ((sourceIsHaste && entryIsHaste) || (sourceIsSlow && entryIsSlow))
                 {
-                    ExpireEntryAt(i);
+                    ExpireEntryAt(i, true);
                 }
             }
         }
@@ -214,7 +235,7 @@ namespace TGD.CombatV2
             {
                 if (_entries[i] == entry)
                 {
-                    ExpireEntryAt(i);
+                    ExpireEntryAt(i, true);
                     break;
                 }
             }
@@ -222,7 +243,7 @@ namespace TGD.CombatV2
             RecomputeProduct();
         }
 
-        void ExpireEntryAt(int index)
+        void ExpireEntryAt(int index, bool log)
         {
             if (index < 0 || index >= _entries.Count)
                 return;
@@ -231,8 +252,11 @@ namespace TGD.CombatV2
             if (entry != null)
             {
                 _entriesByTag.Remove(entry.tag);
-                if (debugLog)
-                    Debug.Log($"[Env] Expire tag={entry.tag}", this);
+                if (log)
+                {
+                    var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+                    Debug.Log($"[Sticky] Expire  U={unitLabel} tag={entry.tag}", this);
+                }
             }
             _entries.RemoveAt(index);
         }
@@ -244,18 +268,13 @@ namespace TGD.CombatV2
             return turns.ToString();
         }
 
-        string FormatSource(string source)
-            => string.IsNullOrEmpty(source) ? string.Empty : $" at={source}";
-
-        string FormatOwner(Unit unit)
-            => unit != null ? unit.Id : "?";
-
-        public void TickEndOfTurn(Unit owner)
+        public void TickOneTurn()
         {
             if (_entries.Count == 0)
                 return;
 
             bool changed = false;
+            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
                 var entry = _entries[i];
@@ -269,17 +288,17 @@ namespace TGD.CombatV2
                 if (entry.remainingTurns < 0)
                     continue;
 
-                entry.remainingTurns = Mathf.Max(0, entry.remainingTurns - 1);
-                if (debugLog)
-                    Debug.Log($"[Env] Tick owner={FormatOwner(owner)} -> tag={entry.tag}, remain={entry.remainingTurns}", this);
+                int after = Mathf.Max(0, entry.remainingTurns - 1);
+                entry.remainingTurns = after;
 
-                if (entry.remainingTurns == 0)
+                if (after > 0)
                 {
-                    ExpireEntryAt(i);
-                    changed = true;
+                    Debug.Log($"[Sticky] Tick    U={unitLabel} tag={entry.tag} -> remain={after}", this);
                 }
                 else
                 {
+                    Debug.Log($"[Sticky] Expire  U={unitLabel} tag={entry.tag}", this);
+                    ExpireEntryAt(i, false);
                     changed = true;
                 }
             }
@@ -288,26 +307,35 @@ namespace TGD.CombatV2
                 RecomputeProduct();
         }
 
-        void RecomputeProduct()
+        bool RecomputeProduct()
         {
             float product = 1f;
+            bool changed = false;
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
                 var entry = _entries[i];
                 if (entry == null)
                 {
                     _entries.RemoveAt(i);
+                    changed = true;
                     continue;
                 }
                 if (entry.remainingTurns == 0)
                 {
                     _entriesByTag.Remove(entry.tag);
                     _entries.RemoveAt(i);
+                    changed = true;
                     continue;
                 }
                 product *= Mathf.Clamp(entry.mult, 0.01f, 100f);
             }
-            _product = Mathf.Clamp(product, 0.01f, 100f);
+            float clamped = Mathf.Clamp(product, 0.01f, 100f);
+            if (!Mathf.Approximately(_product, clamped))
+            {
+                _product = clamped;
+                changed = true;
+            }
+            return changed;
         }
 
         public void ClearAll()
@@ -315,6 +343,26 @@ namespace TGD.CombatV2
             _entries.Clear();
             _entriesByTag.Clear();
             _product = 1f;
+        }
+
+        public bool RefreshProduct()
+        {
+            return RecomputeProduct();
+        }
+
+        public void CopyActiveEntries(List<EntrySnapshot> buffer)
+        {
+            if (buffer == null)
+                return;
+            buffer.Clear();
+            foreach (var entry in _entries)
+            {
+                if (entry == null)
+                    continue;
+                if (entry.remainingTurns == 0)
+                    continue;
+                buffer.Add(new EntrySnapshot(entry.tag, entry.remainingTurns));
+            }
         }
     }
 }

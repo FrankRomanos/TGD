@@ -81,8 +81,8 @@ namespace TGD.CombatV2
         public MonoBehaviour costProvider;
         IMoveCostService _cost;
 
-        [Tooltip("精准移动：进入减速地形时永久降低 MoveRate（无时间系统的临时方案）")]
-        public bool applyPermanentSlowInPreciseMove = true;
+        [Tooltip("精准移动：进入减速地形时永久降低 MoveRate（已禁用保留字段）")]
+        public bool applyPermanentSlowInPreciseMove = false;
 
         [Header("Picking")]
         public Camera pickCamera;
@@ -110,11 +110,10 @@ namespace TGD.CombatV2
 
         [Header("Environment (optional)")]
         public HexEnvironmentSystem env;                 // 可不挂，按1倍速
-        [Tooltip("地形：进入后永久学习一次（加速/减速各一次；Buff/Debuff不在此处学习）")]
-        public bool terrainLearnOnce = true;
 
-        bool _learnedHaste = false;  // 地形正向学习已发生？
-        bool _learnedSlow = false;  // 地形负向学习已发生？
+        [Tooltip("地形：进入后永久学习一次（已禁用保留字段）")]
+        public bool terrainLearnOnce = false;
+
         [Header("Sticky Slow (optional)")]
         public MoveRateStatusRuntime status;        // 黏性修饰器运行时（可选）
         public MonoBehaviour stickySource;          // 任意实现了 IStickySlowSource 的组件
@@ -159,20 +158,31 @@ namespace TGD.CombatV2
         public string Id => "Move";
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
+        int _reportEnergyNet;
         bool _reportPending;
 
         void ClearExecReport()
         {
             _reportUsedSeconds = 0;
             _reportRefundedSeconds = 0;
+            _reportEnergyNet = 0;
             _reportPending = false;
         }
 
-        void SetExecReport(int used, int refunded)
+        void SetExecReport(int used, int refunded, int energyNet)
         {
             _reportUsedSeconds = Mathf.Max(0, used);
             _reportRefundedSeconds = Mathf.Max(0, refunded);
+            _reportEnergyNet = Mathf.Max(0, energyNet);
             _reportPending = true;
+            LogMoveSummary();
+        }
+
+        void LogMoveSummary()
+        {
+            var unit = driver != null ? driver.UnitRef : null;
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            Debug.Log($"[Move]   Use secs={_reportUsedSeconds} refund={_reportRefundedSeconds} energy={_reportEnergyNet} U={label}", this);
         }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
@@ -340,15 +350,11 @@ namespace TGD.CombatV2
 
             if (_sticky != null && _sticky.TryGetSticky(hex, out var stickM, out var stickTurns, out var tag))
             {
-                if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
+                if (!Mathf.Approximately(stickM, 1f))
                 {
+                    mult *= stickM;
                     hasStickySource = true;
-                    bool alreadyActive = status != null && status.HasActiveTag(tag);
-                    if (!alreadyActive)
-                    {
-                        mult *= stickM;
-                        sticky = true;
-                    }
+                    sticky = stickTurns > 0;
                 }
             }
 
@@ -361,7 +367,8 @@ namespace TGD.CombatV2
                 }
             }
 
-            return new MoveSimulator.StickySample(mult, sticky);
+            bool isSticky = sticky && !Mathf.Approximately(mult, 1f);
+            return new MoveSimulator.StickySample(mult, isSticky);
         }
 
         int GetFallbackBaseRate()
@@ -513,6 +520,12 @@ namespace TGD.CombatV2
             int spentSec = Mathf.Max(0, requiredSec - refunded);
             int usedSeconds = Mathf.Max(0, Mathf.CeilToInt(sim.UsedSeconds));
             var stepRates = sim.StepEffectiveRates;
+            int energyNet = 0;
+            if (config != null)
+            {
+                int costPerSecond = Mathf.Max(0, config.energyCost);
+                energyNet = Mathf.Max(0, spentSec * costPerSecond);
+            }
 
             if (reached == null || reached.Count < 2)
             {
@@ -524,7 +537,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            SetExecReport(usedSeconds, refunded);
+            SetExecReport(usedSeconds, refunded, energyNet);
             _moving = true;
             if (driver.unitView != null)
             {

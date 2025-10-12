@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using TGD.CoreV2;
 using TGD.HexBoard;
 using UnityEngine;
@@ -27,10 +28,15 @@ namespace TGD.CombatV2
         readonly Dictionary<Unit, ITurnBudget> _budgetHandles = new();
         readonly Dictionary<Unit, IResourcePool> _resourceHandles = new();
         readonly Dictionary<Unit, ICooldownSink> _cooldownHandles = new();
+        readonly Dictionary<Unit, MoveRateStatusRuntime> _moveRateStatuses = new();
+        readonly List<MoveRateStatusRuntime.EntrySnapshot> _buffScratch = new();
 
         Coroutine _loop;
         Unit _activeUnit;
         bool _waitingForEnd;
+        int _phaseIndex;
+        int _currentPhaseIndex;
+        bool _currentPhaseIsPlayer;
 
         sealed class TurnBudgetHandle : ITurnBudget
         {
@@ -185,6 +191,7 @@ namespace TGD.CombatV2
 
             if (_loop != null)
                 StopCoroutine(_loop);
+            _phaseIndex = 0;
             _loop = StartCoroutine(BattleLoop());
         }
 
@@ -231,8 +238,8 @@ namespace TGD.CombatV2
             if (runtime == null) return;
 
             HandleEndTurn(runtime);
-            TurnEnded?.Invoke(unit);
-            Debug.Log($"[Turn] EndTurn {FormatUnit(runtime)}", this);
+            string unitLabel = FormatUnitLabel(runtime.Unit);
+            Debug.Log($"[Turn]  End    T{_currentPhaseIndex}({unitLabel})", this);
 
             if (_activeUnit == unit)
             {
@@ -252,20 +259,23 @@ namespace TGD.CombatV2
 
         IEnumerator RunPhase(List<Unit> units, bool isPlayer)
         {
-            if (isPlayer)
-            {
-                Debug.Log("[Turn] PlayerPhaseStart", this);
-                PlayerPhaseStarted?.Invoke();
-            }
-            else
-            {
-                Debug.Log("[Turn] EnemyPhaseStart", this);
-                EnemyPhaseStarted?.Invoke();
-            }
+            _phaseIndex += 1;
+            _currentPhaseIndex = _phaseIndex;
+            _currentPhaseIsPlayer = isPlayer;
 
-            float delay = Mathf.Max(1f, phaseStartDelaySeconds);
+            string phaseLabel = FormatPhaseLabel(isPlayer);
+            Debug.Log($"[Phase] Begin  T{_currentPhaseIndex}({phaseLabel})", this);
+            if (isPlayer)
+                PlayerPhaseStarted?.Invoke();
+            else
+                EnemyPhaseStarted?.Invoke();
+
+            RecomputeStatsForAllUnits();
+
+            float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
+            Debug.Log($"[Phase] Idle1s T{_currentPhaseIndex}({phaseLabel})", this);
 
             foreach (var unit in units)
             {
@@ -280,23 +290,26 @@ namespace TGD.CombatV2
 
         void BeginTurn(TurnRuntimeV2 runtime)
         {
-            runtime.ResetBudget();
+            int turnTime = runtime.TurnTime;
+            int prepaid = Mathf.Clamp(runtime.PrepaidTime, 0, turnTime);
+            runtime.BeginTurn();
             _activeUnit = runtime.Unit;
             _waitingForEnd = true;
-            Debug.Log($"[Turn] StartTurn {FormatUnit(runtime)} TT={runtime.TurnTime} Prepaid={runtime.PrepaidTime} Remain={runtime.RemainingTime}", this);
+            string unitLabel = FormatUnitLabel(runtime.Unit);
+            Debug.Log($"[Turn]  Begin  T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
             TurnStarted?.Invoke(runtime.Unit);
         }
 
         void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds)
         {
             runtime.SpendTime(seconds);
-            Debug.Log($"[Time] Spend {FormatUnit(runtime)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
         void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds)
         {
             runtime.RefundTime(seconds);
-            Debug.Log($"[Time] Refund {FormatUnit(runtime)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
         void ModifyResource(TurnRuntimeV2 runtime, string id, int delta, string reason, bool isRefund)
@@ -327,41 +340,56 @@ namespace TGD.CombatV2
             }
 
             string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" ({reason})";
+            string unitLabel = FormatUnitLabel(runtime.Unit);
             if (isRefund)
-                Debug.Log($"[Res] Refund {FormatUnit(runtime)}:{id} +{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
+                Debug.Log($"[Res] Refund {unitLabel}:{id} +{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
             else
-                Debug.Log($"[Res] Spend {FormatUnit(runtime)}:{id} -{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
+                Debug.Log($"[Res] Spend {unitLabel}:{id} -{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
         }
 
         void HandleEndTurn(TurnRuntimeV2 runtime)
         {
-            TickCooldowns(runtime);
-            HandleEnergyRegen(runtime);
-            Debug.Log($"[Buff] Tick {FormatUnit(runtime)} -1 turn (placeholder)", this);
-            runtime.ClearPrepaid();
+            runtime.FinishTurn();
+
+            int cdAffected = TickCooldowns(runtime);
+            string unitLabel = FormatUnitLabel(runtime.Unit);
+            Debug.Log($"[CD]    Tick   T{_currentPhaseIndex}({unitLabel}) -{StatsMathV2.BaseTurnSeconds}s  ({cdAffected} skills)", this);
+
+            TurnEnded?.Invoke(runtime.Unit);
+
+            string buffSummary = SummarizeBuffState(runtime.Unit);
+            Debug.Log($"[Buff]  Tick   T{_currentPhaseIndex}({unitLabel}) -1 turn  ({buffSummary})", this);
+
+            var regen = HandleEnergyRegen(runtime);
+            Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({unitLabel}) +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
         }
 
-        void TickCooldowns(TurnRuntimeV2 runtime)
+        int TickCooldowns(TurnRuntimeV2 runtime)
         {
             var store = GetSecStore(runtime);
-            if (store == null) return;
+            if (store == null) return 0;
             var keys = store.Keys.ToList();
+            int affected = 0;
             foreach (var key in keys)
             {
-                int left = store.AddSeconds(key, -StatsMathV2.BaseTurnSeconds);
-                int turns = store.TurnsLeft(key);
-                Debug.Log($"[CD] TickEndTurn {FormatUnit(runtime)}:{key} -{StatsMathV2.BaseTurnSeconds}s -> {left}s (turns={turns})", this);
+                if (string.IsNullOrEmpty(key))
+                    continue;
+                int before = store.SecondsLeft(key);
+                if (before <= 0)
+                    continue;
+                store.AddSeconds(key, -StatsMathV2.BaseTurnSeconds);
+                affected += 1;
             }
+            return affected;
         }
 
-        void HandleEnergyRegen(TurnRuntimeV2 runtime)
+        (int gain, int current, int max) HandleEnergyRegen(TurnRuntimeV2 runtime)
         {
             var ctx = runtime.Context;
             var stats = ctx != null ? ctx.stats : null;
             if (stats == null)
             {
-                Debug.Log($"[Res] Refund {FormatUnit(runtime)}:Energy +0 -> 0/0 (EndTurnRegen)", this);
-                return;
+                return (0, 0, 0);
             }
 
             int turnTime = runtime.TurnTime;
@@ -370,7 +398,7 @@ namespace TGD.CombatV2
             int max = Mathf.Max(0, stats.MaxEnergy);
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(before + gain, 0, max);
-            Debug.Log($"[Res] Refund {FormatUnit(runtime)}:Energy +{gain} -> {stats.Energy}/{max} (EndTurnRegen)", this);
+            return (gain, stats.Energy, max);
         }
 
         int GetResourceCurrent(TurnRuntimeV2 runtime, string id)
@@ -404,12 +432,12 @@ namespace TGD.CombatV2
 
         void LogCooldownStart(TurnRuntimeV2 runtime, string skillId, int seconds, int turns)
         {
-            Debug.Log($"[CD] StartSeconds {FormatUnit(runtime)}:{skillId} = {seconds}s (turns={turns})", this);
+            Debug.Log($"[CD] StartSeconds {FormatUnitLabel(runtime.Unit)}:{skillId} = {seconds}s (turns={turns})", this);
         }
 
         void LogCooldownAdd(TurnRuntimeV2 runtime, string skillId, int delta, int left, int turns)
         {
-            Debug.Log($"[CD] AddSeconds {FormatUnit(runtime)}:{skillId} += {delta}s -> {left}s (turns={turns})", this);
+            Debug.Log($"[CD] AddSeconds {FormatUnitLabel(runtime.Unit)}:{skillId} += {delta}s -> {left}s (turns={turns})", this);
         }
 
         TurnRuntimeV2 EnsureRuntime(Unit unit, bool? isPlayerHint)
@@ -432,13 +460,89 @@ namespace TGD.CombatV2
 
             return runtime;
         }
+        string SummarizeBuffState(Unit unit)
+        {
+            if (unit == null)
+                return "none";
+            if (!_moveRateStatuses.TryGetValue(unit, out var status) || status == null)
+                return "none";
+
+            status.RefreshProduct();
+            status.CopyActiveEntries(_buffScratch);
+            if (_buffScratch.Count == 0)
+                return "none";
+
+            return $"tags:{FormatBuffTags(_buffScratch)}";
+        }
+
+        void RecomputeStatsForAllUnits()
+        {
+            foreach (var pair in _moveRateStatuses.ToArray())
+            {
+                var unit = pair.Key;
+                var status = pair.Value;
+                if (unit == null || status == null)
+                    continue;
+
+                status.RefreshProduct();
+                status.CopyActiveEntries(_buffScratch);
+                string summary = _buffScratch.Count == 0
+                    ? "none"
+                    : $"tags:{FormatBuffTags(_buffScratch)}";
+                string unitLabel = FormatUnitLabel(unit);
+                Debug.Log($"[Buff]  Refresh U={unitLabel} (recomputed {summary})", this);
+            }
+        }
+
+        string FormatBuffTags(List<MoveRateStatusRuntime.EntrySnapshot> entries)
+        {
+            if (entries == null || entries.Count == 0)
+                return "none";
+            var sb = new StringBuilder();
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (i > 0)
+                    sb.Append(',');
+                var entry = entries[i];
+                sb.Append(entry.tag);
+                sb.Append(':');
+                sb.Append(entry.remainingTurns < 0 ? "inf" : entry.remainingTurns.ToString());
+            }
+            return sb.ToString();
+        }
+
+        internal void RegisterMoveRateStatus(MoveRateStatusRuntime runtime)
+        {
+            if (runtime == null)
+                return;
+            var unit = runtime.UnitRef;
+            if (unit == null)
+                return;
+            _moveRateStatuses[unit] = runtime;
+        }
+
+        internal void UnregisterMoveRateStatus(MoveRateStatusRuntime runtime)
+        {
+            if (runtime == null)
+                return;
+            var unit = runtime.UnitRef;
+            if (unit == null)
+                return;
+            if (_moveRateStatuses.TryGetValue(unit, out var existing) && existing == runtime)
+                _moveRateStatuses.Remove(unit);
+        }
 
         static bool IsEnergy(string id) => string.Equals(id, "Energy", StringComparison.OrdinalIgnoreCase);
 
-        static string FormatUnit(TurnRuntimeV2 runtime)
+        internal static string FormatUnitLabel(Unit unit)
         {
-            var unit = runtime?.Unit;
-            return unit != null ? unit.Id : "<null>";
+            if (unit == null)
+                return "?";
+            if (!string.IsNullOrEmpty(unit.Id))
+                return unit.Id;
+            return "?";
         }
+
+        static string FormatPhaseLabel(bool isPlayer) => isPlayer ? "Player" : "Enemy";
     }
 }
