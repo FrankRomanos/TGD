@@ -35,6 +35,11 @@ namespace TGD.CombatV2
         public MoveActionConfig moveConfig;
         public MonoBehaviour enemyProvider;
 
+        [Header("Turn Manager Binding")]
+        public bool UseTurnManager = true;
+        public bool ManageEnergyLocally = false;
+        public bool ManageTurnTimeLocally = false;
+
         [Header("Costs & Turn")]
         public bool simulateTurnTime = true;
         public int baseTurnSeconds = 6;
@@ -72,8 +77,8 @@ namespace TGD.CombatV2
         int _reportMoveRefundSeconds;
         int _reportAttackUsedSeconds;
         int _reportAttackRefundSeconds;
-        int _reportMoveEnergyNet;
-        int _reportAttackEnergyNet;
+        public int ReportMoveEnergyNet { get; private set; }
+        public int ReportAttackEnergyNet { get; private set; }
         bool _reportPending;
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
@@ -96,33 +101,23 @@ namespace TGD.CombatV2
             _reportMoveRefundSeconds = 0;
             _reportAttackUsedSeconds = 0;
             _reportAttackRefundSeconds = 0;
-            _reportMoveEnergyNet = 0;
-            _reportAttackEnergyNet = 0;
+            ReportMoveEnergyNet = 0;
+            ReportAttackEnergyNet = 0;
             _reportPending = false;
             _reportComboBaseCount = 0;
             _pendingComboBaseCount = 0;
         }
 
-        void SetExecReport(int moveUsed, int moveRefund, int attackUsed, int attackRefund, int moveEnergyNet, int attackEnergyNet, bool attackExecuted)
+        void SetExecReport(int usedSeconds, int refundedSeconds, bool attackExecuted)
         {
-            _reportMoveUsedSeconds = Mathf.Max(0, moveUsed);
-            _reportMoveRefundSeconds = Mathf.Max(0, moveRefund);
-            _reportAttackUsedSeconds = Mathf.Max(0, attackUsed);
-            _reportAttackRefundSeconds = Mathf.Max(0, attackRefund);
-            _reportMoveEnergyNet = Mathf.Max(0, moveEnergyNet);
-            _reportAttackEnergyNet = Mathf.Max(0, attackEnergyNet);
-            _reportUsedSeconds = _reportMoveUsedSeconds + _reportAttackUsedSeconds;
-            _reportRefundedSeconds = _reportMoveRefundSeconds + _reportAttackRefundSeconds;
+            _reportUsedSeconds = Mathf.Max(0, usedSeconds);
+            _reportRefundedSeconds = Mathf.Max(0, refundedSeconds);
             _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
             _reportPending = true;
             _pendingComboBaseCount = 0;
         }
 
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
-        bool UseTurnManager => turnManager != null;
-        bool ManageTurnTimeLocally => simulateTurnTime && !UseTurnManager;
-        bool ManageEnergyLocally => !UseTurnManager;
-
 
         public void AttachTurnManager(TurnManagerV2 manager)
         {
@@ -132,7 +127,14 @@ namespace TGD.CombatV2
             turnManager = manager;
             _boundTurnManager = null;
 
-            if (!isActiveAndEnabled || turnManager == null)
+            UseTurnManager = manager != null;
+            simulateTurnTime = !UseTurnManager;
+            ManageTurnTimeLocally = !UseTurnManager;
+            ManageEnergyLocally = !UseTurnManager;
+            if (!ManageTurnTimeLocally)
+                _turnSecondsLeft = -1f;
+
+            if (!UseTurnManager || !isActiveAndEnabled)
                 return;
 
             turnManager.TurnStarted += OnTurnStarted;
@@ -141,7 +143,7 @@ namespace TGD.CombatV2
 
         IResourcePool ResolveResourcePool()
         {
-            if (!UseTurnManager || driver == null || driver.UnitRef == null)
+            if (!UseTurnManager || turnManager == null || driver == null || driver.UnitRef == null)
                 return null;
             return turnManager.GetResources(driver.UnitRef);
         }
@@ -168,7 +170,7 @@ namespace TGD.CombatV2
 
         int ExternalTimeRemaining()
         {
-            if (!UseTurnManager || driver == null || driver.UnitRef == null)
+            if (!UseTurnManager || turnManager == null || driver == null || driver.UnitRef == null)
                 return int.MaxValue;
 
             var budget = turnManager.GetBudget(driver.UnitRef);
@@ -262,7 +264,7 @@ namespace TGD.CombatV2
 
         void OnTurnStarted(Unit unit)
         {
-            if (!UseTurnManager || driver == null || driver.UnitRef != unit)
+            if (!UseTurnManager || turnManager == null || driver == null || driver.UnitRef != unit)
                 return;
 
             _attacksThisTurn = 0;
@@ -275,8 +277,6 @@ namespace TGD.CombatV2
             if (!ManageTurnTimeLocally) return;
             if (_turnSecondsLeft >= 0f) return;
             _turnSecondsLeft = MaxTurnSeconds;
-            if (debugLog)
-                Debug.Log($"[Attack] Init TurnTime = {_turnSecondsLeft}s (base={baseTurnSeconds} + speed={(ctx ? ctx.Speed : 0)})", this);
         }
 
         bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _actor != null;
@@ -292,6 +292,21 @@ namespace TGD.CombatV2
             if (!IsReady)
             {
                 RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                return;
+            }
+            int needSec = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
+            if (UseTurnManager && turnManager != null && driver != null && driver.UnitRef != null)
+            {
+                var budget = turnManager.GetBudget(driver.UnitRef);
+                if (budget == null || !budget.HasTime(needSec))
+                {
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    return;
+                }
+            }
+            else if (ManageTurnTimeLocally && _turnSecondsLeft + 1e-4f < needSec)
+            {
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
                 return;
             }
 
@@ -387,8 +402,6 @@ namespace TGD.CombatV2
                     attackSecsCharge = 0;
                     attackEnergyCost = 0;
                     _pendingComboBaseCount = 0;
-                    if (debugLog)
-                        Debug.Log("[Attack] Not enough time for attack (TurnManager). Downgrade to move-only.", this);
                 }
             }
             else if (simulateTurnTime)
@@ -404,8 +417,6 @@ namespace TGD.CombatV2
                     attackSecsCharge = 0;
                     attackEnergyCost = 0;
                     _pendingComboBaseCount = 0;
-                    if (debugLog)
-                        Debug.Log("[Attack] Not enough time for attack. Downgrade to move-only.", this);
                 }
             }
 
@@ -438,12 +449,6 @@ namespace TGD.CombatV2
                 _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
                 if (attackPlanned)
                     _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
-            }
-
-            if (debugLog)
-            {
-                Debug.Log($"[Attack] PayMove secs={moveSecsCharge} energy={moveEnergyCost}; " +
-                          $"PayAttack secs={attackSecsCharge} energy={attackEnergyCost}", this);
             }
 
             _currentPreview = null;
@@ -573,17 +578,6 @@ namespace TGD.CombatV2
             preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
 
             preview.valid = true;
-
-            //if (debugLog)
-            //{
-            //    Debug.Log(
-            //        $"[Attack/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
-            //        $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} startRaw={rates.startEnvMult:F2} " +
-            //        $"startIsSticky={rates.startIsSticky} => MR_click={rates.mrClick:F2} steps={preview.steps} " +
-            //        $"predSecs={preview.moveSecsPred} chargeSecs={preview.moveSecsCharge}",
-            //        this);
-            //}
-
             return preview;
         }
 
@@ -661,8 +655,6 @@ namespace TGD.CombatV2
 
             AttackEventsV2.RaiseAttackMoveStarted(unit, reached);
 
-            int moveEnergyNet = Mathf.Max(0, moveEnergyPaid);
-            int attackEnergyNet = Mathf.Max(0, attackEnergyPaid);
             int moveEnergyRate = MoveEnergyPerSecond();
 
             if (reached.Count <= 1)
@@ -694,8 +686,15 @@ namespace TGD.CombatV2
                     }
                     TriggerAttackAnimation(unit, preview.targetHex);
                 }
-
-
+                int meleeAttackUsedSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
+                int meleeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
+                _reportMoveUsedSeconds = 0;
+                _reportMoveRefundSeconds = meleeMoveRefundSeconds;
+                _reportAttackUsedSeconds = meleeAttackUsedSeconds;
+                _reportAttackRefundSeconds = 0;
+                ReportMoveEnergyNet = 0;
+                ReportAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
+                SetExecReport(meleeAttackUsedSeconds, meleeMoveRefundSeconds, attackPlanned);
                 yield break;
             }
 
@@ -734,12 +733,11 @@ namespace TGD.CombatV2
 
                 if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                 {
-                    if (debugLog)
-                        Debug.Log($"[Attack] rollback: effMR={effMR:F2} < MR_click={preview.mrClick:F2} at step i={i}", this);
+                    //if (debugLog)
+                    //    Debug.Log($"[Attack] rollback: effMR={effMR:F2} < MR_click={preview.mrClick:F2} at step i={i}", this);
                     attackRolledBack = true;
                     if (attackEnergyPaid > 0 && ManageEnergyLocally)
                         RefundAttackEnergy(attackEnergyPaid);
-                    attackEnergyNet = 0;
                     if (ManageTurnTimeLocally)
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
@@ -789,7 +787,6 @@ namespace TGD.CombatV2
             if (refundedSeconds > 0)
             {
                 int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
-                moveEnergyNet = Mathf.Max(0, moveEnergyNet - refundEnergy);
                 if (ManageEnergyLocally && refundEnergy > 0)
                     RefundMoveEnergy(refundEnergy);
             }
@@ -797,10 +794,6 @@ namespace TGD.CombatV2
             if (status != null && usedSeconds > 0f)
                 status.ConsumeSeconds(usedSeconds);
 
-            if (truncated && !stoppedByExternal && debugLog)
-            {
-                Debug.Log("[Attack] Attack move truncated (no more time).", this);
-            }
 
             bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
             if (attackSuccess)
@@ -811,7 +804,6 @@ namespace TGD.CombatV2
             {
                 if (!attackRolledBack)
                 {
-                    attackEnergyNet = 0;
                     if (attackEnergyPaid > 0 && ManageEnergyLocally)
                         RefundAttackEnergy(attackEnergyPaid);
                     _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
@@ -824,7 +816,19 @@ namespace TGD.CombatV2
             int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
             int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
             int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
-            SetExecReport(moveUsedSeconds, moveRefundSeconds, attackUsedSeconds, attackRefundSeconds, moveEnergyNet, attackEnergyNet, attackSuccess);
+            _reportMoveUsedSeconds = moveUsedSeconds;
+            _reportMoveRefundSeconds = moveRefundSeconds;
+            _reportAttackUsedSeconds = attackUsedSeconds;
+            _reportAttackRefundSeconds = attackRefundSeconds;
+
+            int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
+            ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
+            ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+
+            SetExecReport(
+                moveUsedSeconds + attackUsedSeconds,
+                moveRefundSeconds + attackRefundSeconds,
+                attackSuccess);
         }
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
@@ -840,8 +844,7 @@ namespace TGD.CombatV2
         public int ReportMoveRefundSeconds => _reportPending ? _reportMoveRefundSeconds : 0;
         public int ReportAttackUsedSeconds => _reportPending ? _reportAttackUsedSeconds : 0;
         public int ReportAttackRefundSeconds => _reportPending ? _reportAttackRefundSeconds : 0;
-        public int ReportMoveEnergyNet => _reportPending ? _reportMoveEnergyNet : 0;
-        public int ReportAttackEnergyNet => _reportPending ? _reportAttackEnergyNet : 0;
+
 
         MoveRatesSnapshot BuildMoveRates(Hex start)
         {
@@ -1086,8 +1089,6 @@ namespace TGD.CombatV2
             if (stats == null) return;
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(stats.Energy - amount, 0, stats.MaxEnergy);
-            if (debugLog)
-                Debug.Log($"[Attack] SpendEnergy {amount} => {before}->{stats.Energy}", this);
         }
 
         void RefundMoveEnergy(int amount)
@@ -1097,8 +1098,6 @@ namespace TGD.CombatV2
             if (stats == null) return;
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
-            if (debugLog)
-                Debug.Log($"[Attack] Refund move energy +{amount} ({before}->{stats.Energy})", this);
         }
 
         void RefundAttackEnergy(int amount)

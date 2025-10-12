@@ -44,6 +44,12 @@ namespace TGD.CombatV2
         public bool debugLog = true;
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
+        [Header("Turn Manager Binding")]
+        public bool UseTurnManager = true;
+        public bool ManageEnergyLocally = false;
+        public bool ManageTurnTimeLocally = false;
+        TurnManagerV2 _turnManager;
+
         [Header("Turn Time (TEMP no-TM)")]
         public bool simulateTurnTime = true;
         [Tooltip("基础回合时间（秒）")]
@@ -53,16 +59,23 @@ namespace TGD.CombatV2
         int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
         void EnsureTurnTimeInited()
         {
-            if (!simulateTurnTime) return;
+            if (!ManageTurnTimeLocally) return;
             if (_turnSecondsLeft < 0)
             {
                 _turnSecondsLeft = MaxTurnSeconds;
-                Debug.Log($"[ClickMove] Init TurnTime = {_turnSecondsLeft}s (base={baseTurnSeconds} + speed={(ctx ? ctx.Speed : 0)})", this);
             }
         }
 
-        void LogTime(string tag) => Debug.Log($"[ClickMove] [{tag}] TimeLeft = {_turnSecondsLeft}s", this);
-
+        public void AttachTurnManager(TurnManagerV2 tm)
+        {
+            _turnManager = tm;
+            UseTurnManager = tm != null;
+            simulateTurnTime = !UseTurnManager;
+            ManageTurnTimeLocally = !UseTurnManager;
+            ManageEnergyLocally = !UseTurnManager;
+            if (!ManageTurnTimeLocally)
+                _turnSecondsLeft = -1;
+        }
         [Header("Action Config & Cost")]
         public MoveActionConfig config;
         public MonoBehaviour costProvider;
@@ -162,15 +175,7 @@ namespace TGD.CombatV2
             _reportPending = true;
         }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
-        void RefreshStateForAim()
-        {
-            if (debugLog)
-            {
-                var start = (driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
-                float m = (env != null) ? Mathf.Clamp(env.GetSpeedMult(start), ENV_MIN, ENV_MAX) : 1f;
-                Debug.Log($"[ClickMove] RefreshStateForAim start={start} envMult={m:F2} baseR={(ctx ? ctx.BaseMoveRate : -1)}", this);
-            }
-        }
+        void RefreshStateForAim() { }
 
         public void OnEnterAim()
         {
@@ -178,10 +183,20 @@ namespace TGD.CombatV2
             RefreshStateForAim();
             // 预检查：时间 + 能量，不满足就直接拒绝，不进入瞄准
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            if (simulateTurnTime && _turnSecondsLeft < needSec)
+            if (UseTurnManager)
+            {
+                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                    ? _turnManager.GetBudget(driver.UnitRef)
+                    : null;
+                if (budget == null || !budget.HasTime(needSec))
+                {
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                    return;
+                }
+            }
+            else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                LogTime("EnterAim/NO-TIME");
                 return;
             }
             if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
@@ -202,10 +217,20 @@ namespace TGD.CombatV2
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
-            if (simulateTurnTime && _turnSecondsLeft < needSec)
+            if (UseTurnManager)
+            {
+                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                    ? _turnManager.GetBudget(driver.UnitRef)
+                    : null;
+                if (budget == null || !budget.HasTime(needSec))
+                {
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                    yield break;
+                }
+            }
+            else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                LogTime("Confirm/NO-TIME");
                 yield break;
             }
             if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
@@ -251,7 +276,6 @@ namespace TGD.CombatV2
             // 注册本单位的占位（失败就再试一次，通常是起始位置非法）
             if (!_occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing))
                 _occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing);
-            Debug.Log($"[ClickMover] unitView={(driver && driver.unitView ? driver.unitView.name : "NULL")}", this);
         }
 
         void OnDisable()
@@ -388,18 +412,6 @@ namespace TGD.CombatV2
             int cap = config ? config.stepsCap : 12;
             int steps = Mathf.Min(cap, StatsMathV2.StepsAllowedF32(mrPreview, timeSec));
 
-            if (debugLog)
-            {
-                Debug.Log(
-                    $"[ClickMove/Preview] baseR={rates.baseRate} buff={rates.buffMult:F2} " +
-                    $"stickyNow={rates.stickyMult:F2} flatAfter={rates.flatAfter} " +
-                    $"startRaw={rates.startEnvMult:F2} startIsSticky={startGivesSticky} " +
-                    $"=> MR_noEnv={mrNoEnv:F2} MR_preview={mrPreview:F2} steps={steps}",
-                    this
-                );
-            }
-
-
             var physicsBlocker =
                 (blockByPhysics && obstacleMask != 0)
                 ? HexAreaUtil.MakeDefaultBlocker(
@@ -454,10 +466,20 @@ namespace TGD.CombatV2
 
             int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
-            if (simulateTurnTime && _turnSecondsLeft < requiredSec)
+            if (UseTurnManager)
+            {
+                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                    ? _turnManager.GetBudget(driver.UnitRef)
+                    : null;
+                if (budget == null || !budget.HasTime(requiredSec))
+                {
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                    yield break;
+                }
+            }
+            else if (ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                LogTime("BeforePay/NO-TIME");
                 yield break;
             }
 
@@ -468,8 +490,8 @@ namespace TGD.CombatV2
                 if (!_cost.HasEnough(driver.UnitRef, config))
                 { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
-                _cost.Pay(driver.UnitRef, config);
-                Debug.Log($"[ClickMove] Pay: {config.energyCost} energy for {requiredSec}s move.", this);
+                if (ManageEnergyLocally)
+                    _cost.Pay(driver.UnitRef, config);
             }
 
             var rates = BuildMoveRates(path[0]);
@@ -494,10 +516,11 @@ namespace TGD.CombatV2
 
             if (reached == null || reached.Count < 2)
             {
-                _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
-                if (simulateTurnTime) _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
+                if (ManageEnergyLocally)
+                    _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                if (ManageTurnTimeLocally)
+                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
-                Debug.Log($"[ClickMove] No step possible. Refund ALL: {requiredSec}s. TimeLeft={_turnSecondsLeft}s", this);
                 yield break;
             }
 
@@ -593,19 +616,15 @@ namespace TGD.CombatV2
                 Debug.Log("[ClickMove] No more time.");
             }
 
-            if (simulateTurnTime)
+            if (ManageTurnTimeLocally)
             {
                 _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
             }
             if (refunded > 0)
             {
-                _cost?.RefundSeconds(driver.UnitRef, config, refunded);
+                if (ManageEnergyLocally)
+                    _cost?.RefundSeconds(driver.UnitRef, config, refunded);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
-                Debug.Log($"[ClickMove] Refund: +{refunded}s (and energy). New TimeLeft={_turnSecondsLeft}s", this);
-            }
-            else
-            {
-                Debug.Log($"[ClickMove] Spent {spentSec}s, Refunded {refunded}s. TimeLeft={_turnSecondsLeft}s", this);
             }
             if (_showing) ShowRange();
             if (status != null && spentSec > 0)
