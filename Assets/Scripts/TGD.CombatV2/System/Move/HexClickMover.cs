@@ -557,6 +557,7 @@ namespace TGD.CombatV2
 
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
+            string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
             Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
             bool truncatedByBudget = (reached.Count < path.Count);
             bool stoppedByExternal = false;
@@ -606,12 +607,12 @@ namespace TGD.CombatV2
 
 
                 _occ.TryMove(_actor, to);
-                if (_sticky != null && status != null && _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag))
+                if (_sticky != null && status != null &&
+                    _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
+                    stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                 {
-                    if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
-                    {
-                        status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
-                    }
+                    status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
+                    Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}", this);
                 }
 
                 if (driver.Map != null)

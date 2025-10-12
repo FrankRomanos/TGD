@@ -517,6 +517,7 @@ namespace TGD.CombatV2
 
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
+            string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
             var start = unit.Position;
 
             var rates = BuildMoveRates(start);
@@ -786,12 +787,12 @@ namespace TGD.CombatV2
                 unit.Position = to;
                 driver.SyncView();
 
-                if (_sticky != null && status != null && _sticky.TryGetSticky(to, out var mult, out var turns, out var tag))
+                if (_sticky != null && status != null &&
+                    _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
+                    turns > 0 && !Mathf.Approximately(mult, 1f))
                 {
-                    if (turns > 0 && !Mathf.Approximately(mult, 1f))
-                    {
-                        status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
-                    }
+                    status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
+                    Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
                 }
             }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using TGD.HexBoard;
 
@@ -56,7 +57,6 @@ namespace TGD.CombatV2
         {
             if (_subscribedManager != null)
             {
-                _subscribedManager.TurnEnded -= OnTurnEnded;
                 _subscribedManager.UnregisterMoveRateStatus(this);
                 _subscribedManager = null;
             }
@@ -84,7 +84,6 @@ namespace TGD.CombatV2
 
             if (_subscribedManager != null)
             {
-                _subscribedManager.TurnEnded -= OnTurnEnded;
                 _subscribedManager.UnregisterMoveRateStatus(this);
             }
 
@@ -93,19 +92,9 @@ namespace TGD.CombatV2
 
             if (manager != null && isActiveAndEnabled)
             {
-                manager.TurnEnded += OnTurnEnded;
                 manager.RegisterMoveRateStatus(this);
                 _subscribedManager = manager;
             }
-        }
-
-        void OnTurnEnded(Unit unit)
-        {
-            if (unit == null)
-                return;
-            if (UnitRef == null || unit != UnitRef)
-                return;
-            TickOneTurn();
         }
 
         public IEnumerable<float> GetActiveMultipliers()
@@ -145,16 +134,10 @@ namespace TGD.CombatV2
                 return;
 
             float clampedMult = Mathf.Clamp(mult, 0.01f, 100f);
-            if (Mathf.Approximately(clampedMult, 1f))
-            {
-                Remove(tag);
-                return;
-            }
-
-            if (turns == 0)
+            if (turns == 0 || Mathf.Approximately(clampedMult, 1f))
                 return;
 
-            int normalizedTurns = turns < 0 ? -1 : Mathf.Max(1, turns);
+            int normalizedTurns = turns < 0 ? -1 : turns;
             var entry = GetOrCreateEntry(tag, exclusive, clampedMult, normalizedTurns, source);
             if (entry == null)
                 return;
@@ -172,12 +155,7 @@ namespace TGD.CombatV2
             {
                 existing.mult = mult;
                 existing.exclusive = existing.exclusive || exclusive;
-                if (turns < 0)
-                    existing.remainingTurns = -1;
-                else if (existing.remainingTurns < 0)
-                    existing.remainingTurns = turns;
-                else
-                    existing.remainingTurns = Mathf.Max(existing.remainingTurns, turns);
+                existing.remainingTurns = turns;
 
                 Debug.Log($"[Sticky] Refresh U={unitLabel} tag={tag} mult={mult:F2} turns={FormatTurns(existing.remainingTurns)}", this);
                 return existing;
@@ -193,7 +171,7 @@ namespace TGD.CombatV2
             _entries.Add(entry);
             _entriesByTag[tag] = entry;
 
-            Debug.Log($"[Sticky] Apply  U={unitLabel} tag={tag} mult={mult:F2} turns={FormatTurns(turns)}", this);
+            Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag} mult={mult:F2} turns={FormatTurns(turns)}", this);
 
             return entry;
         }
@@ -255,7 +233,7 @@ namespace TGD.CombatV2
                 if (log)
                 {
                     var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
-                    Debug.Log($"[Sticky] Expire  U={unitLabel} tag={entry.tag}", this);
+                    Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
                 }
             }
             _entries.RemoveAt(index);
@@ -268,9 +246,9 @@ namespace TGD.CombatV2
             return turns.ToString();
         }
 
-        public void TickOneTurn()
+        public void TickAll(int deltaTurns)
         {
-            if (_entries.Count == 0)
+            if (deltaTurns == 0 || _entries.Count == 0)
                 return;
 
             bool changed = false;
@@ -288,23 +266,28 @@ namespace TGD.CombatV2
                 if (entry.remainingTurns < 0)
                     continue;
 
-                int after = Mathf.Max(0, entry.remainingTurns - 1);
-                entry.remainingTurns = after;
+                entry.remainingTurns += deltaTurns;
 
-                if (after > 0)
+                if (entry.remainingTurns > 0)
                 {
-                    Debug.Log($"[Sticky] Tick    U={unitLabel} tag={entry.tag} -> remain={after}", this);
+                    Debug.Log($"[Sticky] Tick U={unitLabel} tag={entry.tag} -> remain={entry.remainingTurns}", this);
                 }
                 else
                 {
-                    Debug.Log($"[Sticky] Expire  U={unitLabel} tag={entry.tag}", this);
-                    ExpireEntryAt(i, false);
+                    Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
+                    _entriesByTag.Remove(entry.tag);
+                    _entries.RemoveAt(i);
                     changed = true;
                 }
             }
 
             if (changed)
                 RecomputeProduct();
+        }
+
+        public void TickOneTurn()
+        {
+            TickAll(-1);
         }
 
         bool RecomputeProduct()
@@ -362,6 +345,35 @@ namespace TGD.CombatV2
                 if (entry.remainingTurns == 0)
                     continue;
                 buffer.Add(new EntrySnapshot(entry.tag, entry.remainingTurns));
+            }
+        }
+
+        public string ActiveTagsCsv
+        {
+            get
+            {
+                if (_entries.Count == 0)
+                    return "none";
+
+                var sb = new StringBuilder();
+                bool any = false;
+                foreach (var entry in _entries)
+                {
+                    if (entry == null)
+                        continue;
+                    if (entry.remainingTurns == 0)
+                        continue;
+
+                    if (any)
+                        sb.Append(',');
+
+                    sb.Append(entry.tag);
+                    sb.Append(':');
+                    sb.Append(entry.remainingTurns < 0 ? "inf" : entry.remainingTurns.ToString());
+                    any = true;
+                }
+
+                return any ? sb.ToString() : "none";
             }
         }
     }

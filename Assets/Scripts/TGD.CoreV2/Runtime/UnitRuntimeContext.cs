@@ -3,27 +3,41 @@ using UnityEngine;
 
 namespace TGD.CoreV2
 {
-    /// µ¥Î»ÔËĞĞÊ±ÉÏÏÂÎÄ£ºÍ³Ò»³ĞÔØ Stats/Cooldown µÈ£¬²¢Ìá¹©±ã½İÖ»¶Á·ÃÎÊ
+    /// å•ä½è¿è¡Œæ—¶ä¸Šä¸‹æ–‡ï¼šç»Ÿä¸€æ‰¿è½½ Stats/Cooldown ç­‰ï¼Œå¹¶æä¾›ä¾¿æ·åªè¯»è®¿é—®
     [DisallowMultipleComponent]
     public sealed class UnitRuntimeContext : MonoBehaviour
     {
         [Header("Core Refs")]
-        [Tooltip("¸Ãµ¥Î»µÄËùÓĞÕ½¶·ÊıÖµ£¨ĞòÁĞ»¯ÈİÆ÷£©")]
+        [Tooltip("è¯¥å•ä½çš„æ‰€æœ‰æˆ˜æ–—æ•°å€¼ï¼ˆåºåˆ—åŒ–å®¹å™¨ï¼‰")]
         public StatsV2 stats = new StatsV2();
         public CooldownHubV2 cooldownHub;
 
         [Header("Fallbacks (for tests)")]
-        [Tooltip("µ± stats Îª¿ÕÊ±ÓÃÓÚ²âÊÔµÄÄ¬ÈÏ MoveRate")]
+        [SerializeField]
+        float _currentMoveRate = -1f;
+        public float CurrentMoveRate
+        {
+            get
+            {
+                if (_currentMoveRate <= 0f)
+                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd);
+                return _currentMoveRate;
+            }
+            set => _currentMoveRate = Mathf.Max(0.01f, value);
+        }
+
+            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd));
+        [Tooltip("å½“ stats ä¸ºç©ºæ—¶ç”¨äºæµ‹è¯•çš„é»˜è®¤ MoveRate")]
         public float fallbackMoveRate = 5f;
         // File: TGD.CoreV2/UnitRuntimeContext.cs
-        // ÔÚÀàÀïÆäËü±ã½İÊôĞÔÅÔ±ßĞÂÔö£º
-        public bool Entangled => stats != null && stats.IsEntangled; // ¡ï ĞÂÔö£º¶ÔÍâÖ»¶Á£¬²»±©Â¶ StatsV2
+        // åœ¨ç±»é‡Œå…¶å®ƒä¾¿æ·å±æ€§æ—è¾¹æ–°å¢ï¼š
+        public bool Entangled => stats != null && stats.IsEntangled; // â˜… æ–°å¢ï¼šå¯¹å¤–åªè¯»ï¼Œä¸æš´éœ² StatsV2
 
 
-        // ========= ±ã½İÖ»¶Á·ÃÎÊ£¨Í³Ò»Èë¿Ú£»Íâ²¿ÏµÍ³Ö»¶ÁÕâĞ©£© =========
-        // ¡ª¡ª ÒÆ¶¯ ¡ª¡ª 
+        // ========= ä¾¿æ·åªè¯»è®¿é—®ï¼ˆç»Ÿä¸€å…¥å£ï¼›å¤–éƒ¨ç³»ç»Ÿåªè¯»è¿™äº›ï¼‰ =========
+        // â€”â€” ç§»åŠ¨ â€”â€” 
         public int MoveRate => (stats != null) ? stats.MoveRate : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
-        // ¡ï ĞÂÔö£º»ù´¡ÒÆËÙ£¨¿ÉĞ´£¬Ğ´»Ø Stats »ò fallback£©
+        // â˜… æ–°å¢ï¼šåŸºç¡€ç§»é€Ÿï¼ˆå¯å†™ï¼Œå†™å› Stats æˆ– fallbackï¼‰
         public int BaseMoveRate
         {
             get => stats != null ? Mathf.Max(1, stats.MoveRate)
@@ -40,19 +54,19 @@ namespace TGD.CoreV2
         public int MoveRateFlatAdd => stats != null ? stats.MoveRateFlatAdd : 0;
         //speed
         public int Speed => (stats != null) ? stats.Speed : 0;
-        // ¡ª¡ª ÄÜÁ¿ ¡ª¡ª 
+        // â€”â€” èƒ½é‡ â€”â€” 
         public int Energy => stats != null ? stats.Energy : 0;
         public int MaxEnergy => stats != null ? stats.MaxEnergy : 0;
 
-        // ¡ª¡ª ¹¥»÷/Ö÷ÊôĞÔ/±©»÷£¨°´ StatsV2 µÄ¶¨ÒåÖ±Í¨±©Â¶£¬²»Ôì¶îÍâ¹«Ê½£© ¡ª¡ª 
+        // â€”â€” æ”»å‡»/ä¸»å±æ€§/æš´å‡»ï¼ˆæŒ‰ StatsV2 çš„å®šä¹‰ç›´é€šæš´éœ²ï¼Œä¸é€ é¢å¤–å…¬å¼ï¼‰ â€”â€” 
         public int Attack => stats != null ? stats.Attack : 0;
-        public float PrimaryP => stats != null ? stats.PrimaryP : 0f;          // Ö÷ÊôĞÔ»»ËãºóµÄ°Ù·Ö±È£¨Ğ¡Êı£©
-        public float CritChance => stats != null ? stats.CritChance : 0f;        // [0,1] ÒÑ×öÉÏÏŞ
-        public float CritOverflow => stats != null ? stats.CritOverflow : 0f;      // ³¬Ã±²¿·Ö£¨Ğ¡Êı£¬¿É>0£©
-        public float CritMult => stats != null ? stats.CritMult : 2f;          // ÀıÈç 2.0 = 200%
-        public float Mastery => stats != null ? stats.Mastery : 0f;           // ¿É>1 µÄ¾«Í¨
+        public float PrimaryP => stats != null ? stats.PrimaryP : 0f;          // ä¸»å±æ€§æ¢ç®—åçš„ç™¾åˆ†æ¯”ï¼ˆå°æ•°ï¼‰
+        public float CritChance => stats != null ? stats.CritChance : 0f;        // [0,1] å·²åšä¸Šé™
+        public float CritOverflow => stats != null ? stats.CritOverflow : 0f;      // è¶…å¸½éƒ¨åˆ†ï¼ˆå°æ•°ï¼Œå¯>0ï¼‰
+        public float CritMult => stats != null ? stats.CritMult : 2f;          // ä¾‹å¦‚ 2.0 = 200%
+        public float Mastery => stats != null ? stats.Mastery : 0f;           // å¯>1 çš„ç²¾é€š
 
-        // ¡ª¡ª ÆäËü³£ÓÃÍ°/¼õÉËÖ±Í¨£¨ĞèÒª¾ÍÓÃ£¬Ã»ÓÃ¿ÉÒÔºöÂÔ£© ¡ª¡ª 
+        // â€”â€” å…¶å®ƒå¸¸ç”¨æ¡¶/å‡ä¼¤ç›´é€šï¼ˆéœ€è¦å°±ç”¨ï¼Œæ²¡ç”¨å¯ä»¥å¿½ç•¥ï¼‰ â€”â€” 
         public float DmgBonusA_P => stats != null ? stats.DmgBonusA_P : 0f;
         public float DmgBonusB_P => stats != null ? stats.DmgBonusB_P : 0f;
         public float DmgBonusC_P => stats != null ? stats.DmgBonusC_P : 0f;
@@ -60,7 +74,7 @@ namespace TGD.CoreV2
         public float ReduceB_P => stats != null ? stats.ReduceB_P : 0f;
         public float ReduceC_P => stats != null ? stats.ReduceC_P : 0f;
 
-        // ========= µ÷ÊÔ =========
+        // ========= è°ƒè¯• =========
         [Header("Debug")]
         public bool debugLog = true;
 

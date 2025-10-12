@@ -102,26 +102,14 @@ namespace TGD.HexBoard
                     if (Hex.Distance(at, p.Center) > p.radius) continue;
 
                     float m = Mathf.Clamp(p.mult, 0.01f, 100f);
-                    bool isHaste = m > 1f + 1e-4f;
-                    bool isSlow = m < 1f - 1e-4f;
+                    int turns = p.stickyTurnsOnEnter;
+                    if (turns <= 0 || Mathf.Approximately(m, 1f))
+                        continue;
 
-                    if (isHaste)
-                    {
-                        int turns = Mathf.Max(1, p.stickyTurnsOnEnter);
-                        multiplier = m;
-                        durationTurns = turns;
-                        tag = $"Patch@{p.q},{p.r}";
-                        return true;
-                    }
-
-                    if (isSlow)
-                    {
-                        int turns = Mathf.Max(1, p.stickyTurnsOnEnter);
-                        multiplier = m;
-                        durationTurns = turns;
-                        tag = $"Patch@{p.q},{p.r}";
-                        return true;
-                    }
+                    multiplier = m;
+                    durationTurns = turns;
+                    tag = $"Patch@{p.q},{p.r}";
+                    return true;
                 }
             }
 
