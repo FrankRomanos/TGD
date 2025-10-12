@@ -114,10 +114,11 @@ namespace TGD.HexBoard
                         return true;
                     }
 
-                    if (isSlow && p.stickyTurnsOnEnter > 0)
+                    if (isSlow)
                     {
+                        int turns = Mathf.Max(1, p.stickyTurnsOnEnter);
                         multiplier = m;
-                        durationTurns = p.stickyTurnsOnEnter;
+                        durationTurns = turns;
                         tag = $"Patch@{p.q},{p.r}";
                         return true;
                     }

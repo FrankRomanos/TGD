@@ -310,6 +310,21 @@ namespace TGD.CombatV2
                 return;
             }
 
+            var pool = ResolveResourcePool();
+            int energyAvailable = ResolveEnergyAvailable(pool);
+            int moveEnergyCost = MoveEnergyPerSecond();
+            bool anyEnergyCost = (moveEnergyCost > 0) || (attackConfig != null && attackConfig.baseEnergyCost > 0f);
+            if (anyEnergyCost && energyAvailable <= 0)
+            {
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                return;
+            }
+            if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
+            {
+                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                return;
+            }
+
             _aiming = true;
             _hover = null;
             _currentPreview = null;
@@ -768,9 +783,7 @@ namespace TGD.CombatV2
                 {
                     if (turns > 0 && !Mathf.Approximately(mult, 1f))
                     {
-                        status.ApplyOrRefreshExclusive(tag, mult, turns);
-                        if (debugLog)
-                            Debug.Log($"[Sticky] tag={tag} mult={mult:F2} turns={turns} (applied/refreshed) at={to}", this);
+                        status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
                     }
                 }
             }
@@ -790,10 +803,6 @@ namespace TGD.CombatV2
                 if (ManageEnergyLocally && refundEnergy > 0)
                     RefundMoveEnergy(refundEnergy);
             }
-
-            if (status != null && usedSeconds > 0f)
-                status.ConsumeSeconds(usedSeconds);
-
 
             bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
             if (attackSuccess)

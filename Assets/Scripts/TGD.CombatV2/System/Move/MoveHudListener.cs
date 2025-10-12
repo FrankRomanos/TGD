@@ -14,7 +14,8 @@ namespace TGD.CombatV2
         public RectTransform root;
 
         [Header("Filter")]
-        public HexBoardTestDriver driver;   // ¡ï ĞÂÔö£ºÖ»ÏÔÊ¾ÊôÓÚ×Ô¼ºµÄÊÂ¼ş
+        public HexBoardTestDriver driver;   // å¯é€‰å¼•ç”¨ï¼ˆè‡ªåŠ¨ç»‘å®šï¼‰
+        public bool requireUnitMatch = true;
 
         [Header("Behavior")]
         [Min(0.2f)] public float showSeconds = 1.6f;
@@ -28,7 +29,7 @@ namespace TGD.CombatV2
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
             if (root) _cg = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); 
             SetVisible(false, true);
         }
 
@@ -46,7 +47,8 @@ namespace TGD.CombatV2
             SetVisible(false);
         }
 
-        bool Match(Unit u) => driver && driver.UnitRef == u;
+        Unit UnitRef => driver ? driver.UnitRef : null;
+        bool Match(Unit u) => !requireUnitMatch || (u != null && u == UnitRef);
 
         void OnRefunded(Unit u, int sec)
         {

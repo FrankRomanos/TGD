@@ -13,7 +13,8 @@ namespace TGD.CombatV2
         public RectTransform root;
 
         [Header("Filter")]
-        public HexBoardTestDriver driver;   // ★ 新增
+        public HexBoardTestDriver driver;   // 可选引用（自动绑定）
+        public bool requireUnitMatch = true;
 
         [Header("Behavior")]
         [Min(0.2f)] public float showSeconds = 1.6f;
@@ -52,7 +53,8 @@ namespace TGD.CombatV2
             SetVisible(false);
         }
 
-        bool Match(Unit u) => driver && driver.UnitRef == u;
+        Unit UnitRef => driver ? driver.UnitRef : null;
+        bool Match(Unit u) => !requireUnitMatch || (u != null && u == UnitRef);
 
         void OnRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {

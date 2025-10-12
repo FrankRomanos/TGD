@@ -597,8 +597,7 @@ namespace TGD.CombatV2
                 {
                     if (stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                     {
-                        status.ApplyOrRefreshExclusive(tag, stickM, stickTurns);
-                        if (debugLog) Debug.Log($"[Sticky] tag={tag} mult={stickM:F2} turns={stickTurns} (applied/refreshed) at={to}", this);
+                        status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
                     }
                 }
 
@@ -613,7 +612,7 @@ namespace TGD.CombatV2
             if (truncatedByBudget && !stoppedByExternal)
             {
                 HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
-                Debug.Log("[ClickMove] No more time.");
+                if (debugLog) Debug.Log("[Move] No more time.", this);
             }
 
             if (ManageTurnTimeLocally)
@@ -627,10 +626,6 @@ namespace TGD.CombatV2
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
             }
             if (_showing) ShowRange();
-            if (status != null && spentSec > 0)
-            {
-                status.ConsumeSeconds(spentSec);
-            }
 
         }
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
