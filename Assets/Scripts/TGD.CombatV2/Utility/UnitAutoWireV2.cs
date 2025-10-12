@@ -6,7 +6,14 @@ using TGD.HexBoard;
 namespace TGD.CombatV2
 {
     /// <summary>
-    /// ¿ÉÑ¡£º°ÑÍ¬ÎïÌåÉÏµÄ Adapter ½ÓÉÏ TurnManager Óë Context¡£
+            if (turnManager != null && context != null)
+            {
+                turnManager.RegisterContext(context);
+                if (context.cooldownHub != null && context.cooldownHub.secStore != null)
+                    turnManager.RegisterCooldownStore(context.cooldownHub.secStore);
+            }
+
+    /// å¯é€‰ï¼šæŠŠåŒç‰©ä½“ä¸Šçš„ Adapter æ¥ä¸Š TurnManager ä¸ Contextã€‚
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class UnitAutoWireV2 : MonoBehaviour

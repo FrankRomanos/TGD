@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using TGD.CoreV2;
 using TGD.HexBoard;
 using UnityEngine;
@@ -29,7 +28,10 @@ namespace TGD.CombatV2
         readonly Dictionary<Unit, IResourcePool> _resourceHandles = new();
         readonly Dictionary<Unit, ICooldownSink> _cooldownHandles = new();
         readonly Dictionary<Unit, MoveRateStatusRuntime> _moveRateStatuses = new();
-        readonly List<MoveRateStatusRuntime.EntrySnapshot> _buffScratch = new();
+        readonly Dictionary<UnitRuntimeContext, Unit> _unitByContext = new();
+        readonly HashSet<UnitRuntimeContext> _allContexts = new();
+        readonly HashSet<MoveRateStatusRuntime> _allMoveRateStatuses = new();
+        readonly HashSet<CooldownStoreSecV2> _allCooldownStores = new();
 
         Coroutine _loop;
         Unit _activeUnit;
@@ -161,6 +163,10 @@ namespace TGD.CombatV2
         {
             if (unit == null || context == null) return;
             _contextByUnit[unit] = context;
+            _unitByContext[context] = unit;
+            RegisterContext(context);
+            if (context.cooldownHub != null && context.cooldownHub.secStore != null)
+                RegisterCooldownStore(context.cooldownHub.secStore);
             if (_runtimeByUnit.TryGetValue(unit, out var runtime))
                 runtime.Bind(context);
         }
@@ -239,7 +245,7 @@ namespace TGD.CombatV2
 
             HandleEndTurn(runtime);
             string unitLabel = FormatUnitLabel(runtime.Unit);
-            Debug.Log($"[Turn]  End    T{_currentPhaseIndex}({unitLabel})", this);
+            Debug.Log($"[Turn] End T{_currentPhaseIndex}({unitLabel})", this);
 
             if (_activeUnit == unit)
             {
@@ -264,18 +270,18 @@ namespace TGD.CombatV2
             _currentPhaseIsPlayer = isPlayer;
 
             string phaseLabel = FormatPhaseLabel(isPlayer);
-            Debug.Log($"[Phase] Begin  T{_currentPhaseIndex}({phaseLabel})", this);
+            Debug.Log($"[Phase] Begin T{_currentPhaseIndex}({phaseLabel})", this);
             if (isPlayer)
                 PlayerPhaseStarted?.Invoke();
             else
                 EnemyPhaseStarted?.Invoke();
 
-            RecomputeStatsForAllUnits();
+            RefreshMoveRatesForAllUnits();
 
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
-            Debug.Log($"[Phase] Idle1s T{_currentPhaseIndex}({phaseLabel})", this);
+            Debug.Log($"[Phase] Idle T{_currentPhaseIndex}({phaseLabel}) ≥1s", this);
 
             foreach (var unit in units)
             {
@@ -296,7 +302,7 @@ namespace TGD.CombatV2
             _activeUnit = runtime.Unit;
             _waitingForEnd = true;
             string unitLabel = FormatUnitLabel(runtime.Unit);
-            Debug.Log($"[Turn]  Begin  T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
+            Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
             TurnStarted?.Invoke(runtime.Unit);
         }
 
@@ -351,36 +357,17 @@ namespace TGD.CombatV2
         {
             runtime.FinishTurn();
 
-            int cdAffected = TickCooldowns(runtime);
-            string unitLabel = FormatUnitLabel(runtime.Unit);
-            Debug.Log($"[CD]    Tick   T{_currentPhaseIndex}({unitLabel}) -{StatsMathV2.BaseTurnSeconds}s  ({cdAffected} skills)", this);
+            TickAllCooldowns();
+            Debug.Log($"[CD]   Tick  T{_currentPhaseIndex}(-{StatsMathV2.BaseTurnSeconds}s all)", this);
+
+            TickAllMoveStatuses(-1);
+            Debug.Log($"[Buff] Tick  T{_currentPhaseIndex}(-1 turn all)", this);
 
             TurnEnded?.Invoke(runtime.Unit);
 
-            string buffSummary = SummarizeBuffState(runtime.Unit);
-            Debug.Log($"[Buff]  Tick   T{_currentPhaseIndex}({unitLabel}) -1 turn  ({buffSummary})", this);
-
+            string unitLabel = FormatUnitLabel(runtime.Unit);
             var regen = HandleEnergyRegen(runtime);
-            Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({unitLabel}) +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
-        }
-
-        int TickCooldowns(TurnRuntimeV2 runtime)
-        {
-            var store = GetSecStore(runtime);
-            if (store == null) return 0;
-            var keys = store.Keys.ToList();
-            int affected = 0;
-            foreach (var key in keys)
-            {
-                if (string.IsNullOrEmpty(key))
-                    continue;
-                int before = store.SecondsLeft(key);
-                if (before <= 0)
-                    continue;
-                store.AddSeconds(key, -StatsMathV2.BaseTurnSeconds);
-                affected += 1;
-            }
-            return affected;
+            Debug.Log($"[Res] Regen T{_currentPhaseIndex}({unitLabel}) +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
         }
 
         (int gain, int current, int max) HandleEnergyRegen(TurnRuntimeV2 runtime)
@@ -399,6 +386,37 @@ namespace TGD.CombatV2
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(before + gain, 0, max);
             return (gain, stats.Energy, max);
+        }
+
+        int TickAllCooldowns()
+        {
+            int affected = 0;
+            foreach (var store in _allCooldownStores.ToArray())
+            {
+                if (store == null)
+                {
+                    _allCooldownStores.Remove(store);
+                    continue;
+                }
+
+                affected += store.TickEndOfOwnerTurn(StatsMathV2.BaseTurnSeconds);
+            }
+
+            return affected;
+        }
+
+        void TickAllMoveStatuses(int deltaTurns)
+        {
+            foreach (var status in _allMoveRateStatuses.ToArray())
+            {
+                if (status == null)
+                {
+                    _allMoveRateStatuses.Remove(status);
+                    continue;
+                }
+
+                status.TickAll(deltaTurns);
+            }
         }
 
         int GetResourceCurrent(TurnRuntimeV2 runtime, string id)
@@ -449,6 +467,13 @@ namespace TGD.CombatV2
                 _contextByUnit.TryGetValue(unit, out var ctx);
                 runtime = new TurnRuntimeV2(unit, ctx, isPlayer);
                 _runtimeByUnit[unit] = runtime;
+                if (ctx != null)
+                {
+                    _unitByContext[ctx] = unit;
+                    RegisterContext(ctx);
+                    if (ctx.cooldownHub != null && ctx.cooldownHub.secStore != null)
+                        RegisterCooldownStore(ctx.cooldownHub.secStore);
+                }
             }
             else if (isPlayerHint.HasValue && runtime.IsPlayer != isPlayerHint.Value)
             {
@@ -456,59 +481,79 @@ namespace TGD.CombatV2
             }
 
             if (_contextByUnit.TryGetValue(unit, out var context) && runtime.Context != context)
+            {
                 runtime.Bind(context);
+                if (context != null)
+                {
+                    _unitByContext[context] = unit;
+                    RegisterContext(context);
+                    if (context.cooldownHub != null && context.cooldownHub.secStore != null)
+                        RegisterCooldownStore(context.cooldownHub.secStore);
+                }
+            }
 
             return runtime;
         }
-        string SummarizeBuffState(Unit unit)
+        void RefreshMoveRatesForAllUnits()
         {
-            if (unit == null)
-                return "none";
-            if (!_moveRateStatuses.TryGetValue(unit, out var status) || status == null)
-                return "none";
-
-            status.RefreshProduct();
-            status.CopyActiveEntries(_buffScratch);
-            if (_buffScratch.Count == 0)
-                return "none";
-
-            return $"tags:{FormatBuffTags(_buffScratch)}";
-        }
-
-        void RecomputeStatsForAllUnits()
-        {
-            foreach (var pair in _moveRateStatuses.ToArray())
+            foreach (var ctx in _allContexts.ToArray())
             {
-                var unit = pair.Key;
-                var status = pair.Value;
-                if (unit == null || status == null)
+                if (ctx == null)
+                {
+                    _allContexts.Remove(ctx);
                     continue;
+                }
 
-                status.RefreshProduct();
-                status.CopyActiveEntries(_buffScratch);
-                string summary = _buffScratch.Count == 0
-                    ? "none"
-                    : $"tags:{FormatBuffTags(_buffScratch)}";
-                string unitLabel = FormatUnitLabel(unit);
-                Debug.Log($"[Buff]  Refresh U={unitLabel} (recomputed {summary})", this);
+                string unitLabel = FormatContextLabel(ctx);
+                Unit unitForCtx = null;
+                if (_unitByContext.TryGetValue(ctx, out var mappedUnit) && mappedUnit != null)
+                    unitForCtx = mappedUnit;
+
+                MoveRateStatusRuntime status = null;
+                if (unitForCtx != null && _moveRateStatuses.TryGetValue(unitForCtx, out var found) && found != null)
+                {
+                    status = found;
+                }
+
+                status?.RefreshProduct();
+                float product = status?.GetProduct() ?? 1f;
+                string tagsCsv = status?.ActiveTagsCsv ?? "none";
+
+                float before = ctx.CurrentMoveRate;
+                float recomputed = StatsMathV2.MR_MultiThenFlat(ctx.BaseMoveRate, new[] { product }, ctx.MoveRateFlatAdd);
+                if (!Mathf.Approximately(before, recomputed))
+                {
+                    Debug.Log($"[Buff] Refresh U={unitLabel} mr:{before:F2} -> {recomputed:F2} (recomputed tags:{tagsCsv})", this);
+                    ctx.CurrentMoveRate = recomputed;
+                }
+                else
+                {
+                    Debug.Log($"[Buff] Refresh U={unitLabel} (recomputed tags:{tagsCsv})", this);
+                }
             }
         }
 
-        string FormatBuffTags(List<MoveRateStatusRuntime.EntrySnapshot> entries)
+        string FormatContextLabel(UnitRuntimeContext context)
         {
-            if (entries == null || entries.Count == 0)
-                return "none";
-            var sb = new StringBuilder();
-            for (int i = 0; i < entries.Count; i++)
+            if (context == null)
+                return "?";
+
+            if (_unitByContext.TryGetValue(context, out var unit) && unit != null)
+                return FormatUnitLabel(unit);
+
+            foreach (var pair in _contextByUnit)
             {
-                if (i > 0)
-                    sb.Append(',');
-                var entry = entries[i];
-                sb.Append(entry.tag);
-                sb.Append(':');
-                sb.Append(entry.remainingTurns < 0 ? "inf" : entry.remainingTurns.ToString());
+                if (pair.Value == context)
+                {
+                    if (pair.Key != null)
+                    {
+                        _unitByContext[context] = pair.Key;
+                        return FormatUnitLabel(pair.Key);
+                    }
+                }
             }
-            return sb.ToString();
+
+            return string.IsNullOrEmpty(context.name) ? "?" : context.name;
         }
 
         internal void RegisterMoveRateStatus(MoveRateStatusRuntime runtime)
@@ -519,6 +564,13 @@ namespace TGD.CombatV2
             if (unit == null)
                 return;
             _moveRateStatuses[unit] = runtime;
+            _allMoveRateStatuses.Add(runtime);
+
+            if (_contextByUnit.TryGetValue(unit, out var context) && context != null)
+            {
+                _unitByContext[context] = unit;
+                RegisterContext(context);
+            }
         }
 
         internal void UnregisterMoveRateStatus(MoveRateStatusRuntime runtime)
@@ -530,6 +582,38 @@ namespace TGD.CombatV2
                 return;
             if (_moveRateStatuses.TryGetValue(unit, out var existing) && existing == runtime)
                 _moveRateStatuses.Remove(unit);
+            _allMoveRateStatuses.Remove(runtime);
+        }
+
+        internal void RegisterContext(UnitRuntimeContext context)
+        {
+            if (context == null)
+                return;
+            _allContexts.Add(context);
+            if (context.cooldownHub != null && context.cooldownHub.secStore != null)
+                RegisterCooldownStore(context.cooldownHub.secStore);
+        }
+
+        internal void UnregisterContext(UnitRuntimeContext context)
+        {
+            if (context == null)
+                return;
+            _allContexts.Remove(context);
+            _unitByContext.Remove(context);
+        }
+
+        internal void RegisterCooldownStore(CooldownStoreSecV2 store)
+        {
+            if (store == null)
+                return;
+            _allCooldownStores.Add(store);
+        }
+
+        internal void UnregisterCooldownStore(CooldownStoreSecV2 store)
+        {
+            if (store == null)
+                return;
+            _allCooldownStores.Remove(store);
         }
 
         static bool IsEnergy(string id) => string.Equals(id, "Energy", StringComparison.OrdinalIgnoreCase);
