@@ -35,7 +35,18 @@ namespace TGD.CoreV2
                 else fallbackMoveRate = v;
             }
         }
-
+        [SerializeField]
+        float _currentMoveRate = -1f;
+        public float CurrentMoveRate
+        {
+            get
+            {
+                if (_currentMoveRate <= 0f)
+                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd);
+                return _currentMoveRate;
+            }
+            set => _currentMoveRate = Mathf.Max(0.01f, value);
+        }
         public float MoveRatePctAdd => stats != null ? stats.MoveRatePctAdd : 0f;
         public int MoveRateFlatAdd => stats != null ? stats.MoveRateFlatAdd : 0;
         //speed
@@ -67,6 +78,7 @@ namespace TGD.CoreV2
         void OnValidate()
         {
             if (stats != null) stats.Clamp();
+            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd));
         }
 
         [ContextMenu("Debug/Print Snapshot")]

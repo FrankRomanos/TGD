@@ -24,7 +24,12 @@ namespace TGD.CombatV2
         {
             if (context == null)
                 context = GetComponent<UnitRuntimeContext>();
-
+            if (turnManager != null && context != null)
+            {
+                turnManager.RegisterContext(context);
+                if (context.cooldownHub != null && context.cooldownHub.secStore != null)
+                    turnManager.RegisterCooldownStore(context.cooldownHub.secStore);
+            }
             WireMoveCosts();
             WireAttackCosts();
             WireStatusRuntime();
