@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace TGD.CoreV2
@@ -53,22 +52,5 @@ namespace TGD.CoreV2
 
         public IEnumerable<KeyValuePair<string, int>> Entries => _seconds;
         public IEnumerable<string> Keys => _seconds.Keys;
-
-        public int TickEndOfOwnerTurn(int baseTurnSeconds = StatsMathV2.BaseTurnSeconds)
-        {
-            int affected = 0;
-            var keys = _seconds.Keys.ToList();
-            foreach (var key in keys)
-            {
-                if (string.IsNullOrEmpty(key))
-                    continue;
-                if (SecondsLeft(key) <= 0)
-                    continue;
-                affected += 1;
-                TickEndTurn(key, baseTurnSeconds);
-            }
-
-            return affected;
-        }
     }
 }
