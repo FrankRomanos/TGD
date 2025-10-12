@@ -140,6 +140,10 @@ namespace TGD.CombatV2
             if (turnManager == null || unit == null) return true;
             if (_currentUnit != null && unit != _currentUnit)
                 return false;
+            // ★ 当走 TurnManager 时，剩余时间<=0 直接拒绝（不进入 Aim/Confirm）
+            var budget = turnManager.GetBudget(unit);
+            if (budget != null && budget.Remaining <= 0)
+                return false;
             if (tool is IActionExecReportV2)
                 return true;
             // Future fixed-cost actions can hook into this branch.

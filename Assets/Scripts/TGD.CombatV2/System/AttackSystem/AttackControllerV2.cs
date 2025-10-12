@@ -123,6 +123,7 @@ namespace TGD.CombatV2
         bool ManageTurnTimeLocally => simulateTurnTime && !UseTurnManager;
         bool ManageEnergyLocally => !UseTurnManager;
 
+
         public void AttachTurnManager(TurnManagerV2 manager)
         {
             if (_boundTurnManager != null)
