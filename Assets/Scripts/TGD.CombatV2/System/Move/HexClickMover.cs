@@ -160,6 +160,12 @@ namespace TGD.CombatV2
         int _reportRefundedSeconds;
         int _reportEnergyNet;
         bool _reportPending;
+        public (int timeSec, int energy) PeekPlannedCost()
+        {
+            int seconds = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int energyRate = config ? Mathf.Max(0, config.energyCost) : 0;
+            return (seconds, energyRate * seconds);
+        }
 
         void ClearExecReport()
         {
@@ -187,33 +193,63 @@ namespace TGD.CombatV2
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
 
-        public void OnEnterAim()
+        public bool TryPrecheckAim(out string reason, bool raiseHud = true)
         {
             EnsureTurnTimeInited();
             RefreshStateForAim();
-            // 预检查：时间 + 能量，不满足就直接拒绝，不进入瞄准
+            var unit = driver != null ? driver.UnitRef : null;
+            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null)
+            {
+                if (raiseHud)
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
+                reason = "(not-ready)";
+                return false;
+            }
+
+            if (ctx != null && ctx.Entangled)
+            {
+                if (raiseHud)
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, null);
+                reason = "(entangled)";
+                return false;
+            }
+
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
             if (UseTurnManager)
             {
-                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
-                    ? _turnManager.GetBudget(driver.UnitRef)
+                var budget = (_turnManager != null && unit != null)
+                    ? _turnManager.GetBudget(unit)
                     : null;
                 if (budget == null || !budget.HasTime(needSec))
                 {
-                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                    return;
+                    if (raiseHud)
+                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
+                    reason = "(no-time)";
+                    return false;
                 }
             }
             else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                return;
+                if (raiseHud)
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
+                reason = "(no-time)";
+                return false;
             }
-            if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
+            if (_cost != null && config != null && !_cost.HasEnough(unit, config))
             {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null);
-                return;
+                if (raiseHud)
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                reason = "(no-energy)";
+                return false;
             }
+            reason = null;
+            return true;
+        }
+
+        public void OnEnterAim()
+        {
+            if (!TryPrecheckAim(out _))
+                return;
             ShowRange();
         }
         public void OnExitAim() { HideRange(); }

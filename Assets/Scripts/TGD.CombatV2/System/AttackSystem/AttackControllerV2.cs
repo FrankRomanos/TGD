@@ -188,7 +188,60 @@ namespace TGD.CombatV2
             var budget = turnManager.GetBudget(driver.UnitRef);
             return budget != null ? Mathf.Max(0, budget.Remaining) : int.MaxValue;
         }
+        public struct PlannedAttackCost
+        {
+            public int moveSecs;
+            public int moveEnergy;
+            public int atkSecs;
+            public int atkEnergy;
+            public bool valid;
+        }
 
+        public PlannedAttackCost PeekPlannedCost(Hex target)
+        {
+            int fallbackMoveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
+            int moveEnergyRate = moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0;
+            int fallbackAtkSecs = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0;
+            int fallbackAtkEnergy = attackConfig ? Mathf.Max(0, attackConfig.baseEnergyCost) : 0;
+
+            var result = new PlannedAttackCost
+            {
+                moveSecs = fallbackMoveSecs,
+                moveEnergy = moveEnergyRate * fallbackMoveSecs,
+                atkSecs = fallbackAtkSecs,
+                atkEnergy = fallbackAtkEnergy,
+                valid = false
+            };
+
+            PreviewData preview = null;
+            if (_currentPreview != null && _currentPreview.valid && _currentPreview.targetHex.Equals(target))
+            {
+                preview = _currentPreview;
+            }
+            else
+            {
+                preview = BuildPreview(target, true);
+            }
+
+            if (preview != null && preview.valid)
+            {
+                result.valid = true;
+                result.moveSecs = Mathf.Max(0, preview.moveSecsCharge);
+                result.moveEnergy = Mathf.Max(0, preview.moveEnergyCost);
+                if (preview.targetIsEnemy)
+                {
+                    result.atkSecs = Mathf.Max(0, preview.attackSecsCharge);
+                    result.atkEnergy = Mathf.Max(0, preview.attackEnergyCost);
+                }
+                else
+                {
+                    result.atkSecs = 0;
+                    result.atkEnergy = 0;
+                }
+            }
+
+            return result;
+        }
         struct MoveRatesSnapshot
         {
             public int baseRate;
@@ -302,13 +355,23 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseRejected(unit, reason, message);
         }
 
-        public void OnEnterAim()
+        public bool TryPrecheckAim(out string reason, bool raiseHud = true)
         {
             EnsureTurnTimeInited();
             if (!IsReady)
             {
-                RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
-                return;
+                if (raiseHud)
+                    RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                reason = "(not-ready)";
+                return false;
+            }
+
+            if (ctx != null && ctx.Entangled)
+            {
+                if (raiseHud)
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.");
+                reason = "(entangled)";
+                return false;
             }
             int needSec = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
             if (UseTurnManager && turnManager != null && driver != null && driver.UnitRef != null)
@@ -316,14 +379,18 @@ namespace TGD.CombatV2
                 var budget = turnManager.GetBudget(driver.UnitRef);
                 if (budget == null || !budget.HasTime(needSec))
                 {
-                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
-                    return;
+                    if (raiseHud)
+                        RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    reason = "(no-time)";
+                    return false;
                 }
             }
             else if (ManageTurnTimeLocally && _turnSecondsLeft + 1e-4f < needSec)
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
-                return;
+                if (raiseHud)
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                reason = "(no-time)";
+                return false;
             }
 
             var pool = ResolveResourcePool();
@@ -332,14 +399,26 @@ namespace TGD.CombatV2
             bool anyEnergyCost = (moveEnergyCost > 0) || (attackConfig != null && attackConfig.baseEnergyCost > 0f);
             if (anyEnergyCost && energyAvailable <= 0)
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
-                return;
+                if (raiseHud)
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                reason = "(no-energy)";
+                return false;
             }
             if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
-                return;
+                if (raiseHud)
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                reason = "(no-energy)";
+                return false;
             }
+            reason = null;
+            return true;
+        }
+
+        public void OnEnterAim()
+        {
+            if (!TryPrecheckAim(out _))
+                return;
 
             _aiming = true;
             _hover = null;
