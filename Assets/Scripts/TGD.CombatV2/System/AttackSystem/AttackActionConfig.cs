@@ -7,24 +7,27 @@ namespace TGD.CombatV2
     public class AttackActionConfigV2 : ScriptableObject
     {
         [Header("Timing / Budget")]
-        [Tooltip("±¾´Î¹¥»÷¿ÉÓÃÓÚ¡¾Î»ÒÆ¡¿µÄÊ±¼äÔ¤Ëã£¨Ãë£¬È¡Õû£©")]
-        public int baseTimeSeconds = 2;               // Àı£º2 / 3 / 1
+        [Tooltip("æœ¬æ¬¡æ”»å‡»å¯ç”¨äºã€ä½ç§»ã€‘çš„æ—¶é—´é¢„ç®—ï¼ˆç§’ï¼Œå–æ•´ï¼‰")]
+        public int baseTimeSeconds = 2;               // ä¾‹ï¼š2 / 3 / 1
 
-        [Tooltip("¼ÓËÙÀÛ¼Æ½ÚÊ¡ ¡İ ãĞÖµ·µ»¹ 1s")]
+        [Tooltip("åŠ é€Ÿç´¯è®¡èŠ‚çœ â‰¥ é˜ˆå€¼è¿”è¿˜ 1s")]
         [Range(0.1f, 1.0f)] public float refundThresholdSeconds = 0.8f;
 
+        [Tooltip("Free move cutoff for melee attacks (seconds)")]
+        public float freeMoveCutoffSeconds = 0.2f;   // é»˜è®¤ 0.2sï¼›ä»…å¯¹è¿‘èº«æ”»å‡»ç”Ÿæ•ˆ
+
         [Header("Energy Cost")]
-        [Tooltip("»ù´¡ÄÜÁ¿ÏûºÄ£¨Àı£º2s=20£¬3s=30£¬1s=5£©")]
+        [Tooltip("åŸºç¡€èƒ½é‡æ¶ˆè€—ï¼ˆä¾‹ï¼š2s=20ï¼Œ3s=30ï¼Œ1s=5ï¼‰")]
         public int baseEnergyCost = 20;
 
-        [Tooltip("±¾»ØºÏµÚ¶ş´ÎÆğÃ¿´Î +50% »ù´¡ÏûºÄ£»¿É¹Ø±Õ")]
+        [Tooltip("æœ¬å›åˆç¬¬äºŒæ¬¡èµ·æ¯æ¬¡ +50% åŸºç¡€æ¶ˆè€—ï¼›å¯å…³é—­")]
         public bool applySameTurnPenalty = true;
 
-        [Tooltip("Í¬»ØºÏµş¼ÓÏµÊı£¨Ä¬ÈÏ 0.5 = +50%/´Î£©")]
+        [Tooltip("åŒå›åˆå åŠ ç³»æ•°ï¼ˆé»˜è®¤ 0.5 = +50%/æ¬¡ï¼‰")]
         [Range(0f, 1f)] public float sameTurnPenaltyRate = 0.5f;
 
         [Header("Reach")]
-        [Tooltip("½üÕ½¸ñ¾à£¨1=ÏàÁÚ£©")]
+        [Tooltip("è¿‘æˆ˜æ ¼è·ï¼ˆ1=ç›¸é‚»ï¼‰")]
         public int meleeRange = 1;
 
         [Header("Facing")]

@@ -843,6 +843,22 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
+                float cutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
+                bool isMelee = attackPlanned;
+                bool canFree = isMelee && moveSecsCharge >= 1;
+
+                if (canFree && reached != null && reached.Count >= 2 && usedSeconds < cutoff)
+                {
+                    int forceFree = 1;
+                    refundedSeconds = Mathf.Max(refundedSeconds, forceFree);
+
+                    if (debugLog)
+                    {
+                        string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                        Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSeconds:F2}s (<{cutoff:F2})", this);
+                    }
+                }
+
                 int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
                 int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
                 int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
@@ -1221,7 +1237,10 @@ namespace TGD.CombatV2
 
             _tempReservedThisAction.Add(cell);
             string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-            Debug.Log($"[Occ] TempReserve U={unitLabel} @{cell}", this);
+            if (debugLog)
+            {
+                Debug.Log($"[Occ] TempReserve U={unitLabel} @{cell}", this);
+            }
         }
 
         void ClearTempReservations(string reason, bool logAlways = false)
@@ -1233,7 +1252,10 @@ namespace TGD.CombatV2
             if (logAlways || count > 0)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
+                if (debugLog)
+                {
+                    Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
+                }
             }
         }
 
