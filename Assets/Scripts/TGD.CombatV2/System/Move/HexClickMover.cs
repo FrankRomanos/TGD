@@ -224,6 +224,7 @@ namespace TGD.CombatV2
             ClearExecReport();
             EnsureTurnTimeInited();
             RefreshStateForAim();
+            _occ?.TempClearForOwner(_actor);
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
@@ -436,7 +437,7 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits && !_occ.CanPlace(_actor, cell, _actor.Facing, ignore: _actor))
+                if (blockByUnits && !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
                     return true;
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;

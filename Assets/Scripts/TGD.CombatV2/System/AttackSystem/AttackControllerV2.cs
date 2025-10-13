@@ -684,178 +684,187 @@ namespace TGD.CombatV2
             int refundedSeconds = Mathf.Max(0, sim.RefundedSeconds);
             float usedSeconds = Mathf.Max(0f, sim.UsedSeconds);
             var stepRates = sim.StepEffectiveRates;
-
-            AttackEventsV2.RaiseAttackMoveStarted(unit, reached);
-
             int moveEnergyRate = MoveEnergyPerSecond();
 
-            if (reached.Count <= 1)
+            try
             {
-                if (moveEnergyPaid > 0 && ManageEnergyLocally)
-                    RefundMoveEnergy(moveEnergyPaid);
+                if (reached.Count > 1)
+                {
+                    for (int i = 1; i < reached.Count; i++)
+                        ReserveTemp(reached[i]);
+                }
+
+                AttackEventsV2.RaiseAttackMoveStarted(unit, reached);
+
+                if (reached.Count <= 1)
+                {
+                    if (moveEnergyPaid > 0 && ManageEnergyLocally)
+                        RefundMoveEnergy(moveEnergyPaid);
+                    if (ManageTurnTimeLocally)
+                    {
+                        float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                        if (refundMove > 0f)
+                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                    }
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
+
+                    if (attackPlanned)
+                    {
+                        if (authoring?.Layout != null && driver?.unitView != null)
+                        {
+                            var fromW = authoring.Layout.World(unit.Position, y);
+                            var toW = authoring.Layout.World(preview.targetHex, y);
+                            float keep = attackConfig ? attackConfig.keepDeg : 45f;
+                            float turn = attackConfig ? attackConfig.turnDeg : 135f;
+                            float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                            var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                            yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+                            driver.UnitRef.Facing = nf;
+                            _actor.Facing = nf;
+                        }
+                        TriggerAttackAnimation(unit, preview.targetHex);
+                    }
+                    int meleeAttackUsedSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
+                    int meleeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
+                    _reportMoveUsedSeconds = 0;
+                    _reportMoveRefundSeconds = meleeMoveRefundSeconds;
+                    _reportAttackUsedSeconds = meleeAttackUsedSeconds;
+                    _reportAttackRefundSeconds = 0;
+                    ReportMoveEnergyNet = 0;
+                    ReportAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
+                    SetExecReport(meleeAttackUsedSeconds, meleeMoveRefundSeconds, attackPlanned);
+                    yield break;
+                }
+
+                bool truncated = reached.Count < path.Count;
+                bool stoppedByExternal = false;
+                bool attackRolledBack = false;
+
+                for (int i = 1; i < reached.Count; i++)
+                {
+                    if (ctx != null && ctx.Entangled)
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+
+                    var from = reached[i - 1];
+                    var to = reached[i];
+
+                    if (_occ.IsBlocked(to, _actor))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+                    if (env != null && env.IsPit(to))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+
+                    AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
+
+                    float effMR = (stepRates != null && (i - 1) < stepRates.Count)
+                        ? stepRates[i - 1]
+                        : Mathf.Clamp(mrNoEnv, MR_MIN, MR_MAX);
+                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
+
+                    if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
+                    {
+                        attackRolledBack = true;
+                        if (attackEnergyPaid > 0 && ManageEnergyLocally)
+                            RefundAttackEnergy(attackEnergyPaid);
+                        if (ManageTurnTimeLocally)
+                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                        _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                        AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
+                    }
+
+                    var fromW = layout.World(from, y);
+                    var toW = layout.World(to, y);
+                    string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                    float t = 0f;
+                    while (t < 1f)
+                    {
+                        t += Time.deltaTime / stepDuration;
+                        if (view != null)
+                            view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+                        yield return null;
+                    }
+
+                    _occ.TryMove(_actor, to);
+                    if (driver.Map != null)
+                    {
+                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
+                    }
+                    unit.Position = to;
+                    driver.SyncView();
+                    _tempReservedThisAction.Add(to);
+
+                    if (_sticky != null && status != null &&
+           _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
+           turns > 0 && !Mathf.Approximately(mult, 1f))
+                    {
+                        status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
+                        Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
+                    }
+                }
+
+                AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
+
                 if (ManageTurnTimeLocally)
                 {
                     float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
                     if (refundMove > 0f)
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                 }
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
-                if (attackPlanned)
+                if (refundedSeconds > 0)
                 {
-                    // （可选）面向目标；不需要可删
-                    if (authoring?.Layout != null && driver?.unitView != null)
-                    {
-                        var fromW = authoring.Layout.World(unit.Position, y);
-                        var toW = authoring.Layout.World(preview.targetHex, y);
-                        float keep = attackConfig ? attackConfig.keepDeg : 45f;
-                        float turn = attackConfig ? attackConfig.turnDeg : 135f;
-                        float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
-                        var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
-                        yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
-                        driver.UnitRef.Facing = nf;
-                        _actor.Facing = nf;
-                    }
+                    int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
+                    if (ManageEnergyLocally && refundEnergy > 0)
+                        RefundMoveEnergy(refundEnergy);
+                }
+
+                bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
+                if (attackSuccess)
+                {
                     TriggerAttackAnimation(unit, preview.targetHex);
                 }
-                int meleeAttackUsedSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
-                int meleeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
-                _reportMoveUsedSeconds = 0;
-                _reportMoveRefundSeconds = meleeMoveRefundSeconds;
-                _reportAttackUsedSeconds = meleeAttackUsedSeconds;
-                _reportAttackRefundSeconds = 0;
-                ReportMoveEnergyNet = 0;
-                ReportAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
-                SetExecReport(meleeAttackUsedSeconds, meleeMoveRefundSeconds, attackPlanned);
-                yield break;
+                else if (attackPlanned)
+                {
+                    if (!attackRolledBack)
+                    {
+                        if (attackEnergyPaid > 0 && ManageEnergyLocally)
+                            RefundAttackEnergy(attackEnergyPaid);
+                        _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                        AttackEventsV2.RaiseMiss(unit, "Out of reach.");
+                        if (ManageTurnTimeLocally)
+                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                    }
+                }
+                int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
+                int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
+                int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
+                int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
+                _reportMoveUsedSeconds = moveUsedSeconds;
+                _reportMoveRefundSeconds = moveRefundSeconds;
+                _reportAttackUsedSeconds = attackUsedSeconds;
+                _reportAttackRefundSeconds = attackRefundSeconds;
+
+                int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
+                ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
+                ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+
+                SetExecReport(
+                    moveUsedSeconds + attackUsedSeconds,
+                    moveRefundSeconds + attackRefundSeconds,
+                    attackSuccess);
             }
-
-            bool truncated = reached.Count < path.Count;
-            bool stoppedByExternal = false;
-            bool attackRolledBack = false;
-
-            for (int i = 1; i < reached.Count; i++)
+            finally
             {
-                if (ctx != null && ctx.Entangled)
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-
-                var from = reached[i - 1];
-                var to = reached[i];
-
-                if (_occ.IsBlocked(to, _actor))
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-                if (env != null && env.IsPit(to))
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-
-                AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
-
-                float effMR = (stepRates != null && (i - 1) < stepRates.Count)
-                    ? stepRates[i - 1]
-                    : Mathf.Clamp(mrNoEnv, MR_MIN, MR_MAX);
-                float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
-
-                if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
-                {
-                    //if (debugLog)
-                    //    Debug.Log($"[Attack] rollback: effMR={effMR:F2} < MR_click={preview.mrClick:F2} at step i={i}", this);
-                    attackRolledBack = true;
-                    if (attackEnergyPaid > 0 && ManageEnergyLocally)
-                        RefundAttackEnergy(attackEnergyPaid);
-                    if (ManageTurnTimeLocally)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
-                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                    AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
-                }
-
-                var fromW = layout.World(from, y);
-                var toW = layout.World(to, y);
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                float t = 0f;
-                while (t < 1f)
-                {
-                    t += Time.deltaTime / stepDuration;
-                    if (view != null)
-                        view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
-                    yield return null;
-                }
-
-                _occ.TryMove(_actor, to);
-                if (driver.Map != null)
-                {
-                    if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                }
-                unit.Position = to;
-                driver.SyncView();
-                _tempReservedThisAction.Add(to);
-
-                if (_sticky != null && status != null &&
-           _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
-           turns > 0 && !Mathf.Approximately(mult, 1f))
-                {
-                    status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
-                    Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
-                }
+                ClearTempReservations("ActionEnd");
             }
-
-            AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
-
-            if (ManageTurnTimeLocally)
-            {
-                float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
-                if (refundMove > 0f)
-                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
-            }
-
-            if (refundedSeconds > 0)
-            {
-                int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
-                if (ManageEnergyLocally && refundEnergy > 0)
-                    RefundMoveEnergy(refundEnergy);
-            }
-
-            bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
-            if (attackSuccess)
-            {
-                TriggerAttackAnimation(unit, preview.targetHex);
-            }
-            else if (attackPlanned)
-            {
-                if (!attackRolledBack)
-                {
-                    if (attackEnergyPaid > 0 && ManageEnergyLocally)
-                        RefundAttackEnergy(attackEnergyPaid);
-                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                    AttackEventsV2.RaiseMiss(unit, "Out of reach.");
-                    if (ManageTurnTimeLocally)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
-                }
-            }
-            int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
-            int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
-            int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
-            int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
-            _reportMoveUsedSeconds = moveUsedSeconds;
-            _reportMoveRefundSeconds = moveRefundSeconds;
-            _reportAttackUsedSeconds = attackUsedSeconds;
-            _reportAttackRefundSeconds = attackRefundSeconds;
-
-            int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
-            ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
-            ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
-
-            SetExecReport(
-                moveUsedSeconds + attackUsedSeconds,
-                moveRefundSeconds + attackRefundSeconds,
-                attackSuccess);
         }
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
@@ -1201,15 +1210,31 @@ namespace TGD.CombatV2
         }
         bool IsMyUnit(Unit unit) => driver != null && driver.UnitRef == unit;
 
+        void ReserveTemp(Hex cell)
+        {
+            if (_occ == null || _actor == null)
+                return;
+            if (_tempReservedThisAction.Contains(cell))
+                return;
+            if (!_occ.TempReserve(cell, _actor))
+                return;
+
+            _tempReservedThisAction.Add(cell);
+            string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
+            Debug.Log($"[Occ] TempReserve U={unitLabel} @{cell}", this);
+        }
+
         void ClearTempReservations(string reason, bool logAlways = false)
         {
-            int count = _tempReservedThisAction.Count;
+            int tracked = _tempReservedThisAction.Count;
+            int occCleared = (_occ != null && _actor != null) ? _occ.TempClearForOwner(_actor) : 0;
+            int count = Mathf.Max(tracked, occCleared);
+            _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
                 Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
             }
-            _tempReservedThisAction.Clear();
         }
 
         int ResolveComboIndex()
