@@ -569,14 +569,14 @@ namespace TGD.CombatV2
 
         void OnPlayerSideEnd()
         {
-            ApplySideEndTicks(_playerUnits, true);
+            ApplySideEndTicks(true);
             PlayerSideEnded?.Invoke();
             SideEnded?.Invoke(true);
         }
 
         void OnEnemySideEnd()
         {
-            ApplySideEndTicks(_enemyUnits, false);
+            ApplySideEndTicks(false);
             EnemySideEnded?.Invoke();
             SideEnded?.Invoke(false);
         }
@@ -649,20 +649,36 @@ namespace TGD.CombatV2
             return TerrainStickySample.None;
         }
 
-        void ApplySideEndTicks(List<Unit> units, bool isPlayer)
+        void ApplySideEndTicks(bool isPlayerSide)
         {
-            if (units == null) return;
-            string phaseLabel = FormatPhaseLabel(isPlayer);
-            foreach (var unit in units)
-            {
-                if (unit == null) continue;
-                var runtime = EnsureRuntime(unit, isPlayer);
-                if (runtime == null) continue;
+            string phaseLabel = FormatPhaseLabel(isPlayerSide);
+            var processed = new HashSet<Unit>();
 
-                TickCooldownsForUnit(runtime, phaseLabel);
+            void Process(Unit unit, bool? isPlayerHint)
+            {
+                if (unit == null || !processed.Add(unit))
+                    return;
+
+                var runtime = EnsureRuntime(unit, isPlayerHint);
+                if (runtime != null)
+                    TickCooldownsForUnit(runtime, phaseLabel);              
                 TickBuffsForUnit(unit, phaseLabel);
-                ApplyEnergyRegen(runtime, phaseLabel);
+                if (runtime != null)
+                    ApplyEnergyRegen(runtime, phaseLabel);
             }
+
+            void ProcessAll(IEnumerable<Unit> units, bool? isPlayerHint)
+            {
+                if (units == null)
+                    return;
+                foreach (var unit in units)
+                    Process(unit, isPlayerHint);
+            }
+            ProcessAll(_playerUnits, true);
+            ProcessAll(_enemyUnits, false);
+            ProcessAll(_contextByUnit.Keys.ToList(), null);
+            ProcessAll(_runtimeByUnit.Keys.ToList(), null);
+            ProcessAll(_moveRateStatuses.Keys.ToList(), null);
         }
 
         void TickCooldownsForUnit(TurnRuntimeV2 runtime, string phaseLabel)
