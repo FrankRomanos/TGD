@@ -1,4 +1,5 @@
 // File: TGD.HexBoard/HexClickMover.cs
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TGD.HexBoard;
@@ -156,6 +157,10 @@ namespace TGD.CombatV2
         string _hudMsg;
         float _hudMsgUntil;
         public string Id => "Move";
+        public ActionKind Kind => ActionKind.Standard;
+        static readonly string[] EMPTY_TAGS = Array.Empty<string>();
+        public IReadOnlyCollection<string> ChainTags => EMPTY_TAGS;
+        public bool CanChainAfter(string previousId, IReadOnlyCollection<string> previousTags) => false;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
         int _reportEnergyNet;
@@ -165,6 +170,12 @@ namespace TGD.CombatV2
             int seconds = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
             int energyRate = config ? Mathf.Max(0, config.energyCost) : 0;
             return (seconds, energyRate * seconds);
+        }
+        public ActionCostPlan PlannedCost(Hex hex)
+        {
+            var (timeSec, energy) = PeekPlannedCost();
+            string detail = $"(time={timeSec}s, energy={energy})";
+            return new ActionCostPlan(true, timeSec, energy, timeSec, 0, energy, 0, detail);
         }
 
         void ClearExecReport()
@@ -679,6 +690,8 @@ namespace TGD.CombatV2
             if (_showing) ShowRange();
 
         }
+        public int ReportEnergyNet => _reportPending ? _reportEnergyNet : 0;
+
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
 

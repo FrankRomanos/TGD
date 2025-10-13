@@ -22,7 +22,7 @@ namespace TGD.CombatV2
         public event Action<bool> SideEnded;
         public event Action<Unit> TurnStarted;
         public event Action<Unit> TurnEnded;
-
+        public event Func<FullRoundQueuedAction, IEnumerator> FullRoundExecuteRequested;
         readonly List<Unit> _playerUnits = new();
         readonly List<Unit> _enemyUnits = new();
 
@@ -36,6 +36,25 @@ namespace TGD.CombatV2
         readonly HashSet<UnitRuntimeContext> _allContexts = new();
         readonly HashSet<MoveRateStatusRuntime> _allMoveRateStatuses = new();
         readonly HashSet<CooldownStoreSecV2> _allCooldownStores = new();
+        readonly List<FullRoundQueuedAction> _fullRoundQueue = new();
+
+        public readonly struct FullRoundQueuedAction
+        {
+            public readonly Unit unit;
+            public readonly IActionToolV2 tool;
+            public readonly Hex hex;
+            public readonly ActionCostPlan plan;
+            public readonly bool executeAtNextOwnPhaseStart;
+
+            public FullRoundQueuedAction(Unit unit, IActionToolV2 tool, Hex hex, ActionCostPlan plan, bool executeAtNextOwnPhaseStart)
+            {
+                this.unit = unit;
+                this.tool = tool;
+                this.hex = hex;
+                this.plan = plan;
+                this.executeAtNextOwnPhaseStart = executeAtNextOwnPhaseStart;
+            }
+        }
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -246,6 +265,18 @@ namespace TGD.CombatV2
             }
             return handle;
         }
+        public void EnqueueFullRound(FullRoundQueuedAction entry)
+        {
+            if (entry.unit == null || entry.tool == null)
+                return;
+            _fullRoundQueue.Add(entry);
+        }
+
+        public int GetTurnTime(Unit unit)
+        {
+            var runtime = EnsureRuntime(unit, null);
+            return runtime != null ? runtime.TurnTime : 0;
+        }
 
         public void EndTurn(Unit unit)
         {
@@ -287,6 +318,7 @@ namespace TGD.CombatV2
                 OnPlayerPhaseBegin();
             else
                 OnEnemyPhaseBegin();
+            yield return ExecuteFullRoundQueue(isPlayer);
 
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
@@ -319,7 +351,44 @@ namespace TGD.CombatV2
             Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
             TurnStarted?.Invoke(runtime.Unit);
         }
+        IEnumerator ExecuteFullRoundQueue(bool isPlayerPhase)
+        {
+            if (_fullRoundQueue.Count == 0)
+                yield break;
 
+            List<FullRoundQueuedAction> pending = null;
+            for (int i = _fullRoundQueue.Count - 1; i >= 0; i--)
+            {
+                var entry = _fullRoundQueue[i];
+                if (!entry.executeAtNextOwnPhaseStart)
+                    continue;
+
+                var runtime = EnsureRuntime(entry.unit, null);
+                bool belongsToPhase = runtime != null ? runtime.IsPlayer == isPlayerPhase : isPlayerPhase ? IsPlayerUnit(entry.unit) : IsEnemyUnit(entry.unit);
+                if (!belongsToPhase)
+                    continue;
+
+                pending ??= new List<FullRoundQueuedAction>();
+                pending.Add(entry);
+                _fullRoundQueue.RemoveAt(i);
+            }
+
+            if (pending == null || pending.Count == 0)
+                yield break;
+
+            pending.Reverse();
+
+            foreach (var entry in pending)
+            {
+                var handler = FullRoundExecuteRequested;
+                if (handler != null)
+                {
+                    var routine = handler(entry);
+                    if (routine != null)
+                        yield return routine;
+                }
+            }
+        }
         void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds)
         {
             runtime.SpendTime(seconds);
