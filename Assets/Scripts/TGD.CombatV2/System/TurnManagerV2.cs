@@ -40,6 +40,9 @@ namespace TGD.CombatV2
         [Header("Environment")]
         public HexEnvironmentSystem environment;
 
+        [Header("Board Occupancy")]
+        public HexOccupancyService occupancyService;
+
         Coroutine _loop;
         Unit _activeUnit;
         bool _waitingForEnd;
@@ -570,6 +573,7 @@ namespace TGD.CombatV2
         void OnPlayerSideEnd()
         {
             ApplySideEndTicks(true);
+            ClearTempAttackLayer("SideEnd");
             PlayerSideEnded?.Invoke();
             SideEnded?.Invoke(true);
         }
@@ -577,8 +581,17 @@ namespace TGD.CombatV2
         void OnEnemySideEnd()
         {
             ApplySideEndTicks(false);
+            ClearTempAttackLayer("SideEnd");
             EnemySideEnded?.Invoke();
             SideEnded?.Invoke(false);
+        }
+
+        void ClearTempAttackLayer(string reason)
+        {
+            var occ = occupancyService != null ? occupancyService.Get() : null;
+            if (occ == null) return;
+            int count = occ.ClearLayer(OccLayer.TempAttack);
+            Debug.Log($"[Occ] TempClear {reason} count={count}", this);
         }
 
         readonly struct TerrainStickySample
