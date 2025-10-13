@@ -526,7 +526,7 @@ namespace TGD.CombatV2
 
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
-            var start = unit.Position;         
+            var start = unit.Position;
             var rates = BuildMoveRates(start);
             var preview = new PreviewData
             {
@@ -863,82 +863,7 @@ namespace TGD.CombatV2
             }
             finally
             {
-<<<<<<< HEAD
-                if (ctx != null && ctx.Entangled)
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-
-                var from = reached[i - 1];
-                var to = reached[i];
-
-                if (_occ.IsBlocked(to, _actor))
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-                if (env != null && env.IsPit(to))
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-
-                AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
-
-                float effMR = (stepRates != null && (i - 1) < stepRates.Count)
-                    ? stepRates[i - 1]
-                    : Mathf.Clamp(mrNoEnv, MR_MIN, MR_MAX);
-                float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
-
-                if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
-                {
-                    //if (debugLog)
-                    //    Debug.Log($"[Attack] rollback: effMR={effMR:F2} < MR_click={preview.mrClick:F2} at step i={i}", this);
-                    attackRolledBack = true;
-                    if (attackEnergyPaid > 0 && ManageEnergyLocally)
-                        RefundAttackEnergy(attackEnergyPaid);
-                    if (ManageTurnTimeLocally)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
-                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                    AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
-                }
-
-                var fromW = layout.World(from, y);
-                var toW = layout.World(to, y);
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                float t = 0f;
-                while (t < 1f)
-                {
-                    t += Time.deltaTime / stepDuration;
-                    if (view != null)
-                        view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
-                    yield return null;
-                }
-
-                _occ.TryMove(_actor, to);
-                if (driver.Map != null)
-                {
-                    if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                }
-                unit.Position = to;
-                driver.SyncView();
-                if (_tempReservedThisAction.Add(to) && _occ != null && _actor != null)
-                {
-                    if (_occ.TryReserve(_actor, to, ReserveLayer.TempAttack))
-                        Debug.Log($"[Occ] TempReserve U={unitLabel} cell={to} layer={ReserveLayer.TempAttack}", this);
-                }
-
-                if (_sticky != null && status != null &&
-           _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
-           turns > 0 && !Mathf.Approximately(mult, 1f))
-                {
-                    status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
-                    Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
-                }
-=======
                 ClearTempReservations("ActionEnd");
->>>>>>> c7f259781277cdba4eb7c94c163904c550c2915b
             }
         }
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
@@ -1302,21 +1227,13 @@ namespace TGD.CombatV2
         void ClearTempReservations(string reason, bool logAlways = false)
         {
             int tracked = _tempReservedThisAction.Count;
-<<<<<<< HEAD
-            int cleared = (_occ != null && _actor != null)
-                ? _occ.ClearReserves(_actor, ReserveLayer.TempAttack)
-                : 0;
-            int display = Mathf.Max(tracked, cleared);
-            if (logAlways || display > 0)
-=======
             int occCleared = (_occ != null && _actor != null) ? _occ.TempClearForOwner(_actor) : 0;
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
->>>>>>> c7f259781277cdba4eb7c94c163904c550c2915b
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                Debug.Log($"[Occ] TempClear U={unitLabel} count={display} ({reason})", this);
+                Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
             }
         }
 

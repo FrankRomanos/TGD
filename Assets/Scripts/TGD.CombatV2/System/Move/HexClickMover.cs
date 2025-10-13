@@ -262,7 +262,7 @@ namespace TGD.CombatV2
         }
 
         void Awake()
-        {           
+        {
             _cost = costProvider as IMoveCostService;
             _painter = new HexAreaPainter(tiler);
             // ★ 统一解析：优先 ctx.stats，其次向上找
@@ -437,11 +437,7 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-<<<<<<< HEAD
-                if (blockByUnits && !_occ.CanPlace(_actor, cell, _actor.Facing, ignore: _actor, ignoreLayers: ReserveLayer.TempAttack))
-=======
                 if (blockByUnits && !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
->>>>>>> c7f259781277cdba4eb7c94c163904c550c2915b
                     return true;
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
