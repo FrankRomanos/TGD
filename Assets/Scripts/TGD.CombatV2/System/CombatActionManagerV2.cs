@@ -251,8 +251,8 @@ namespace TGD.CombatV2
                 return (-1, -1);
             int used = Mathf.Max(0, usedSeconds);
             int refunded = Mathf.Max(0, refundedSeconds);
-            int moveEnergy = Mathf.Max(0, moveEnergyActual);
-            int attackEnergy = Mathf.Max(0, attackEnergyActual);
+            int moveEnergy = moveEnergyActual;
+            int attackEnergy = attackEnergyActual;
             int totalEnergyActual = moveEnergy + attackEnergy;
             int planTime = Mathf.Max(0, plan.timeSeconds);
             int planEnergyTotal = Mathf.Max(0, plan.energy);
@@ -261,11 +261,14 @@ namespace TGD.CombatV2
             int consumedAfterRefund = Mathf.Max(0, planTime - refunded);
             int finalTimeSpent = consumedAfterRefund + extraUsed;
             int timeDelta = finalTimeSpent - planTime;
-            int finalEnergyTotal = Mathf.Max(0, totalEnergyActual);
-            int energyDelta = finalEnergyTotal - planEnergyTotal;
+            int energyDelta = totalEnergyActual - planEnergyTotal;
 
             int budgetAfter = -1;
             int energyAfter = -1;
+
+            var attackTool = tool as AttackControllerV2;
+            bool freeMove = attackTool != null && attackTool.FreeMoveApplied;
+            string adjustLabel = freeMove ? "FreeMove" : $"{tool.Id}_Adjust";
 
             if (turnManager != null && unit != null)
             {
@@ -275,22 +278,15 @@ namespace TGD.CombatV2
                     if (timeDelta > 0)
                     {
                         budget.SpendTime(timeDelta);
-                        Debug.Log($"[Time] Spend {timeDelta}s (reason={tool.Id}_Adjust)", this);
+                        Debug.Log($"[Time] Spend {timeDelta}s -> Remain={budget.Remaining} ({adjustLabel})", this);
                     }
                     else if (timeDelta < 0)
                     {
-                        budget.RefundTime(-timeDelta);
-                        Debug.Log($"[Time] Refund {-timeDelta}s (reason={tool.Id}_Adjust)", this);
-                    }
-                    else
-                    {
-                        Debug.Log("[Time] No change (delta=0)", this);
+                        int refundAmount = -timeDelta;
+                        budget.RefundTime(refundAmount);
+                        Debug.Log($"[Time] Refund {refundAmount}s -> Remain={budget.Remaining} ({adjustLabel})", this);
                     }
                     budgetAfter = budget.Remaining;
-                }
-                else
-                {
-                    Debug.Log("[Time] Skip (no budget)", this);
                 }
 
                 var resources = turnManager.GetResources(unit);
@@ -298,23 +294,20 @@ namespace TGD.CombatV2
                 {
                     if (energyDelta > 0)
                     {
-                        resources.Spend("Energy", energyDelta, $"{tool.Id}_Adjust");
-                        Debug.Log($"[Res]  Spend {energyDelta} (reason={tool.Id}_Adjust)", this);
+                        resources.Spend("Energy", energyDelta, adjustLabel);
+                        int energyRemain = resources.Get("Energy");
+                        Debug.Log($"[Res]  Spend {energyDelta} -> {energyRemain} ({adjustLabel})", this);
+                        energyAfter = energyRemain;
                     }
                     else if (energyDelta < 0)
                     {
-                        resources.Refund("Energy", -energyDelta, $"{tool.Id}_Adjust");
-                        Debug.Log($"[Res]  Refund {-energyDelta} (reason={tool.Id}_Adjust)", this);
-                    }
-                    else
-                    {
-                        Debug.Log("[Res]  No change (delta=0)", this);
+                        int refundEnergy = -energyDelta;
+                        resources.Refund("Energy", refundEnergy, adjustLabel);
+                        int energyRemain = resources.Get("Energy");
+                        Debug.Log($"[Res]  Refund {refundEnergy} -> {energyRemain} ({adjustLabel})", this);
+                        energyAfter = energyRemain;
                     }
                     energyAfter = resources.Get("Energy");
-                }
-                else
-                {
-                    Debug.Log("[Res]  Skip (no resources)", this);
                 }
             }
             exec.Consume();
@@ -325,8 +318,8 @@ namespace TGD.CombatV2
         {
             if (tool is IActionEnergyReportV2 energyReport)
                 return (
-                    Mathf.Max(0, energyReport.ReportMoveEnergyNet),
-                    Mathf.Max(0, energyReport.ReportAttackEnergyNet));
+                    energyReport.ReportMoveEnergyNet,
+                    energyReport.ReportAttackEnergyNet);
             return (0, 0);
         }
 

@@ -2,7 +2,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -40,6 +39,7 @@ namespace TGD.CombatV2
         public AttackActionConfigV2 attackConfig;
         public MoveActionConfig moveConfig;
         public MonoBehaviour enemyProvider;
+        public MonoBehaviour allegianceProvider;
 
         [Header("Turn Manager Binding")]
         public bool UseTurnManager = true;
@@ -70,6 +70,8 @@ namespace TGD.CombatV2
         IGridActor _actor;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
+        IAllegianceProvider _allegianceProvider;
+        DefaultAllegianceProvider _fallbackAllegiance;
 
         bool _aiming;
         bool _moving;
@@ -87,10 +89,12 @@ namespace TGD.CombatV2
         public int ReportMoveEnergyNet { get; private set; }
         public int ReportAttackEnergyNet { get; private set; }
         public bool FreeMoveApplied => _reportPending && _freeMoveApplied;
+        public bool AttackRolledBack => _reportPending && _attackRolledBack;
         bool _reportPending;
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
         bool _freeMoveApplied;
+        bool _attackRolledBack;
         readonly HashSet<Hex> _tempReservedThisAction = new();
 
         struct PendingAttack
@@ -117,15 +121,17 @@ namespace TGD.CombatV2
             _reportComboBaseCount = 0;
             _pendingComboBaseCount = 0;
             _freeMoveApplied = false;
+            _attackRolledBack = false;
         }
 
-        void SetExecReport(int usedSeconds, int refundedSeconds, bool attackExecuted)
+        void SetExecReport(int usedSeconds, int refundedSeconds, bool attackExecuted, bool attackRolledBack)
         {
             _reportUsedSeconds = Mathf.Max(0, usedSeconds);
             _reportRefundedSeconds = Mathf.Max(0, refundedSeconds);
             _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
             _reportPending = true;
             _pendingComboBaseCount = 0;
+            _attackRolledBack = attackRolledBack;
             LogAttackSummary();
         }
         void LogAttackSummary()
@@ -294,6 +300,7 @@ namespace TGD.CombatV2
         {
             public bool valid;
             public bool targetIsEnemy;
+            public TargetOccupancy occupancy;
             public bool attackPlanned;
             public Hex targetHex;
             public Hex landingHex;
@@ -312,6 +319,13 @@ namespace TGD.CombatV2
             public string planFailDetail;
         }
 
+        enum TargetOccupancy
+        {
+            None,
+            Friendly,
+            Enemy
+        }
+
         void Awake()
         {
             _painter = new HexAreaPainter(tiler);
@@ -322,6 +336,18 @@ namespace TGD.CombatV2
             _enemyLocator = enemyProvider as IEnemyLocator;
             if (_enemyLocator == null)
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
+
+            _allegianceProvider = allegianceProvider as IAllegianceProvider;
+            if (_allegianceProvider == null)
+                _allegianceProvider = GetComponentInParent<IAllegianceProvider>(true);
+            if (_allegianceProvider == null)
+            {
+                _fallbackAllegiance = new DefaultAllegianceProvider(
+                    () => driver != null ? driver.UnitRef : null,
+                    () => turnManager,
+                    () => _enemyLocator);
+                _allegianceProvider = _fallbackAllegiance;
+            }
         }
 
         void OnEnable()
@@ -679,111 +705,124 @@ namespace TGD.CombatV2
                 attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0
             };
 
-            if (!layout.Contains(target))
-            {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.NoPath;
-                preview.rejectMessage = "targetInvalid(unreachable)";
-                preview.planFailDetail = "(reason=unreachable)";
-                return preview;
-            }
-
-            if (env != null && env.IsPit(target))
-            {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.NoPath;
-                preview.rejectMessage = "targetInvalid(pit)";
-                preview.planFailDetail = "(reason=pit)";
-                return preview;
-            }
-
+            bool inLayout = layout.Contains(target);
             var map = driver != null ? driver.Map : null;
-            Unit mapUnit = null;
-            bool hasUnit = map != null && map.TryGetActor(target, out mapUnit) && mapUnit != null;
-            bool isSelf = hasUnit && mapUnit == unit;
-            bool isFriendly = hasUnit && IsSelfOrFriendly(unit, mapUnit);
-            bool isEnemy = hasUnit && !isFriendly && IsEnemyUnit(unit, mapUnit);
-
-            string occLabel = hasUnit ? (isSelf ? "Self" : (isEnemy ? "Enemy" : "Friendly")) : "None";
-            string planLabel = isEnemy ? "Move+Attack" : "MoveOnly";
-            if (debugLog)
+            Unit occupant = null;
+            TargetOccupancy occupancy = TargetOccupancy.None;
+            if (inLayout && map != null && map.TryGetActor(target, out var mapUnit) && mapUnit != null)
             {
-                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
+                occupant = mapUnit;
+                occupancy = DetermineOccupancy(unit, occupant);
             }
 
-            if (isSelf || isFriendly)
+            preview.occupancy = occupancy;
+            preview.targetIsEnemy = occupancy == TargetOccupancy.Enemy;
+            preview.attackPlanned = preview.targetIsEnemy;
+
+            string planLabel = occupancy switch
             {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.Friendly;
-                preview.rejectMessage = "targetInvalid(friendly)";
-                preview.planFailDetail = "(reason=friendly)";
-                return preview;
+                TargetOccupancy.Enemy => "Move+Attack",
+                TargetOccupancy.Friendly => "Reject",
+                _ => "MoveOnly"
+            };
+
+            bool reject = false;
+            AttackRejectReasonV2 rejectReason = AttackRejectReasonV2.NoPath;
+            string rejectMessage = "targetInvalid(unreachable)";
+            string rejectDetail = "(reason=unreachable)";
+
+            if (!inLayout)
+            {
+                reject = true;
             }
-
-            bool attackPlanned = isEnemy;
-            preview.targetIsEnemy = isEnemy;
-            preview.attackPlanned = attackPlanned;
-
-            List<Hex> path = null;
-            Hex landing = target;
-
-            if (attackPlanned)
+            else if (env != null && env.IsPit(target))
             {
-                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
-                if (!TryFindMeleePath(start, target, range, out landing, out path) || path == null || path.Count == 0)
-                {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "targetInvalid(noPath)";
-                    preview.planFailDetail = "(reason=noPath)";
-                    return preview;
-                }
+                reject = true;
+                rejectMessage = "targetInvalid(pit)";
+                rejectDetail = "(reason=targetInvalid)";
+            }
+            else if (occupancy == TargetOccupancy.Friendly)
+            {
+                reject = true;
+                rejectReason = AttackRejectReasonV2.Friendly;
+                rejectMessage = "targetInvalid(friendly)";
+                rejectDetail = "(reason=targetInvalid)";
             }
             else
             {
-                if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
+                List<Hex> path = null;
+                Hex landing = target;
+
+                if (preview.attackPlanned)
                 {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "targetInvalid(unreachable)";
-                    preview.planFailDetail = "(reason=unreachable)";
-                    return preview;
+                    int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                    if (!TryFindMeleePath(start, target, range, out landing, out path) || path == null || path.Count == 0)
+                    {
+                        reject = true;
+                    }
+                }
+                else
+                {
+                    if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
+                    {
+                        reject = true;
+                    }
+                    else
+                    {
+                        path = ShortestPath(start, target, c => IsBlockedForMove(c, start, target));
+                        if (path == null || path.Count == 0)
+                            reject = true;
+                    }
                 }
 
-                path = ShortestPath(start, target, c => IsBlockedForMove(c, start, target));
-                if (path == null || path.Count == 0)
+                if (!reject)
                 {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "targetInvalid(noPath)";
-                    preview.planFailDetail = "(reason=noPath)";
-                    return preview;
+                    preview.landingHex = landing;
+                    preview.path = path;
+                    preview.steps = Mathf.Max(0, (path?.Count ?? 1) - 1);
+
+                    float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
+                    int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
+                    int chargeSecs = predSecs;
+                    if (preview.attackPlanned)
+                    {
+                        float charge = Mathf.Max(0f, predSecs - 0.2f);
+                        chargeSecs = Mathf.CeilToInt(charge);
+                    }
+
+                    preview.moveSecsPred = predSecs;
+                    preview.moveSecsCharge = chargeSecs;
+                    preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
+                    if (!preview.attackPlanned)
+                    {
+                        preview.attackSecsCharge = 0;
+                        preview.attackEnergyCost = 0;
+                    }
                 }
             }
 
-            preview.landingHex = landing;
-            preview.path = path;
-            preview.steps = Mathf.Max(0, (path?.Count ?? 1) - 1);
-
-            float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
-            int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
-            int chargeSecs = predSecs;
-            if (attackPlanned)
+            if (debugLog)
             {
-                float charge = Mathf.Max(0f, predSecs - 0.2f);
-                chargeSecs = Mathf.CeilToInt(charge);
+                string occLabel = FormatOccupancyLabel(occupancy, occupant);
+                string planLog = reject ? "Reject" : planLabel;
+                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLog}", this);
             }
 
-            preview.moveSecsPred = predSecs;
-            preview.moveSecsCharge = chargeSecs;
-            preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
-            if (!attackPlanned)
+            if (reject)
             {
-                preview.attackSecsCharge = 0;
-                preview.attackEnergyCost = 0;
+                preview.valid = false;
+                preview.rejectReason = rejectReason;
+                preview.rejectMessage = rejectMessage;
+                preview.planFailDetail = rejectDetail;
+            }
+            else
+            {
+                preview.valid = true;
+                preview.rejectReason = AttackRejectReasonV2.Empty;
+                preview.rejectMessage = null;
+                preview.planFailDetail = null;
             }
 
-            preview.valid = true;
             return preview;
         }
         PreviewData ClonePreview(PreviewData src)
@@ -793,6 +832,7 @@ namespace TGD.CombatV2
             {
                 valid = src.valid,
                 targetIsEnemy = src.targetIsEnemy,
+                occupancy = src.occupancy,
                 attackPlanned = src.attackPlanned,
                 targetHex = src.targetHex,
                 landingHex = src.landingHex,
@@ -865,9 +905,7 @@ namespace TGD.CombatV2
             var stepRates = sim.StepEffectiveRates;
             int moveEnergyRate = MoveEnergyPerSecond();
             float freeMoveCutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
-            bool freeMoveCandidate = attackPlanned && moveSecsCharge > 0 && usedSecondsRaw < freeMoveCutoff;
-            bool freeMove = false;
-            int freeMoveRefundSeconds = 0;
+            bool freeMoveCandidate = attackPlanned && usedSecondsRaw < freeMoveCutoff;
 
             try
             {
@@ -909,30 +947,35 @@ namespace TGD.CombatV2
                         }
                         TriggerAttackAnimation(unit, preview.targetHex);
                     }
-                    int meleeAttackUsedSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
-                    int meleeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
-                    _reportMoveUsedSeconds = 0;
-                    _reportMoveRefundSeconds = meleeMoveRefundSeconds;
-                    _reportAttackUsedSeconds = meleeAttackUsedSeconds;
-                    _reportAttackRefundSeconds = 0;
-                    ReportMoveEnergyNet = 0;
-                    ReportAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
-                    bool adjacencyFreeMove = attackPlanned && freeMoveCandidate;
-                    if (adjacencyFreeMove)
+
+                    int moveUsedSecondsReport = Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw - 1e-4f));
+                    int baseMoveRefundSeconds = Mathf.Max(0, refundedSeconds);
+                    bool freeMoveApplied = freeMoveCandidate && attackPlanned;
+                    int freeMoveBonusSeconds = freeMoveApplied ? 1 : 0;
+                    int moveRefundSecondsReport = baseMoveRefundSeconds + freeMoveBonusSeconds;
+
+                    _reportMoveUsedSeconds = moveUsedSecondsReport;
+                    _reportMoveRefundSeconds = moveRefundSecondsReport;
+                    bool attackSuccess = attackPlanned;
+                    _reportAttackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
+                    _reportAttackRefundSeconds = attackSuccess ? 0 : Mathf.Max(0, attackSecsCharge);
+
+                    int moveEnergyNet = Mathf.Max(0, (moveSecsCharge - baseMoveRefundSeconds) * moveEnergyRate);
+                    if (freeMoveApplied)
+                        moveEnergyNet = Mathf.Max(0, moveEnergyNet - moveEnergyRate);
+                    ReportMoveEnergyNet = moveEnergyNet;
+                    ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+
+                    _freeMoveApplied = freeMoveApplied;
+                    if (_freeMoveApplied && debugLog)
                     {
-                        _freeMoveApplied = true;
-                        if (debugLog)
-                        {
-                            string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                            Debug.Log($"[Attack] FreeMove1s U={unitLabel} used=0.00s (<{freeMoveCutoff:F2})", this);
-                        }
+                        string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                        Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
                     }
-                    else
-                    {
-                        _freeMoveApplied = false;
-                    }
-                    int totalRefund = attackPlanned ? 0 : meleeMoveRefundSeconds;
-                    SetExecReport(meleeAttackUsedSeconds, Mathf.Max(0, totalRefund), attackPlanned);
+
+                    int totalUsed = _reportMoveUsedSeconds + _reportAttackUsedSeconds;
+                    int totalRefund = _reportMoveRefundSeconds + _reportAttackRefundSeconds;
+                    SetExecReport(totalUsed, Mathf.Max(0, totalRefund), attackSuccess, false);
                     yield break;
                 }
 
@@ -973,6 +1016,8 @@ namespace TGD.CombatV2
                     if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                     {
                         attackRolledBack = true;
+                        if (debugLog)
+                            Debug.Log("[Attack] rollback: slowed.", this);
                         if (attackEnergyPaid > 0 && ManageEnergyLocally)
                             RefundAttackEnergy(attackEnergyPaid);
                         if (ManageTurnTimeLocally)
@@ -1023,20 +1068,30 @@ namespace TGD.CombatV2
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
                 bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
-                freeMove = freeMoveCandidate && attackSuccess;
-                if (freeMove)
+                bool freeMoveApplied = freeMoveCandidate && attackSuccess;
+                int baseMoveRefundSeconds = Mathf.Max(0, refundedSeconds);
+                int freeMoveBonusSeconds = freeMoveApplied ? 1 : 0;
+                int moveRefundSeconds = baseMoveRefundSeconds + freeMoveBonusSeconds;
+                int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw - 1e-4f));
+                int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
+                int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
+
+                _reportMoveUsedSeconds = moveUsedSeconds;
+                _reportMoveRefundSeconds = moveRefundSeconds;
+                _reportAttackUsedSeconds = attackUsedSeconds;
+                _reportAttackRefundSeconds = attackRefundSeconds;
+
+                int moveEnergyNet = Mathf.Max(0, (moveSecsCharge - baseMoveRefundSeconds) * moveEnergyRate);
+                if (freeMoveApplied)
+                    moveEnergyNet = Mathf.Max(0, moveEnergyNet - moveEnergyRate);
+                ReportMoveEnergyNet = moveEnergyNet;
+                ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+
+                _freeMoveApplied = freeMoveApplied;
+                if (_freeMoveApplied && debugLog)
                 {
-                    freeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
-                    _freeMoveApplied = true;
-                    if (debugLog)
-                    {
-                        string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                        Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
-                    }
-                }
-                else
-                {
-                    _freeMoveApplied = false;
+                    string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                    Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
                 }
 
                 if (ManageTurnTimeLocally)
@@ -1048,13 +1103,15 @@ namespace TGD.CombatV2
                     }
                     else
                     {
-                        float refundMove = freeMove ? moveSecsCharge : (moveSecsCharge - usedSeconds + refundedSeconds);
+                        float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                        if (freeMoveApplied)
+                            refundMove += 1f;
                         if (refundMove > 0f)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                     }
                 }
 
-                int refundSecondsForEnergy = freeMove ? moveSecsCharge : refundedSeconds;
+                int refundSecondsForEnergy = baseMoveRefundSeconds + (freeMoveApplied ? 1 : 0);
                 if (refundSecondsForEnergy > 0)
                 {
                     int refundEnergy = Mathf.Max(0, refundSecondsForEnergy * moveEnergyRate);
@@ -1088,25 +1145,6 @@ namespace TGD.CombatV2
                         }
                     }
                 }
-                int moveUsedSeconds = freeMove ? Mathf.Max(0, moveSecsCharge) : Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw));
-                int moveRefundSeconds = freeMove ? freeMoveRefundSeconds : Mathf.Max(0, refundedSeconds);
-                int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
-                int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
-                _reportMoveUsedSeconds = moveUsedSeconds;
-                _reportMoveRefundSeconds = moveRefundSeconds;
-                _reportAttackUsedSeconds = attackUsedSeconds;
-                _reportAttackRefundSeconds = attackRefundSeconds;
-
-                if (!freeMove)
-                {
-                    int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
-                    ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
-                }
-                else
-                {
-                    ReportMoveEnergyNet = 0;
-                }
-                ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                 int totalUsedForReport = moveUsedSeconds + attackUsedSeconds;
                 int totalRefundForReport = attackRefundSeconds + moveRefundSeconds;
@@ -1114,7 +1152,8 @@ namespace TGD.CombatV2
                 SetExecReport(
                     totalUsedForReport,
                     Mathf.Max(0, totalRefundForReport),
-                    attackSuccess);
+                    attackSuccess,
+                    attackRolledBack);
             }
             finally
             {
@@ -1219,120 +1258,53 @@ namespace TGD.CombatV2
             return null;
         }
 
-        static bool TryGetTeamToken(Unit unit, out string token)
+        TargetOccupancy DetermineOccupancy(Unit self, Unit occupant)
         {
-            token = null;
-            if (unit == null)
-                return false;
+            if (occupant == null)
+                return TargetOccupancy.None;
+            if (self != null && ReferenceEquals(self, occupant))
+                return TargetOccupancy.Friendly;
 
-            var type = unit.GetType();
-            object value = null;
-
-            var propTeam = type.GetProperty("Team", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (propTeam != null && propTeam.CanRead)
-                value = propTeam.GetValue(unit);
-            else
+            if (_allegianceProvider != null)
             {
-                var fieldTeam = type.GetField("Team", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (fieldTeam != null)
-                    value = fieldTeam.GetValue(unit);
+                if (_allegianceProvider.AreEnemies(self, occupant))
+                    return TargetOccupancy.Enemy;
+                if (_allegianceProvider.AreAllies(self, occupant))
+                    return TargetOccupancy.Friendly;
             }
 
-            if (value == null)
-            {
-                var propTeamId = type.GetProperty("TeamId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (propTeamId != null && propTeamId.CanRead)
-                    value = propTeamId.GetValue(unit);
-                else
-                {
-                    var fieldTeamId = type.GetField("TeamId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (fieldTeamId != null)
-                        value = fieldTeamId.GetValue(unit);
-                }
-            }
+            if (_enemyLocator != null && _enemyLocator.IsEnemy(occupant.Position))
+                return TargetOccupancy.Enemy;
 
-            if (value == null)
-                return false;
-
-            string tokenValue = Convert.ToString(value);
-            if (string.IsNullOrEmpty(tokenValue))
-                return false;
-
-            token = tokenValue;
-            return true;
+            return TargetOccupancy.Friendly;
         }
 
-        bool IsSelfOrFriendly(Unit self, Unit other)
+        string FormatOccupancyLabel(TargetOccupancy occupancy, Unit occupant)
         {
-            if (self == null || other == null)
-                return false;
-            if (ReferenceEquals(self, other))
-                return true;
-
-            if (TryGetTeamToken(self, out var selfTeam) && TryGetTeamToken(other, out var otherTeam) &&
-                !string.IsNullOrEmpty(selfTeam) && !string.IsNullOrEmpty(otherTeam))
+            return occupancy switch
             {
-                if (string.Equals(selfTeam, otherTeam, StringComparison.Ordinal))
-                    return true;
-                if (!string.Equals(selfTeam, otherTeam, StringComparison.Ordinal))
-                    return false;
-            }
-
-            if (turnManager != null)
-            {
-                bool selfPlayer = turnManager.IsPlayerUnit(self);
-                bool otherPlayer = turnManager.IsPlayerUnit(other);
-                bool selfEnemy = turnManager.IsEnemyUnit(self);
-                bool otherEnemy = turnManager.IsEnemyUnit(other);
-                if ((selfPlayer && otherPlayer) || (selfEnemy && otherEnemy))
-                    return true;
-                if ((selfPlayer && otherEnemy) || (selfEnemy && otherPlayer))
-                    return false;
-            }
-
-            if (_enemyLocator != null)
-                return !_enemyLocator.IsEnemy(other.Position);
-
-            return false;
-        }
-
-        bool IsEnemyUnit(Unit self, Unit other)
-        {
-            if (self == null || other == null)
-                return false;
-            if (ReferenceEquals(self, other))
-                return false;
-
-            if (TryGetTeamToken(self, out var selfTeam) && TryGetTeamToken(other, out var otherTeam) &&
-                !string.IsNullOrEmpty(selfTeam) && !string.IsNullOrEmpty(otherTeam))
-                return !string.Equals(selfTeam, otherTeam, StringComparison.Ordinal);
-
-            if (turnManager != null)
-            {
-                bool selfPlayer = turnManager.IsPlayerUnit(self);
-                bool otherPlayer = turnManager.IsPlayerUnit(other);
-                bool selfEnemy = turnManager.IsEnemyUnit(self);
-                bool otherEnemy = turnManager.IsEnemyUnit(other);
-                if ((selfPlayer && otherEnemy) || (selfEnemy && otherPlayer))
-                    return true;
-                if ((selfPlayer && otherPlayer) || (selfEnemy && otherEnemy))
-                    return false;
-            }
-
-            if (_enemyLocator != null)
-                return _enemyLocator.IsEnemy(other.Position);
-
-            return false;
+                TargetOccupancy.Enemy => occupant != null
+                    ? $"Enemy@{TurnManagerV2.FormatUnitLabel(occupant)}"
+                    : "Enemy",
+                TargetOccupancy.Friendly => occupant != null
+                    ? $"Friendly@{TurnManagerV2.FormatUnitLabel(occupant)}"
+                    : "Friendly",
+                _ => "None"
+            };
         }
 
         bool IsEnemyHex(Hex hex)
         {
             var self = driver != null ? driver.UnitRef : null;
             var occupant = ResolveMapUnit(hex);
-            if (self != null && occupant != null)
-                return IsEnemyUnit(self, occupant);
+            if (occupant != null)
+            {
+                return DetermineOccupancy(self, occupant) == TargetOccupancy.Enemy;
+            }
+
             if (_enemyLocator != null)
                 return _enemyLocator.IsEnemy(hex);
+
             return false;
         }
 
