@@ -13,6 +13,12 @@ namespace TGD.CombatV2
         FirstAvailable
     }
 
+    public enum ChainTestMode
+    {
+        Skip,
+        AutoFirst
+    }
+
     [DisallowMultipleComponent]
     public sealed class CombatActionManagerV2 : MonoBehaviour
     {
@@ -33,9 +39,13 @@ namespace TGD.CombatV2
         [Header("Chain Prompt")]
         public ChainPromptAutoMode chainPromptAuto = ChainPromptAutoMode.Skip;
 
+        [Header("Test Hooks")]
+        public ChainTestMode chainTestMode = ChainTestMode.Skip;
+
         [Header("Keybinds")]
-        public KeyCode keyMoveAim = KeyCode.V;
+        public KeyCode keyMoveAim = KeyCode.M;
         public KeyCode keyAttackAim = KeyCode.A;
+        public KeyCode keyFullRound = KeyCode.F;
 
         ActionModeV2 _mode = ActionModeV2.Idle;
         readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
@@ -131,6 +141,7 @@ namespace TGD.CombatV2
             {
                 if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
                 if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
+                if (Input.GetKeyDown(keyFullRound)) RequestAim("FullRound_Test");
             }
 
             // —— 瞄准中：Hover / Confirm / Cancel —— 
@@ -173,12 +184,14 @@ namespace TGD.CombatV2
             {
                 if (!_turnJustStarted)
                 {
+                    Debug.Log("[FullRound] reject not-full-time", this);
                     reason = "(NotFullTime)";
                     return false;
                 }
 
                 if (turnManager == null || unit == null)
                 {
+                    Debug.Log("[FullRound] reject not-full-time", this);
                     reason = "(NotFullTime)";
                     return false;
                 }
@@ -187,6 +200,7 @@ namespace TGD.CombatV2
                 int turnTime = turnManager.GetTurnTime(unit);
                 if (budget == null || budget.Remaining < turnTime)
                 {
+                    Debug.Log("[FullRound] reject not-full-time", this);
                     reason = "(NotFullTime)";
                     return false;
                 }
@@ -428,7 +442,18 @@ namespace TGD.CombatV2
                     break;
                 }
 
-                if (_chainCandidates.Count == 0 || chainPromptAuto == ChainPromptAutoMode.Skip)
+                var promptMode = chainPromptAuto;
+                switch (chainTestMode)
+                {
+                    case ChainTestMode.Skip:
+                        promptMode = ChainPromptAutoMode.Skip;
+                        break;
+                    case ChainTestMode.AutoFirst:
+                        promptMode = ChainPromptAutoMode.FirstAvailable;
+                        break;
+                }
+
+                if (_chainCandidates.Count == 0 || promptMode == ChainPromptAutoMode.Skip)
                 {
                     aborted = true;
                     abortReason = "(auto-skip)";
