@@ -684,7 +684,10 @@ namespace TGD.CombatV2
                 var from = reached[i - 1];
                 var to = reached[i];
 
-                if (_occ.IsBlocked(to, _actor))
+                bool blocked = _occ != null && _occ.IsBlocked(to, _actor);
+                if (blocked && _occ.IsReservedTempAttack(to, _actor))
+                    blocked = false;
+                if (blocked)
                 {
                     stoppedByExternal = true;
                     break;
