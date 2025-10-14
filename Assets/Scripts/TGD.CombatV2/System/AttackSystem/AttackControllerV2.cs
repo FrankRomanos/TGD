@@ -301,6 +301,9 @@ namespace TGD.CombatV2
             public bool valid;
             public bool targetIsEnemy;
             public TargetOccupancy occupancy;
+            public TargetPlan plan;
+            public string probeSource;
+            public string probeRejectReason;
             public bool attackPlanned;
             public Hex targetHex;
             public Hex landingHex;
@@ -324,6 +327,13 @@ namespace TGD.CombatV2
             None,
             Friendly,
             Enemy
+        }
+
+        enum TargetPlan
+        {
+            MoveOnly,
+            MoveAndAttack,
+            Reject
         }
 
         void Awake()
@@ -504,6 +514,16 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAimHidden();
         }
 
+        public void OnAimCancel()
+        {
+            ForceClearTempReservations("AimCancel");
+        }
+
+        public void OnConfirmAbort()
+        {
+            ForceClearTempReservations("ConfirmAbort");
+        }
+
         public void OnHover(Hex hex)
         {
             if (!_aiming || _moving) return;
@@ -540,6 +560,8 @@ namespace TGD.CombatV2
                     preview != null ? preview.rejectMessage : "Invalid target.");
                 yield break;
             }
+
+            LogProbe(preview.targetHex, preview.probeSource, preview.plan, preview.targetIsEnemy, preview.probeRejectReason);
 
             if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
@@ -678,6 +700,122 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAimShown(driver.UnitRef, preview.path);
         }
 
+        struct ProbeResult
+        {
+            public TargetPlan plan;
+            public TargetOccupancy occupancy;
+            public string sourceLabel;
+            public string rejectReasonLabel;
+            public Unit targetUnit;
+            public bool isEnemy;
+        }
+
+        ProbeResult ProbeAt(Hex hex)
+        {
+            var result = new ProbeResult
+            {
+                plan = TargetPlan.MoveOnly,
+                occupancy = TargetOccupancy.None,
+                sourceLabel = "None",
+                rejectReasonLabel = null,
+                targetUnit = null,
+                isEnemy = false
+            };
+
+            var layout = authoring != null ? authoring.Layout : null;
+            if (layout == null || !layout.Contains(hex))
+            {
+                result.plan = TargetPlan.Reject;
+                result.rejectReasonLabel = "invalid";
+                return result;
+            }
+
+            var self = driver != null ? driver.UnitRef : null;
+            var map = driver != null ? driver.Map : null;
+            Unit mapUnit = null;
+            if (map != null && map.TryGetActor(hex, out var unitAtHex) && unitAtHex != null)
+            {
+                mapUnit = unitAtHex;
+            }
+
+            IGridActor occActor = _occ != null ? _occ.Get(hex) : null;
+            if (occActor != null)
+            {
+                result.sourceLabel = "Occ";
+            }
+            else if (mapUnit != null)
+            {
+                result.sourceLabel = "Map";
+            }
+
+            Unit targetUnit = null;
+            if (occActor != null)
+            {
+                if (_actor != null && ReferenceEquals(occActor, _actor))
+                {
+                    targetUnit = self;
+                }
+                else if (mapUnit != null)
+                {
+                    targetUnit = mapUnit;
+                }
+            }
+
+            if (targetUnit == null)
+                targetUnit = mapUnit;
+
+            result.targetUnit = targetUnit;
+
+            if (targetUnit == null)
+            {
+                result.plan = TargetPlan.MoveOnly;
+                result.occupancy = TargetOccupancy.None;
+                result.isEnemy = false;
+                return result;
+            }
+
+            if (self != null && ReferenceEquals(self, targetUnit))
+            {
+                result.plan = TargetPlan.Reject;
+                result.occupancy = TargetOccupancy.Friendly;
+                result.rejectReasonLabel = "self";
+                result.isEnemy = false;
+                return result;
+            }
+
+            var occupancy = DetermineOccupancy(self, targetUnit);
+            result.occupancy = occupancy;
+            result.isEnemy = occupancy == TargetOccupancy.Enemy;
+
+            if (occupancy == TargetOccupancy.Enemy)
+            {
+                result.plan = TargetPlan.MoveAndAttack;
+                return result;
+            }
+
+            result.plan = TargetPlan.Reject;
+            result.rejectReasonLabel = "friendly";
+            return result;
+        }
+
+        void LogProbe(Hex target, string sourceLabel, TargetPlan plan, bool enemy, string rejectReason)
+        {
+            if (!debugLog)
+                return;
+
+            string occLabel = string.IsNullOrEmpty(sourceLabel) ? "None" : sourceLabel;
+            string planLabel = plan switch
+            {
+                TargetPlan.MoveAndAttack => "Move+Attack",
+                TargetPlan.MoveOnly => "MoveOnly",
+                _ => "Reject"
+            };
+            if (plan == TargetPlan.Reject && !string.IsNullOrEmpty(rejectReason))
+                planLabel += $"({rejectReason})";
+            string enemyLabel = enemy ? "true" : "false";
+            Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} plan={planLabel} enemy={enemyLabel}", this);
+        }
+
         PreviewData BuildPreview(Hex target, bool logInvalid)
         {
             if (!IsReady)
@@ -706,26 +844,17 @@ namespace TGD.CombatV2
             };
 
             bool inLayout = layout.Contains(target);
-            var map = driver != null ? driver.Map : null;
-            Unit occupant = null;
-            TargetOccupancy occupancy = TargetOccupancy.None;
-            if (inLayout && map != null && map.TryGetActor(target, out var mapUnit) && mapUnit != null)
-            {
-                occupant = mapUnit;
-                occupancy = DetermineOccupancy(unit, occupant);
-            }
+            var probe = ProbeAt(target);
 
-            preview.occupancy = occupancy;
-            preview.targetIsEnemy = occupancy == TargetOccupancy.Enemy;
-            preview.attackPlanned = preview.targetIsEnemy;
+            preview.occupancy = probe.occupancy;
+            preview.plan = probe.plan;
+            preview.probeSource = probe.sourceLabel;
+            preview.probeRejectReason = probe.rejectReasonLabel;
+            preview.targetIsEnemy = probe.isEnemy;
+            preview.attackPlanned = probe.plan == TargetPlan.MoveAndAttack;
 
-            string planLabel = "MoveOnly";
-            if (!inLayout)
-                planLabel = "Reject";
-            else if (preview.attackPlanned)
-                planLabel = "Move+Attack";
-            else if (occupancy == TargetOccupancy.Friendly)
-                planLabel = "Reject";
+            TargetPlan finalPlan = probe.plan;
+            string rejectPlanReason = probe.rejectReasonLabel;
 
             bool reject = false;
             AttackRejectReasonV2 rejectReason = AttackRejectReasonV2.NoPath;
@@ -735,19 +864,39 @@ namespace TGD.CombatV2
             if (!inLayout)
             {
                 reject = true;
+                finalPlan = TargetPlan.Reject;
+                rejectPlanReason = "invalid";
                 rejectMessage = "targetInvalid(out-of-bounds)";
             }
             else if (env != null && env.IsPit(target))
             {
                 reject = true;
                 rejectReason = AttackRejectReasonV2.CantMove;
+                finalPlan = TargetPlan.Reject;
+                rejectPlanReason = "invalid";
                 rejectMessage = "targetInvalid(pit)";
             }
-            else if (occupancy == TargetOccupancy.Friendly)
+            else if (probe.plan == TargetPlan.Reject)
             {
                 reject = true;
-                rejectReason = AttackRejectReasonV2.Friendly;
-                rejectMessage = "targetInvalid(friendly)";
+                rejectPlanReason ??= "invalid";
+                if (string.Equals(probe.rejectReasonLabel, "self", System.StringComparison.Ordinal))
+                {
+                    rejectReason = AttackRejectReasonV2.SelfCell;
+                    rejectMessage = "targetInvalid(self)";
+                    rejectDetail = "(reason=self)";
+                }
+                else if (string.Equals(probe.rejectReasonLabel, "friendly", System.StringComparison.Ordinal))
+                {
+                    rejectReason = AttackRejectReasonV2.Friendly;
+                    rejectMessage = "targetInvalid(friendly)";
+                    rejectDetail = "(reason=friendly)";
+                }
+                else
+                {
+                    rejectReason = AttackRejectReasonV2.NoPath;
+                    rejectMessage = "targetInvalid(invalid)";
+                }
             }
             else
             {
@@ -760,6 +909,8 @@ namespace TGD.CombatV2
                     if (!TryFindMeleePath(start, target, range, out landing, out path) || path == null || path.Count == 0)
                     {
                         reject = true;
+                        finalPlan = TargetPlan.Reject;
+                        rejectPlanReason = "invalid";
                         rejectDetail = "(reason=unreachable)";
                     }
                 }
@@ -768,6 +919,8 @@ namespace TGD.CombatV2
                     if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
                     {
                         reject = true;
+                        finalPlan = TargetPlan.Reject;
+                        rejectPlanReason = "invalid";
                         rejectMessage = "targetInvalid(blocked)";
                     }
                     else
@@ -776,6 +929,8 @@ namespace TGD.CombatV2
                         if (path == null || path.Count == 0)
                         {
                             reject = true;
+                            finalPlan = TargetPlan.Reject;
+                            rejectPlanReason = "invalid";
                             rejectMessage = "targetInvalid(no-path)";
                         }
                     }
@@ -807,11 +962,13 @@ namespace TGD.CombatV2
                 }
             }
 
-            if (debugLog)
-            {
-                string occLabel = FormatOccupancyLabel(occupancy, occupant);
-                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
-            }
+            preview.plan = finalPlan;
+            preview.probeRejectReason = rejectPlanReason;
+
+            if (preview.attackPlanned != (finalPlan == TargetPlan.MoveAndAttack))
+                preview.attackPlanned = finalPlan == TargetPlan.MoveAndAttack;
+
+            LogProbe(target, preview.probeSource, finalPlan, preview.targetIsEnemy, rejectPlanReason);
 
             if (reject)
             {
@@ -838,6 +995,9 @@ namespace TGD.CombatV2
                 valid = src.valid,
                 targetIsEnemy = src.targetIsEnemy,
                 occupancy = src.occupancy,
+                plan = src.plan,
+                probeSource = src.probeSource,
+                probeRejectReason = src.probeRejectReason,
                 attackPlanned = src.attackPlanned,
                 targetHex = src.targetHex,
                 landingHex = src.landingHex,
@@ -972,7 +1132,7 @@ namespace TGD.CombatV2
                     ReportAttackEnergyNet = attackSuccessImmediate ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                     _freeMoveApplied = freeMoveAppliedImmediate;
-                    if (_freeMoveApplied && debugLog)
+                    if (_freeMoveApplied && debugLog && ManageTurnTimeLocally)
                     {
                         string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                         Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
@@ -1091,7 +1251,7 @@ namespace TGD.CombatV2
                 ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                 _freeMoveApplied = freeMoveApplied;
-                if (_freeMoveApplied && debugLog)
+                if (_freeMoveApplied && debugLog && ManageTurnTimeLocally)
                 {
                     string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                     Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
@@ -1160,7 +1320,7 @@ namespace TGD.CombatV2
             }
             finally
             {
-                ClearTempReservations("ActionEnd");
+                ForceClearTempReservations("RunAttack");
             }
         }
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
@@ -1268,6 +1428,25 @@ namespace TGD.CombatV2
             if (self != null && ReferenceEquals(self, occupant))
                 return TargetOccupancy.Friendly;
 
+            if (turnManager != null)
+            {
+                bool selfIsEnemy = self != null && turnManager.IsEnemyUnit(self);
+                bool selfIsPlayer = self != null && turnManager.IsPlayerUnit(self);
+                bool targetIsEnemy = turnManager.IsEnemyUnit(occupant);
+                bool targetIsPlayer = turnManager.IsPlayerUnit(occupant);
+                bool selfKnown = selfIsEnemy || selfIsPlayer;
+                bool targetKnown = targetIsEnemy || targetIsPlayer;
+                if (selfKnown && targetKnown)
+                {
+                    bool enemyToSelf = targetIsEnemy != selfIsEnemy;
+                    return enemyToSelf ? TargetOccupancy.Enemy : TargetOccupancy.Friendly;
+                }
+                if (!selfKnown && targetKnown)
+                {
+                    return targetIsEnemy ? TargetOccupancy.Enemy : TargetOccupancy.Friendly;
+                }
+            }
+
             if (_allegianceProvider != null)
             {
                 if (_allegianceProvider.AreEnemies(self, occupant))
@@ -1279,21 +1458,7 @@ namespace TGD.CombatV2
             if (_enemyLocator != null && _enemyLocator.IsEnemy(occupant.Position))
                 return TargetOccupancy.Enemy;
 
-            return TargetOccupancy.Friendly;
-        }
-
-        string FormatOccupancyLabel(TargetOccupancy occupancy, Unit occupant)
-        {
-            return occupancy switch
-            {
-                TargetOccupancy.Enemy => occupant != null
-                    ? $"Enemy@{TurnManagerV2.FormatUnitLabel(occupant)}"
-                    : "Enemy",
-                TargetOccupancy.Friendly => occupant != null
-                    ? $"Friendly@{TurnManagerV2.FormatUnitLabel(occupant)}"
-                    : "Friendly",
-                _ => "None"
-            };
+            return TargetOccupancy.Enemy;
         }
 
         bool IsEnemyHex(Hex hex)
@@ -1590,21 +1755,20 @@ namespace TGD.CombatV2
             }
         }
 
-        void ClearTempReservations(string reason, bool logAlways = false, string layer = "TempAttack")
+        void ClearTempReservations(string reason, bool forceLog = false)
         {
             int tracked = _tempReservedThisAction.Count;
             int occCleared = (_occ != null && _actor != null) ? _occ.TempClearForOwner(_actor) : 0;
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
-            if (logAlways || count > 0)
+            if ((forceLog || count > 0) && debugLog)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                if (debugLog)
-                {
-                    Debug.Log($"[Occ] TempClear({reason} {layer}) U={unitLabel} count={count}", this);
-                }
+                Debug.Log($"[Occ] TempClear {reason} U={unitLabel} count={count}", this);
             }
         }
+
+        void ForceClearTempReservations(string reason) => ClearTempReservations(reason, true);
 
         int ResolveComboIndex()
         {

@@ -493,6 +493,13 @@ namespace TGD.CombatV2
 
             float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
 
+            if (_occ != null && _actor != null)
+            {
+                var registeredActor = _occ.Get(startHex);
+                if (registeredActor != null && !ReferenceEquals(registeredActor, _actor) && registeredActor.Id == _actor.Id)
+                    _actor = registeredActor;
+            }
+
             // 计算步数
             int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
             int cap = config ? config.stepsCap : 12;
@@ -513,6 +520,7 @@ namespace TGD.CombatV2
 
             bool Block(TGD.HexBoard.Hex cell)
             {
+                if (cell == startHex) return false;
                 if (layout != null && !layout.Contains(cell)) return true;
 
                 if (blockByUnits && !_occ.CanPlaceIgnoreTempAttack(_actor, cell, _actor.Facing, ignore: _actor))
