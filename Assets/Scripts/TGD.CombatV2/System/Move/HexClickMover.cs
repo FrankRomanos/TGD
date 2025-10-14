@@ -511,12 +511,18 @@ namespace TGD.CombatV2
                       y: y)
                 : null;
 
+            var actorForPlacement = ResolveRegisteredActor(startHex);
             bool Block(TGD.HexBoard.Hex cell)
             {
+                if (cell.Equals(startHex)) return false;
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits && !_occ.CanPlaceIgnoreTempAttack(_actor, cell, _actor.Facing, ignore: _actor))
-                    return true;
+                if (blockByUnits)
+                {
+                    var actorRef = actorForPlacement ?? _actor;
+                    if (actorRef != null && _occ != null && !_occ.CanPlaceIgnoreTempAttack(actorRef, cell, actorRef.Facing, ignore: actorRef))
+                        return true;
+                }
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
 
@@ -784,6 +790,22 @@ namespace TGD.CombatV2
         void IActionExecReportV2.Consume()
         {
             ClearExecReport();
+        }
+
+        IGridActor ResolveRegisteredActor(Hex anchor)
+        {
+            if (_occ == null)
+                return _actor;
+            var registered = _occ.Get(anchor);
+            if (registered == null)
+                return _actor;
+            if (_actor == null)
+                return registered;
+            if (ReferenceEquals(registered, _actor))
+                return _actor;
+            if (!string.IsNullOrEmpty(registered.Id) && registered.Id == _actor.Id)
+                return registered;
+            return registered;
         }
 
         // 若没指定占位，临时造一个“单格”占位
