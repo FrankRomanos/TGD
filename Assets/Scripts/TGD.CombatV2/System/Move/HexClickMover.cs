@@ -31,7 +31,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable, IActionEnergyReportV2
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -504,7 +504,7 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits && !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                if (blockByUnits && !_occ.CanPlaceIgnoreTempAttack(_actor, cell, _actor.Facing, ignore: _actor))
                     return true;
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
@@ -713,6 +713,8 @@ namespace TGD.CombatV2
 
         }
         public int ReportEnergyNet => _reportPending ? _reportEnergyNet : 0;
+        int IActionEnergyReportV2.ReportMoveEnergyNet => ReportEnergyNet;
+        int IActionEnergyReportV2.ReportAttackEnergyNet => 0;
 
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;

@@ -7,6 +7,12 @@ namespace TGD.CombatV2
         void Consume();
     }
 
+    public interface IActionEnergyReportV2
+    {
+        int ReportMoveEnergyNet { get; }
+        int ReportAttackEnergyNet { get; }
+    }
+
     public interface IBudgetGateSkippable
     {
         bool SkipBudgetGate { get; set; }

@@ -6,7 +6,7 @@ using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
-    public sealed class TestDerivedAfterAttackAction : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class TestDerivedAfterAttackAction : MonoBehaviour, IActionToolV2, IActionExecReportV2, IActionEnergyReportV2
     {
         static readonly WaitForSeconds WAIT = new(0.1f);
         static readonly string[] EMPTY_TAGS = Array.Empty<string>();
@@ -40,6 +40,9 @@ namespace TGD.CombatV2
 
         int IActionExecReportV2.UsedSeconds => _reportPending ? _usedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _refundedSeconds : 0;
+
+        public int ReportMoveEnergyNet => 0;
+        public int ReportAttackEnergyNet => 0;
 
         void IActionExecReportV2.Consume()
         {
