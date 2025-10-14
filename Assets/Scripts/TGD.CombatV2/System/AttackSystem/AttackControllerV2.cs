@@ -9,7 +9,7 @@ using TGD.HexBoard;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable, IActionEnergyReportV2
     {
         const float MR_MIN = 1f;
         const float MR_MAX = 12f;
@@ -85,9 +85,11 @@ namespace TGD.CombatV2
         int _reportAttackRefundSeconds;
         public int ReportMoveEnergyNet { get; private set; }
         public int ReportAttackEnergyNet { get; private set; }
+        public bool FreeMoveApplied => _reportPending && _freeMoveApplied;
         bool _reportPending;
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
+        bool _freeMoveApplied;
         readonly HashSet<Hex> _tempReservedThisAction = new();
 
         struct PendingAttack
@@ -113,6 +115,7 @@ namespace TGD.CombatV2
             _reportPending = false;
             _reportComboBaseCount = 0;
             _pendingComboBaseCount = 0;
+            _freeMoveApplied = false;
         }
 
         void SetExecReport(int usedSeconds, int refundedSeconds, bool attackExecuted)
@@ -445,6 +448,7 @@ namespace TGD.CombatV2
             if (!TryPrecheckAim(out _))
                 return;
 
+            ClearTempReservations("OnEnterAim");
             _aiming = true;
             _hover = null;
             _currentPreview = null;
@@ -455,6 +459,7 @@ namespace TGD.CombatV2
 
         public void OnExitAim()
         {
+            ClearTempReservations("OnExitAim");
             _aiming = false;
             _hover = null;
             _currentPreview = null;
@@ -673,41 +678,66 @@ namespace TGD.CombatV2
                 return preview;
             }
 
-            bool isEnemy = IsEnemyHex(target);
-            preview.targetIsEnemy = isEnemy;
+            var mapUnit = ResolveMapUnit(target);
+            bool hasUnit = mapUnit != null;
+            bool isSelf = hasUnit && mapUnit == unit;
+            bool isEnemy = hasUnit && IsEnemyUnit(unit, mapUnit);
+            bool isFriendly = hasUnit && !isSelf && !isEnemy && IsAllyUnit(unit, mapUnit);
+
+            bool tempAttackReserved = _occ != null && _actor != null && _occ.IsReservedTempAttack(target, _actor);
+            bool occupancyBlocked = _occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor);
+            bool physicsBlocked = occupancyBlocked && !hasUnit && !tempAttackReserved;
+
+            string mapUnitLabel = hasUnit ? (isSelf ? "self" : (isEnemy ? "enemy" : "ally")) : "<none>";
+            if (debugLog)
+            {
+                Debug.Log($"[Probe] target={target} mapUnit={mapUnitLabel} tempAttack={(tempAttackReserved ? "true" : "false")} physicsBlocked={(physicsBlocked ? "true" : "false")}", this);
+            }
+
+            if (isSelf)
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.SelfCell;
+                preview.rejectMessage = "Target is self.";
+                return preview;
+            }
+
+            if (isFriendly)
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.Friendly;
+                preview.rejectMessage = "Target is friendly.";
+                return preview;
+            }
+
+            if (!hasUnit)
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.Empty;
+                preview.rejectMessage = "Target empty.";
+                return preview;
+            }
+
+            if (!isEnemy)
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.Friendly;
+                preview.rejectMessage = "Target not hostile.";
+                return preview;
+            }
+
+            preview.targetIsEnemy = true;
 
             List<Hex> path = null;
             Hex landing = target;
 
-            if (isEnemy)
+            int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+            if (!TryFindMeleePath(start, target, range, out landing, out path))
             {
-                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
-                if (!TryFindMeleePath(start, target, range, out landing, out path))
-                {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "No landing.";
-                    return preview;
-                }
-            }
-            else
-            {
-                if (_occ != null && _occ.IsBlocked(target, _actor))
-                {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "Cell occupied.";
-                    return preview;
-                }
-
-                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target));
-                if (path == null)
-                {
-                    preview.valid = false;
-                    preview.rejectReason = AttackRejectReasonV2.NoPath;
-                    preview.rejectMessage = "No path.";
-                    return preview;
-                }
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.NoPath;
+                preview.rejectMessage = "No landing.";
+                return preview;
             }
 
             preview.landingHex = landing;
@@ -801,10 +831,16 @@ namespace TGD.CombatV2
                 debugLog);
 
             var reached = sim.ReachedPath ?? new List<Hex>();
-            int refundedSeconds = Mathf.Max(0, sim.RefundedSeconds);
-            float usedSeconds = Mathf.Max(0f, sim.UsedSeconds);
+            int simRefundedSeconds = Mathf.Max(0, sim.RefundedSeconds);
+            int refundedSeconds = simRefundedSeconds;
+            float usedSecondsRaw = Mathf.Max(0f, sim.UsedSeconds);
+            float usedSeconds = usedSecondsRaw;
             var stepRates = sim.StepEffectiveRates;
             int moveEnergyRate = MoveEnergyPerSecond();
+            float freeMoveCutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
+            bool freeMoveCandidate = attackPlanned && moveSecsCharge > 0 && usedSecondsRaw < freeMoveCutoff;
+            bool freeMove = false;
+            int freeMoveRefundSeconds = 0;
 
             try
             {
@@ -852,7 +888,22 @@ namespace TGD.CombatV2
                     _reportAttackRefundSeconds = 0;
                     ReportMoveEnergyNet = 0;
                     ReportAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
-                    SetExecReport(meleeAttackUsedSeconds, meleeMoveRefundSeconds, attackPlanned);
+                    bool adjacencyFreeMove = attackPlanned && freeMoveCandidate;
+                    if (adjacencyFreeMove)
+                    {
+                        _freeMoveApplied = true;
+                        if (debugLog)
+                        {
+                            string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                            Debug.Log($"[Attack] FreeMove1s U={unitLabel} used=0.00s (<{freeMoveCutoff:F2})", this);
+                        }
+                    }
+                    else
+                    {
+                        _freeMoveApplied = false;
+                    }
+                    int totalRefund = attackPlanned ? 0 : meleeMoveRefundSeconds;
+                    SetExecReport(meleeAttackUsedSeconds, Mathf.Max(0, totalRefund), attackPlanned);
                     yield break;
                 }
 
@@ -932,6 +983,23 @@ namespace TGD.CombatV2
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
+                bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
+                freeMove = freeMoveCandidate && attackSuccess;
+                if (freeMove)
+                {
+                    freeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
+                    _freeMoveApplied = true;
+                    if (debugLog)
+                    {
+                        string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                        Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
+                    }
+                }
+                else
+                {
+                    _freeMoveApplied = false;
+                }
+
                 if (ManageTurnTimeLocally)
                 {
                     float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
@@ -946,7 +1014,6 @@ namespace TGD.CombatV2
                         RefundMoveEnergy(refundEnergy);
                 }
 
-                bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
                 if (attackSuccess)
                 {
                     TriggerAttackAnimation(unit, preview.targetHex);
@@ -963,24 +1030,8 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
-                float cutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
-                bool isMelee = attackPlanned;
-                bool canFree = isMelee && moveSecsCharge >= 1;
-
-                if (canFree && reached != null && reached.Count >= 2 && usedSeconds < cutoff)
-                {
-                    int forceFree = 1;
-                    refundedSeconds = Mathf.Max(refundedSeconds, forceFree);
-
-                    if (debugLog)
-                    {
-                        string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                        Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSeconds:F2}s (<{cutoff:F2})", this);
-                    }
-                }
-
-                int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
-                int moveRefundSeconds = Mathf.Max(0, refundedSeconds);
+                int moveUsedSeconds = freeMove ? 0 : Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw));
+                int moveRefundSeconds = freeMove ? freeMoveRefundSeconds : Mathf.Max(0, refundedSeconds);
                 int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
                 int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
                 _reportMoveUsedSeconds = moveUsedSeconds;
@@ -988,13 +1039,25 @@ namespace TGD.CombatV2
                 _reportAttackUsedSeconds = attackUsedSeconds;
                 _reportAttackRefundSeconds = attackRefundSeconds;
 
-                int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
-                ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
+                if (!freeMove)
+                {
+                    int netMoveSeconds = Mathf.Max(0, moveSecsCharge - moveRefundSeconds);
+                    ReportMoveEnergyNet = Mathf.Max(0, netMoveSeconds * moveEnergyRate);
+                }
+                else
+                {
+                    ReportMoveEnergyNet = 0;
+                }
                 ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
 
+                int totalUsedForReport = moveUsedSeconds + attackUsedSeconds;
+                int totalRefundForReport = attackRefundSeconds;
+                if (!freeMove)
+                    totalRefundForReport += moveRefundSeconds;
+
                 SetExecReport(
-                    moveUsedSeconds + attackUsedSeconds,
-                    moveRefundSeconds + attackRefundSeconds,
+                    totalUsedForReport,
+                    Mathf.Max(0, totalRefundForReport),
                     attackSuccess);
             }
             finally
@@ -1092,16 +1155,62 @@ namespace TGD.CombatV2
 
         int MoveEnergyPerSecond() => moveConfig != null ? Mathf.Max(0, moveConfig.energyCost) : 0;
 
-        bool IsEnemyHex(Hex hex)
+        Unit ResolveMapUnit(Hex hex)
         {
-            if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
+            var map = driver != null ? driver.Map : null;
+            if (map != null && map.TryGetUnit(hex, out var mapUnit) && mapUnit != null)
+                return mapUnit;
+            return null;
+        }
+
+        bool IsAllyUnit(Unit self, Unit other)
+        {
+            if (self == null || other == null)
+                return false;
+            if (self == other)
                 return true;
-            if (_occ != null)
+            if (turnManager != null)
             {
-                var actor = _occ.Get(hex);
-                if (actor != null && actor != _actor)
+                bool selfPlayer = turnManager.IsPlayerUnit(self);
+                bool selfEnemy = turnManager.IsEnemyUnit(self);
+                if (selfPlayer && turnManager.IsPlayerUnit(other))
+                    return true;
+                if (selfEnemy && turnManager.IsEnemyUnit(other))
                     return true;
             }
+            return false;
+        }
+
+        bool IsEnemyUnit(Unit self, Unit other)
+        {
+            if (self == null || other == null)
+                return false;
+            if (self == other)
+                return false;
+            if (turnManager != null)
+            {
+                bool selfPlayer = turnManager.IsPlayerUnit(self);
+                bool selfEnemy = turnManager.IsEnemyUnit(self);
+                if (selfPlayer && turnManager.IsEnemyUnit(other))
+                    return true;
+                if (selfEnemy && turnManager.IsPlayerUnit(other))
+                    return true;
+            }
+            if (_enemyLocator != null)
+            {
+                return _enemyLocator.IsEnemy(other.Position);
+            }
+            return false;
+        }
+
+        bool IsEnemyHex(Hex hex)
+        {
+            var self = driver != null ? driver.UnitRef : null;
+            var occupant = ResolveMapUnit(hex);
+            if (self != null && occupant != null)
+                return IsEnemyUnit(self, occupant);
+            if (_enemyLocator != null)
+                return _enemyLocator.IsEnemy(hex);
             return false;
         }
 

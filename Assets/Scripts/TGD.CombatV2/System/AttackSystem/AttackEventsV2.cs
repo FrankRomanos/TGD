@@ -12,7 +12,10 @@ namespace TGD.CombatV2
         OnCooldown,
         NotEnoughResource,
         NoPath,
-        CantMove
+        CantMove,
+        SelfCell,
+        Friendly,
+        Empty
     }
 
     public static class AttackEventsV2

@@ -54,6 +54,9 @@ namespace TGD.HexBoard
         public bool CanPlaceIgnoringTemp(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore = null)
             => CanPlaceInternal(a, anchor, facing, ignore, false);
 
+        public bool CanPlaceIgnoreTempAttack(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore = null)
+            => CanPlaceInternal(a, anchor, facing, ignore, false);
+
         public bool TryPlace(IGridActor a, Hex anchor, Facing4 facing)
         {
             if (!CanPlace(a, anchor, facing)) return false;
@@ -126,6 +129,15 @@ namespace TGD.HexBoard
 
             tempActorToCells.Remove(owner);
             return count;
+        }
+
+        public bool IsReservedTempAttack(Hex cell, IGridActor ignore = null)
+        {
+            if (!tempCellToActor.TryGetValue(cell, out var owner) || owner == null)
+                return false;
+            if (ignore != null && owner == ignore)
+                return false;
+            return true;
         }
 
         public int ClearLayer(OccLayer layer)

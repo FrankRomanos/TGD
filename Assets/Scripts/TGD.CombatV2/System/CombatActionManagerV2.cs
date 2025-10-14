@@ -161,7 +161,7 @@ namespace TGD.CombatV2
                 }
 
                 if (Input.GetMouseButtonDown(0)) Confirm();      // 左键确认
-                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // 右键/ESC 取消
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(true); // 右键/ESC 取消
             }
         }
         Unit ResolveUnit(IActionToolV2 tool)
@@ -285,15 +285,11 @@ namespace TGD.CombatV2
 
         (int move, int attack) ResolveActualEnergyDetail(IActionToolV2 tool)
         {
-            switch (tool)
-            {
-                case HexClickMover mover:
-                    return (Mathf.Max(0, mover.ReportEnergyNet), 0);
-                case AttackControllerV2 attack:
-                    return (Mathf.Max(0, attack.ReportMoveEnergyNet), Mathf.Max(0, attack.ReportAttackEnergyNet));
-                default:
-                    return (0, 0);
-            }
+            if (tool is IActionEnergyReportV2 energyReport)
+                return (
+                    Mathf.Max(0, energyReport.ReportMoveEnergyNet),
+                    Mathf.Max(0, energyReport.ReportAttackEnergyNet));
+            return (0, 0);
         }
 
         ActionCostPlan GetPlannedCost(IActionToolV2 tool, Hex hex)
@@ -447,7 +443,7 @@ namespace TGD.CombatV2
                     energyBefore = resources.Get("Energy");
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteBegin, $"(budgetBefore={FormatBudgetValue(budgetBefore)}, energyBefore={FormatBudgetValue(energyBefore)})");
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteBegin, $"(remainBefore={FormatBudgetValue(budgetBefore)}, energyBefore={FormatBudgetValue(energyBefore)})");
 
             var skippable = tool as IBudgetGateSkippable;
             if (skippable != null)
@@ -482,7 +478,10 @@ namespace TGD.CombatV2
             }
 
             int net = Mathf.Max(0, used - refunded);
-            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin, $"(used={used}, refunded={refunded}, net={net}, energyMove={moveEnergyActual}, energyAtk={attackEnergyActual})");
+            string resolveBegin = $"(used={used}, refunded={refunded}, net={net}, energyMove={moveEnergyActual}, energyAtk={attackEnergyActual})";
+            if (tool is AttackControllerV2 atk && atk.FreeMoveApplied)
+                resolveBegin += " (FreeMove)";
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin, resolveBegin);
             var (budgetAfter, energyAfter) = FinalizeExecution(unit, tool, plan, used, refunded, moveEnergyActual, attackEnergyActual);
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveEnd, $"(budgetAfter={FormatBudgetValue(budgetAfter)}, energyAfter={FormatBudgetValue(energyAfter)})");
             if (exitActiveTool)
@@ -681,8 +680,6 @@ namespace TGD.CombatV2
         {
             if (_activeTool != null)
             {
-                if (userInitiated && (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim))
-                    ActionPhaseLogger.Log(ResolveUnit(_activeTool), _activeTool.Id, ActionPhase.W1_AimCancel);
                 _activeTool.OnExitAim();
                 _activeTool = null;
             }
@@ -706,6 +703,8 @@ namespace TGD.CombatV2
 
         public void Cancel(bool userInitiated = false)
         {
+            if (_activeTool != null && (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim))
+                ActionPhaseLogger.Log(ResolveUnit(_activeTool), _activeTool.Id, ActionPhase.W1_AimCancel);
             ExitActiveTool(userInitiated);
         }
 
