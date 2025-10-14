@@ -318,14 +318,14 @@ namespace TGD.CombatV2
          out int energyRemainBefore)
         {
             okMessage = string.Empty;
-            failReason = "(lack)";
+            failReason = "(reason=lack)";
             shortage = PlanShortageReason.None;
             timeRemainBefore = -1;
             energyRemainBefore = -1;
 
             if (!plan.valid)
             {
-                failReason = string.IsNullOrEmpty(plan.detail) ? "(targetInvalid)" : plan.detail;
+                failReason = string.IsNullOrEmpty(plan.detail) ? "(reason=unreachable)" : plan.detail;
                 return false;
             }
 
@@ -346,14 +346,14 @@ namespace TGD.CombatV2
             if (budget != null && plan.timeSeconds > 0 && timeRemainBefore >= 0 && timeRemainBefore < plan.timeSeconds)
             {
                 shortage = PlanShortageReason.Time;
-                failReason = "(lack-time)";
+                failReason = "(reason=lack)";
                 return false;
             }
 
             if (resources != null && plan.energy > 0 && energyRemainBefore >= 0 && energyRemainBefore < plan.energy)
             {
                 shortage = PlanShortageReason.Energy;
-                failReason = "(lack-energy)";
+                failReason = "(reason=lack)";
                 return false;
             }
 
@@ -388,14 +388,14 @@ namespace TGD.CombatV2
 
         void LogW2PreDeduct(ActionCostPlan plan, int timeRemainBefore, int energyRemainBefore)
         {
-            Debug.Log($"[Gate] W2 PreDeduct planSecs={plan.timeSeconds} planEnergy={plan.energy} before=Time:{FormatBudgetValue(timeRemainBefore)}/Energy:{FormatBudgetValue(energyRemainBefore)}", this);
+            Debug.Log($"[Gate] W2_PreDeduct planSecs={plan.timeSeconds} planEnergyMove={plan.primaryEnergy} planEnergyAtk={plan.secondaryEnergy} before=Time:{FormatBudgetValue(timeRemainBefore)}/Energy:{FormatBudgetValue(energyRemainBefore)}", this);
         }
 
         void LogW2PreDeductSuccess(ActionCostPlan plan, int timeRemainBefore, int energyRemainBefore)
         {
             int afterTime = timeRemainBefore >= 0 ? Mathf.Max(0, timeRemainBefore - plan.timeSeconds) : -1;
             int afterEnergy = energyRemainBefore >= 0 ? Mathf.Max(0, energyRemainBefore - plan.energy) : -1;
-            Debug.Log($"[Gate] W2 PreDeduct OK -> after=Time:{FormatBudgetValue(afterTime)}/Energy:{FormatBudgetValue(afterEnergy)}", this);
+            Debug.Log($"[Gate] W2_PreDeduct OK -> after=Time:{FormatBudgetValue(afterTime)}/Energy:{FormatBudgetValue(afterEnergy)}", this);
         }
 
         void LogW2PreDeductAbort(ActionCostPlan plan, PlanShortageReason shortage, int timeRemainBefore, int energyRemainBefore)
@@ -405,8 +405,8 @@ namespace TGD.CombatV2
             int need = shortage == PlanShortageReason.Time ? plan.timeSeconds : plan.energy;
             int leftRaw = shortage == PlanShortageReason.Time ? timeRemainBefore : energyRemainBefore;
             int left = leftRaw >= 0 ? leftRaw : 0;
-            string reason = shortage == PlanShortageReason.Time ? "Time" : "Energy";
-            Debug.Log($"[Gate] W2 Abort (lack) need={need} left={left} reason={reason}", this);
+            string reason = shortage == PlanShortageReason.Time ? "time" : "energy";
+            Debug.Log($"[Gate] W2_PreDeduct Abort (reason=lack) need={need} left={left} type={reason}", this);
         }
 
         void DeductPlan(Unit unit, IActionToolV2 tool, ActionCostPlan plan)
@@ -443,7 +443,7 @@ namespace TGD.CombatV2
                     energyBefore = resources.Get("Energy");
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteBegin, $"(remainBefore={FormatBudgetValue(budgetBefore)}, energyBefore={FormatBudgetValue(energyBefore)})");
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteBegin, $"(budgetBefore={FormatBudgetValue(budgetBefore)}, energyBefore={FormatBudgetValue(energyBefore)})");
 
             var skippable = tool as IBudgetGateSkippable;
             if (skippable != null)
@@ -478,9 +478,10 @@ namespace TGD.CombatV2
             }
 
             int net = Mathf.Max(0, used - refunded);
-            string resolveBegin = $"(used={used}, refunded={refunded}, net={net}, energyMove={moveEnergyActual}, energyAtk={attackEnergyActual})";
+            string resolveBegin = $"(used={used}, refunded={refunded}, net={net}, energyMove={moveEnergyActual}, energyAtk={attackEnergyActual}";
             if (tool is AttackControllerV2 atk && atk.FreeMoveApplied)
-                resolveBegin += " (FreeMove)";
+                resolveBegin += ", FreeMove";
+            resolveBegin += ")";
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin, resolveBegin);
             var (budgetAfter, energyAfter) = FinalizeExecution(unit, tool, plan, used, refunded, moveEnergyActual, attackEnergyActual);
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveEnd, $"(budgetAfter={FormatBudgetValue(budgetAfter)}, energyAfter={FormatBudgetValue(energyAfter)})");

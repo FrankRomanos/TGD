@@ -204,6 +204,7 @@ namespace TGD.CombatV2
             public int atkSecs;
             public int atkEnergy;
             public bool valid;
+            public string invalidDetail;
         }
 
         public PlannedAttackCost PeekPlannedCost(Hex target)
@@ -219,7 +220,8 @@ namespace TGD.CombatV2
                 moveEnergy = moveEnergyRate * fallbackMoveSecs,
                 atkSecs = fallbackAtkSecs,
                 atkEnergy = fallbackAtkEnergy,
-                valid = false
+                valid = false,
+                invalidDetail = null
             };
 
             PreviewData preview = null;
@@ -237,7 +239,8 @@ namespace TGD.CombatV2
                 result.valid = true;
                 result.moveSecs = Mathf.Max(0, preview.moveSecsCharge);
                 result.moveEnergy = Mathf.Max(0, preview.moveEnergyCost);
-                if (preview.targetIsEnemy)
+                result.invalidDetail = null;
+                if (preview.attackPlanned)
                 {
                     result.atkSecs = Mathf.Max(0, preview.attackSecsCharge);
                     result.atkEnergy = Mathf.Max(0, preview.attackEnergyCost);
@@ -247,6 +250,10 @@ namespace TGD.CombatV2
                     result.atkSecs = 0;
                     result.atkEnergy = 0;
                 }
+            }
+            else if (preview != null && !preview.valid)
+            {
+                result.invalidDetail = preview.planFailDetail;
             }
 
             return result;
@@ -263,7 +270,8 @@ namespace TGD.CombatV2
             int totalEnergy = moveEnergy + atkEnergy;
             if (!planned.valid)
             {
-                return ActionCostPlan.Invalid("(targetInvalid)");
+                string invalidDetail = string.IsNullOrEmpty(planned.invalidDetail) ? "(reason=unreachable)" : planned.invalidDetail;
+                return ActionCostPlan.Invalid(invalidDetail);
             }
 
             string detail = $"(move={moveSecs}s/{moveEnergy}, atk={atkSecs}s/{atkEnergy}, total={totalTime}s/{totalEnergy})";
@@ -285,6 +293,7 @@ namespace TGD.CombatV2
         {
             public bool valid;
             public bool targetIsEnemy;
+            public bool attackPlanned;
             public Hex targetHex;
             public Hex landingHex;
             public List<Hex> path;
@@ -299,6 +308,7 @@ namespace TGD.CombatV2
             public MoveRatesSnapshot rates;
             public AttackRejectReasonV2 rejectReason;
             public string rejectMessage;
+            public string planFailDetail;
         }
 
         void Awake()
@@ -511,7 +521,7 @@ namespace TGD.CombatV2
             }
 
             preview.moveEnergyCost = Mathf.Max(0, preview.moveSecsCharge) * MoveEnergyPerSecond();
-            if (preview.targetIsEnemy)
+            if (preview.attackPlanned)
             {
                 preview.attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0;
             }
@@ -521,12 +531,12 @@ namespace TGD.CombatV2
                 preview.attackSecsCharge = 0;
             }
 
-            bool attackPlanned = preview.targetIsEnemy;
+            bool attackPlanned = preview.attackPlanned;
             _pendingComboBaseCount = attackPlanned ? Mathf.Max(0, _attacksThisTurn) : 0;
             int moveSecsCharge = Mathf.Max(0, preview.moveSecsCharge);
-            int attackSecsCharge = preview.targetIsEnemy ? Mathf.Max(0, preview.attackSecsCharge) : 0;
+            int attackSecsCharge = preview.attackPlanned ? Mathf.Max(0, preview.attackSecsCharge) : 0;
             int moveEnergyCost = Mathf.Max(0, preview.moveEnergyCost);
-            int attackEnergyCost = preview.targetIsEnemy ? Mathf.Max(0, preview.attackEnergyCost) : 0;
+            int attackEnergyCost = preview.attackPlanned ? Mathf.Max(0, preview.attackEnergyCost) : 0;
 
             int externalTimeLeft = UseTurnManager ? ExternalTimeRemaining() : int.MaxValue;
             int localTimeLeft = ManageTurnTimeLocally ? Mathf.CeilToInt(Mathf.Max(0f, _turnSecondsLeft)) : int.MaxValue;
@@ -551,10 +561,8 @@ namespace TGD.CombatV2
                 }
                 if (attackPlanned && externalTimeLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
                 {
-                    attackPlanned = false;
-                    attackSecsCharge = 0;
-                    attackEnergyCost = 0;
-                    _pendingComboBaseCount = 0;
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    yield break;
                 }
             }
             else if (!UseTurnManager && simulateTurnTime)
@@ -566,10 +574,8 @@ namespace TGD.CombatV2
                 }
                 if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
                 {
-                    attackPlanned = false;
-                    attackSecsCharge = 0;
-                    attackEnergyCost = 0;
-                    _pendingComboBaseCount = 0;
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    yield break;
                 }
             }
 
@@ -645,7 +651,8 @@ namespace TGD.CombatV2
                 {
                     valid = false,
                     rejectReason = AttackRejectReasonV2.NotReady,
-                    rejectMessage = "Not ready."
+                    rejectMessage = "Not ready.",
+                    planFailDetail = "(reason=unreachable)",
                 };
             }
 
@@ -667,77 +674,82 @@ namespace TGD.CombatV2
             {
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
-                preview.rejectMessage = "Target out of board.";
+                preview.rejectMessage = "targetInvalid(unreachable)";
+                preview.planFailDetail = "(reason=unreachable)";
                 return preview;
             }
+
             if (env != null && env.IsPit(target))
             {
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
-                preview.rejectMessage = "Target is pit.";
+                preview.rejectMessage = "targetInvalid(pit)";
+                preview.planFailDetail = "(reason=pit)";
                 return preview;
             }
 
-            var mapUnit = ResolveMapUnit(target);
-            bool hasUnit = mapUnit != null;
+            var map = driver != null ? driver.Map : null;
+            Unit mapUnit = null;
+            bool hasUnit = map != null && map.TryGetActor(target, out mapUnit) && mapUnit != null;
             bool isSelf = hasUnit && mapUnit == unit;
             bool isEnemy = hasUnit && IsEnemyUnit(unit, mapUnit);
             bool isFriendly = hasUnit && !isSelf && !isEnemy && IsAllyUnit(unit, mapUnit);
 
-            bool tempAttackReserved = _occ != null && _actor != null && _occ.IsReservedTempAttack(target, _actor);
-            bool occupancyBlocked = _occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor);
-            bool physicsBlocked = occupancyBlocked && !hasUnit && !tempAttackReserved;
-
-            string mapUnitLabel = hasUnit ? (isSelf ? "self" : (isEnemy ? "enemy" : "ally")) : "<none>";
+            string occLabel = hasUnit ? (isSelf ? "Self" : (isEnemy ? "Enemy" : "Ally")) : "None";
+            string planLabel = isEnemy ? "Move+Atk" : "MoveOnly";
             if (debugLog)
             {
-                Debug.Log($"[Probe] target={target} mapUnit={mapUnitLabel} tempAttack={(tempAttackReserved ? "true" : "false")} physicsBlocked={(physicsBlocked ? "true" : "false")}", this);
+                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
             }
 
-            if (isSelf)
-            {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.SelfCell;
-                preview.rejectMessage = "Target is self.";
-                return preview;
-            }
-
-            if (isFriendly)
+            if (isSelf || isFriendly)
             {
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.Friendly;
-                preview.rejectMessage = "Target is friendly.";
+                preview.rejectMessage = "targetInvalid(friendly)";
+                preview.planFailDetail = "(reason=friendly)";
                 return preview;
             }
 
-            if (!hasUnit)
-            {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.Empty;
-                preview.rejectMessage = "Target empty.";
-                return preview;
-            }
-
-            if (!isEnemy)
-            {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.Friendly;
-                preview.rejectMessage = "Target not hostile.";
-                return preview;
-            }
-
-            preview.targetIsEnemy = true;
+            bool attackPlanned = isEnemy;
+            preview.targetIsEnemy = isEnemy;
+            preview.attackPlanned = attackPlanned;
 
             List<Hex> path = null;
             Hex landing = target;
 
-            int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
-            if (!TryFindMeleePath(start, target, range, out landing, out path))
+            if (attackPlanned)
             {
-                preview.valid = false;
-                preview.rejectReason = AttackRejectReasonV2.NoPath;
-                preview.rejectMessage = "No landing.";
-                return preview;
+                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                if (!TryFindMeleePath(start, target, range, out landing, out path) || path == null || path.Count == 0)
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "targetInvalid(noPath)";
+                    preview.planFailDetail = "(reason=noPath)";
+                    return preview;
+                }
+            }
+            else
+            {
+                if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "targetInvalid(unreachable)";
+                    preview.planFailDetail = "(reason=unreachable)";
+                    return preview;
+                }
+
+                path = ShortestPath(start, target, c => IsBlockedForMove(c, start, target));
+                if (path == null || path.Count == 0)
+                {
+                    preview.valid = false;
+                    preview.rejectReason = AttackRejectReasonV2.NoPath;
+                    preview.rejectMessage = "targetInvalid(noPath)";
+                    preview.planFailDetail = "(reason=noPath)";
+                    return preview;
+                }
             }
 
             preview.landingHex = landing;
@@ -747,7 +759,7 @@ namespace TGD.CombatV2
             float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
             int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
             int chargeSecs = predSecs;
-            if (isEnemy)
+            if (attackPlanned)
             {
                 float charge = Mathf.Max(0f, predSecs - 0.2f);
                 chargeSecs = Mathf.CeilToInt(charge);
@@ -756,11 +768,15 @@ namespace TGD.CombatV2
             preview.moveSecsPred = predSecs;
             preview.moveSecsCharge = chargeSecs;
             preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
+            if (!attackPlanned)
+            {
+                preview.attackSecsCharge = 0;
+                preview.attackEnergyCost = 0;
+            }
 
             preview.valid = true;
             return preview;
         }
-
         PreviewData ClonePreview(PreviewData src)
         {
             if (src == null) return null;
@@ -768,6 +784,7 @@ namespace TGD.CombatV2
             {
                 valid = src.valid,
                 targetIsEnemy = src.targetIsEnemy,
+                attackPlanned = src.attackPlanned,
                 targetHex = src.targetHex,
                 landingHex = src.landingHex,
                 path = src.path != null ? new List<Hex>(src.path) : null,
@@ -781,7 +798,8 @@ namespace TGD.CombatV2
                 mrNoEnv = src.mrNoEnv,
                 rates = src.rates,
                 rejectReason = src.rejectReason,
-                rejectMessage = src.rejectMessage
+                rejectMessage = src.rejectMessage,
+                planFailDetail = src.planFailDetail
             };
         }
 
@@ -844,12 +862,6 @@ namespace TGD.CombatV2
 
             try
             {
-                if (reached.Count > 1)
-                {
-                    for (int i = 1; i < reached.Count; i++)
-                        ReserveTemp(reached[i]);
-                }
-
                 AttackEventsV2.RaiseAttackMoveStarted(unit, reached);
 
                 if (reached.Count <= 1)
@@ -933,6 +945,7 @@ namespace TGD.CombatV2
                         break;
                     }
 
+                    ReserveTemp(to);
                     AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
@@ -948,7 +961,7 @@ namespace TGD.CombatV2
                         if (ManageTurnTimeLocally)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                        AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
+                        AttackEventsV2.RaiseMiss(unit, "slowed");
                     }
 
                     var fromW = layout.World(from, y);
@@ -970,7 +983,6 @@ namespace TGD.CombatV2
                     }
                     unit.Position = to;
                     driver.SyncView();
-                    _tempReservedThisAction.Add(to);
 
                     if (_sticky != null && status != null &&
            _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
@@ -1002,14 +1014,15 @@ namespace TGD.CombatV2
 
                 if (ManageTurnTimeLocally)
                 {
-                    float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                    float refundMove = freeMove ? moveSecsCharge : (moveSecsCharge - usedSeconds + refundedSeconds);
                     if (refundMove > 0f)
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                 }
 
-                if (refundedSeconds > 0)
+                int refundSecondsForEnergy = freeMove ? moveSecsCharge : refundedSeconds;
+                if (refundSecondsForEnergy > 0)
                 {
-                    int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
+                    int refundEnergy = Mathf.Max(0, refundSecondsForEnergy * moveEnergyRate);
                     if (ManageEnergyLocally && refundEnergy > 0)
                         RefundMoveEnergy(refundEnergy);
                 }
@@ -1030,7 +1043,7 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
-                int moveUsedSeconds = freeMove ? 0 : Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw));
+                int moveUsedSeconds = freeMove ? Mathf.Max(0, moveSecsCharge) : Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw));
                 int moveRefundSeconds = freeMove ? freeMoveRefundSeconds : Mathf.Max(0, refundedSeconds);
                 int attackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
                 int attackRefundSeconds = (attackPlanned && !attackSuccess) ? Mathf.Max(0, attackSecsCharge) : 0;
@@ -1051,9 +1064,7 @@ namespace TGD.CombatV2
                 ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                 int totalUsedForReport = moveUsedSeconds + attackUsedSeconds;
-                int totalRefundForReport = attackRefundSeconds;
-                if (!freeMove)
-                    totalRefundForReport += moveRefundSeconds;
+                int totalRefundForReport = attackRefundSeconds + moveRefundSeconds;
 
                 SetExecReport(
                     totalUsedForReport,
@@ -1158,7 +1169,7 @@ namespace TGD.CombatV2
         Unit ResolveMapUnit(Hex hex)
         {
             var map = driver != null ? driver.Map : null;
-            if (map != null && map.TryGetAt(hex, out var mapUnit) && mapUnit != null)
+            if (map != null && map.TryGetActor(hex, out var mapUnit) && mapUnit != null)
                 return mapUnit;
             return null;
         }
