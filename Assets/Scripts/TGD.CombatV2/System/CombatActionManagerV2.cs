@@ -238,7 +238,7 @@ namespace TGD.CombatV2
             return true;
         }
 
-        (int budgetAfter, int energyAfter) FinalizeExecution(
+        (int budgetAfter, int energyAfter) ApplyExecution(
         Unit unit,
         IActionToolV2 tool,
         ActionCostPlan plan,
@@ -254,6 +254,15 @@ namespace TGD.CombatV2
             int moveEnergy = Mathf.Max(0, moveEnergyActual);
             int attackEnergy = Mathf.Max(0, attackEnergyActual);
             int totalEnergyActual = moveEnergy + attackEnergy;
+            int planTime = Mathf.Max(0, plan.timeSeconds);
+            int planEnergyTotal = Mathf.Max(0, plan.energy);
+
+            int extraUsed = Mathf.Max(0, used - planTime);
+            int consumedAfterRefund = Mathf.Max(0, planTime - refunded);
+            int finalTimeSpent = consumedAfterRefund + extraUsed;
+            int timeDelta = finalTimeSpent - planTime;
+            int finalEnergyTotal = Mathf.Max(0, totalEnergyActual);
+            int energyDelta = finalEnergyTotal - planEnergyTotal;
 
             int budgetAfter = -1;
             int energyAfter = -1;
@@ -263,20 +272,49 @@ namespace TGD.CombatV2
                 var budget = turnManager.GetBudget(unit);
                 if (budget != null)
                 {
-                    int delta = used - plan.timeSeconds;
-                    if (delta > 0) budget.SpendTime(delta);
-                    else if (delta < 0) budget.RefundTime(-delta);
-                    if (refunded > 0) budget.RefundTime(refunded);
+                    if (timeDelta > 0)
+                    {
+                        budget.SpendTime(timeDelta);
+                        Debug.Log($"[Time] Spend {timeDelta}s (reason={tool.Id}_Adjust)", this);
+                    }
+                    else if (timeDelta < 0)
+                    {
+                        budget.RefundTime(-timeDelta);
+                        Debug.Log($"[Time] Refund {-timeDelta}s (reason={tool.Id}_Adjust)", this);
+                    }
+                    else
+                    {
+                        Debug.Log("[Time] No change (delta=0)", this);
+                    }
                     budgetAfter = budget.Remaining;
+                }
+                else
+                {
+                    Debug.Log("[Time] Skip (no budget)", this);
                 }
 
                 var resources = turnManager.GetResources(unit);
                 if (resources != null)
                 {
-                    int diff = totalEnergyActual - plan.energy;
-                    if (diff > 0) resources.Spend("Energy", diff, $"{tool.Id}_Adjust");
-                    else if (diff < 0) resources.Refund("Energy", -diff, $"{tool.Id}_Adjust");
+                    if (energyDelta > 0)
+                    {
+                        resources.Spend("Energy", energyDelta, $"{tool.Id}_Adjust");
+                        Debug.Log($"[Res]  Spend {energyDelta} (reason={tool.Id}_Adjust)", this);
+                    }
+                    else if (energyDelta < 0)
+                    {
+                        resources.Refund("Energy", -energyDelta, $"{tool.Id}_Adjust");
+                        Debug.Log($"[Res]  Refund {-energyDelta} (reason={tool.Id}_Adjust)", this);
+                    }
+                    else
+                    {
+                        Debug.Log("[Res]  No change (delta=0)", this);
+                    }
                     energyAfter = resources.Get("Energy");
+                }
+                else
+                {
+                    Debug.Log("[Res]  Skip (no resources)", this);
                 }
             }
             exec.Consume();
@@ -388,14 +426,14 @@ namespace TGD.CombatV2
 
         void LogW2PreDeduct(ActionCostPlan plan, int timeRemainBefore, int energyRemainBefore)
         {
-            Debug.Log($"[Gate] W2_PreDeduct planSecs={plan.timeSeconds} planEnergyMove={plan.primaryEnergy} planEnergyAtk={plan.secondaryEnergy} before=Time:{FormatBudgetValue(timeRemainBefore)}/Energy:{FormatBudgetValue(energyRemainBefore)}", this);
+            Debug.Log($"[Gate] W2 PreDeduct planSecs={plan.timeSeconds} planEnergyMove={plan.primaryEnergy} planEnergyAtk={plan.secondaryEnergy} before=Time:{FormatBudgetValue(timeRemainBefore)}/Energy:{FormatBudgetValue(energyRemainBefore)}", this);
         }
 
         void LogW2PreDeductSuccess(ActionCostPlan plan, int timeRemainBefore, int energyRemainBefore)
         {
             int afterTime = timeRemainBefore >= 0 ? Mathf.Max(0, timeRemainBefore - plan.timeSeconds) : -1;
             int afterEnergy = energyRemainBefore >= 0 ? Mathf.Max(0, energyRemainBefore - plan.energy) : -1;
-            Debug.Log($"[Gate] W2_PreDeduct OK -> after=Time:{FormatBudgetValue(afterTime)}/Energy:{FormatBudgetValue(afterEnergy)}", this);
+            Debug.Log($"[Gate] W2 PreDeduct OK -> after=Time:{FormatBudgetValue(afterTime)}/Energy:{FormatBudgetValue(afterEnergy)}", this);
         }
 
         void LogW2PreDeductAbort(ActionCostPlan plan, PlanShortageReason shortage, int timeRemainBefore, int energyRemainBefore)
@@ -406,7 +444,7 @@ namespace TGD.CombatV2
             int leftRaw = shortage == PlanShortageReason.Time ? timeRemainBefore : energyRemainBefore;
             int left = leftRaw >= 0 ? leftRaw : 0;
             string reason = shortage == PlanShortageReason.Time ? "time" : "energy";
-            Debug.Log($"[Gate] W2_PreDeduct Abort (reason=lack) need={need} left={left} type={reason}", this);
+            Debug.Log($"[Gate] W2 PreDeduct Abort (reason=lack) need={need} left={left} type={reason}", this);
         }
 
         void DeductPlan(Unit unit, IActionToolV2 tool, ActionCostPlan plan)
@@ -480,10 +518,10 @@ namespace TGD.CombatV2
             int net = Mathf.Max(0, used - refunded);
             string resolveBegin = $"(used={used}, refunded={refunded}, net={net}, energyMove={moveEnergyActual}, energyAtk={attackEnergyActual}";
             if (tool is AttackControllerV2 atk && atk.FreeMoveApplied)
-                resolveBegin += ", FreeMove";
+                resolveBegin += " [FreeMove]";
             resolveBegin += ")";
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin, resolveBegin);
-            var (budgetAfter, energyAfter) = FinalizeExecution(unit, tool, plan, used, refunded, moveEnergyActual, attackEnergyActual);
+            var (budgetAfter, energyAfter) = ApplyExecution(unit, tool, plan, used, refunded, moveEnergyActual, attackEnergyActual);
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveEnd, $"(budgetAfter={FormatBudgetValue(budgetAfter)}, energyAfter={FormatBudgetValue(energyAfter)})");
             if (exitActiveTool)
             {

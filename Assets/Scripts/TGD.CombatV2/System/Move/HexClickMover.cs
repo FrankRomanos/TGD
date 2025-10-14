@@ -286,15 +286,26 @@ namespace TGD.CombatV2
             int externalTimeLeft = budget != null ? budget.Remaining : -1;
             int localTimeLeft = ManageTurnTimeLocally ? Mathf.CeilToInt(Mathf.Max(0f, _turnSecondsLeft)) : -1;
             bool skipBudgetGate = UseTurnManager && SkipBudgetGate;
+            int planEnergyMove = Mathf.Max(0, needSec * (config ? Mathf.Max(0, config.energyCost) : 0));
+            int energyBefore = -1;
+            if (UseTurnManager && _turnManager != null && driver != null && driver.UnitRef != null)
+            {
+                var resources = _turnManager.GetResources(driver.UnitRef);
+                if (resources != null)
+                    energyBefore = resources.Get("Energy");
+            }
+            else if (!UseTurnManager && ctx != null && ctx.stats != null)
+            {
+                energyBefore = ctx.stats.Energy;
+            }
             if (debugLog)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                string externalDisplay = (externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString();
-                string localDisplay = (localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString();
-                string leftLabel = UseTurnManager
-                    ? $"left(External)={externalDisplay}"
-                    : $"left(Local)={localDisplay}";
-                Debug.Log($"[ToolGate] Move useTM={UseTurnManager} skipGate={SkipBudgetGate} {leftLabel} need(move={needSec},atk=0) U={unitLabel}", this);
+                string timeBefore = UseTurnManager
+                    ? ((externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString())
+                    : ((localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString());
+                string energyLabel = (energyBefore < 0 || energyBefore == int.MaxValue) ? "?" : energyBefore.ToString();
+                Debug.Log($"[Gate] W2 PreDeduct planSecs={needSec} planEnergyMove={planEnergyMove} planEnergyAtk=0 before=Time:{timeBefore}/Energy:{energyLabel}", this);
             }
 
             if (UseTurnManager && !skipBudgetGate)
@@ -568,7 +579,17 @@ namespace TGD.CombatV2
                 { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
                 if (ManageEnergyLocally)
-                    _cost.Pay(driver.UnitRef, config);
+                {
+                    if (UseTurnManager)
+                    {
+                        if (debugLog)
+                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                    }
+                    else
+                    {
+                        _cost.Pay(driver.UnitRef, config);
+                    }
+                }
             }
 
             var rates = BuildMoveRates(path[0]);
@@ -600,9 +621,29 @@ namespace TGD.CombatV2
             if (reached == null || reached.Count < 2)
             {
                 if (ManageEnergyLocally)
-                    _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                {
+                    if (UseTurnManager)
+                    {
+                        if (debugLog)
+                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                    }
+                    else
+                    {
+                        _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                    }
+                }
                 if (ManageTurnTimeLocally)
-                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
+                {
+                    if (UseTurnManager)
+                    {
+                        if (debugLog)
+                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                    }
+                    else
+                    {
+                        _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
+                    }
+                }
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
                 yield break;
             }
@@ -701,12 +742,30 @@ namespace TGD.CombatV2
 
             if (ManageTurnTimeLocally)
             {
-                _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
+                if (UseTurnManager)
+                {
+                    if (debugLog)
+                        Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                }
+                else
+                {
+                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
+                }
             }
             if (refunded > 0)
             {
                 if (ManageEnergyLocally)
-                    _cost?.RefundSeconds(driver.UnitRef, config, refunded);
+                {
+                    if (UseTurnManager)
+                    {
+                        if (debugLog)
+                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                    }
+                    else
+                    {
+                        _cost?.RefundSeconds(driver.UnitRef, config, refunded);
+                    }
+                }
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
             }
             if (_showing) ShowRange();
