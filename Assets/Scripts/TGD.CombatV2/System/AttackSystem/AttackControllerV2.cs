@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -540,15 +541,16 @@ namespace TGD.CombatV2
 
             int externalTimeLeft = UseTurnManager ? ExternalTimeRemaining() : int.MaxValue;
             int localTimeLeft = ManageTurnTimeLocally ? Mathf.CeilToInt(Mathf.Max(0f, _turnSecondsLeft)) : int.MaxValue;
+            var resourcePoolForLog = ResolveResourcePool();
+            int energyBefore = ResolveEnergyAvailable(resourcePoolForLog);
             if (debugLog)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                string externalDisplay = (externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString();
-                string localDisplay = (localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString();
-                string leftLabel = UseTurnManager
-                    ? $"left(External)={externalDisplay}"
-                    : $"left(Local)={localDisplay}";
-                Debug.Log($"[ToolGate] Attack useTM={UseTurnManager} skipGate={SkipBudgetGate} {leftLabel} need(move={moveSecsCharge},atk={attackSecsCharge}) U={unitLabel}", this);
+                string timeBefore = UseTurnManager
+                    ? ((externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString())
+                    : ((localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString());
+                string energyLabel = (energyBefore < 0 || energyBefore == int.MaxValue) ? "?" : energyBefore.ToString();
+                Debug.Log($"[Gate] W2 PreDeduct planSecs={moveSecsCharge + attackSecsCharge} planEnergyMove={moveEnergyCost} planEnergyAtk={attackEnergyCost} before=Time:{timeBefore}/Energy:{energyLabel}", this);
             }
 
             bool skipBudgetGate = UseTurnManager && SkipBudgetGate;
@@ -581,14 +583,13 @@ namespace TGD.CombatV2
 
             if (!skipBudgetGate)
             {
-                var resourcePool = ResolveResourcePool();
-                int energyAvailable = ResolveEnergyAvailable(resourcePool);
-                if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+                int energyCheck = energyBefore;
+                if (!TryReserveEnergy(ref energyCheck, moveEnergyCost))
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
                     yield break;
                 }
-                if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
+                if (attackPlanned && !TryReserveEnergy(ref energyCheck, attackEnergyCost))
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
                     yield break;
@@ -608,9 +609,17 @@ namespace TGD.CombatV2
 
             if (ManageTurnTimeLocally)
             {
-                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
-                if (attackPlanned)
-                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
+                if (UseTurnManager)
+                {
+                    if (debugLog)
+                        Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                }
+                else
+                {
+                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
+                    if (attackPlanned)
+                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
+                }
             }
 
             _currentPreview = null;
@@ -692,11 +701,11 @@ namespace TGD.CombatV2
             Unit mapUnit = null;
             bool hasUnit = map != null && map.TryGetActor(target, out mapUnit) && mapUnit != null;
             bool isSelf = hasUnit && mapUnit == unit;
-            bool isEnemy = hasUnit && IsEnemyUnit(unit, mapUnit);
-            bool isFriendly = hasUnit && !isSelf && !isEnemy && IsAllyUnit(unit, mapUnit);
+            bool isFriendly = hasUnit && IsSelfOrFriendly(unit, mapUnit);
+            bool isEnemy = hasUnit && !isFriendly && IsEnemyUnit(unit, mapUnit);
 
-            string occLabel = hasUnit ? (isSelf ? "Self" : (isEnemy ? "Enemy" : "Ally")) : "None";
-            string planLabel = isEnemy ? "Move+Atk" : "MoveOnly";
+            string occLabel = hasUnit ? (isSelf ? "Self" : (isEnemy ? "Enemy" : "Friendly")) : "None";
+            string planLabel = isEnemy ? "Move+Attack" : "MoveOnly";
             if (debugLog)
             {
                 Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
@@ -870,9 +879,17 @@ namespace TGD.CombatV2
                         RefundMoveEnergy(moveEnergyPaid);
                     if (ManageTurnTimeLocally)
                     {
-                        float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
-                        if (refundMove > 0f)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                        if (UseTurnManager)
+                        {
+                            if (debugLog)
+                                Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                        }
+                        else
+                        {
+                            float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
+                            if (refundMove > 0f)
+                                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                        }
                     }
                     AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
 
@@ -959,7 +976,17 @@ namespace TGD.CombatV2
                         if (attackEnergyPaid > 0 && ManageEnergyLocally)
                             RefundAttackEnergy(attackEnergyPaid);
                         if (ManageTurnTimeLocally)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                        {
+                            if (UseTurnManager)
+                            {
+                                if (debugLog)
+                                    Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                            }
+                            else
+                            {
+                                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                            }
+                        }
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         AttackEventsV2.RaiseMiss(unit, "slowed");
                     }
@@ -1014,9 +1041,17 @@ namespace TGD.CombatV2
 
                 if (ManageTurnTimeLocally)
                 {
-                    float refundMove = freeMove ? moveSecsCharge : (moveSecsCharge - usedSeconds + refundedSeconds);
-                    if (refundMove > 0f)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                    if (UseTurnManager)
+                    {
+                        if (debugLog)
+                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                    }
+                    else
+                    {
+                        float refundMove = freeMove ? moveSecsCharge : (moveSecsCharge - usedSeconds + refundedSeconds);
+                        if (refundMove > 0f)
+                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
+                    }
                 }
 
                 int refundSecondsForEnergy = freeMove ? moveSecsCharge : refundedSeconds;
@@ -1040,7 +1075,17 @@ namespace TGD.CombatV2
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         AttackEventsV2.RaiseMiss(unit, "Out of reach.");
                         if (ManageTurnTimeLocally)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                        {
+                            if (UseTurnManager)
+                            {
+                                if (debugLog)
+                                    Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                            }
+                            else
+                            {
+                                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
+                            }
+                        }
                     }
                 }
                 int moveUsedSeconds = freeMove ? Mathf.Max(0, moveSecsCharge) : Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw));
@@ -1174,21 +1219,80 @@ namespace TGD.CombatV2
             return null;
         }
 
-        bool IsAllyUnit(Unit self, Unit other)
+        static bool TryGetTeamToken(Unit unit, out string token)
+        {
+            token = null;
+            if (unit == null)
+                return false;
+
+            var type = unit.GetType();
+            object value = null;
+
+            var propTeam = type.GetProperty("Team", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (propTeam != null && propTeam.CanRead)
+                value = propTeam.GetValue(unit);
+            else
+            {
+                var fieldTeam = type.GetField("Team", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (fieldTeam != null)
+                    value = fieldTeam.GetValue(unit);
+            }
+
+            if (value == null)
+            {
+                var propTeamId = type.GetProperty("TeamId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (propTeamId != null && propTeamId.CanRead)
+                    value = propTeamId.GetValue(unit);
+                else
+                {
+                    var fieldTeamId = type.GetField("TeamId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (fieldTeamId != null)
+                        value = fieldTeamId.GetValue(unit);
+                }
+            }
+
+            if (value == null)
+                return false;
+
+            string tokenValue = Convert.ToString(value);
+            if (string.IsNullOrEmpty(tokenValue))
+                return false;
+
+            token = tokenValue;
+            return true;
+        }
+
+        bool IsSelfOrFriendly(Unit self, Unit other)
         {
             if (self == null || other == null)
                 return false;
-            if (self == other)
+            if (ReferenceEquals(self, other))
                 return true;
+
+            if (TryGetTeamToken(self, out var selfTeam) && TryGetTeamToken(other, out var otherTeam) &&
+                !string.IsNullOrEmpty(selfTeam) && !string.IsNullOrEmpty(otherTeam))
+            {
+                if (string.Equals(selfTeam, otherTeam, StringComparison.Ordinal))
+                    return true;
+                if (!string.Equals(selfTeam, otherTeam, StringComparison.Ordinal))
+                    return false;
+            }
+
             if (turnManager != null)
             {
                 bool selfPlayer = turnManager.IsPlayerUnit(self);
+                bool otherPlayer = turnManager.IsPlayerUnit(other);
                 bool selfEnemy = turnManager.IsEnemyUnit(self);
-                if (selfPlayer && turnManager.IsPlayerUnit(other))
+                bool otherEnemy = turnManager.IsEnemyUnit(other);
+                if ((selfPlayer && otherPlayer) || (selfEnemy && otherEnemy))
                     return true;
-                if (selfEnemy && turnManager.IsEnemyUnit(other))
-                    return true;
+                if ((selfPlayer && otherEnemy) || (selfEnemy && otherPlayer))
+                    return false;
             }
+
+            if (_enemyLocator != null)
+                return !_enemyLocator.IsEnemy(other.Position);
+
             return false;
         }
 
@@ -1196,21 +1300,28 @@ namespace TGD.CombatV2
         {
             if (self == null || other == null)
                 return false;
-            if (self == other)
+            if (ReferenceEquals(self, other))
                 return false;
+
+            if (TryGetTeamToken(self, out var selfTeam) && TryGetTeamToken(other, out var otherTeam) &&
+                !string.IsNullOrEmpty(selfTeam) && !string.IsNullOrEmpty(otherTeam))
+                return !string.Equals(selfTeam, otherTeam, StringComparison.Ordinal);
+
             if (turnManager != null)
             {
                 bool selfPlayer = turnManager.IsPlayerUnit(self);
+                bool otherPlayer = turnManager.IsPlayerUnit(other);
                 bool selfEnemy = turnManager.IsEnemyUnit(self);
-                if (selfPlayer && turnManager.IsEnemyUnit(other))
+                bool otherEnemy = turnManager.IsEnemyUnit(other);
+                if ((selfPlayer && otherEnemy) || (selfEnemy && otherPlayer))
                     return true;
-                if (selfEnemy && turnManager.IsPlayerUnit(other))
-                    return true;
+                if ((selfPlayer && otherPlayer) || (selfEnemy && otherEnemy))
+                    return false;
             }
+
             if (_enemyLocator != null)
-            {
                 return _enemyLocator.IsEnemy(other.Position);
-            }
+
             return false;
         }
 
@@ -1374,6 +1485,13 @@ namespace TGD.CombatV2
         void SpendEnergy(int amount)
         {
             if (amount <= 0) return;
+            if (!ManageEnergyLocally) return;
+            if (UseTurnManager)
+            {
+                if (debugLog)
+                    Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                return;
+            }
             var stats = ctx != null ? ctx.stats : null;
             if (stats == null) return;
             int before = stats.Energy;
@@ -1383,6 +1501,13 @@ namespace TGD.CombatV2
         void RefundMoveEnergy(int amount)
         {
             if (amount <= 0) return;
+            if (!ManageEnergyLocally) return;
+            if (UseTurnManager)
+            {
+                if (debugLog)
+                    Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                return;
+            }
             var stats = ctx != null ? ctx.stats : null;
             if (stats == null) return;
             int before = stats.Energy;
@@ -1392,6 +1517,13 @@ namespace TGD.CombatV2
         void RefundAttackEnergy(int amount)
         {
             if (amount <= 0) return;
+            if (!ManageEnergyLocally) return;
+            if (UseTurnManager)
+            {
+                if (debugLog)
+                    Debug.Log("[Guard] Skip local settle (TM in charge)", this);
+                return;
+            }
             var stats = ctx != null ? ctx.stats : null;
             if (stats == null) return;
             int before = stats.Energy;
