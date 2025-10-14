@@ -2,7 +2,8 @@ using System.Collections.Generic;
 
 namespace TGD.HexBoard
 {
-    /// <summary> µ¥Õ¼Î»Íø¸ñ£ºÒ»¸ö¸ñ×î¶à 1 ¸öÊµÌå¡£ </summary>
+        public bool TryGetActor(Hex h, out T entity) => cells.TryGetValue(h, out entity);
+    /// <summary> å•å ä½ç½‘æ ¼ï¼šä¸€ä¸ªæ ¼æœ€å¤š 1 ä¸ªå®ä½“ã€‚ </summary>
     public sealed class HexBoardMap<T>
     {
         readonly HexBoardLayout layout;
@@ -21,7 +22,7 @@ namespace TGD.HexBoard
         public bool Set(T e, Hex h)
         {
             if (!layout.Contains(h)) return false;
-            if (cells.ContainsKey(h)) return false; // µ¥Õ¼Î»
+            if (cells.ContainsKey(h)) return false; // å•å ä½
 
             if (positions.TryGetValue(e, out var old))
                 cells.Remove(old);
