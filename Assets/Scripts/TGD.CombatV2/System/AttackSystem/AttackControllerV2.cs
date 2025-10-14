@@ -949,24 +949,24 @@ namespace TGD.CombatV2
                     }
 
                     int moveUsedSecondsReport = Mathf.Max(0, Mathf.CeilToInt(usedSecondsRaw - 1e-4f));
-                    int baseMoveRefundSeconds = Mathf.Max(0, refundedSeconds);
-                    bool freeMoveApplied = freeMoveCandidate && attackPlanned;
-                    int freeMoveBonusSeconds = freeMoveApplied ? 1 : 0;
-                    int moveRefundSecondsReport = baseMoveRefundSeconds + freeMoveBonusSeconds;
+                    int baseMoveRefundSecondsImmediate = Mathf.Max(0, refundedSeconds);
+                    bool freeMoveAppliedImmediate = freeMoveCandidate && attackPlanned;
+                    int freeMoveBonusSecondsImmediate = freeMoveAppliedImmediate ? 1 : 0;
+                    int moveRefundSecondsImmediate = baseMoveRefundSecondsImmediate + freeMoveBonusSecondsImmediate;
 
                     _reportMoveUsedSeconds = moveUsedSecondsReport;
-                    _reportMoveRefundSeconds = moveRefundSecondsReport;
-                    bool attackSuccess = attackPlanned;
-                    _reportAttackUsedSeconds = attackSuccess ? Mathf.Max(0, attackSecsCharge) : 0;
-                    _reportAttackRefundSeconds = attackSuccess ? 0 : Mathf.Max(0, attackSecsCharge);
+                    _reportMoveRefundSeconds = moveRefundSecondsImmediate;
+                    bool attackSuccessImmediate = attackPlanned;
+                    _reportAttackUsedSeconds = attackSuccessImmediate ? Mathf.Max(0, attackSecsCharge) : 0;
+                    _reportAttackRefundSeconds = attackSuccessImmediate ? 0 : Mathf.Max(0, attackSecsCharge);
 
-                    int moveEnergyNet = Mathf.Max(0, (moveSecsCharge - baseMoveRefundSeconds) * moveEnergyRate);
-                    if (freeMoveApplied)
-                        moveEnergyNet = Mathf.Max(0, moveEnergyNet - moveEnergyRate);
-                    ReportMoveEnergyNet = moveEnergyNet;
-                    ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+                    int moveEnergyNetImmediate = Mathf.Max(0, (moveSecsCharge - baseMoveRefundSecondsImmediate) * moveEnergyRate);
+                    if (freeMoveAppliedImmediate)
+                        moveEnergyNetImmediate = Mathf.Max(0, moveEnergyNetImmediate - moveEnergyRate);
+                    ReportMoveEnergyNet = moveEnergyNetImmediate;
+                    ReportAttackEnergyNet = attackSuccessImmediate ? Mathf.Max(0, attackEnergyPaid) : 0;
 
-                    _freeMoveApplied = freeMoveApplied;
+                    _freeMoveApplied = freeMoveAppliedImmediate;
                     if (_freeMoveApplied && debugLog)
                     {
                         string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
@@ -975,7 +975,7 @@ namespace TGD.CombatV2
 
                     int totalUsed = _reportMoveUsedSeconds + _reportAttackUsedSeconds;
                     int totalRefund = _reportMoveRefundSeconds + _reportAttackRefundSeconds;
-                    SetExecReport(totalUsed, Mathf.Max(0, totalRefund), attackSuccess, false);
+                    SetExecReport(totalUsed, Mathf.Max(0, totalRefund), attackSuccessImmediate, false);
                     yield break;
                 }
 
