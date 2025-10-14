@@ -268,7 +268,6 @@ namespace TGD.CombatV2
 
             var attackTool = tool as AttackControllerV2;
             bool freeMove = attackTool != null && attackTool.FreeMoveApplied;
-            string adjustLabel = freeMove ? "FreeMove" : $"{tool.Id}_Adjust";
 
             if (turnManager != null && unit != null)
             {
@@ -276,38 +275,42 @@ namespace TGD.CombatV2
                 if (budget != null)
                 {
                     if (timeDelta > 0)
-                    {
                         budget.SpendTime(timeDelta);
-                        Debug.Log($"[Time] Spend {timeDelta}s -> Remain={budget.Remaining} ({adjustLabel})", this);
-                    }
+                    else if (timeDelta < 0)
+                        budget.RefundTime(-timeDelta);
+
+                    budgetAfter = budget.Remaining;
+                    string timeLog;
+                    if (timeDelta > 0)
+                        timeLog = $"[Time] Spend {timeDelta}s -> Remain={budget.Remaining}";
                     else if (timeDelta < 0)
                     {
                         int refundAmount = -timeDelta;
-                        budget.RefundTime(refundAmount);
-                        Debug.Log($"[Time] Refund {refundAmount}s -> Remain={budget.Remaining} ({adjustLabel})", this);
+                        string suffix = freeMove ? " (FreeMove)" : string.Empty;
+                        timeLog = $"[Time] Refund {refundAmount}s -> Remain={budget.Remaining}{suffix}";
                     }
-                    budgetAfter = budget.Remaining;
+                    else
+                        timeLog = $"[Time] NoChange -> Remain={budget.Remaining}";
+                    Debug.Log(timeLog, this);
                 }
 
                 var resources = turnManager.GetResources(unit);
                 if (resources != null)
                 {
                     if (energyDelta > 0)
-                    {
-                        resources.Spend("Energy", energyDelta, adjustLabel);
-                        int energyRemain = resources.Get("Energy");
-                        Debug.Log($"[Res]  Spend {energyDelta} -> {energyRemain} ({adjustLabel})", this);
-                        energyAfter = energyRemain;
-                    }
+                        resources.Spend("Energy", energyDelta, tool.Id);
                     else if (energyDelta < 0)
-                    {
-                        int refundEnergy = -energyDelta;
-                        resources.Refund("Energy", refundEnergy, adjustLabel);
-                        int energyRemain = resources.Get("Energy");
-                        Debug.Log($"[Res]  Refund {refundEnergy} -> {energyRemain} ({adjustLabel})", this);
-                        energyAfter = energyRemain;
-                    }
+                        resources.Refund("Energy", -energyDelta, tool.Id);
+
                     energyAfter = resources.Get("Energy");
+                    string resLog;
+                    if (energyDelta > 0)
+                        resLog = $"[Res] Spend {energyDelta} -> {energyAfter}";
+                    else if (energyDelta < 0)
+                        resLog = $"[Res] Refund {-energyDelta} -> {energyAfter}";
+                    else
+                        resLog = $"[Res] NoChange -> {energyAfter}";
+                    Debug.Log(resLog, this);
                 }
             }
             exec.Consume();
@@ -721,6 +724,8 @@ namespace TGD.CombatV2
         void AbortConfirm(IActionToolV2 tool, Unit unit, string reason)
         {
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ConfirmAbort, reason);
+            if (tool is AttackControllerV2 attackTool)
+                attackTool.OnConfirmAbortCleanup();
             if (_activeTool == tool)
             {
                 ExitActiveTool(false);
@@ -737,6 +742,8 @@ namespace TGD.CombatV2
         {
             if (_activeTool != null && (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim))
                 ActionPhaseLogger.Log(ResolveUnit(_activeTool), _activeTool.Id, ActionPhase.W1_AimCancel);
+            if (_activeTool is AttackControllerV2 attack)
+                attack.OnAimCancelCleanup();
             ExitActiveTool(userInitiated);
         }
 

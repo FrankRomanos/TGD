@@ -317,6 +317,10 @@ namespace TGD.CombatV2
             public AttackRejectReasonV2 rejectReason;
             public string rejectMessage;
             public string planFailDetail;
+            public ProbePlan probePlan;
+            public string probeSource;
+            public bool probeEnemy;
+            public string probeRejectReason;
         }
 
         enum TargetOccupancy
@@ -324,6 +328,27 @@ namespace TGD.CombatV2
             None,
             Friendly,
             Enemy
+        }
+
+        enum ProbePlan
+        {
+            MoveOnly,
+            MoveAndAttack,
+            Reject
+        }
+
+        struct ProbeInfo
+        {
+            public ProbePlan plan;
+            public TargetOccupancy occupancy;
+            public bool isEnemy;
+            public string source;
+            public bool reject;
+            public AttackRejectReasonV2 rejectReason;
+            public string rejectMessage;
+            public string planFailDetail;
+            public string rejectLogReason;
+            public Unit targetUnit;
         }
 
         void Awake()
@@ -518,14 +543,24 @@ namespace TGD.CombatV2
         {
             ClearExecReport();
             EnsureTurnTimeInited();
+            bool cleanupDone = false;
+            void Cleanup(string reason)
+            {
+                if (cleanupDone)
+                    return;
+                ClearTempReservations(reason, true);
+                cleanupDone = true;
+            }
             if (!IsReady)
             {
                 RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                Cleanup("ConfirmAbort");
                 yield break;
             }
             if (_moving)
             {
                 RaiseRejected(driver.UnitRef, AttackRejectReasonV2.Busy, "Attack in progress.");
+                Cleanup("ConfirmAbort");
                 yield break;
             }
 
@@ -538,12 +573,16 @@ namespace TGD.CombatV2
                 RaiseRejected(driver.UnitRef,
                     preview != null ? preview.rejectReason : AttackRejectReasonV2.NoPath,
                     preview != null ? preview.rejectMessage : "Invalid target.");
+                Cleanup("ConfirmAbort");
                 yield break;
             }
+
+            LogProbe(hex, preview);
 
             if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
                 RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "Can't move while entangled.");
+                Cleanup("ConfirmAbort");
                 yield break;
             }
 
@@ -585,11 +624,13 @@ namespace TGD.CombatV2
                 if (externalTimeLeft + 1e-4f < moveSecsCharge)
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
                 if (attackPlanned && externalTimeLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
             }
@@ -598,11 +639,13 @@ namespace TGD.CombatV2
                 if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
                 if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
             }
@@ -613,11 +656,13 @@ namespace TGD.CombatV2
                 if (!TryReserveEnergy(ref energyCheck, moveEnergyCost))
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
                 if (attackPlanned && !TryReserveEnergy(ref energyCheck, attackEnergyCost))
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
+                    Cleanup("ConfirmAbort");
                     yield break;
                 }
 
@@ -654,6 +699,7 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAimHidden();
 
             _moving = true;
+            LogProbe(hex, preview);
             yield return RunAttack(preview, attackPlanned, moveSecsCharge, moveEnergyCost, attackSecsCharge, attackEnergySpent);
             _moving = false;
         }
@@ -688,6 +734,10 @@ namespace TGD.CombatV2
                     rejectReason = AttackRejectReasonV2.NotReady,
                     rejectMessage = "Not ready.",
                     planFailDetail = "(reason=targetInvalid)",
+                    probePlan = ProbePlan.Reject,
+                    probeSource = "None",
+                    probeEnemy = false,
+                    probeRejectReason = "invalid"
                 };
             }
 
@@ -702,30 +752,29 @@ namespace TGD.CombatV2
                 mrClick = rates.mrClick,
                 mrNoEnv = rates.mrNoEnv,
                 attackSecsCharge = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0,
-                attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0
+                attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0,
+                probePlan = ProbePlan.MoveOnly,
+                probeSource = "None",
+                probeEnemy = false,
+                probeRejectReason = null
             };
 
             bool inLayout = layout.Contains(target);
-            var map = driver != null ? driver.Map : null;
-            Unit occupant = null;
-            TargetOccupancy occupancy = TargetOccupancy.None;
-            if (inLayout && map != null && map.TryGetActor(target, out var mapUnit) && mapUnit != null)
+            var probe = ProbeAt(target);
+            preview.occupancy = probe.occupancy;
+            preview.targetIsEnemy = probe.isEnemy;
+            preview.attackPlanned = probe.plan == ProbePlan.MoveAndAttack;
+            preview.probePlan = probe.plan;
+            preview.probeSource = probe.source;
+            preview.probeEnemy = probe.isEnemy;
+            preview.probeRejectReason = probe.rejectLogReason;
+
+            string planLabel = preview.probePlan switch
             {
-                occupant = mapUnit;
-                occupancy = DetermineOccupancy(unit, occupant);
-            }
-
-            preview.occupancy = occupancy;
-            preview.targetIsEnemy = occupancy == TargetOccupancy.Enemy;
-            preview.attackPlanned = preview.targetIsEnemy;
-
-            string planLabel = "MoveOnly";
-            if (!inLayout)
-                planLabel = "Reject";
-            else if (preview.attackPlanned)
-                planLabel = "Move+Attack";
-            else if (occupancy == TargetOccupancy.Friendly)
-                planLabel = "Reject";
+                ProbePlan.MoveAndAttack => "Move+Attack",
+                ProbePlan.MoveOnly => "MoveOnly",
+                _ => "Reject"
+            };
 
             bool reject = false;
             AttackRejectReasonV2 rejectReason = AttackRejectReasonV2.NoPath;
@@ -736,18 +785,25 @@ namespace TGD.CombatV2
             {
                 reject = true;
                 rejectMessage = "targetInvalid(out-of-bounds)";
+                preview.probePlan = ProbePlan.Reject;
+                preview.probeRejectReason = "invalid";
             }
             else if (env != null && env.IsPit(target))
             {
                 reject = true;
                 rejectReason = AttackRejectReasonV2.CantMove;
                 rejectMessage = "targetInvalid(pit)";
+                preview.probePlan = ProbePlan.Reject;
+                preview.probeRejectReason = "invalid";
             }
-            else if (occupancy == TargetOccupancy.Friendly)
+            else if (probe.reject)
             {
                 reject = true;
-                rejectReason = AttackRejectReasonV2.Friendly;
-                rejectMessage = "targetInvalid(friendly)";
+                rejectReason = probe.rejectReason;
+                rejectMessage = probe.rejectMessage;
+                rejectDetail = probe.planFailDetail ?? rejectDetail;
+                preview.probePlan = ProbePlan.Reject;
+                preview.probeRejectReason = string.IsNullOrEmpty(probe.rejectLogReason) ? "invalid" : probe.rejectLogReason;
             }
             else
             {
@@ -761,14 +817,19 @@ namespace TGD.CombatV2
                     {
                         reject = true;
                         rejectDetail = "(reason=unreachable)";
+                        preview.probePlan = ProbePlan.Reject;
+                        preview.probeRejectReason = "invalid";
                     }
                 }
                 else
                 {
-                    if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
+                    var occActor = ResolveRegisteredSelfActor();
+                    if (_occ != null && occActor != null && !_occ.CanPlaceIgnoreTempAttack(occActor, target, occActor.Facing, ignore: occActor))
                     {
                         reject = true;
                         rejectMessage = "targetInvalid(blocked)";
+                        preview.probePlan = ProbePlan.Reject;
+                        preview.probeRejectReason = "invalid";
                     }
                     else
                     {
@@ -777,6 +838,8 @@ namespace TGD.CombatV2
                         {
                             reject = true;
                             rejectMessage = "targetInvalid(no-path)";
+                            preview.probePlan = ProbePlan.Reject;
+                            preview.probeRejectReason = "invalid";
                         }
                     }
                 }
@@ -809,8 +872,7 @@ namespace TGD.CombatV2
 
             if (debugLog)
             {
-                string occLabel = FormatOccupancyLabel(occupancy, occupant);
-                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
+                LogProbe(target, preview, planLabel);
             }
 
             if (reject)
@@ -819,6 +881,9 @@ namespace TGD.CombatV2
                 preview.rejectReason = rejectReason;
                 preview.rejectMessage = rejectMessage;
                 preview.planFailDetail = rejectDetail;
+                preview.probePlan = ProbePlan.Reject;
+                if (string.IsNullOrEmpty(preview.probeRejectReason))
+                    preview.probeRejectReason = "invalid";
             }
             else
             {
@@ -826,6 +891,7 @@ namespace TGD.CombatV2
                 preview.rejectReason = AttackRejectReasonV2.Empty;
                 preview.rejectMessage = null;
                 preview.planFailDetail = null;
+                preview.probeRejectReason = null;
             }
 
             return preview;
@@ -853,8 +919,155 @@ namespace TGD.CombatV2
                 rates = src.rates,
                 rejectReason = src.rejectReason,
                 rejectMessage = src.rejectMessage,
-                planFailDetail = src.planFailDetail
+                planFailDetail = src.planFailDetail,
+                probePlan = src.probePlan,
+                probeSource = src.probeSource,
+                probeEnemy = src.probeEnemy,
+                probeRejectReason = src.probeRejectReason
             };
+        }
+
+        ProbeInfo ProbeAt(Hex target)
+        {
+            var info = new ProbeInfo
+            {
+                plan = ProbePlan.MoveOnly,
+                occupancy = TargetOccupancy.None,
+                isEnemy = false,
+                source = "None",
+                reject = false,
+                rejectReason = AttackRejectReasonV2.Empty,
+                rejectMessage = null,
+                planFailDetail = null,
+                rejectLogReason = null,
+                targetUnit = null
+            };
+
+            var layout = authoring != null ? authoring.Layout : null;
+            if (layout == null || !layout.Contains(target))
+            {
+                info.plan = ProbePlan.Reject;
+                info.reject = true;
+                info.rejectReason = AttackRejectReasonV2.NoPath;
+                info.rejectMessage = "targetInvalid(out-of-bounds)";
+                info.planFailDetail = "(reason=targetInvalid)";
+                info.rejectLogReason = "invalid";
+                return info;
+            }
+
+            Unit self = driver != null ? driver.UnitRef : null;
+            var map = driver != null ? driver.Map : null;
+
+            IGridActor occActor = _occ != null ? _occ.Get(target) : null;
+            if (occActor != null)
+            {
+                info.source = "Occ";
+                info.targetUnit = ResolveUnitFromActor(occActor, target);
+            }
+            else if (map != null && map.TryGetActor(target, out var mapActor) && mapActor != null)
+            {
+                info.source = "Map";
+                info.targetUnit = mapActor;
+            }
+            else
+            {
+                info.source = "None";
+                info.plan = ProbePlan.MoveOnly;
+                info.occupancy = TargetOccupancy.None;
+                return info;
+            }
+
+            Unit targetUnit = info.targetUnit;
+            IGridActor selfActor = ResolveRegisteredSelfActor();
+            bool isSelf = false;
+            if (self != null && targetUnit != null && ReferenceEquals(self, targetUnit))
+                isSelf = true;
+            else if (occActor != null && selfActor != null && ReferenceEquals(occActor, selfActor))
+                isSelf = true;
+
+            if (isSelf)
+            {
+                info.plan = ProbePlan.Reject;
+                info.occupancy = TargetOccupancy.Friendly;
+                info.reject = true;
+                info.rejectReason = AttackRejectReasonV2.SelfCell;
+                info.rejectMessage = "targetInvalid(self)";
+                info.planFailDetail = "(reason=self)";
+                info.rejectLogReason = "self";
+                info.isEnemy = false;
+                return info;
+            }
+
+            bool enemy = false;
+            if (targetUnit != null)
+            {
+                if (turnManager != null)
+                    enemy = turnManager.IsEnemyUnit(targetUnit);
+                else if (_allegianceProvider != null)
+                    enemy = _allegianceProvider.AreEnemies(self, targetUnit);
+                else
+                    enemy = !ReferenceEquals(self, targetUnit);
+            }
+            else if (_enemyLocator != null)
+            {
+                enemy = _enemyLocator.IsEnemy(target);
+            }
+
+            info.isEnemy = enemy;
+
+            if (enemy)
+            {
+                info.plan = ProbePlan.MoveAndAttack;
+                info.occupancy = TargetOccupancy.Enemy;
+                return info;
+            }
+
+            info.plan = ProbePlan.Reject;
+            info.occupancy = targetUnit != null ? TargetOccupancy.Friendly : TargetOccupancy.None;
+            info.reject = true;
+            if (targetUnit != null)
+            {
+                info.rejectReason = AttackRejectReasonV2.Friendly;
+                info.rejectMessage = "targetInvalid(friendly)";
+                info.planFailDetail = "(reason=friendly)";
+                info.rejectLogReason = "friendly";
+            }
+            else
+            {
+                info.rejectReason = AttackRejectReasonV2.NoPath;
+                info.rejectMessage = "targetInvalid(invalid)";
+                info.planFailDetail = "(reason=targetInvalid)";
+                info.rejectLogReason = "invalid";
+            }
+            return info;
+        }
+
+        void LogProbe(Hex target, PreviewData preview, string planLabel = null)
+        {
+            if (!debugLog)
+                return;
+            string occLabel = preview != null ? preview.probeSource ?? "None" : "None";
+            string plan = planLabel;
+            if (preview != null && string.IsNullOrEmpty(plan))
+            {
+                plan = preview.probePlan switch
+                {
+                    ProbePlan.MoveAndAttack => "Move+Attack",
+                    ProbePlan.MoveOnly => "MoveOnly",
+                    _ => "Reject"
+                };
+            }
+            plan ??= "MoveOnly";
+            bool enemy = preview != null && preview.probeEnemy;
+            string message = $"[Probe] hex=({target.q},{target.r}) occ={occLabel} plan={plan} enemy={enemy.ToString().ToLowerInvariant()}";
+            if (plan == "Reject")
+            {
+                string reason = preview != null ? preview.probeRejectReason : null;
+                if (string.IsNullOrEmpty(reason))
+                    reason = "invalid";
+                message += $" reason={reason}";
+            }
+            Debug.Log(message, this);
         }
 
         IEnumerator RunAttack(
@@ -972,7 +1185,7 @@ namespace TGD.CombatV2
                     ReportAttackEnergyNet = attackSuccessImmediate ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                     _freeMoveApplied = freeMoveAppliedImmediate;
-                    if (_freeMoveApplied && debugLog)
+                    if (_freeMoveApplied && ManageTurnTimeLocally && debugLog)
                     {
                         string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                         Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
@@ -1091,7 +1304,7 @@ namespace TGD.CombatV2
                 ReportAttackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
 
                 _freeMoveApplied = freeMoveApplied;
-                if (_freeMoveApplied && debugLog)
+                if (_freeMoveApplied && ManageTurnTimeLocally && debugLog)
                 {
                     string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                     Debug.Log($"[Attack] FreeMove +1s U={unitLabel} used={usedSecondsRaw:F2}s (<{freeMoveCutoff:F2})", this);
@@ -1253,6 +1466,37 @@ namespace TGD.CombatV2
 
         int MoveEnergyPerSecond() => moveConfig != null ? Mathf.Max(0, moveConfig.energyCost) : 0;
 
+        IGridActor ResolveRegisteredSelfActor()
+        {
+            if (_occ == null)
+                return _actor;
+            if (driver == null || driver.UnitRef == null)
+                return _actor;
+            var registered = _occ.Get(driver.UnitRef.Position);
+            if (registered == null)
+                return _actor;
+            if (_actor == null)
+                return registered;
+            if (ReferenceEquals(registered, _actor))
+                return _actor;
+            if (!string.IsNullOrEmpty(registered.Id) && registered.Id == _actor.Id)
+                return registered;
+            return registered;
+        }
+
+        Unit ResolveUnitFromActor(IGridActor actor, Hex at)
+        {
+            if (actor == null)
+                return null;
+            if (_actor != null && ReferenceEquals(actor, _actor) && driver != null)
+                return driver.UnitRef;
+            if (driver != null && driver.Map != null && driver.Map.TryGetActor(at, out var mapUnit) && mapUnit != null)
+                return mapUnit;
+            if (ReferenceEquals(actor, ResolveRegisteredSelfActor()) && driver != null)
+                return driver.UnitRef;
+            return null;
+        }
+
         Unit ResolveMapUnit(Hex hex)
         {
             var map = driver != null ? driver.Map : null;
@@ -1267,6 +1511,14 @@ namespace TGD.CombatV2
                 return TargetOccupancy.None;
             if (self != null && ReferenceEquals(self, occupant))
                 return TargetOccupancy.Friendly;
+
+            if (turnManager != null)
+            {
+                if (turnManager.IsEnemyUnit(occupant))
+                    return TargetOccupancy.Enemy;
+                if (turnManager.IsPlayerUnit(occupant))
+                    return TargetOccupancy.Friendly;
+            }
 
             if (_allegianceProvider != null)
             {
@@ -1573,6 +1825,9 @@ namespace TGD.CombatV2
         }
         bool IsMyUnit(Unit unit) => driver != null && driver.UnitRef == unit;
 
+        public void OnAimCancelCleanup() => ClearTempReservations("AimCancel", true);
+        public void OnConfirmAbortCleanup() => ClearTempReservations("ConfirmAbort");
+
         void ReserveTemp(Hex cell)
         {
             if (_occ == null || _actor == null)
@@ -1601,7 +1856,7 @@ namespace TGD.CombatV2
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
                 if (debugLog)
                 {
-                    Debug.Log($"[Occ] TempClear({reason} {layer}) U={unitLabel} count={count}", this);
+                    Debug.Log($"[Occ] TempClear {reason} (layer={layer}) U={unitLabel} count={count}", this);
                 }
             }
         }
