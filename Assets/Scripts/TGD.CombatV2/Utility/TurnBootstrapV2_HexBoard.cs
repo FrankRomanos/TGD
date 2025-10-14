@@ -7,8 +7,8 @@ using TGD.CoreV2;
 namespace TGD.CombatV2
 {
     /// <summary>
-    /// °Ñ HexBoardTestDriver Ìá¹©µÄ Unit ÓëÍ¬ÎïÌåÉÏµÄ UnitRuntimeContext °ó¶¨µ½ TurnManagerV2£¬²¢Æô¶¯»ØºÏÑ­»·¡£
-    /// - Ö§³Ö 1~4 ÃûÍæ¼Ò£»Boss ¿ÉÑ¡£¨Îª¿ÕÔòµĞ·½ÏàÎ»½öÏÔÊ¾ÆğÊ¼ÌáÊ¾Óë 1s Í£¶Ù£©¡£
+    /// æŠŠ HexBoardTestDriver æä¾›çš„ Unit ä¸åŒç‰©ä½“ä¸Šçš„ UnitRuntimeContext ç»‘å®šåˆ° TurnManagerV2ï¼Œå¹¶å¯åŠ¨å›åˆå¾ªç¯ã€‚
+    /// - æ”¯æŒ 1~4 åç©å®¶ï¼›Boss å¯é€‰ï¼ˆä¸ºç©ºåˆ™æ•Œæ–¹ç›¸ä½ä»…æ˜¾ç¤ºèµ·å§‹æç¤ºä¸ 1s åœé¡¿ï¼‰ã€‚
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class TurnBootstrapV2_HexBoard : MonoBehaviour
@@ -17,13 +17,51 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
 
         [Header("Players (1~4)")]
-        public List<HexBoardTestDriver> playerDrivers = new(); // ÍÏ 1~4 ¸ö
+            var readyDrivers = new List<HexBoardTestDriver>();
+                readyDrivers.Add(drv);
+
+                    readyDrivers.Add(bossDriver);
+            RegisterUnitsOnMaps(readyDrivers, playerUnits, bossUnit);
+
+
+        void RegisterUnitsOnMaps(List<HexBoardTestDriver> drivers, List<Unit> players, Unit bossUnit)
+        {
+            if (drivers == null || drivers.Count == 0)
+                return;
+
+            var units = new List<Unit>();
+            if (players != null)
+                units.AddRange(players);
+            if (bossUnit != null)
+                units.Add(bossUnit);
+
+            if (units.Count == 0)
+                return;
+
+            foreach (var unit in units)
+            {
+                if (unit == null)
+                    continue;
+
+                var coord = unit.Position;
+                string label = TurnManagerV2.FormatUnitLabel(unit);
+                Debug.Log($"[Map] Register {label} at ({coord.q},{coord.r})", this);
+
+                foreach (var drv in drivers)
+                {
+                    if (drv == null || drv.Map == null)
+                        continue;
+                    drv.Map.Set(unit, coord);
+                }
+            }
+        }
+        public List<HexBoardTestDriver> playerDrivers = new(); // æ‹– 1~4 ä¸ª
         [Header("Boss (optional)")]
         public HexBoardTestDriver bossDriver;
 
         [Header("Auto Add Helpers")]
-        public bool autoAddMissingContext = false; // true Ê±£¬ÈôÈ±ÉÙ UnitRuntimeContext ½«×Ô¶¯Ìí¼ÓÒ»¸ö×îĞ¡Ä¬ÈÏ
-        public bool autoWireAdapters = true;       // true Ê±£¬×Ô¶¯Îª½ÇÉ«ÉÏµÄ Adapter ¸³ turnManager/context
+        public bool autoAddMissingContext = false; // true æ—¶ï¼Œè‹¥ç¼ºå°‘ UnitRuntimeContext å°†è‡ªåŠ¨æ·»åŠ ä¸€ä¸ªæœ€å°é»˜è®¤
+        public bool autoWireAdapters = true;       // true æ—¶ï¼Œè‡ªåŠ¨ä¸ºè§’è‰²ä¸Šçš„ Adapter èµ‹ turnManager/context
 
         void Start()
         {
@@ -33,14 +71,14 @@ namespace TGD.CombatV2
                 return;
             }
 
-            // ×éÍæ¼Ò Unit ÁĞ±í
+            // ç»„ç©å®¶ Unit åˆ—è¡¨
             var playerUnits = new List<Unit>();
             foreach (var drv in playerDrivers)
             {
                 if (!EnsureReady(drv)) continue;
                 var ctx = drv.GetComponent<UnitRuntimeContext>();
                 if (ctx == null && autoAddMissingContext)
-                    ctx = drv.gameObject.AddComponent<UnitRuntimeContext>(); // Ä¬ÈÏ stats ÎªĞòÁĞ»¯Àï×Ô´øµÄ
+                    ctx = drv.gameObject.AddComponent<UnitRuntimeContext>(); // é»˜è®¤ stats ä¸ºåºåˆ—åŒ–é‡Œè‡ªå¸¦çš„
 
                 if (ctx == null)
                 {
@@ -48,7 +86,7 @@ namespace TGD.CombatV2
                     continue;
                 }
 
-                // ¿ÉÑ¡×Ô¶¯²¼Ïß£º°Ñ Adapter ÃÇÁ¬ÉÏ TM Óë Ctx
+                // å¯é€‰è‡ªåŠ¨å¸ƒçº¿ï¼šæŠŠ Adapter ä»¬è¿ä¸Š TM ä¸ Ctx
                 if (autoWireAdapters)
                 {
                     var wire = drv.GetComponent<UnitAutoWireV2>();
@@ -62,7 +100,7 @@ namespace TGD.CombatV2
                 playerUnits.Add(drv.UnitRef);
             }
 
-            // Boss£¨¿É¿Õ£©
+            // Bossï¼ˆå¯ç©ºï¼‰
             Unit bossUnit = null;
             if (bossDriver != null && EnsureReady(bossDriver))
             {
@@ -86,7 +124,7 @@ namespace TGD.CombatV2
                 }
             }
 
-            // ¿ªÕ½£¨Ö§³Ö 1~4 Íæ¼Ò£¬Boss ¿É¿Õ£©
+            // å¼€æˆ˜ï¼ˆæ”¯æŒ 1~4 ç©å®¶ï¼ŒBoss å¯ç©ºï¼‰
             turnManager.StartBattle(playerUnits, bossUnit);
             Debug.Log($"[TurnBootstrap] StartBattle players={playerUnits.Count} boss={(bossUnit != null ? "yes" : "no")}", this);
         }

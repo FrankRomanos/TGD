@@ -687,7 +687,7 @@ namespace TGD.CombatV2
                     valid = false,
                     rejectReason = AttackRejectReasonV2.NotReady,
                     rejectMessage = "Not ready.",
-                    planFailDetail = "(reason=unreachable)",
+                    planFailDetail = "(reason=targetInvalid)",
                 };
             }
 
@@ -719,34 +719,35 @@ namespace TGD.CombatV2
             preview.targetIsEnemy = occupancy == TargetOccupancy.Enemy;
             preview.attackPlanned = preview.targetIsEnemy;
 
-            string planLabel = occupancy switch
-            {
-                TargetOccupancy.Enemy => "Move+Attack",
-                TargetOccupancy.Friendly => "Reject",
-                _ => "MoveOnly"
-            };
+            string planLabel = "MoveOnly";
+            if (!inLayout)
+                planLabel = "Reject";
+            else if (preview.attackPlanned)
+                planLabel = "Move+Attack";
+            else if (occupancy == TargetOccupancy.Friendly)
+                planLabel = "Reject";
 
             bool reject = false;
             AttackRejectReasonV2 rejectReason = AttackRejectReasonV2.NoPath;
             string rejectMessage = "targetInvalid(unreachable)";
-            string rejectDetail = "(reason=unreachable)";
+            string rejectDetail = "(reason=targetInvalid)";
 
             if (!inLayout)
             {
                 reject = true;
+                rejectMessage = "targetInvalid(out-of-bounds)";
             }
             else if (env != null && env.IsPit(target))
             {
                 reject = true;
+                rejectReason = AttackRejectReasonV2.CantMove;
                 rejectMessage = "targetInvalid(pit)";
-                rejectDetail = "(reason=targetInvalid)";
             }
             else if (occupancy == TargetOccupancy.Friendly)
             {
                 reject = true;
                 rejectReason = AttackRejectReasonV2.Friendly;
                 rejectMessage = "targetInvalid(friendly)";
-                rejectDetail = "(reason=targetInvalid)";
             }
             else
             {
@@ -759,6 +760,7 @@ namespace TGD.CombatV2
                     if (!TryFindMeleePath(start, target, range, out landing, out path) || path == null || path.Count == 0)
                     {
                         reject = true;
+                        rejectDetail = "(reason=unreachable)";
                     }
                 }
                 else
@@ -766,12 +768,16 @@ namespace TGD.CombatV2
                     if (_occ != null && _actor != null && !_occ.CanPlaceIgnoreTempAttack(_actor, target, _actor.Facing, ignore: _actor))
                     {
                         reject = true;
+                        rejectMessage = "targetInvalid(blocked)";
                     }
                     else
                     {
                         path = ShortestPath(start, target, c => IsBlockedForMove(c, start, target));
                         if (path == null || path.Count == 0)
+                        {
                             reject = true;
+                            rejectMessage = "targetInvalid(no-path)";
+                        }
                     }
                 }
 
@@ -804,8 +810,7 @@ namespace TGD.CombatV2
             if (debugLog)
             {
                 string occLabel = FormatOccupancyLabel(occupancy, occupant);
-                string planLog = reject ? "Reject" : planLabel;
-                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLog}", this);
+                Debug.Log($"[Probe] hex=({target.q},{target.r}) occ={occLabel} ⇒ plan={planLabel}", this);
             }
 
             if (reject)
@@ -1016,8 +1021,6 @@ namespace TGD.CombatV2
                     if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                     {
                         attackRolledBack = true;
-                        if (debugLog)
-                            Debug.Log("[Attack] rollback: slowed.", this);
                         if (attackEnergyPaid > 0 && ManageEnergyLocally)
                             RefundAttackEnergy(attackEnergyPaid);
                         if (ManageTurnTimeLocally)
@@ -1587,7 +1590,7 @@ namespace TGD.CombatV2
             }
         }
 
-        void ClearTempReservations(string reason, bool logAlways = false)
+        void ClearTempReservations(string reason, bool logAlways = false, string layer = "TempAttack")
         {
             int tracked = _tempReservedThisAction.Count;
             int occCleared = (_occ != null && _actor != null) ? _occ.TempClearForOwner(_actor) : 0;
@@ -1598,7 +1601,7 @@ namespace TGD.CombatV2
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
                 if (debugLog)
                 {
-                    Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
+                    Debug.Log($"[Occ] TempClear({reason} {layer}) U={unitLabel} count={count}", this);
                 }
             }
         }
