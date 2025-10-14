@@ -2,8 +2,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using TGD.HexBoard;
 using TGD.CoreV2;
+using TGD.HexBoard;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -517,7 +517,7 @@ namespace TGD.CombatV2
 
                 if (blockByUnits && !_occ.CanPlaceIgnoreTempAttack(_actor, cell, _actor.Facing, ignore: _actor))
                     return true;
-
+                
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
 
                 if (env != null && env.IsPit(cell)) return true;
