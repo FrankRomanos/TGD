@@ -1158,7 +1158,7 @@ namespace TGD.CombatV2
         Unit ResolveMapUnit(Hex hex)
         {
             var map = driver != null ? driver.Map : null;
-            if (map != null && map.TryGetUnit(hex, out var mapUnit) && mapUnit != null)
+            if (map != null && map.TryGetAt(hex, out var mapUnit) && mapUnit != null)
                 return mapUnit;
             return null;
         }
