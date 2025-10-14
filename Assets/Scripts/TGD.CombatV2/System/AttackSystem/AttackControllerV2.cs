@@ -9,7 +9,7 @@ using TGD.HexBoard;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable
     {
         const float MR_MIN = 1f;
         const float MR_MAX = 12f;
@@ -62,6 +62,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]
         public bool debugLog = true;
+        public bool SkipBudgetGate { get; set; }
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
@@ -341,6 +342,7 @@ namespace TGD.CombatV2
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
+            SkipBudgetGate = false;
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
@@ -521,15 +523,28 @@ namespace TGD.CombatV2
             int moveEnergyCost = Mathf.Max(0, preview.moveEnergyCost);
             int attackEnergyCost = preview.targetIsEnemy ? Mathf.Max(0, preview.attackEnergyCost) : 0;
 
-            if (UseTurnManager)
+            int externalTimeLeft = UseTurnManager ? ExternalTimeRemaining() : int.MaxValue;
+            int localTimeLeft = ManageTurnTimeLocally ? Mathf.CeilToInt(Mathf.Max(0f, _turnSecondsLeft)) : int.MaxValue;
+            if (debugLog)
             {
-                int timeLeft = ExternalTimeRemaining();
-                if (timeLeft + 1e-4f < moveSecsCharge)
+                string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
+                string externalDisplay = (externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString();
+                string localDisplay = (localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString();
+                string leftLabel = UseTurnManager
+                    ? $"left(External)={externalDisplay}"
+                    : $"left(Local)={localDisplay}";
+                Debug.Log($"[ToolGate] Attack useTM={UseTurnManager} skipGate={SkipBudgetGate} {leftLabel} need(move={moveSecsCharge},atk={attackSecsCharge}) U={unitLabel}", this);
+            }
+
+            bool skipBudgetGate = UseTurnManager && SkipBudgetGate;
+            if (UseTurnManager && !skipBudgetGate)
+            {
+                if (externalTimeLeft + 1e-4f < moveSecsCharge)
                 {
                     RaiseRejected(driver.UnitRef, AttackRejectReasonV2.CantMove, "No more time.");
                     yield break;
                 }
-                if (attackPlanned && timeLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
+                if (attackPlanned && externalTimeLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
                 {
                     attackPlanned = false;
                     attackSecsCharge = 0;
@@ -537,7 +552,7 @@ namespace TGD.CombatV2
                     _pendingComboBaseCount = 0;
                 }
             }
-            else if (simulateTurnTime)
+            else if (!UseTurnManager && simulateTurnTime)
             {
                 if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
                 {
@@ -553,27 +568,30 @@ namespace TGD.CombatV2
                 }
             }
 
-            var resourcePool = ResolveResourcePool();
-            int energyAvailable = ResolveEnergyAvailable(resourcePool);
-            if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+            if (!skipBudgetGate)
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
-                yield break;
-            }
-            if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
-            {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
-                yield break;
+                var resourcePool = ResolveResourcePool();
+                int energyAvailable = ResolveEnergyAvailable(resourcePool);
+                if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+                {
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
+                    yield break;
+                }
+                if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
+                {
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
+                    yield break;
+                }
+
+                if (ManageEnergyLocally)
+                    SpendEnergy(moveEnergyCost);
             }
 
-            if (ManageEnergyLocally)
-                SpendEnergy(moveEnergyCost);
-            int attackEnergySpent = 0;
+            int attackEnergySpent = attackPlanned ? Mathf.Max(0, attackEnergyCost) : 0;
             if (attackPlanned)
             {
-                if (ManageEnergyLocally && attackEnergyCost > 0)
+                if (!skipBudgetGate && ManageEnergyLocally && attackEnergyCost > 0)
                     SpendEnergy(attackEnergyCost);
-                attackEnergySpent = Mathf.Max(0, attackEnergyCost);
                 _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
             }
 

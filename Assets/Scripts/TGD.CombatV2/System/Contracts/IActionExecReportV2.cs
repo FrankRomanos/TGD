@@ -6,4 +6,9 @@ namespace TGD.CombatV2
         int RefundedSeconds { get; }
         void Consume();
     }
+
+    public interface IBudgetGateSkippable
+    {
+        bool SkipBudgetGate { get; set; }
+    }
 }
