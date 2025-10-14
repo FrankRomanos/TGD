@@ -2,7 +2,6 @@ using System.Collections.Generic;
 
 namespace TGD.HexBoard
 {
-        public bool TryGetActor(Hex h, out T entity) => cells.TryGetValue(h, out entity);
     /// <summary> 单占位网格：一个格最多 1 个实体。 </summary>
     public sealed class HexBoardMap<T>
     {
@@ -16,6 +15,7 @@ namespace TGD.HexBoard
         }
 
         public bool TryGetAt(Hex h, out T entity) => cells.TryGetValue(h, out entity);
+        public bool TryGetActor(Hex h, out T entity) => cells.TryGetValue(h, out entity);
         public bool IsFree(Hex h) => !cells.ContainsKey(h);
         public bool TryGetPosition(T e, out Hex h) => positions.TryGetValue(e, out h);
 
