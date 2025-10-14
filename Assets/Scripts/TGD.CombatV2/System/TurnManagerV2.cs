@@ -660,7 +660,7 @@ namespace TGD.CombatV2
             var occ = occupancyService != null ? occupancyService.Get() : null;
             if (occ == null) return;
             int count = occ.ClearLayer(OccLayer.TempAttack);
-            Debug.Log($"[Occ] TempClear {reason} count={count}", this);
+            Debug.Log($"[Occ] TempClear({reason} TempAttack) count={count}", this);
         }
 
         readonly struct TerrainStickySample
