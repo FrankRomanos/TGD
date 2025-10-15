@@ -183,7 +183,10 @@ namespace TGD.CombatV2
         public int ReportRefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
         public int ReportEnergyMoveNet => _reportPending ? _reportEnergyMoveNet : 0;
         public int ReportEnergyAtkNet => 0;
+        public int ReportMoveEnergyNet => ReportEnergyMoveNet;
+        public int ReportAttackEnergyNet => ReportEnergyAtkNet;
         public bool ReportFreeMoveApplied => _reportPending && _reportFreeMove;
+
 
         void ClearExecReport()
         {
