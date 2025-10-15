@@ -1,5 +1,6 @@
 using UnityEngine;
 using TGD.HexBoard;
+using TGD.HexBoard.Path;
 
 namespace TGD.CombatV2.Targeting
 {
@@ -19,35 +20,67 @@ namespace TGD.CombatV2.Targeting
 
         void Awake()
         {
+            if (!occupancyService)
+                occupancyService = GetComponentInParent<HexOccupancyService>(true);
             _occ = occupancyService ? occupancyService.Get() : null;
         }
 
         public TargetCheckResult Check(Unit actor, Hex hex, TargetingSpec spec)
         {
-            if (_occ == null)
+            TargetCheckResult RejectEarly(TargetInvalidReason reason, string why)
             {
-                return Reject(TargetInvalidReason.Unknown, "[Probe] NoOccupancy", actor, hex, spec, null, HitKind.None);
+                var rej = new TargetCheckResult
+                {
+                    ok = false,
+                    reason = reason,
+                    hitUnit = null,
+                    hit = HitKind.None,
+                    plan = PlanKind.None
+                };
+
+                if (debugLog)
+                {
+                    var specLabel = spec != null ? spec.ToString() : "<null>";
+                    Debug.Log($"{why} {specLabel} @ {hex} → {reason}", this);
+                }
+
+                return rej;
             }
 
             if (spec == null)
+                return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoSpec");
+
+            if (_occ == null)
+                return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoOccupancyService");
+
+            if (spec.terrain == TargetTerrainMask.NonObstacle)
             {
-                return Reject(TargetInvalidReason.Unknown, "[Probe] NoSpec", actor, hex, spec, null, HitKind.None);
+                var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
+                if (terrainPass != null && terrainPass.IsBlocked(hex))
+                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=StaticObstacle");
             }
 
-            if (spec.terrain == TargetTerrainMask.NonObstacle && _occ.IsObstacle(hex))
+            _occ.TryGetActor(hex, out var actorAt);
+            var unitAt = ResolveUnit(actorAt);
+            bool isEmpty = actorAt == null;
+            bool enemyMarked = enemyRegistry != null && enemyRegistry.IsEnemyAt(hex, _occ);
+
+            HitKind hit;
+            if (isEmpty && !enemyMarked)
             {
-                return Reject(TargetInvalidReason.Blocked, "[Probe] Terrain=Obstacle", actor, hex, spec, null, HitKind.None);
+                hit = HitKind.None;
             }
-
-            _occ.TryGetActor(hex, out var rawActor);
-            var unitAt = rawActor is UnitGridAdapter adapter ? adapter.Unit : null;
-            bool enemyMarked = enemyRegistry != null && enemyRegistry.IsEnemy(hex);
-            bool isEmpty = rawActor == null && !enemyMarked;
-            var hit = ClassifyHit(actor, unitAt, hex, rawActor, enemyMarked);
-
-            if (hit == HitKind.Self && !spec.allowSelf)
+            else if (unitAt != null && actor != null && ReferenceEquals(unitAt, actor))
             {
-                return Reject(TargetInvalidReason.Self, "[Probe] SelfNotAllowed", actor, hex, spec, unitAt, hit);
+                hit = HitKind.Self;
+            }
+            else if (enemyMarked || (actorAt != null && enemyRegistry != null && enemyRegistry.IsEnemyActor(actorAt)))
+            {
+                hit = HitKind.Enemy;
+            }
+            else
+            {
+                hit = HitKind.Ally;
             }
 
             bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
@@ -55,47 +88,59 @@ namespace TGD.CombatV2.Targeting
             bool allowAlly = (spec.occupant & TargetOccupantMask.Ally) != 0;
             bool allowSelfMask = (spec.occupant & TargetOccupantMask.Self) != 0;
 
-            if (isEmpty && !allowEmpty)
+            TargetCheckResult Reject(TargetInvalidReason reason, string why)
             {
-                return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] EmptyNotAllowed", actor, hex, spec, unitAt, hit);
+                var rej = new TargetCheckResult
+                {
+                    ok = false,
+                    reason = reason,
+                    hitUnit = unitAt,
+                    hit = hit,
+                    plan = PlanKind.None
+                };
+
+                if (debugLog)
+                    Debug.Log($"{why} {spec} @ {hex} → {reason}", this);
+
+                return rej;
             }
+
+            if (hit == HitKind.Self && !(spec.allowSelf || allowSelfMask))
+                return Reject(TargetInvalidReason.Self, "[Probe] SelfNotAllowed");
+
+            if (isEmpty && !allowEmpty)
+                return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] EmptyNotAllowed");
 
             if (hit == HitKind.Enemy && !allowEnemy)
-            {
-                return Reject(TargetInvalidReason.EnemyNotAllowed, "[Probe] EnemyNotAllowed", actor, hex, spec, unitAt, hit);
-            }
+                return Reject(TargetInvalidReason.EnemyNotAllowed, "[Probe] EnemyNotAllowed");
 
             if (hit == HitKind.Ally && !allowAlly)
-            {
-                return Reject(TargetInvalidReason.Friendly, "[Probe] AllyNotAllowed", actor, hex, spec, unitAt, hit);
-            }
+                return Reject(TargetInvalidReason.Friendly, "[Probe] AllyNotAllowed");
 
-            if (hit == HitKind.Self && !allowSelfMask && !spec.allowSelf)
-            {
-                return Reject(TargetInvalidReason.Self, "[Probe] SelfMaskNotAllowed", actor, hex, spec, unitAt, hit);
-            }
+            if (spec.requireOccupied && (isEmpty && !enemyMarked))
+                return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] RequireOccupied");
 
-            if (spec.requireOccupied && isEmpty)
-            {
-                return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] RequireOccupied", actor, hex, spec, unitAt, hit);
-            }
-
-            if (spec.requireEmpty && !isEmpty)
-            {
-                return Reject(TargetInvalidReason.Blocked, "[Probe] RequireEmpty", actor, hex, spec, unitAt, hit);
-            }
+            if (spec.requireEmpty && (!isEmpty || enemyMarked))
+                return Reject(TargetInvalidReason.Blocked, "[Probe] RequireEmpty");
 
             if (spec.maxRangeHexes >= 0 && actor != null)
             {
                 var anchor = actor.Position;
+                if (_occ.TryGetAnchor(actor, out var anchorHex))
+                    anchor = anchorHex;
                 int dist = Hex.Distance(anchor, hex);
                 if (dist > spec.maxRangeHexes)
-                {
-                    return Reject(TargetInvalidReason.OutOfRange, $"[Probe] OutOfRange({dist}>{spec.maxRangeHexes})", actor, hex, spec, unitAt, hit);
-                }
+                    return Reject(TargetInvalidReason.OutOfRange, $"[Probe] OutOfRange({dist}>{spec.maxRangeHexes})");
             }
 
-            var plan = DerivePlan(hit);
+            var plan = hit switch
+            {
+                HitKind.Enemy => PlanKind.MoveAndAttack,
+                HitKind.None => PlanKind.MoveOnly,
+                HitKind.Self => PlanKind.AttackOnly,
+                _ => PlanKind.None
+            };
+
             bool ok = plan != PlanKind.None;
             var res = new TargetCheckResult
             {
@@ -107,87 +152,16 @@ namespace TGD.CombatV2.Targeting
             };
 
             if (debugLog)
-            {
                 Debug.Log($"[Probe] {spec} @ {hex} → {res}", this);
-            }
 
             return res;
         }
 
-        TargetCheckResult Reject(TargetInvalidReason reason, string why, Unit actor, Hex hex, TargetingSpec spec, Unit unitAt, HitKind hit)
+        static Unit ResolveUnit(IGridActor actor)
         {
-            var res = new TargetCheckResult
-            {
-                ok = false,
-                reason = reason,
-                hitUnit = unitAt,
-                hit = hit,
-                plan = PlanKind.None
-            };
-
-            if (debugLog)
-            {
-                Debug.Log($"{why} {spec} @ {hex} → {reason}", this);
-            }
-
-            return res;
-        }
-
-        HitKind ClassifyHit(Unit actor, Unit unitAt, Hex hex, IGridActor rawActor, bool enemyMarked)
-        {
-            if (actor != null && unitAt != null && ReferenceEquals(actor, unitAt))
-                return HitKind.Self;
-
-            if (enemyMarked)
-                return HitKind.Enemy;
-
-            if (rawActor == null)
-                return HitKind.None;
-
-            if (unitAt != null)
-                return HitKind.Ally;
-
-            return HitKind.Ally;
-        }
-
-        static PlanKind DerivePlan(HitKind hit)
-        {
-            switch (hit)
-            {
-                case HitKind.Enemy:
-                    return PlanKind.MoveAndAttack;
-                case HitKind.None:
-                    return PlanKind.MoveOnly;
-                case HitKind.Self:
-                    return PlanKind.AttackOnly;
-                default:
-                    return PlanKind.None;
-            }
-        }
-    }
-
-    static class OccupancyExtensions
-    {
-        public static bool IsObstacle(this HexOccupancy occ, Hex hex)
-        {
-            if (occ == null) return true;
-            return occ.IsBlockedFormal(hex);
-        }
-
-        public static Unit TryGetUnit(this HexOccupancy occ, Hex hex)
-        {
-            if (occ == null) return null;
-            if (!occ.TryGetActor(hex, out var actor)) return null;
-            if (actor is UnitGridAdapter unitAdapter)
-                return unitAdapter.Unit;
+            if (actor is UnitGridAdapter adapter)
+                return adapter.Unit;
             return null;
-        }
-
-        public static Hex GetAnchor(this HexOccupancy occ, Unit unit)
-        {
-            if (unit == null)
-                return Hex.Zero;
-            return unit.Position;
         }
     }
 }
