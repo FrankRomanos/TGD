@@ -18,17 +18,5 @@ namespace TGD.HexBoard
             => Get() != null && Get().TryPlace(actor, anchor, facing);
 
         public void Unregister(IGridActor actor) { Get()?.Remove(actor); }
-
-        public bool CanPlaceIgnoreTempAttack(IGridActor actor, Hex anchor, Facing4 facing, IGridActor ignore = null)
-        {
-            var occ = Get();
-            return occ != null && occ.CanPlaceIgnoreTempAttack(actor, anchor, facing, ignore);
-        }
-
-        public bool IsReservedTempAttack(Hex cell, IGridActor ignore = null)
-        {
-            var occ = Get();
-            return occ != null && occ.IsReservedTempAttack(cell, ignore);
-        }
     }
 }

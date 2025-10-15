@@ -1,9 +1,8 @@
 // File: TGD.HexBoard/HexClickMover.cs
-using System;
 using System.Collections;
 using System.Collections.Generic;
-using TGD.CoreV2;
 using TGD.HexBoard;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -31,7 +30,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, IBudgetGateSkippable, IActionEnergyReportV2
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -43,7 +42,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
-        public bool SkipBudgetGate { get; set; }
+
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]
         public bool UseTurnManager = true;
@@ -157,26 +156,10 @@ namespace TGD.CombatV2
         string _hudMsg;
         float _hudMsgUntil;
         public string Id => "Move";
-        public ActionKind Kind => ActionKind.Standard;
-        static readonly string[] EMPTY_TAGS = Array.Empty<string>();
-        public IReadOnlyCollection<string> ChainTags => EMPTY_TAGS;
-        public bool CanChainAfter(string previousId, IReadOnlyCollection<string> previousTags) => false;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
         int _reportEnergyNet;
         bool _reportPending;
-        public (int timeSec, int energy) PeekPlannedCost()
-        {
-            int seconds = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            int energyRate = config ? Mathf.Max(0, config.energyCost) : 0;
-            return (seconds, energyRate * seconds);
-        }
-        public ActionCostPlan PlannedCost(Hex hex)
-        {
-            var (timeSec, energy) = PeekPlannedCost();
-            string detail = $"(time={timeSec}s, energy={energy})";
-            return new ActionCostPlan(true, timeSec, energy, timeSec, 0, energy, 0, detail);
-        }
 
         void ClearExecReport()
         {
@@ -204,63 +187,33 @@ namespace TGD.CombatV2
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
 
-        public bool TryPrecheckAim(out string reason, bool raiseHud = true)
+        public void OnEnterAim()
         {
             EnsureTurnTimeInited();
             RefreshStateForAim();
-            var unit = driver != null ? driver.UnitRef : null;
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null)
-            {
-                if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
-                reason = "(not-ready)";
-                return false;
-            }
-
-            if (ctx != null && ctx.Entangled)
-            {
-                if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, null);
-                reason = "(entangled)";
-                return false;
-            }
-
+            // 预检查：时间 + 能量，不满足就直接拒绝，不进入瞄准
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
             if (UseTurnManager)
             {
-                var budget = (_turnManager != null && unit != null)
-                    ? _turnManager.GetBudget(unit)
+                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                    ? _turnManager.GetBudget(driver.UnitRef)
                     : null;
                 if (budget == null || !budget.HasTime(needSec))
                 {
-                    if (raiseHud)
-                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
-                    reason = "(no-time)";
-                    return false;
+                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                    return;
                 }
             }
             else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
-                if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
-                reason = "(no-time)";
-                return false;
-            }
-            if (_cost != null && config != null && !_cost.HasEnough(unit, config))
-            {
-                if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
-                reason = "(no-energy)";
-                return false;
-            }
-            reason = null;
-            return true;
-        }
-
-        public void OnEnterAim()
-        {
-            if (!TryPrecheckAim(out _))
+                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                 return;
+            }
+            if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
+            {
+                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null);
+                return;
+            }
             ShowRange();
         }
         public void OnExitAim() { HideRange(); }
@@ -275,53 +228,23 @@ namespace TGD.CombatV2
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
-            ITurnBudget budget = null;
             if (UseTurnManager)
             {
-                budget = (_turnManager != null && driver != null && driver.UnitRef != null)
-                  ? _turnManager.GetBudget(driver.UnitRef)
+                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                    ? _turnManager.GetBudget(driver.UnitRef)
                     : null;
-            }
-
-            int externalTimeLeft = budget != null ? budget.Remaining : -1;
-            int localTimeLeft = ManageTurnTimeLocally ? Mathf.CeilToInt(Mathf.Max(0f, _turnSecondsLeft)) : -1;
-            bool skipBudgetGate = UseTurnManager && SkipBudgetGate;
-            int planEnergyMove = Mathf.Max(0, needSec * (config ? Mathf.Max(0, config.energyCost) : 0));
-            int energyBefore = -1;
-            if (UseTurnManager && _turnManager != null && driver != null && driver.UnitRef != null)
-            {
-                var resources = _turnManager.GetResources(driver.UnitRef);
-                if (resources != null)
-                    energyBefore = resources.Get("Energy");
-            }
-            else if (!UseTurnManager && ctx != null && ctx.stats != null)
-            {
-                energyBefore = ctx.stats.Energy;
-            }
-            if (debugLog)
-            {
-                string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
-                string timeBefore = UseTurnManager
-                    ? ((externalTimeLeft < 0 || externalTimeLeft == int.MaxValue) ? "?" : externalTimeLeft.ToString())
-                    : ((localTimeLeft < 0 || localTimeLeft == int.MaxValue) ? "?" : localTimeLeft.ToString());
-                string energyLabel = (energyBefore < 0 || energyBefore == int.MaxValue) ? "?" : energyBefore.ToString();
-                Debug.Log($"[Gate] W2 PreDeduct planSecs={needSec} planEnergyMove={planEnergyMove} planEnergyAtk=0 before=Time:{timeBefore}/Energy:{energyLabel}", this);
-            }
-
-            if (UseTurnManager && !skipBudgetGate)
-            {
                 if (budget == null || !budget.HasTime(needSec))
                 {
                     HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                     yield break;
                 }
             }
-            else if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft + 1e-4f < needSec)
+            else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                 yield break;
             }
-            if (!skipBudgetGate && _cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
+            if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null);
                 yield break;
@@ -371,7 +294,6 @@ namespace TGD.CombatV2
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
-            SkipBudgetGate = false;
             _actor = null; _occ = null;
         }
 
@@ -510,18 +432,14 @@ namespace TGD.CombatV2
                       includeTriggerColliders: false,
                       y: y)
                 : null;
-            var actorForPlacement = ResolveRegisteredActor(startHex);
+
             bool Block(TGD.HexBoard.Hex cell)
             {
-                if (cell.Equals(startHex)) return false;
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits)
-                {
-                    var actorRef = actorForPlacement ?? _actor;
-                    if (actorRef != null && _occ != null && !_occ.CanPlaceIgnoreTempAttack(actorRef, cell, actorRef.Facing, ignore: actorRef))
-                        return true;
-                }
+                if (blockByUnits && !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                    return true;
+
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
 
                 if (env != null && env.IsPit(cell)) return true;
@@ -556,9 +474,7 @@ namespace TGD.CombatV2
 
             int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
-            bool skipBudgetGate = UseTurnManager && SkipBudgetGate;
-
-            if (UseTurnManager && !skipBudgetGate)
+            if (UseTurnManager)
             {
                 var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
                     ? _turnManager.GetBudget(driver.UnitRef)
@@ -569,7 +485,7 @@ namespace TGD.CombatV2
                     yield break;
                 }
             }
-            else if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft + 1e-4f < requiredSec)
+            else if (ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                 yield break;
@@ -579,21 +495,11 @@ namespace TGD.CombatV2
             {
                 if (_cost.IsOnCooldown(driver.UnitRef, config))
                 { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
-                if (!skipBudgetGate && !_cost.HasEnough(driver.UnitRef, config))
+                if (!_cost.HasEnough(driver.UnitRef, config))
                 { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
                 if (ManageEnergyLocally)
-                {
-                    if (UseTurnManager)
-                    {
-                        if (debugLog)
-                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
-                    }
-                    else
-                    {
-                        _cost.Pay(driver.UnitRef, config);
-                    }
-                }
+                    _cost.Pay(driver.UnitRef, config);
             }
 
             var rates = BuildMoveRates(path[0]);
@@ -625,29 +531,9 @@ namespace TGD.CombatV2
             if (reached == null || reached.Count < 2)
             {
                 if (ManageEnergyLocally)
-                {
-                    if (UseTurnManager)
-                    {
-                        if (debugLog)
-                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
-                    }
-                    else
-                    {
-                        _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
-                    }
-                }
+                    _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
                 if (ManageTurnTimeLocally)
-                {
-                    if (UseTurnManager)
-                    {
-                        if (debugLog)
-                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
-                    }
-                    else
-                    {
-                        _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
-                    }
-                }
+                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
                 yield break;
             }
@@ -688,10 +574,7 @@ namespace TGD.CombatV2
                 var from = reached[i - 1];
                 var to = reached[i];
 
-                bool blocked = _occ != null && _occ.IsBlocked(to, _actor);
-                if (blocked && _occ.IsReservedTempAttack(to, _actor))
-                    blocked = false;
-                if (blocked)
+                if (_occ.IsBlocked(to, _actor))
                 {
                     stoppedByExternal = true;
                     break;
@@ -749,39 +632,17 @@ namespace TGD.CombatV2
 
             if (ManageTurnTimeLocally)
             {
-                if (UseTurnManager)
-                {
-                    if (debugLog)
-                        Debug.Log("[Guard] Skip local settle (TM in charge)", this);
-                }
-                else
-                {
-                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
-                }
+                _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
             }
             if (refunded > 0)
             {
                 if (ManageEnergyLocally)
-                {
-                    if (UseTurnManager)
-                    {
-                        if (debugLog)
-                            Debug.Log("[Guard] Skip local settle (TM in charge)", this);
-                    }
-                    else
-                    {
-                        _cost?.RefundSeconds(driver.UnitRef, config, refunded);
-                    }
-                }
+                    _cost?.RefundSeconds(driver.UnitRef, config, refunded);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
             }
             if (_showing) ShowRange();
 
         }
-        public int ReportEnergyNet => _reportPending ? _reportEnergyNet : 0;
-        int IActionEnergyReportV2.ReportMoveEnergyNet => ReportEnergyNet;
-        int IActionEnergyReportV2.ReportAttackEnergyNet => 0;
-
         int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
         int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
 
@@ -789,21 +650,7 @@ namespace TGD.CombatV2
         {
             ClearExecReport();
         }
-        IGridActor ResolveRegisteredActor(Hex anchor)
-        {
-            if (_occ == null)
-                return _actor;
-            var registered = _occ.Get(anchor);
-            if (registered == null)
-                return _actor;
-            if (_actor == null)
-                return registered;
-            if (ReferenceEquals(registered, _actor))
-                return _actor;
-            if (!string.IsNullOrEmpty(registered.Id) && registered.Id == _actor.Id)
-                return registered;
-            return registered;
-        }
+
         // 若没指定占位，临时造一个“单格”占位
         static FootprintShape CreateSingleFallback()
         {
