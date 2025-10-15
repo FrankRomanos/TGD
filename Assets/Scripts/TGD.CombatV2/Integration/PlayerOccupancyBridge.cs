@@ -46,6 +46,18 @@ namespace TGD.CombatV2.Integration
         {
             if (!_placed)
                 EnsurePlacedNow();
+
+#if UNITY_EDITOR
+            if (_driver != null && _driver.IsReady && _placed)
+            {
+                var anchor = _actor.Anchor;
+                if (_driver.UnitRef.Position != anchor)
+                {
+                    Debug.LogWarning($"[Occ] Drift detected: driver={_driver.UnitRef.Position} occ={anchor}. Auto-mirror.", this);
+                    MirrorDriver(anchor, _actor.Facing);
+                }
+            }
+#endif
         }
 
         void OnDisable()
@@ -83,6 +95,7 @@ namespace TGD.CombatV2.Integration
                 _placed = true;
                 if (debugLog)
                     Debug.Log($"[Occ] Place {IdLabel()} at {_actor.Anchor}", this);
+                MirrorDriver(_actor.Anchor, _actor.Facing);
             }
         }
 
@@ -100,6 +113,7 @@ namespace TGD.CombatV2.Integration
                 _placed = true;
                 if (debugLog)
                     Debug.Log($"[Occ] Move {IdLabel()} -> {newAnchor}", this);
+                MirrorDriver(newAnchor, newFacing);
             }
             else
             {
@@ -111,6 +125,7 @@ namespace TGD.CombatV2.Integration
                     _placed = true;
                     if (debugLog)
                         Debug.Log($"[Occ] RePlace {IdLabel()} at {newAnchor}", this);
+                    MirrorDriver(newAnchor, newFacing);
                 }
             }
         }
@@ -163,21 +178,25 @@ namespace TGD.CombatV2.Integration
             public Facing4 Facing { get; set; }
             public FootprintShape Footprint => _footprint;
         }
+
         void MirrorDriver(Hex anchor, Facing4 facing)
         {
-            if (_driver == null || !_driver.IsReady) return;
-            // 更新 Unit 的逻辑坐标
-            _driver.UnitRef.Position = anchor;
-            _driver.UnitRef.Facing = facing;
+            if (_driver == null || !_driver.IsReady || _driver.UnitRef == null)
+                return;
 
-            // 同步 HexBoardMap（避免残留旧索引）
-            _driver.Map.Set(_driver.UnitRef, anchor);
+            var unit = _driver.UnitRef;
+            unit.Position = anchor;
+            unit.Facing = facing;
 
-            // 刷新可见位置
+            if (_driver.Map != null)
+                _driver.Map.Set(unit, anchor);
+
             _driver.SyncView();
 
-            if (debugLog) Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
+            if (debugLog)
+                Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
         }
+
         static FootprintShape CreateSingle()
         {
             var shape = ScriptableObject.CreateInstance<FootprintShape>();
