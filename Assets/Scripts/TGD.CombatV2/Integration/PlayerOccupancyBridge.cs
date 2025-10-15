@@ -18,6 +18,12 @@ namespace TGD.CombatV2.Integration
         IGridActor _actor;
         bool _placed;
 
+        public event System.Action<Hex, int> AnchorChanged;
+
+        public Hex CurrentAnchor => _actor?.Anchor ?? Hex.Zero;
+
+        public int AnchorVersion { get; private set; } = 0;
+
         void Awake()
         {
             _driver = GetComponent<HexBoardTestDriver>();
@@ -43,6 +49,14 @@ namespace TGD.CombatV2.Integration
 
         void Start() => EnsurePlacedNow();
 
+        void RaiseAnchorChanged(Hex anchor)
+        {
+            AnchorVersion++;
+            AnchorChanged?.Invoke(anchor, AnchorVersion);
+            if (debugLog)
+                Debug.Log($"[Occ] AnchorChanged v{AnchorVersion} -> {anchor}", this);
+        }
+
         void Update()
         {
             if (!_placed)
@@ -52,12 +66,13 @@ namespace TGD.CombatV2.Integration
             if (!autoMirrorDebug)
                 return;
 
-            if (_driver != null && _driver.IsReady && _placed)
+            if (_driver != null && _driver.IsReady && _placed && _driver.UnitRef != null)
             {
                 var anchor = _actor.Anchor;
-                if (!_driver.UnitRef.Position.Equals(anchor))
+                var unitRef = _driver.UnitRef;
+                if (!unitRef.Position.Equals(anchor))
                 {
-                    Debug.LogWarning($"[Occ] Drift detected: driver={_driver.UnitRef.Position} occ={anchor}. Auto-mirror.", this);
+                    Debug.LogWarning($"[Occ] Drift detected: driver={unitRef.Position} occ={anchor}. Auto-mirror.", this);
                     MirrorDriver(anchor, _actor.Facing);
                 }
             }
@@ -79,20 +94,22 @@ namespace TGD.CombatV2.Integration
 
         public object Actor => _actor;
 
-        public Hex CurrentAnchor => _actor?.Anchor ?? Hex.Zero;
-
-        public void EnsurePlacedNow()
+        public bool EnsurePlacedNow()
         {
             _driver?.EnsureInit();
             if (_occ == null && occupancyService)
                 _occ = occupancyService.Get();
             if (!IsReady)
-                return;
+                return false;
             if (_placed)
-                return;
+                return true;
 
-            _actor.Anchor = _driver.UnitRef.Position;
-            _actor.Facing = _driver.UnitRef.Facing;
+            var unitRef = _driver != null ? _driver.UnitRef : null;
+            if (unitRef != null)
+            {
+                _actor.Anchor = unitRef.Position;
+                _actor.Facing = unitRef.Facing;
+            }
 
             if (_occ.TryPlace(_actor, _actor.Anchor, _actor.Facing))
             {
@@ -100,15 +117,20 @@ namespace TGD.CombatV2.Integration
                 if (debugLog)
                     Debug.Log($"[Occ] Place {IdLabel()} at {_actor.Anchor}", this);
                 MirrorDriver(_actor.Anchor, _actor.Facing);
+                RaiseAnchorChanged(_actor.Anchor);
+                return true;
             }
+            return false;
         }
 
-        public void MoveCommit(Hex newAnchor, Facing4 newFacing)
+        public bool MoveCommit(Hex newAnchor, Facing4 newFacing)
         {
             if (_occ == null && occupancyService)
                 _occ = occupancyService.Get();
             if (!IsReady)
-                return;
+                return false;
+
+            bool success = false;
 
             if (_occ.TryMove(_actor, newAnchor))
             {
@@ -118,6 +140,7 @@ namespace TGD.CombatV2.Integration
                 if (debugLog)
                     Debug.Log($"[Occ] Move {IdLabel()} -> {newAnchor}", this);
                 MirrorDriver(newAnchor, newFacing);
+                success = true;
             }
             else
             {
@@ -130,8 +153,17 @@ namespace TGD.CombatV2.Integration
                     if (debugLog)
                         Debug.Log($"[Occ] RePlace {IdLabel()} at {newAnchor}", this);
                     MirrorDriver(newAnchor, newFacing);
+                    success = true;
                 }
             }
+
+            if (success)
+            {
+                RaiseAnchorChanged(newAnchor);
+                return true;
+            }
+
+            return false;
         }
 
         IGridActor CreateActorAdapter()
