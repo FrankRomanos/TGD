@@ -1,3 +1,4 @@
+using System;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2.Integration
@@ -7,7 +8,9 @@ namespace TGD.CombatV2.Integration
         bool IsReady { get; }
         object Actor { get; }
         Hex CurrentAnchor { get; }
-        void EnsurePlacedNow();
-        void MoveCommit(Hex newAnchor, Facing4 newFacing);
+        int AnchorVersion { get; }
+        event System.Action<Hex, int> AnchorChanged;
+        bool EnsurePlacedNow();
+        bool MoveCommit(Hex newAnchor, Facing4 newFacing);
     }
 }

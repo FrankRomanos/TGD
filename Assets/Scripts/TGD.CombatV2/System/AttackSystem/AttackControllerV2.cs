@@ -65,6 +65,10 @@ namespace TGD.CombatV2
         HexAreaPainter _painter;
         HexOccupancy _occ;
         IActorOccupancyBridge _bridge;
+        PlayerOccupancyBridge _playerBridge;
+        bool _previewDirty = true;
+        int _previewAnchorVersion = -1;
+        int _planAnchorVersion = -1;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
 
@@ -313,9 +317,7 @@ namespace TGD.CombatV2
             {
                 if (_bridge != null)
                     return _bridge.CurrentAnchor;
-                if (SelfActor != null)
-                    return SelfActor.Anchor;
-                return driver != null && driver.UnitRef != null ? driver.UnitRef.Position : Hex.Zero;
+                return SelfActor != null ? SelfActor.Anchor : Hex.Zero;
             }
         }
 
@@ -331,6 +333,7 @@ namespace TGD.CombatV2
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
 
             _bridge = GetComponent<IActorOccupancyBridge>();
+            _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponent<PlayerOccupancyBridge>();
 
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
@@ -362,6 +365,10 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             ClearPendingAttack();
+            if (_playerBridge == null)
+                _playerBridge = GetComponent<PlayerOccupancyBridge>();
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged += HandleAnchorChanged;
             AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
@@ -398,6 +405,8 @@ namespace TGD.CombatV2
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged -= HandleAnchorChanged;
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
@@ -410,6 +419,25 @@ namespace TGD.CombatV2
             _currentPreview = null;
             _hover = null;
             _occ = null;
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
+        }
+
+        void OnDestroy()
+        {
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+        }
+
+        void HandleAnchorChanged(Hex anchor, int version)
+        {
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
+            _currentPreview = null;
+            _hover = null;
+            _painter?.Clear();
         }
 
         void OnTurnStarted(Unit unit)
@@ -505,6 +533,9 @@ namespace TGD.CombatV2
             _hover = null;
             _currentPreview = null;
             _painter.Clear();
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
 
             AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
         }
@@ -515,6 +546,9 @@ namespace TGD.CombatV2
             _hover = null;
             _currentPreview = null;
             _painter.Clear();
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
             AttackEventsV2.RaiseAimHidden();
         }
 
@@ -522,7 +556,7 @@ namespace TGD.CombatV2
         {
             if (!_aiming || _moving) return;
             if (!IsReady) return;
-            if (_hover.HasValue && _hover.Value.Equals(hex) && _currentPreview != null) return;
+            if (_hover.HasValue && _hover.Value.Equals(hex) && _currentPreview != null && !_previewDirty) return;
             _hover = hex;
             _currentPreview = BuildPreview(hex, false);
             RenderPreview(_currentPreview);
@@ -573,6 +607,21 @@ namespace TGD.CombatV2
                     preview != null ? preview.rejectMessage : "Invalid target.");
                 yield break;
             }
+
+            if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
+            {
+                Debug.LogWarning($"[Guard] Attack preview stale (previewV={_previewAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild.", this);
+                preview = BuildPreview(hex, true, targetCheck);
+                if (preview == null || !preview.valid)
+                {
+                    RaiseRejected(driver.UnitRef,
+                        preview != null ? preview.rejectReason : AttackRejectReasonV2.NoPath,
+                        preview != null ? preview.rejectMessage : "Invalid target.");
+                    yield break;
+                }
+            }
+
+            _planAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
 
             if (ctx != null && ctx.Entangled && (preview.path == null || preview.path.Count > 1))
             {
@@ -751,6 +800,8 @@ namespace TGD.CombatV2
                 _occ = occupancyService.Get();
 
             var start = CurrentAnchor;
+            _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
+            _previewDirty = false;
             var rates = BuildMoveRates(start);
             var preview = new PreviewData
             {
@@ -904,6 +955,18 @@ namespace TGD.CombatV2
                 yield break;
 
             ClearTempReservations("PreAction");
+
+            if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
+            {
+                Debug.LogWarning($"[Guard] Anchor changed before attack execute (planV={_planAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild plan.", this);
+                preview = BuildPreview(preview.targetHex, true, preview.targetCheck);
+                if (preview == null || !preview.valid)
+                {
+                    HandleApproachAbort();
+                    yield break;
+                }
+                _planAnchorVersion = _playerBridge.AnchorVersion;
+            }
 
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
@@ -1204,6 +1267,7 @@ namespace TGD.CombatV2
             finally
             {
                 ClearTempReservations("ActionEnd");
+                _planAnchorVersion = -1;
             }
 
             void HandleApproachAbort()

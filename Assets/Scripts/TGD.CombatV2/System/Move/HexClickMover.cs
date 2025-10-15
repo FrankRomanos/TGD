@@ -151,7 +151,11 @@ namespace TGD.CombatV2
 
         // 占位
         IActorOccupancyBridge _bridge;
+        PlayerOccupancyBridge _playerBridge;
         HexOccupancy _occ;
+        bool _previewDirty = true;
+        int _previewAnchorVersion = -1;
+        int _planAnchorVersion = -1;
                              // === HUD 提示（可选）===
         [Header("HUD")]
         public bool showHudMessage = true;
@@ -329,6 +333,14 @@ namespace TGD.CombatV2
                 yield break;
             }
 
+            if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
+            {
+                Debug.LogWarning($"[Guard] Move plan stale (previewV={_previewAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild.", this);
+                ShowRange();
+            }
+
+            _planAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
+
             if (_paths.TryGetValue(hex, out var path) && path != null && path.Count >= 2)
             {
                 yield return RunPathTween_WithTime(path);   // ★ 改：走带结算版本
@@ -348,9 +360,7 @@ namespace TGD.CombatV2
             {
                 if (_bridge != null)
                     return _bridge.CurrentAnchor;
-                if (SelfActor != null)
-                    return SelfActor.Anchor;
-                return driver != null && driver.UnitRef != null ? driver.UnitRef.Position : Hex.Zero;
+                return SelfActor != null ? SelfActor.Anchor : Hex.Zero;
             }
         }
 
@@ -363,6 +373,7 @@ namespace TGD.CombatV2
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
             _bridge = GetComponent<IActorOccupancyBridge>();
+            _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponent<PlayerOccupancyBridge>();
 
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
@@ -400,6 +411,8 @@ namespace TGD.CombatV2
 
             if (_bridge == null)
                 _bridge = GetComponent<IActorOccupancyBridge>();
+            if (_playerBridge == null)
+                _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponent<PlayerOccupancyBridge>();
 
             if (occupancyService)
                 _occ = occupancyService.Get();
@@ -412,12 +425,43 @@ namespace TGD.CombatV2
             _bridge?.EnsurePlacedNow();
         }
 
+        void OnEnable()
+        {
+            if (_playerBridge == null)
+                _playerBridge = GetComponent<PlayerOccupancyBridge>();
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged += HandleAnchorChanged;
+        }
+
         void OnDisable()
         {
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged -= HandleAnchorChanged;
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
             _occ = null;
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
+        }
+
+        void OnDestroy()
+        {
+            if (_playerBridge != null)
+                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+        }
+
+        void HandleAnchorChanged(Hex anchor, int version)
+        {
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
+            if (_showing)
+            {
+                _painter.Clear();
+                _paths.Clear();
+            }
         }
 
         void Update()
@@ -588,6 +632,8 @@ namespace TGD.CombatV2
             if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor);
 
             HexMoveEvents.RaiseRangeShown(driver.UnitRef, result.Paths.Keys);
+            _previewDirty = false;
+            _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
             _showing = true;
         }
 
@@ -596,6 +642,9 @@ namespace TGD.CombatV2
             _painter.Clear();
             _paths.Clear();
             _showing = false;
+            _previewDirty = true;
+            _previewAnchorVersion = -1;
+            _planAnchorVersion = -1;
             HexMoveEvents.RaiseRangeHidden();
         }
 
@@ -642,10 +691,26 @@ namespace TGD.CombatV2
         {
 
             if (path == null || path.Count < 2) yield break;
+
+            if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
+            {
+                var targetHex = path[^1];
+                Debug.LogWarning($"[Guard] Anchor changed before execute (planV={_planAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild plan.", this);
+                ShowRange();
+                _planAnchorVersion = _playerBridge.AnchorVersion;
+                if (!_paths.TryGetValue(targetHex, out var refreshed) || refreshed == null || refreshed.Count < 2)
+                {
+                    HexMoveEvents.RaiseRejected(driver != null ? driver.UnitRef : null, MoveBlockReason.PathBlocked, "Anchor changed.");
+                    yield break;
+                }
+                path = refreshed;
+            }
+
             _bridge?.EnsurePlacedNow();
             if (occupancyService)
                 _occ = occupancyService.Get();
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null) yield break;
+            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
+                yield break;
 
             int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
@@ -830,6 +895,8 @@ namespace TGD.CombatV2
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
             }
             if (_showing) ShowRange();
+
+            _planAnchorVersion = -1;
 
         }
         int IActionExecReportV2.UsedSeconds => ReportUsedSeconds;

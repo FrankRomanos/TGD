@@ -4,6 +4,8 @@
 > 涵盖：**TurnManagerV2 时间轴与规则**、**六大动作与统一流程（W1→W4→W4.5）**、**事件/结算解耦约束**、**调试日志规范**、**分步实施与验收**、**测试剧本**。  
 > 本文是**单一真相源**（source of truth），所有实现均以此为准。
 
+<span style="color:red">⚠️ 任何逻辑都不得从 TestDriver/UnitRef/Map 读取“起点/站位”用作规则判断；起点只读 IActorOccupancyBridge.CurrentAnchor，计划和预览都须配合 AnchorVersion 做版本化失效。所有位移（含强制）必须调用 MoveCommit()，由 Bridge 统一触发 AnchorChanged。</span>
+
 ---
 
 ## 目录
