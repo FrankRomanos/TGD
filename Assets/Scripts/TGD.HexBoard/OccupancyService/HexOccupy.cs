@@ -24,6 +24,30 @@ namespace TGD.HexBoard
 
         public IGridActor Get(Hex c) => cellToActor.TryGetValue(c, out var a) ? a : null;
 
+        public bool TryGetActor(Hex cell, out IGridActor actor)
+        {
+            if (cellToActor.TryGetValue(cell, out var found) && found != null)
+            {
+                actor = found;
+                return true;
+            }
+
+            actor = null;
+            return false;
+        }
+
+        public bool TryGetAnchor(Unit unit, out Hex anchor)
+        {
+            if (unit != null)
+            {
+                anchor = unit.Position;
+                return true;
+            }
+
+            anchor = Hex.Zero;
+            return false;
+        }
+
         bool IsBlockedInternal(Hex c, IGridActor ignore, bool includeTemp)
         {
             if (cellToActor.TryGetValue(c, out var a) && a != null && a != ignore)
@@ -34,6 +58,13 @@ namespace TGD.HexBoard
         }
 
         public bool IsBlocked(Hex c, IGridActor ignore = null) => IsBlockedInternal(c, ignore, true);
+
+        public bool IsBlockedFormal(Hex c, IGridActor ignore = null)
+        {
+            if (Layout != null && !Layout.Contains(c))
+                return true;
+            return IsBlockedInternal(c, ignore, false);
+        }
 
         bool CanPlaceInternal(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore, bool includeTemp)
         {
