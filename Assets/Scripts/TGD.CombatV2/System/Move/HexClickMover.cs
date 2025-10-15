@@ -163,7 +163,9 @@ namespace TGD.CombatV2
         public string Id => "Move";
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
-        int _reportEnergyNet;
+        int _reportEnergyMoveNet;
+        int _reportEnergyAtkNet;
+        bool _reportFreeMove;
         bool _reportPending;
         public (int timeSec, int energy) PeekPlannedCost()
         {
@@ -172,19 +174,35 @@ namespace TGD.CombatV2
             return (seconds, energyRate * seconds);
         }
 
+        public (int moveSecs, int energyMove) GetPlannedCost()
+        {
+            var (timeSec, energy) = PeekPlannedCost();
+            return (timeSec, energy);
+        }
+
+        public int ReportUsedSeconds => _reportPending ? _reportUsedSeconds : 0;
+        public int ReportRefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
+        public int ReportEnergyMoveNet => _reportPending ? _reportEnergyMoveNet : 0;
+        public int ReportEnergyAtkNet => 0;
+        public bool ReportFreeMoveApplied => _reportPending && _reportFreeMove;
+
         void ClearExecReport()
         {
             _reportUsedSeconds = 0;
             _reportRefundedSeconds = 0;
-            _reportEnergyNet = 0;
+            _reportEnergyMoveNet = 0;
+            _reportEnergyAtkNet = 0;
+            _reportFreeMove = false;
             _reportPending = false;
         }
 
-        void SetExecReport(int used, int refunded, int energyNet)
+        void SetExecReport(int used, int refunded, int energyMoveNet, bool freeMove)
         {
             _reportUsedSeconds = Mathf.Max(0, used);
             _reportRefundedSeconds = Mathf.Max(0, refunded);
-            _reportEnergyNet = Mathf.Max(0, energyNet);
+            _reportEnergyMoveNet = energyMoveNet;
+            _reportEnergyAtkNet = 0;
+            _reportFreeMove = freeMove;
             _reportPending = true;
             LogMoveSummary();
         }
@@ -193,7 +211,8 @@ namespace TGD.CombatV2
         {
             var unit = driver != null ? driver.UnitRef : null;
             string label = TurnManagerV2.FormatUnitLabel(unit);
-            Debug.Log($"[Move]   Use secs={_reportUsedSeconds} refund={_reportRefundedSeconds} energy={_reportEnergyNet} U={label}", this);
+            string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
+            Debug.Log($"[Move]   Use secs={_reportUsedSeconds} refund={_reportRefundedSeconds} energy={_reportEnergyMoveNet} U={label}{suffix}", this);
         }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
@@ -652,7 +671,7 @@ namespace TGD.CombatV2
                 if (!_cost.HasEnough(driver.UnitRef, config))
                 { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
-                if (ManageEnergyLocally)
+                if (!UseTurnManager && ManageEnergyLocally)
                     _cost.Pay(driver.UnitRef, config);
             }
 
@@ -680,20 +699,20 @@ namespace TGD.CombatV2
             if (config != null)
             {
                 int costPerSecond = Mathf.Max(0, config.energyCost);
-                energyNet = Mathf.Max(0, spentSec * costPerSecond);
+                energyNet = (requiredSec - refunded) * costPerSecond;
             }
 
             if (reached == null || reached.Count < 2)
             {
-                if (ManageEnergyLocally)
+                if (!UseTurnManager && ManageEnergyLocally)
                     _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
-                if (ManageTurnTimeLocally)
+                if (!UseTurnManager && ManageTurnTimeLocally)
                     _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
                 yield break;
             }
 
-            SetExecReport(usedSeconds, refunded, energyNet);
+            SetExecReport(usedSeconds, refunded, energyNet, false);
             _moving = true;
             if (driver.unitView != null)
             {
@@ -795,21 +814,21 @@ namespace TGD.CombatV2
                 if (debugLog) Debug.Log("[Move] No more time.", this);
             }
 
-            if (ManageTurnTimeLocally)
+            if (!UseTurnManager && ManageTurnTimeLocally)
             {
                 _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
             }
             if (refunded > 0)
             {
-                if (ManageEnergyLocally)
+                if (!UseTurnManager && ManageEnergyLocally)
                     _cost?.RefundSeconds(driver.UnitRef, config, refunded);
                 HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
             }
             if (_showing) ShowRange();
 
         }
-        int IActionExecReportV2.UsedSeconds => _reportPending ? _reportUsedSeconds : 0;
-        int IActionExecReportV2.RefundedSeconds => _reportPending ? _reportRefundedSeconds : 0;
+        int IActionExecReportV2.UsedSeconds => ReportUsedSeconds;
+        int IActionExecReportV2.RefundedSeconds => ReportRefundedSeconds;
 
         void IActionExecReportV2.Consume()
         {
