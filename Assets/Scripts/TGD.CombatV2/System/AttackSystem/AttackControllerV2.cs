@@ -1190,8 +1190,6 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                if (_occ != null && SelfActor != null)
-                    _occ.TempClearForOwner(SelfActor);
                 _bridge?.MoveCommit(lastPosition, finalFacing);
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
