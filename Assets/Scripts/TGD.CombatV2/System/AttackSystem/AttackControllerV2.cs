@@ -138,7 +138,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
-            Debug.Log($"[Attack] Use moveSecs={_reportMoveUsedSeconds} atkSecs={_reportAttackUsedSeconds} energyMove={_reportEnergyMoveNet} energyAtk={_reportEnergyAtkNet} U={label}{suffix}", this);
+            Debug.Log($"[Attack] Use moveSecs={_reportMoveUsedSeconds}s atkSecs={_reportAttackUsedSeconds}s energyMove={_reportEnergyMoveNet} energyAtk={_reportEnergyAtkNet} U={label}{suffix}", this);
         }
 
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
@@ -257,6 +257,23 @@ namespace TGD.CombatV2
             }
 
             return result;
+        }
+
+        public PlannedAttackCost GetBaselineCost()
+        {
+            int moveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
+            int moveEnergyRate = moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0;
+            int atkSecs = Mathf.Max(0, attackConfig ? attackConfig.baseTimeSeconds : 0);
+            int atkEnergy = Mathf.Max(0, attackConfig ? attackConfig.baseEnergyCost : 0);
+
+            return new PlannedAttackCost
+            {
+                moveSecs = moveSecs,
+                moveEnergy = moveEnergyRate * moveSecs,
+                atkSecs = atkSecs,
+                atkEnergy = atkEnergy,
+                valid = true
+            };
         }
 
         public (int moveSecs, int atkSecs, int energyMove, int energyAtk) GetPlannedCost()
@@ -1232,15 +1249,15 @@ namespace TGD.CombatV2
 
                 if (canFree && reached != null && reached.Count >= 2 && usedSeconds < cutoff)
                 {
-                    int forceFree = 1;
-                    refundedSeconds = Mathf.Max(refundedSeconds, forceFree);
                     freeMoveApplied = true;
 
+#if !USE_TMV2
                     if (debugLog)
                     {
                         string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                         Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSeconds:F2}s (<{cutoff:F2})", this);
                     }
+#endif
                 }
 
                 int moveUsedSeconds = Mathf.Max(0, Mathf.CeilToInt(usedSeconds));
@@ -1253,8 +1270,10 @@ namespace TGD.CombatV2
                 _reportAttackRefundSeconds = attackRefundSeconds;
 
                 int netMoveSeconds = moveSecsCharge - moveRefundSeconds;
+                if (freeMoveApplied && netMoveSeconds > 0)
+                    netMoveSeconds = Mathf.Max(0, netMoveSeconds - 1);
                 int moveEnergyNet = netMoveSeconds * moveEnergyRate;
-                int attackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : 0;
+                int attackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : -Mathf.Max(0, attackEnergyPaid);
 
                 SetExecReport(
                     moveUsedSeconds + attackUsedSeconds,
@@ -1310,6 +1329,7 @@ namespace TGD.CombatV2
             ClearExecReport();
         }
 
+        public bool IsBusy => _moving;
         public int ReportComboBaseCount => _reportComboBaseCount;
 
         public int ReportMoveUsedSeconds => _reportPending ? _reportMoveUsedSeconds : 0;
@@ -1589,8 +1609,10 @@ namespace TGD.CombatV2
             if (stats == null) return;
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
+#if !USE_TMV2
             if (debugLog)
                 Debug.Log($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})", this);
+#endif
         }
 
         void OnAttackStrikeFired(Unit unit, int comboIndex)

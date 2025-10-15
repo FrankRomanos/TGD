@@ -190,6 +190,7 @@ namespace TGD.CombatV2
         public int ReportMoveEnergyNet => ReportEnergyMoveNet;
         public int ReportAttackEnergyNet => ReportEnergyAtkNet;
         public bool ReportFreeMoveApplied => _reportPending && _reportFreeMove;
+        public bool IsBusy => _moving;
 
 
         void ClearExecReport()
@@ -218,7 +219,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
-            Debug.Log($"[Move]   Use secs={_reportUsedSeconds} refund={_reportRefundedSeconds} energy={_reportEnergyMoveNet} U={label}{suffix}", this);
+            Debug.Log($"[Move] Use secs={_reportUsedSeconds}s refund={_reportRefundedSeconds}s energy={_reportEnergyMoveNet} U={label}{suffix}", this);
         }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
