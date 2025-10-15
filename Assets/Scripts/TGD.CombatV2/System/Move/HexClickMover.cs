@@ -47,6 +47,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
+        public bool suppressInternalLogs = true;
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]
@@ -219,7 +220,13 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
-            Debug.Log($"[Move] Use secs={_reportUsedSeconds}s refund={_reportRefundedSeconds}s energy={_reportEnergyMoveNet} U={label}{suffix}", this);
+            LogInternal($"[Move] Use secs={_reportUsedSeconds}s refund={_reportRefundedSeconds}s energy={_reportEnergyMoveNet} U={label}{suffix}");
+        }
+
+        void LogInternal(string message)
+        {
+            if (!suppressInternalLogs && debugLog)
+                Debug.Log(message, this);
         }
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
@@ -299,7 +306,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateMoveTarget(unit, hex);
             if (debugLog)
-                Debug.Log($"[Action][Move] Click {hex} → {targetCheck}", this);
+                LogInternal($"[Action][Move] Click {hex} → {targetCheck}");
 
             if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
             {
@@ -562,7 +569,7 @@ namespace TGD.CombatV2
             var anchor = CurrentAnchor;
             var occOk = (_playerBridge != null && _playerBridge.IsReady);
             var label = TurnManagerV2.FormatUnitLabel(driver?.UnitRef);
-            Debug.Log($"[Probe][MoveAim] unit={label} driver={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}", this);
+            LogInternal($"[Probe][MoveAim] unit={label} driver={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
 #endif
             _bridge?.EnsurePlacedNow();
             if (occupancyService)
@@ -675,7 +682,7 @@ namespace TGD.CombatV2
         {
             var (mapped, message) = MapMoveReject(reason);
             if (debugLog)
-                Debug.Log($"[Action][Move] Reject {reason}", this);
+                LogInternal($"[Action][Move] Reject {reason}");
             HexMoveEvents.RaiseRejected(unit, mapped, message);
         }
 
@@ -876,7 +883,7 @@ namespace TGD.CombatV2
                       stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
                 {
                     status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
-                    Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}", this);
+                    LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                 }
 
                 if (driver.Map != null)
@@ -897,7 +904,7 @@ namespace TGD.CombatV2
             if (truncatedByBudget && !stoppedByExternal)
             {
                 HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
-                if (debugLog) Debug.Log("[Move] No more time.", this);
+                LogInternal("[Move] No more time.");
             }
 
             if (!UseTurnManager && ManageTurnTimeLocally)
