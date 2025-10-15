@@ -5,7 +5,7 @@ namespace TGD.CombatV2
 {
     public static class ActionPhaseLogger
     {
-        public static void Log(Unit unit, string toolId, ActionPhase phase, string message = null)
+        public static void Log(Unit unit, string toolId, string phase, string message = null)
         {
             var label = TurnManagerV2.FormatUnitLabel(unit);
             string suffix = string.IsNullOrEmpty(message) ? string.Empty : $" {message}";
