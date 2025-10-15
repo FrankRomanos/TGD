@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace TGD.CombatV2.Targeting
 {
@@ -7,30 +8,42 @@ namespace TGD.CombatV2.Targeting
     {
         None = 0,
         Empty = 1 << 0,
-        Enemy = 1 << 1,
+        Self = 1 << 1,
         Ally = 1 << 2,
-        Self = 1 << 3,
-        Any = Empty | Enemy | Ally | Self
+        Enemy = 1 << 3,
+        AnyUnit = Self | Ally | Enemy,
+        Any = Empty | AnyUnit
     }
 
-    [Flags]
     public enum TargetTerrainMask
     {
-        NonObstacle = 1 << 0,
-        Any = 1 << 1
+        NonObstacle = 0,
+        Any = 1
     }
 
-    public struct TargetingSpec
+    public enum HitKind { None, Self, Ally, Enemy }
+    public enum PlanKind { None, MoveOnly, MoveAndAttack, AttackOnly }
+
+    [Serializable]
+    public sealed class TargetingSpec
     {
-        public TargetOccupantMask occupant;
-        public TargetTerrainMask terrain;
-        public bool allowSelf;
-        public bool requireOccupied;
-        public bool requireEmpty;
+        [Header("Who can I click?")]
+        public TargetOccupantMask occupant = TargetOccupantMask.Empty;
+
+        [Header("Terrain filter")]
+        public TargetTerrainMask terrain = TargetTerrainMask.NonObstacle;
+
+        [Header("Booleans")]
+        public bool allowSelf = false;
+        public bool requireOccupied = false;
+        public bool requireEmpty = false;
+
+        [Header("Optional")]
+        public int maxRangeHexes = -1;
 
         public override string ToString()
         {
-            return $"occ={occupant} terrain={terrain} allowSelf={allowSelf} requireOccupied={requireOccupied} requireEmpty={requireEmpty}";
+            return $"[Spec] occ={occupant} terr={terrain} allowSelf={allowSelf} reqOcc={requireOccupied} reqEmpty={requireEmpty} range={maxRangeHexes}";
         }
     }
 }

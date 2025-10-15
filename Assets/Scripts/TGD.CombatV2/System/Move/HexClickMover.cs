@@ -1,8 +1,10 @@
 // File: TGD.HexBoard/HexClickMover.cs
 using System.Collections;
 using System.Collections.Generic;
-using TGD.HexBoard;
+using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
+using TGD.HexBoard;
+using TGD.HexBoard.Pathfinding;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -37,6 +39,7 @@ namespace TGD.CombatV2
         public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
         public HexBoardTiler tiler;      // 着色
         public FootprintShape footprintForActor; // ★ 这个单位的占位形状（SO）
+        public DefaultTargetValidator targetValidator;
         [Header("Context (optional)")]           // ★ 新增
         public UnitRuntimeContext ctx;            // ★ 新增
 
@@ -144,6 +147,8 @@ namespace TGD.CombatV2
         bool _showing = false, _moving = false;
         readonly Dictionary<Hex, List<Hex>> _paths = new();
         HexAreaPainter _painter;
+
+        TargetingSpec _moveSpec;
 
         // 占位
         HexOccupancy _occ;
@@ -260,6 +265,18 @@ namespace TGD.CombatV2
             ClearExecReport();
             EnsureTurnTimeInited();
             RefreshStateForAim();
+
+            var unit = driver != null ? driver.UnitRef : null;
+            var targetCheck = ValidateMoveTarget(unit, hex);
+            if (debugLog)
+                Debug.Log($"[Action][Move] W1/W2 {targetCheck}", this);
+
+            if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
+            {
+                RaiseTargetRejected(unit, targetCheck.reason);
+                yield break;
+            }
+
             _occ?.TempClearForOwner(_actor);
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
@@ -304,6 +321,19 @@ namespace TGD.CombatV2
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+
+            if (!targetValidator)
+                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
+
+            _moveSpec = new TargetingSpec
+            {
+                occupant = TargetOccupantMask.Empty,
+                terrain = TargetTerrainMask.NonObstacle,
+                allowSelf = false,
+                requireOccupied = false,
+                requireEmpty = true,
+                maxRangeHexes = -1
+            };
         }
 
         void Start()
@@ -439,6 +469,8 @@ namespace TGD.CombatV2
 
             var rates = BuildMoveRates(startHex);
 
+            var startPassBlocker = new StartPassBlocker(_occ, driver?.UnitRef, startHex);
+
             // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
             const float MR_MIN = 1f, MR_MAX = 12f;
             const float ENV_MIN = 0.1f, ENV_MAX = 5f;
@@ -473,8 +505,14 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits && !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
-                    return true;
+                if (blockByUnits)
+                {
+                    if (startPassBlocker != null && startPassBlocker.IsBlocked(cell))
+                        return true;
+
+                    if (_occ == null || !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                        return true;
+                }
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
 
@@ -499,6 +537,44 @@ namespace TGD.CombatV2
             _paths.Clear();
             _showing = false;
             HexMoveEvents.RaiseRangeHidden();
+        }
+
+        TargetCheckResult ValidateMoveTarget(Unit unit, Hex hex)
+        {
+            if (targetValidator == null || _moveSpec == null || unit == null)
+                return new TargetCheckResult { ok = false, reason = TargetInvalidReason.Unknown, hit = HitKind.None, plan = PlanKind.None };
+            return targetValidator.Check(unit, hex, _moveSpec);
+        }
+
+        void RaiseTargetRejected(Unit unit, TargetInvalidReason reason)
+        {
+            var (mapped, message) = MapMoveReject(reason);
+            if (debugLog)
+                Debug.Log($"[Action][Move] Reject {reason}", this);
+            HexMoveEvents.RaiseRejected(unit, mapped, message);
+        }
+
+        static (MoveBlockReason reason, string message) MapMoveReject(TargetInvalidReason reason)
+        {
+            switch (reason)
+            {
+                case TargetInvalidReason.Self:
+                    return (MoveBlockReason.PathBlocked, "Self not allowed.");
+                case TargetInvalidReason.Friendly:
+                    return (MoveBlockReason.PathBlocked, "Cannot move onto ally.");
+                case TargetInvalidReason.EnemyNotAllowed:
+                    return (MoveBlockReason.PathBlocked, "Cannot move onto enemy.");
+                case TargetInvalidReason.EmptyNotAllowed:
+                    return (MoveBlockReason.PathBlocked, "Target must be occupied.");
+                case TargetInvalidReason.Blocked:
+                    return (MoveBlockReason.PathBlocked, "Blocked by obstacle.");
+                case TargetInvalidReason.OutOfRange:
+                    return (MoveBlockReason.NoSteps, "Out of range.");
+                case TargetInvalidReason.None:
+                    return (MoveBlockReason.PathBlocked, "Invalid target.");
+                default:
+                    return (MoveBlockReason.PathBlocked, "Invalid target.");
+            }
         }
 
         // ===== 逐格移动 + 起步一次性转向 + 占位提交 =====

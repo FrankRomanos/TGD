@@ -1,9 +1,11 @@
 // File: TGD.CombatV2/AttackControllerV2.cs
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
+using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
+using TGD.HexBoard.Pathfinding;
+using UnityEngine;
 
 namespace TGD.CombatV2
 {
@@ -24,6 +26,7 @@ namespace TGD.CombatV2
         public FootprintShape footprintForActor;
         public HexOccupancyService occService;
         public HexEnvironmentSystem env;
+        public DefaultTargetValidator targetValidator;
 
         [Header("Context (optional)")]
         public UnitRuntimeContext ctx;
@@ -63,6 +66,8 @@ namespace TGD.CombatV2
         IGridActor _actor;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
+
+        TargetingSpec _attackSpec;
 
         bool _aiming;
         bool _moving;
@@ -270,6 +275,8 @@ namespace TGD.CombatV2
             public float mrClick;
             public float mrNoEnv;
             public MoveRatesSnapshot rates;
+            public PlanKind plan;
+            public TargetCheckResult targetCheck;
             public AttackRejectReasonV2 rejectReason;
             public string rejectMessage;
         }
@@ -284,6 +291,19 @@ namespace TGD.CombatV2
             _enemyLocator = enemyProvider as IEnemyLocator;
             if (_enemyLocator == null)
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
+
+            if (!targetValidator)
+                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
+
+            _attackSpec = new TargetingSpec
+            {
+                occupant = TargetOccupantMask.Enemy | TargetOccupantMask.Empty,
+                terrain = TargetTerrainMask.NonObstacle,
+                allowSelf = false,
+                requireOccupied = false,
+                requireEmpty = false,
+                maxRangeHexes = -1
+            };
         }
 
         void OnEnable()
@@ -462,9 +482,24 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            var preview = (_currentPreview != null && _currentPreview.valid && _currentPreview.targetHex.Equals(hex))
-                ? ClonePreview(_currentPreview)
-                : BuildPreview(hex, true);
+            var unit = driver != null ? driver.UnitRef : null;
+            var targetCheck = ValidateAttackTarget(unit, hex);
+            if (debugLog)
+                Debug.Log($"[Action][Attack] W1/W2 {targetCheck}", this);
+
+            if (!targetCheck.ok)
+            {
+                RaiseTargetRejected(unit, targetCheck.reason);
+                yield break;
+            }
+
+            if (targetCheck.plan != PlanKind.MoveOnly && targetCheck.plan != PlanKind.MoveAndAttack)
+            {
+                RaiseTargetRejected(unit, TargetInvalidReason.Unknown);
+                yield break;
+            }
+
+            var preview = BuildPreview(hex, true, targetCheck);
 
             if (preview == null || !preview.valid)
             {
@@ -591,7 +626,45 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAimShown(driver.UnitRef, preview.path);
         }
 
-        PreviewData BuildPreview(Hex target, bool logInvalid)
+        TargetCheckResult ValidateAttackTarget(Unit unit, Hex hex)
+        {
+            if (targetValidator == null || _attackSpec == null || unit == null)
+                return new TargetCheckResult { ok = false, reason = TargetInvalidReason.Unknown, hit = HitKind.None, plan = PlanKind.None };
+            return targetValidator.Check(unit, hex, _attackSpec);
+        }
+
+        void RaiseTargetRejected(Unit unit, TargetInvalidReason reason)
+        {
+            var (mapped, message) = MapAttackReject(reason);
+            if (debugLog)
+                Debug.Log($"[Action][Attack] Reject {reason}", this);
+            RaiseRejected(unit, mapped, message);
+        }
+
+        static (AttackRejectReasonV2 reason, string message) MapAttackReject(TargetInvalidReason reason)
+        {
+            switch (reason)
+            {
+                case TargetInvalidReason.Self:
+                    return (AttackRejectReasonV2.NoPath, "Self target not allowed.");
+                case TargetInvalidReason.Friendly:
+                    return (AttackRejectReasonV2.NoPath, "Cannot attack ally.");
+                case TargetInvalidReason.EnemyNotAllowed:
+                    return (AttackRejectReasonV2.NoPath, "Enemy not allowed.");
+                case TargetInvalidReason.EmptyNotAllowed:
+                    return (AttackRejectReasonV2.NoPath, "Target must be occupied.");
+                case TargetInvalidReason.Blocked:
+                    return (AttackRejectReasonV2.NoPath, "Blocked by obstacle.");
+                case TargetInvalidReason.OutOfRange:
+                    return (AttackRejectReasonV2.CantMove, "Out of range.");
+                case TargetInvalidReason.None:
+                    return (AttackRejectReasonV2.NoPath, "Invalid target.");
+                default:
+                    return (AttackRejectReasonV2.NoPath, "Invalid target.");
+            }
+        }
+
+        PreviewData BuildPreview(Hex target, bool logInvalid, TargetCheckResult? overrideCheck = null)
         {
             if (!IsReady)
             {
@@ -613,17 +686,17 @@ namespace TGD.CombatV2
                 rates = rates,
                 mrClick = rates.mrClick,
                 mrNoEnv = rates.mrNoEnv,
-                attackSecsCharge = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0,
-                attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0
+                attackSecsCharge = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0
             };
 
-            if (!layout.Contains(target))
+            if (layout != null && !layout.Contains(target))
             {
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
                 preview.rejectMessage = "Target out of board.";
                 return preview;
             }
+
             if (env != null && env.IsPit(target))
             {
                 preview.valid = false;
@@ -632,16 +705,41 @@ namespace TGD.CombatV2
                 return preview;
             }
 
-            bool isEnemy = IsEnemyHex(target);
-            preview.targetIsEnemy = isEnemy;
+            var check = overrideCheck ?? ValidateAttackTarget(unit, target);
+            preview.targetCheck = check;
+            preview.plan = check.plan;
 
+            if (!check.ok)
+            {
+                var (reject, message) = MapAttackReject(check.reason);
+                preview.valid = false;
+                preview.rejectReason = reject;
+                preview.rejectMessage = message;
+                if (logInvalid && debugLog)
+                    Debug.Log($"[Action][Attack] BuildPreview reject {message}", this);
+                return preview;
+            }
+
+            bool treatAsEnemy = check.plan == PlanKind.MoveAndAttack;
+            bool treatAsMoveOnly = check.plan == PlanKind.MoveOnly;
+            if (!treatAsEnemy && !treatAsMoveOnly)
+            {
+                preview.valid = false;
+                preview.rejectReason = AttackRejectReasonV2.NoPath;
+                preview.rejectMessage = "Unsupported plan.";
+                return preview;
+            }
+
+            preview.targetIsEnemy = treatAsEnemy;
+
+            var startPassBlocker = new StartPassBlocker(_occ, unit, start);
             List<Hex> path = null;
             Hex landing = target;
 
-            if (isEnemy)
+            if (treatAsEnemy)
             {
                 int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
-                if (!TryFindMeleePath(start, target, range, out landing, out path))
+                if (!TryFindMeleePath(start, target, range, startPassBlocker, out landing, out path))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -659,7 +757,7 @@ namespace TGD.CombatV2
                     return preview;
                 }
 
-                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target));
+                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target, startPassBlocker));
                 if (path == null)
                 {
                     preview.valid = false;
@@ -669,6 +767,12 @@ namespace TGD.CombatV2
                 }
             }
 
+            if (!treatAsEnemy)
+            {
+                preview.attackSecsCharge = 0;
+                preview.attackEnergyCost = 0;
+            }
+
             preview.landingHex = landing;
             preview.path = path;
             preview.steps = Mathf.Max(0, (path?.Count ?? 1) - 1);
@@ -676,7 +780,7 @@ namespace TGD.CombatV2
             float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
             int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
             int chargeSecs = predSecs;
-            if (isEnemy)
+            if (treatAsEnemy)
             {
                 float charge = Mathf.Max(0f, predSecs - 0.2f);
                 chargeSecs = Mathf.CeilToInt(charge);
@@ -709,6 +813,8 @@ namespace TGD.CombatV2
                 mrClick = src.mrClick,
                 mrNoEnv = src.mrNoEnv,
                 rates = src.rates,
+                plan = src.plan,
+                targetCheck = src.targetCheck,
                 rejectReason = src.rejectReason,
                 rejectMessage = src.rejectMessage
             };
@@ -1064,18 +1170,19 @@ namespace TGD.CombatV2
             return false;
         }
 
-        bool IsBlockedForMove(Hex cell, Hex start, Hex landing)
+        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, StartPassBlocker passBlocker = null)
         {
             if (authoring?.Layout == null) return true;
             if (!authoring.Layout.Contains(cell)) return true;
             if (env != null && env.IsPit(cell)) return true;
             if (cell.Equals(start)) return false;
             if (cell.Equals(landing)) return false;
+            if (passBlocker != null && passBlocker.IsBlocked(cell)) return true;
             if (_tempReservedThisAction.Contains(cell)) return true;
             return _occ != null && _occ.IsBlocked(cell, _actor);
         }
 
-        bool TryFindMeleePath(Hex start, Hex target, int range, out Hex landing, out List<Hex> bestPath)
+        bool TryFindMeleePath(Hex start, Hex target, int range, StartPassBlocker startPassBlocker, out Hex landing, out List<Hex> bestPath)
         {
             landing = target;
             bestPath = null;
@@ -1108,7 +1215,7 @@ namespace TGD.CombatV2
                         if (env != null && env.IsPit(candidate)) continue;
                         if (_occ != null && !_occ.CanPlace(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
 
-                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate));
+                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, startPassBlocker));
                         if (path == null) continue;
 
                         int enemyDist = DistanceToEnemy(candidate, enemyCells);
