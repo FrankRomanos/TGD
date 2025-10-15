@@ -51,7 +51,7 @@ namespace TGD.CombatV2.Integration
             if (_driver != null && _driver.IsReady && _placed)
             {
                 var anchor = _actor.Anchor;
-                if (_driver.UnitRef.Position != anchor)
+                if (!_driver.UnitRef.Position.Equals(anchor))
                 {
                     Debug.LogWarning($"[Occ] Drift detected: driver={_driver.UnitRef.Position} occ={anchor}. Auto-mirror.", this);
                     MirrorDriver(anchor, _actor.Facing);
