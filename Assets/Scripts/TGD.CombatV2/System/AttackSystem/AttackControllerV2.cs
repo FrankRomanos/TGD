@@ -11,7 +11,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(UnitOccupancyBinder))]
+    [RequireComponent(typeof(PlayerOccupancyBridge))]
     public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         const float MR_MIN = 1f;
@@ -27,6 +27,7 @@ namespace TGD.CombatV2
         public HexBoardTiler tiler;
         public HexEnvironmentSystem env;
         public DefaultTargetValidator targetValidator;
+        public HexOccupancyService occupancyService;
 
         [Header("Context (optional)")]
         public UnitRuntimeContext ctx;
@@ -63,7 +64,7 @@ namespace TGD.CombatV2
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
-        UnitOccupancyBinder _binder;
+        IActorOccupancyBridge _bridge;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
 
@@ -281,6 +282,20 @@ namespace TGD.CombatV2
             public string rejectMessage;
         }
 
+        IGridActor SelfActor => _bridge?.Actor as IGridActor;
+
+        Hex CurrentAnchor
+        {
+            get
+            {
+                if (_bridge != null)
+                    return _bridge.CurrentAnchor;
+                if (SelfActor != null)
+                    return SelfActor.Anchor;
+                return driver != null && driver.UnitRef != null ? driver.UnitRef.Position : Hex.Zero;
+            }
+        }
+
         void Awake()
         {
             _painter = new HexAreaPainter(tiler);
@@ -292,10 +307,23 @@ namespace TGD.CombatV2
             if (_enemyLocator == null)
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
 
-            _binder = GetComponent<UnitOccupancyBinder>();
+            _bridge = GetComponent<IActorOccupancyBridge>();
 
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
+
+            if (!occupancyService)
+                occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
+
+            if (!occupancyService && driver != null)
+            {
+                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
+                if (!occupancyService && driver.authoring != null)
+                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
+            }
+
+            if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
+                occupancyService = concreteBridge.occupancyService;
 
             _attackSpec = new TargetingSpec
             {
@@ -328,10 +356,18 @@ namespace TGD.CombatV2
                 return;
             }
 
-            if (_binder == null)
-                _binder = GetComponent<UnitOccupancyBinder>();
+            if (_bridge == null)
+                _bridge = GetComponent<IActorOccupancyBridge>();
 
-            _occ = _binder != null ? _binder.Occupancy : null;
+            if (occupancyService)
+                _occ = occupancyService.Get();
+            else if (_bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
+            {
+                occupancyService = concreteBridge.occupancyService;
+                _occ = occupancyService ? occupancyService.Get() : null;
+            }
+
+            _bridge?.EnsurePlacedNow();
         }
 
         void OnDisable()
@@ -370,7 +406,7 @@ namespace TGD.CombatV2
             _turnSecondsLeft = MaxTurnSeconds;
         }
 
-        bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _binder != null && _binder.Actor != null;
+        bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _bridge != null && SelfActor != null;
 
         void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
@@ -483,6 +519,10 @@ namespace TGD.CombatV2
                 RaiseRejected(driver.UnitRef, AttackRejectReasonV2.Busy, "Attack in progress.");
                 yield break;
             }
+
+            _bridge?.EnsurePlacedNow();
+            if (occupancyService)
+                _occ = occupancyService.Get();
 
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateAttackTarget(unit, hex);
@@ -734,7 +774,11 @@ namespace TGD.CombatV2
 
             preview.targetIsEnemy = treatAsEnemy;
 
-            var passability = PassabilityFactory.ForApproach(_occ, _binder.Actor);
+            _bridge?.EnsurePlacedNow();
+            if (occupancyService)
+                _occ = occupancyService.Get();
+
+            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, CurrentAnchor);
             List<Hex> path = null;
             Hex landing = target;
 
@@ -751,7 +795,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, _binder.Actor)))
+                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, SelfActor)))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -840,7 +884,10 @@ namespace TGD.CombatV2
             Transform view = driver.unitView != null ? driver.unitView : transform;
 
             var path = preview.path;
-            var passability = PassabilityFactory.ForApproach(_occ, _binder.Actor);
+            _bridge?.EnsurePlacedNow();
+            if (occupancyService)
+                _occ = occupancyService.Get();
+            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, CurrentAnchor);
             var start = path[0];
 
             if (view != null && path.Count >= 2)
@@ -853,7 +900,7 @@ namespace TGD.CombatV2
                 var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
                 driver.UnitRef.Facing = nf;
-                if (_binder.Actor != null) _binder.Actor.Facing = nf;
+                if (SelfActor != null) SelfActor.Facing = nf;
             }
 
             float mrNoEnv = preview.mrNoEnv;
@@ -908,7 +955,7 @@ namespace TGD.CombatV2
                             var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                             yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
                             driver.UnitRef.Facing = nf;
-                            if (_binder.Actor != null) _binder.Actor.Facing = nf;
+                            if (SelfActor != null) SelfActor.Facing = nf;
                         }
                         TriggerAttackAnimation(unit, preview.targetHex);
                     }
@@ -944,7 +991,7 @@ namespace TGD.CombatV2
                         stoppedByExternal = true;
                         break;
                     }
-                    if (passability == null && _occ != null && _occ.IsBlocked(to, _binder.Actor))
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
                     {
                         stoppedByExternal = true;
                         break;
@@ -985,8 +1032,7 @@ namespace TGD.CombatV2
                         yield return null;
                     }
 
-                    _occ?.TryMove(_binder.Actor, to);
-                    if (_binder.Actor != null) _binder.Actor.Anchor = to;
+                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing);
                     if (driver.Map != null)
                     {
                         if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
@@ -1004,9 +1050,9 @@ namespace TGD.CombatV2
                     }
                 }
 
-                if (_binder != null && driver != null && driver.UnitRef != null)
+                if (driver != null && driver.UnitRef != null)
                 {
-                    _binder.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
+                    _bridge?.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
                 }
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
@@ -1184,7 +1230,7 @@ namespace TGD.CombatV2
             if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
                 return true;
 
-            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != _binder.Actor)
+            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != SelfActor)
                 return true;
 
             return false;
@@ -1199,9 +1245,9 @@ namespace TGD.CombatV2
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
             if (passability != null && passability.IsBlocked(cell)) return true;
-            if (passability == null && _occ != null && _binder.Actor != null)
+            if (passability == null && _occ != null && SelfActor != null)
             {
-                if (!_occ.CanPlaceIgnoringTemp(_binder.Actor, cell, _binder.Actor.Facing, ignore: _binder.Actor))
+                if (!_occ.CanPlaceIgnoringTemp(SelfActor, cell, SelfActor.Facing, ignore: SelfActor))
                     return true;
             }
             return false;
@@ -1239,7 +1285,7 @@ namespace TGD.CombatV2
                         if (!authoring.Layout.Contains(candidate)) continue;
                         if (env != null && env.IsPit(candidate)) continue;
                         if (passability != null && passability.IsBlocked(candidate)) continue;
-                        if (passability == null && _occ != null && _binder.Actor != null && !_occ.CanPlaceIgnoringTemp(_binder.Actor, candidate, _binder.Actor.Facing, ignore: _binder.Actor)) continue;
+                        if (passability == null && _occ != null && SelfActor != null && !_occ.CanPlaceIgnoringTemp(SelfActor, candidate, SelfActor.Facing, ignore: SelfActor)) continue;
 
                         var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, passability));
                         if (path == null) continue;
@@ -1290,7 +1336,7 @@ namespace TGD.CombatV2
                 return new[] { target };
 
             var enemy = _occ.Get(target);
-            if (enemy == null || enemy == _binder.Actor)
+            if (enemy == null || enemy == SelfActor)
                 return new[] { target };
 
             var cells = _occ.CellsOf(enemy);
@@ -1433,11 +1479,11 @@ namespace TGD.CombatV2
 
         void ReserveTemp(Hex cell)
         {
-            if (_occ == null || _binder == null || _binder.Actor == null)
+            if (_occ == null || _bridge == null || SelfActor == null)
                 return;
             if (_tempReservedThisAction.Contains(cell))
                 return;
-            if (!_occ.TempReserve(cell, _binder.Actor))
+            if (!_occ.TempReserve(cell, SelfActor))
                 return;
 
             _tempReservedThisAction.Add(cell);
@@ -1451,7 +1497,7 @@ namespace TGD.CombatV2
         void ClearTempReservations(string reason, bool logAlways = false)
         {
             int tracked = _tempReservedThisAction.Count;
-            int occCleared = (_occ != null && _binder != null && _binder.Actor != null) ? _occ.TempClearForOwner(_binder.Actor) : 0;
+            int occCleared = (_occ != null && _bridge != null && SelfActor != null) ? _occ.TempClearForOwner(SelfActor) : 0;
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
