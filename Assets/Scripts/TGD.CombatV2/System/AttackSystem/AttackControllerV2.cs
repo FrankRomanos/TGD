@@ -1,6 +1,7 @@
 // File: TGD.CombatV2/AttackControllerV2.cs
 using System.Collections;
 using System.Collections.Generic;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -10,6 +11,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(UnitOccupancyBinder))]
     public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         const float MR_MIN = 1f;
@@ -23,8 +25,6 @@ namespace TGD.CombatV2
         public HexBoardAuthoringLite authoring;
         public HexBoardTestDriver driver;
         public HexBoardTiler tiler;
-        public FootprintShape footprintForActor;
-        public HexOccupancyService occService;
         public HexEnvironmentSystem env;
         public DefaultTargetValidator targetValidator;
 
@@ -63,7 +63,7 @@ namespace TGD.CombatV2
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
-        IGridActor _actor;
+        UnitOccupancyBinder _binder;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
 
@@ -292,6 +292,8 @@ namespace TGD.CombatV2
             if (_enemyLocator == null)
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
 
+            _binder = GetComponent<UnitOccupancyBinder>();
+
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
 
@@ -326,11 +328,10 @@ namespace TGD.CombatV2
                 return;
             }
 
-            _occ = occService ? occService.Get() : new HexOccupancy(authoring.Layout);
-            var fp = footprintForActor ? footprintForActor : CreateSingleFallback();
-            _actor = new UnitGridAdapter(driver.UnitRef, fp);
-            if (!_occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing))
-                _occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing);
+            if (_binder == null)
+                _binder = GetComponent<UnitOccupancyBinder>();
+
+            _occ = _binder != null ? _binder.Occupancy : null;
         }
 
         void OnDisable()
@@ -349,6 +350,7 @@ namespace TGD.CombatV2
             _painter?.Clear();
             _currentPreview = null;
             _hover = null;
+            _occ = null;
         }
 
         void OnTurnStarted(Unit unit)
@@ -368,7 +370,7 @@ namespace TGD.CombatV2
             _turnSecondsLeft = MaxTurnSeconds;
         }
 
-        bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _actor != null;
+        bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _binder != null && _binder.Actor != null;
 
         void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
@@ -732,7 +734,7 @@ namespace TGD.CombatV2
 
             preview.targetIsEnemy = treatAsEnemy;
 
-            var passability = PassabilityFactory.ForApproach(_occ, _actor);
+            var passability = PassabilityFactory.ForApproach(_occ, _binder.Actor);
             List<Hex> path = null;
             Hex landing = target;
 
@@ -749,7 +751,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, _actor)))
+                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, _binder.Actor)))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -838,7 +840,7 @@ namespace TGD.CombatV2
             Transform view = driver.unitView != null ? driver.unitView : transform;
 
             var path = preview.path;
-            var passability = PassabilityFactory.ForApproach(_occ, _actor);
+            var passability = PassabilityFactory.ForApproach(_occ, _binder.Actor);
             var start = path[0];
 
             if (view != null && path.Count >= 2)
@@ -851,7 +853,7 @@ namespace TGD.CombatV2
                 var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
                 driver.UnitRef.Facing = nf;
-                _actor.Facing = nf;
+                if (_binder.Actor != null) _binder.Actor.Facing = nf;
             }
 
             float mrNoEnv = preview.mrNoEnv;
@@ -906,7 +908,7 @@ namespace TGD.CombatV2
                             var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                             yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
                             driver.UnitRef.Facing = nf;
-                            _actor.Facing = nf;
+                            if (_binder.Actor != null) _binder.Actor.Facing = nf;
                         }
                         TriggerAttackAnimation(unit, preview.targetHex);
                     }
@@ -942,7 +944,7 @@ namespace TGD.CombatV2
                         stoppedByExternal = true;
                         break;
                     }
-                    if (passability == null && _occ != null && _occ.IsBlocked(to, _actor))
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, _binder.Actor))
                     {
                         stoppedByExternal = true;
                         break;
@@ -983,7 +985,8 @@ namespace TGD.CombatV2
                         yield return null;
                     }
 
-                    _occ.TryMove(_actor, to);
+                    _occ?.TryMove(_binder.Actor, to);
+                    if (_binder.Actor != null) _binder.Actor.Anchor = to;
                     if (driver.Map != null)
                     {
                         if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
@@ -999,6 +1002,11 @@ namespace TGD.CombatV2
                         status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
                         Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
                     }
+                }
+
+                if (_binder != null && driver != null && driver.UnitRef != null)
+                {
+                    _binder.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
                 }
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
@@ -1176,7 +1184,7 @@ namespace TGD.CombatV2
             if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
                 return true;
 
-            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != _actor)
+            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != _binder.Actor)
                 return true;
 
             return false;
@@ -1191,9 +1199,9 @@ namespace TGD.CombatV2
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
             if (passability != null && passability.IsBlocked(cell)) return true;
-            if (passability == null && _occ != null && _actor != null)
+            if (passability == null && _occ != null && _binder.Actor != null)
             {
-                if (!_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                if (!_occ.CanPlaceIgnoringTemp(_binder.Actor, cell, _binder.Actor.Facing, ignore: _binder.Actor))
                     return true;
             }
             return false;
@@ -1231,7 +1239,7 @@ namespace TGD.CombatV2
                         if (!authoring.Layout.Contains(candidate)) continue;
                         if (env != null && env.IsPit(candidate)) continue;
                         if (passability != null && passability.IsBlocked(candidate)) continue;
-                        if (passability == null && _occ != null && _actor != null && !_occ.CanPlaceIgnoringTemp(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
+                        if (passability == null && _occ != null && _binder.Actor != null && !_occ.CanPlaceIgnoringTemp(_binder.Actor, candidate, _binder.Actor.Facing, ignore: _binder.Actor)) continue;
 
                         var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, passability));
                         if (path == null) continue;
@@ -1282,7 +1290,7 @@ namespace TGD.CombatV2
                 return new[] { target };
 
             var enemy = _occ.Get(target);
-            if (enemy == null || enemy == _actor)
+            if (enemy == null || enemy == _binder.Actor)
                 return new[] { target };
 
             var cells = _occ.CellsOf(enemy);
@@ -1364,13 +1372,6 @@ namespace TGD.CombatV2
                 Debug.Log($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})", this);
         }
 
-        static FootprintShape CreateSingleFallback()
-        {
-            var s = ScriptableObject.CreateInstance<FootprintShape>();
-            s.name = "Footprint_Single_Runtime";
-            s.offsets = new() { new L2(0, 0) };
-            return s;
-        }
         void OnAttackStrikeFired(Unit unit, int comboIndex)
         {
             if (!_pendingAttack.active || _pendingAttack.unit != unit)
@@ -1432,11 +1433,11 @@ namespace TGD.CombatV2
 
         void ReserveTemp(Hex cell)
         {
-            if (_occ == null || _actor == null)
+            if (_occ == null || _binder == null || _binder.Actor == null)
                 return;
             if (_tempReservedThisAction.Contains(cell))
                 return;
-            if (!_occ.TempReserve(cell, _actor))
+            if (!_occ.TempReserve(cell, _binder.Actor))
                 return;
 
             _tempReservedThisAction.Add(cell);
@@ -1450,7 +1451,7 @@ namespace TGD.CombatV2
         void ClearTempReservations(string reason, bool logAlways = false)
         {
             int tracked = _tempReservedThisAction.Count;
-            int occCleared = (_occ != null && _actor != null) ? _occ.TempClearForOwner(_actor) : 0;
+            int occCleared = (_occ != null && _binder != null && _binder.Actor != null) ? _occ.TempClearForOwner(_binder.Actor) : 0;
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
