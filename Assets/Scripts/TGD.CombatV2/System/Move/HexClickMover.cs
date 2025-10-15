@@ -1,6 +1,7 @@
 // File: TGD.HexBoard/HexClickMover.cs
 using System.Collections;
 using System.Collections.Generic;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -32,13 +33,13 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
+    [RequireComponent(typeof(UnitOccupancyBinder))]
     public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
         public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
         public HexBoardTiler tiler;      // 着色
-        public FootprintShape footprintForActor; // ★ 这个单位的占位形状（SO）
         public DefaultTargetValidator targetValidator;
         [Header("Context (optional)")]           // ★ 新增
         public UnitRuntimeContext ctx;            // ★ 新增
@@ -140,9 +141,6 @@ namespace TGD.CombatV2
             public bool startIsSticky;
         }
 
-        //occ
-        public HexOccupancyService occService;
-
         // runtime
         bool _showing = false, _moving = false;
         readonly Dictionary<Hex, List<Hex>> _paths = new();
@@ -151,8 +149,8 @@ namespace TGD.CombatV2
         TargetingSpec _moveSpec;
 
         // 占位
+        UnitOccupancyBinder _binder;
         HexOccupancy _occ;
-        IGridActor _actor;   // 适配当前 UnitRef
                              // === HUD 提示（可选）===
         [Header("HUD")]
         public bool showHudMessage = true;
@@ -203,7 +201,7 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             RefreshStateForAim();
             var unit = driver != null ? driver.UnitRef : null;
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null)
+            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _binder == null || _binder.Actor == null)
             {
                 if (raiseHud)
                     HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
@@ -277,7 +275,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            _occ?.TempClearForOwner(_actor);
+            _occ?.TempClearForOwner(_binder.Actor);
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
@@ -322,6 +320,8 @@ namespace TGD.CombatV2
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
+            _binder = GetComponent<UnitOccupancyBinder>();
+
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
 
@@ -343,16 +343,10 @@ namespace TGD.CombatV2
             driver?.EnsureInit();
             if (authoring?.Layout == null || driver == null || !driver.IsReady) return;
 
-            // 先用共享；没有再自己 new
-            _occ = (occService != null ? occService.Get() : null)
-                   ?? new HexOccupancy(authoring.Layout);
+            if (_binder == null)
+                _binder = GetComponent<UnitOccupancyBinder>();
 
-            var fp = footprintForActor != null ? footprintForActor : CreateSingleFallback();
-            _actor = new UnitGridAdapter(driver.UnitRef, fp);
-
-            // 注册本单位的占位（失败就再试一次，通常是起始位置非法）
-            if (!_occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing))
-                _occ.TryPlace(_actor, driver.UnitRef.Position, driver.UnitRef.Facing);
+            _occ = _binder != null ? _binder.Occupancy : null;
         }
 
         void OnDisable()
@@ -360,7 +354,7 @@ namespace TGD.CombatV2
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
-            _actor = null; _occ = null;
+            _occ = null;
         }
 
         void Update()
@@ -451,14 +445,14 @@ namespace TGD.CombatV2
         // ===== 外部 UI 调用 =====
         public void ShowRange()
         {
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null)
+            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _binder == null || _binder.Actor == null)
             { HexMoveEvents.RaiseRejected(driver ? driver.UnitRef : null, MoveBlockReason.NotReady, null); return; }
 
             _painter.Clear();
             _paths.Clear();
 
             var layout = authoring.Layout;
-            var startHex = (driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
+            var startHex = _binder != null ? _binder.CurrentAnchor : ((driver && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero);
 
             if (ctx != null && ctx.Entangled)
             {
@@ -469,7 +463,7 @@ namespace TGD.CombatV2
 
             var rates = BuildMoveRates(startHex);
 
-            var passability = PassabilityFactory.ForMove(_occ, _actor);
+            var passability = PassabilityFactory.ForMove(_occ, _binder.Actor);
 
             // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
             const float MR_MIN = 1f, MR_MAX = 12f;
@@ -510,7 +504,7 @@ namespace TGD.CombatV2
                     if (passability != null && passability.IsBlocked(cell))
                         return true;
 
-                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor)))
+                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(_binder.Actor, cell, _binder.Actor.Facing, ignore: _binder.Actor)))
                         return true;
                 }
 
@@ -582,7 +576,7 @@ namespace TGD.CombatV2
         {
 
             if (path == null || path.Count < 2) yield break;
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _actor == null) yield break;
+            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _binder == null || _binder.Actor == null) yield break;
 
             int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
@@ -615,7 +609,7 @@ namespace TGD.CombatV2
             }
 
             var rates = BuildMoveRates(path[0]);
-            var passability = PassabilityFactory.ForMove(_occ, _actor);
+            var passability = PassabilityFactory.ForMove(_occ, _binder.Actor);
 
             float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
@@ -664,7 +658,7 @@ namespace TGD.CombatV2
                 var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
                 driver.UnitRef.Facing = nf;
-                _actor.Facing = nf;
+                if (_binder.Actor != null) _binder.Actor.Facing = nf;
             }
 
             HexMoveEvents.RaiseMoveStarted(driver.UnitRef, reached);
@@ -692,7 +686,7 @@ namespace TGD.CombatV2
                     stoppedByExternal = true;
                     break;
                 }
-                if (passability == null && _occ != null && _occ.IsBlocked(to, _actor))
+                if (passability == null && _occ != null && _occ.IsBlocked(to, _binder.Actor))
                 {
                     stoppedByExternal = true;
                     break;
@@ -725,7 +719,8 @@ namespace TGD.CombatV2
                 }
 
 
-                _occ.TryMove(_actor, to);
+                _occ?.TryMove(_binder.Actor, to);
+                if (_binder.Actor != null) _binder.Actor.Anchor = to;
                 if (_sticky != null && status != null &&
                       _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
                       stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
@@ -738,6 +733,11 @@ namespace TGD.CombatV2
                 { if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to); }
                 unit.Position = to;
                 driver.SyncView();
+            }
+
+            if (_binder != null && driver != null && driver.UnitRef != null)
+            {
+                _binder.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
             }
 
             _moving = false;
@@ -768,16 +768,6 @@ namespace TGD.CombatV2
         {
             ClearExecReport();
         }
-
-        // 若没指定占位，临时造一个“单格”占位
-        static FootprintShape CreateSingleFallback()
-        {
-            var s = ScriptableObject.CreateInstance<FootprintShape>();
-            s.name = "Footprint_Single_Runtime";
-            s.offsets = new() { new L2(0, 0) };
-            return s;
-        }
-
 
     }
 }
