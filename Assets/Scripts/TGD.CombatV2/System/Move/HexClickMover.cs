@@ -624,8 +624,21 @@ namespace TGD.CombatV2
 
                 return false;
             }
+            // —— 用“权威锚点 B”构造预览用的临时 Map —— //
+            var previewMap = driver.Map;
+            bool needTemp = (previewMap == null)
+                         || (driver.UnitRef == null)
+                    || !driver.UnitRef.Position.Equals(startHex);
 
-            var result = HexMovableRange.Compute(layout, driver.Map, startHex, steps, Block);
+            // 如果 driver.Map 没对齐 CurrentAnchor，就临时造一张只包含自己的 Map
+            if (needTemp)
+            {
+                previewMap = new HexBoardMap<Unit>(layout);
+                if (driver.UnitRef != null)
+                    previewMap.Set(driver.UnitRef, startHex);
+            }
+
+            var result = HexMovableRange.Compute(layout, previewMap, startHex, steps, Block);
             foreach (var kv in result.Paths) _paths[kv.Key] = kv.Value;
 
             _painter.Paint(result.Paths.Keys, rangeColor);

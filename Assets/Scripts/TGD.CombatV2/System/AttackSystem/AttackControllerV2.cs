@@ -1286,8 +1286,13 @@ namespace TGD.CombatV2
                     if (refund > 0f)
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refund, 0f, MaxTurnSeconds);
                 }
-                _bridge?.MoveCommit(startAnchor, finalFacing);
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+
+                var abortUnit = driver != null ? driver.UnitRef : null;
+                var abortAnchor = CurrentAnchor;
+                var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
+
+                _bridge?.MoveCommit(abortAnchor, abortFacing);
+                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
                 SetExecReport(
                     0,
                     Mathf.Max(0, moveSecsCharge + (attackPlanned ? attackSecsCharge : 0)),
