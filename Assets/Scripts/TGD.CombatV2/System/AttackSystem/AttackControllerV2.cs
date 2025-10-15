@@ -12,7 +12,7 @@ namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICombatActionToolV2
     {
         const float MR_MIN = 1f;
         const float MR_MAX = 12f;
@@ -40,6 +40,7 @@ namespace TGD.CombatV2
         public MonoBehaviour enemyProvider;
 
         [Header("Turn Manager Binding")]
+        public bool useTMV2 = true;
         public bool UseTurnManager = true;
         public bool ManageEnergyLocally = false;
         public bool ManageTurnTimeLocally = false;
@@ -1133,6 +1134,19 @@ namespace TGD.CombatV2
         void IActionExecReportV2.Consume()
         {
             ClearExecReport();
+        }
+
+        ActionExecReportV2 ICombatActionToolV2.Execute(ActionPlanV2 plan)
+        {
+            var report = new ActionExecReportV2
+            {
+                kind = ActionKindV2.Attack,
+                usedSecsMove = Mathf.Max(0f, plan.planSecsMove),
+                usedSecsAtk = Mathf.Max(0f, plan.planSecsAtk),
+                energyMoveNet = plan.planEnergyMove,
+                energyAtkNet = plan.planEnergyAtk,
+            };
+            return report;
         }
 
         public int ReportComboBaseCount => _reportComboBaseCount;
