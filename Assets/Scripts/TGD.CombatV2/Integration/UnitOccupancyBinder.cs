@@ -24,7 +24,10 @@ namespace TGD.CombatV2.Integration
         {
             _driver = GetComponent<HexBoardTestDriver>();
             if (!occupancyService)
-                occupancyService = GetComponentInParent<HexBoardTestDriver>()?.authoring?.occupancyService;
+                occupancyService = GetComponentInParent<HexOccupancyService>(true);
+            if (!occupancyService && _driver != null)
+                occupancyService = _driver.GetComponentInParent<HexOccupancyService>(true);
+
             _occ = occupancyService ? occupancyService.Get() : null;
 
             if (_occ == null && _driver != null && _driver.authoring?.Layout != null)
@@ -45,6 +48,8 @@ namespace TGD.CombatV2.Integration
 
         void TryPlaceAtDriverStart()
         {
+            if (_occ == null && occupancyService)
+                _occ = occupancyService.Get();
             if (_occ == null || !_driver || !_driver.IsReady || _driver.UnitRef == null) return;
 
             _actor.Anchor = _driver.UnitRef.Position;
@@ -66,11 +71,16 @@ namespace TGD.CombatV2.Integration
 
         public void MoveCommit(Hex newAnchor, Facing4 newFacing)
         {
+            if (_occ == null && occupancyService)
+                _occ = occupancyService.Get();
             if (_occ == null || _actor == null) return;
             if (!_placed) TryPlaceAtDriverStart();
 
             // 优先 Move；不支持 Move 就降级为 Remove+Place（按你的 API 名字替换）
-            if (_occ.TryMove(_actor, newAnchor, newFacing))
+            var prevFacing = _actor.Facing;
+            _actor.Facing = newFacing;
+
+            if (_occ.TryMove(_actor, newAnchor))
             {
                 _actor.Anchor = newAnchor;
                 _actor.Facing = newFacing;
@@ -78,6 +88,7 @@ namespace TGD.CombatV2.Integration
             }
             else
             {
+                _actor.Facing = prevFacing;
                 TryRemove();
                 _actor.Anchor = newAnchor;
                 _actor.Facing = newFacing;
@@ -92,7 +103,6 @@ namespace TGD.CombatV2.Integration
                 }
             }
         }
-
         void TryRemove()
         {
             if (_occ == null || !_placed || _actor == null) return;
@@ -123,10 +133,9 @@ namespace TGD.CombatV2.Integration
                 else
                 {
                     Anchor = Hex.Zero;
-                    Facing = Facing4.N;
+                    Facing = Facing4.PlusQ;
                 }
             }
-
             public string Id => (_d != null && !string.IsNullOrEmpty(_d.unitId)) ? _d.unitId : "Player";
             public Hex Anchor { get; set; }
             public Facing4 Facing { get; set; }
