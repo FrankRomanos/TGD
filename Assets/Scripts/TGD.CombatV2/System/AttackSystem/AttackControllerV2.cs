@@ -61,6 +61,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]
         public bool debugLog = true;
+        public bool suppressInternalLogs = true;
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
@@ -138,7 +139,13 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
-            Debug.Log($"[Attack] Use moveSecs={_reportMoveUsedSeconds}s atkSecs={_reportAttackUsedSeconds}s energyMove={_reportEnergyMoveNet} energyAtk={_reportEnergyAtkNet} U={label}{suffix}", this);
+            LogInternal($"[Attack] Use moveSecs={_reportMoveUsedSeconds}s atkSecs={_reportAttackUsedSeconds}s energyMove={_reportEnergyMoveNet} energyAtk={_reportEnergyAtkNet} U={label}{suffix}");
+        }
+
+        void LogInternal(string message)
+        {
+            if (!suppressInternalLogs && debugLog)
+                Debug.Log(message, this);
         }
 
         float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
@@ -601,7 +608,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateAttackTarget(unit, hex);
             if (debugLog)
-                Debug.Log($"[Action][Attack] Click {hex} ¡ú {targetCheck}", this);
+                LogInternal($"[Action][Attack] Click {hex} ¡ú {targetCheck}");
 
             if (!targetCheck.ok)
             {
@@ -768,7 +775,7 @@ namespace TGD.CombatV2
         {
             var (mapped, message) = MapAttackReject(reason);
             if (debugLog)
-                Debug.Log($"[Action][Attack] Reject {reason}", this);
+                LogInternal($"[Action][Attack] Reject {reason}");
             RaiseRejected(unit, mapped, message);
         }
 
@@ -856,7 +863,7 @@ namespace TGD.CombatV2
                 preview.rejectReason = reject;
                 preview.rejectMessage = message;
                 if (logInvalid && debugLog)
-                    Debug.Log($"[Action][Attack] BuildPreview reject {message}", this);
+                    LogInternal($"[Action][Attack] BuildPreview reject {message}");
                 return preview;
             }
 
@@ -1199,7 +1206,7 @@ namespace TGD.CombatV2
                         turns > 0 && !Mathf.Approximately(mult, 1f))
                     {
                         status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
-                        Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
+                        LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}");
                     }
                 }
 
@@ -1255,7 +1262,7 @@ namespace TGD.CombatV2
                     if (debugLog)
                     {
                         string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                        Debug.Log($"[Attack] FreeMove1s U={unitLabel} used={usedSeconds:F2}s (<{cutoff:F2})", this);
+                        LogInternal($"[Attack] FreeMove1s U={unitLabel} used={usedSeconds:F2}s (<{cutoff:F2})");
                     }
 #endif
                 }
@@ -1611,7 +1618,7 @@ namespace TGD.CombatV2
             stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
 #if !USE_TMV2
             if (debugLog)
-                Debug.Log($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})", this);
+                LogInternal($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})");
 #endif
         }
 
@@ -1687,7 +1694,7 @@ namespace TGD.CombatV2
             string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
             if (debugLog)
             {
-                Debug.Log($"[Occ] TempReserve U={unitLabel} @{cell}", this);
+                LogInternal($"[Occ] TempReserve U={unitLabel} @{cell}");
             }
         }
 
@@ -1702,7 +1709,7 @@ namespace TGD.CombatV2
                 string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? driver.UnitRef : null);
                 if (debugLog)
                 {
-                    Debug.Log($"[Occ] TempClear U={unitLabel} count={count} ({reason})", this);
+                    LogInternal($"[Occ] TempClear U={unitLabel} count={count} ({reason})");
                 }
             }
         }

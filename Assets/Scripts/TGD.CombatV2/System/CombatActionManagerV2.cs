@@ -26,15 +26,18 @@ namespace TGD.CombatV2
         public KeyCode keyMoveAim = KeyCode.V;
         public KeyCode keyAttackAim = KeyCode.A;
 
-        public enum PhaseState
+        public bool debugLog = true;
+
+        enum Phase
         {
             Idle,
             Aiming,
             Executing
         }
 
-        public PhaseState phase = PhaseState.Idle;
-        public bool IsExecuting => phase == PhaseState.Executing;
+        [SerializeField]
+        Phase _phase = Phase.Idle;
+        public bool IsExecuting => _phase == Phase.Executing;
 
         readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
         IActionToolV2 _activeTool;
@@ -52,6 +55,37 @@ namespace TGD.CombatV2
             public int TotalSeconds => Mathf.Max(0, moveSecs + atkSecs);
             public int TotalEnergy => Mathf.Max(0, moveEnergy + atkEnergy);
         }
+
+        struct PreDeduct
+        {
+            public int secs;
+            public int secsMove;
+            public int secsAtk;
+            public int energyMove;
+            public int energyAtk;
+            public int moveEnergyRate;
+            public bool valid;
+        }
+
+        struct ActionPlan
+        {
+            public string kind;
+            public Hex target;
+            public PlannedCost cost;
+        }
+
+        struct ExecReportData
+        {
+            public bool valid;
+            public int usedSecsMove;
+            public int usedSecsAtk;
+            public int refundedSecs;
+            public int energyMoveNet;
+            public int energyAtkNet;
+            public bool freeMoveApplied;
+        }
+
+        PreDeduct _pre;
 
         void Awake()
         {
@@ -130,13 +164,13 @@ namespace TGD.CombatV2
 
         void Update()
         {
-            if (phase == PhaseState.Idle)
+            if (_phase == Phase.Idle)
             {
                 if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
                 if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
             }
 
-            if (phase == PhaseState.Aiming)
+            if (_phase == Phase.Aiming)
             {
                 var h = PickHexUnderMouse();
                 if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
@@ -161,7 +195,7 @@ namespace TGD.CombatV2
 
         public void RequestAim(string toolId)
         {
-            if (phase != PhaseState.Idle) return;
+            if (_phase != Phase.Idle) return;
 
             var tool = SelectTool(toolId);
             if (tool == null) return;
@@ -174,7 +208,7 @@ namespace TGD.CombatV2
             if (!TryBeginAim(tool, unit, out var reason))
             {
                 if (!string.IsNullOrEmpty(reason))
-                    ActionPhaseLogger.Log(unit, tool.Id, "W1_AimDenied", $"(reason={reason})");
+                    ActionPhaseLogger.Log(unit, tool.Id, "W1_AimReject", $"(reason={reason})");
                 return;
             }
 
@@ -184,28 +218,21 @@ namespace TGD.CombatV2
             _activeTool = tool;
             _hover = null;
             _activeTool.OnEnterAim();
-            phase = PhaseState.Aiming;
+            _phase = Phase.Aiming;
             ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
         }
 
         public void Cancel(bool userInitiated = false)
         {
-            if (phase != PhaseState.Aiming || _activeTool == null)
+            if (_phase != Phase.Aiming || _activeTool == null)
                 return;
 
-            var unit = ResolveUnit(_activeTool);
-            if (userInitiated)
-                ActionPhaseLogger.Log(unit, _activeTool.Id, "W1_AimCancel");
-
-            _activeTool.OnExitAim();
-            _activeTool = null;
-            _hover = null;
-            phase = PhaseState.Idle;
+            CleanupAfterAbort(_activeTool, userInitiated);
         }
 
         public void Confirm()
         {
-            if (phase != PhaseState.Aiming || _activeTool == null)
+            if (_phase != Phase.Aiming || _activeTool == null)
                 return;
 
             var unit = ResolveUnit(_activeTool);
@@ -214,31 +241,62 @@ namespace TGD.CombatV2
             StartCoroutine(ConfirmRoutine(_activeTool, unit, hex));
         }
 
+        void TryHideAllAimUI()
+        {
+            if (_activeTool != null)
+                _activeTool.OnExitAim();
+
+            foreach (var mb in tools)
+            {
+                if (mb == null || ReferenceEquals(mb, _activeTool))
+                    continue;
+
+                switch (mb)
+                {
+                    case HexClickMover mover:
+                        mover.HideRange();
+                        break;
+                    case AttackControllerV2 attack:
+                        attack.OnExitAim();
+                        break;
+                }
+            }
+        }
+
         IEnumerator ConfirmRoutine(IActionToolV2 tool, Unit unit, Hex? target)
         {
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
+            _pre = default;
+            string kind = tool.Id;
+            ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
 
             if (!target.HasValue)
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", "(reason=targetInvalid)");
+                ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
+                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
+                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=targetInvalid)");
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
 
             if (!TryBeginAim(tool, unit, out _, false))
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", "(reason=notReady)");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", "(reason=notReady)");
+                ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
+                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=notReady)");
+                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=notReady)");
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+            ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
 
-            var plan = BuildPlannedCost(tool, target.Value);
+            var actionPlan = new ActionPlan
+            {
+                kind = kind,
+                target = target.Value,
+                cost = BuildPlannedCost(tool, target.Value)
+            };
+
+            var cost = actionPlan.cost;
             var budget = turnManager != null && unit != null ? turnManager.GetBudget(unit) : null;
             var resources = turnManager != null && unit != null ? turnManager.GetResources(unit) : null;
             var cooldowns = turnManager != null && unit != null ? turnManager.GetCooldowns(unit) : null;
@@ -246,178 +304,241 @@ namespace TGD.CombatV2
             int remain = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
 
-            Debug.Log($"[Gate] W2 PreDeduct (move={plan.moveSecs}s/{plan.moveEnergy}, atk={plan.atkSecs}s/{plan.atkEnergy}, total={plan.TotalSeconds}s/{plan.TotalEnergy}, remain={remain}s, energy={energyBefore})");
+            Log($"[Gate] W2 PreDeduct (move={cost.moveSecs}s/{cost.moveEnergy}, atk={cost.atkSecs}s/{cost.atkEnergy}, total={cost.TotalSeconds}s/{cost.TotalEnergy}, remain={remain}s, energy={energyBefore})");
 
             string failReason = null;
-            if (!plan.valid)
+            if (!cost.valid)
                 failReason = "targetInvalid";
-            else if (budget != null && plan.TotalSeconds > 0 && !budget.HasTime(plan.TotalSeconds))
+            else if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
                 failReason = "lackTime";
-            else if (resources != null && plan.TotalEnergy > 0 && !resources.Has("Energy", plan.TotalEnergy))
+            else if (resources != null && cost.TotalEnergy > 0 && !resources.Has("Energy", cost.TotalEnergy))
                 failReason = "lackEnergy";
             else if (!IsCooldownReadyForConfirm(tool, cooldowns))
                 failReason = "cooldown";
 
             if (failReason != null)
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={failReason})");
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ChainPromptOpen", "(count=0)");
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ChainPromptAbort", "(auto-skip)");
+            ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckOk");
 
-            yield return ExecuteAndResolve(tool, unit, target.Value, budget, resources, cooldowns);
-        }
-
-        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, Hex target, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns)
-        {
-            phase = PhaseState.Executing;
-            _hover = null;
-            tool.OnExitAim();
-
-            int budgetBefore = budget != null ? budget.Remaining : 0;
-            int energyBefore = resources != null ? resources.Get("Energy") : 0;
-            ActionPhaseLogger.Log(unit, tool.Id, "W3_ExecuteBegin", $"(budgetBefore={budgetBefore}, energyBefore={energyBefore})");
-
-            var routine = tool.OnConfirm(target);
-            if (routine != null)
-                yield return StartCoroutine(routine);
-
-            ActionPhaseLogger.Log(unit, tool.Id, "W3_ExecuteEnd");
-
-            Resolve(unit, tool, budget, resources, cooldowns);
-        }
-
-        void Resolve(Unit unit, IActionToolV2 tool, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns)
-        {
-            if (tool is not IActionExecReportV2 exec)
-            {
-                CleanupAfterAbort(tool, false);
-                return;
-            }
-
-            int used = Mathf.Max(0, exec.UsedSeconds);
-            int refunded = Mathf.Max(0, exec.RefundedSeconds);
-            int energyMove = 0;
-            int energyAtk = 0;
-            bool freeMove = false;
-            bool attackAdjust = false;
-
-            if (tool is HexClickMover mover)
-            {
-                energyMove = mover.ReportEnergyMoveNet;
-                energyAtk = mover.ReportEnergyAtkNet;
-                freeMove = mover.ReportFreeMoveApplied;
-            }
-            else if (tool is AttackControllerV2 attack)
-            {
-                energyMove = attack.ReportEnergyMoveNet;
-                energyAtk = attack.ReportEnergyAtkNet;
-                freeMove = attack.ReportFreeMoveApplied;
-                attackAdjust = attack.ReportAttackRefundSeconds > 0 || energyAtk < 0;
-            }
-
-            int net = Mathf.Max(0, used - refunded);
-            ActionPhaseLogger.Log(unit, tool.Id, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk})");
-
-            if (budget != null)
-            {
-                if (net > 0)
-                {
-                    int before = budget.Remaining;
-                    budget.SpendTime(net);
-                    int after = budget.Remaining;
-                    Debug.Log($"[Time] Spend 1P {net}s -> Remain={after}");
-                }
-
-                if (net == 0 && refunded > 0)
-                {
-                    int before = budget.Remaining;
-                    budget.RefundTime(refunded);
-                    int after = budget.Remaining;
-                    Debug.Log($"[Time] Refund 1P {refunded}s (reason=Adjust) -> Remain={after}");
-                }
-
-                if (freeMove)
-                {
-                    int before = budget.Remaining;
-                    budget.RefundTime(1);
-                    int after = budget.Remaining;
-                    Debug.Log($"[Time] Refund 1P 1s (reason=FreeMove) -> Remain={after}");
-                }
-            }
+            if (budget != null && cost.TotalSeconds > 0)
+                budget.SpendTime(cost.TotalSeconds);
 
             if (resources != null)
             {
-                int moveEnergyRate = ResolveMoveEnergyRate(tool);
-                int energyMoveSpend = energyMove > 0 ? energyMove : 0;
-                int energyMoveRefund = energyMove < 0 ? -energyMove : 0;
-                if (freeMove && moveEnergyRate > 0)
-                    energyMoveRefund += moveEnergyRate;
+                if (cost.moveEnergy > 0)
+                    resources.Spend("Energy", cost.moveEnergy, "PreDeduct_Move");
+                if (cost.atkEnergy > 0)
+                    resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
+            }
 
-                if (energyMoveSpend > 0)
-                    resources.Spend("Energy", energyMoveSpend, "Move");
-                if (energyMoveRefund > 0)
-                    resources.Refund("Energy", energyMoveRefund, "Move");
+            _pre = new PreDeduct
+            {
+                secs = cost.TotalSeconds,
+                secsMove = cost.moveSecs,
+                secsAtk = cost.atkSecs,
+                energyMove = cost.moveEnergy,
+                energyAtk = cost.atkEnergy,
+                moveEnergyRate = cost.moveSecs > 0 ? Mathf.FloorToInt((float)cost.moveEnergy / Mathf.Max(1, cost.moveSecs)) : 0,
+                valid = true
+            };
 
-                int netEnergyMove = energyMoveSpend - energyMoveRefund;
-                if (energyMoveSpend > 0 || energyMoveRefund > 0 || freeMove)
+            ActionPhaseLogger.Log(unit, kind, "W2_ChainPromptOpen", "(count=0)");
+            ActionPhaseLogger.Log(unit, kind, "W2_ChainPromptAbort", "(auto-skip)");
+
+            yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+        }
+
+        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources)
+        {
+            _phase = Phase.Executing;
+            _hover = null;
+            TryHideAllAimUI();
+
+            int budgetBefore = budget != null ? budget.Remaining : 0;
+            int energyBefore = resources != null ? resources.Get("Energy") : 0;
+            ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteBegin", $"(budgetBefore={budgetBefore}, energyBefore={energyBefore})");
+
+            var routine = tool.OnConfirm(plan.target);
+            if (routine != null)
+                yield return StartCoroutine(routine);
+
+            var report = BuildExecReport(tool, out var exec);
+            if (!report.valid || exec == null)
+            {
+                ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
+                CleanupAfterAbort(tool, false);
+                yield break;
+            }
+
+            LogExecSummary(unit, plan.kind, report);
+
+            ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
+
+            Resolve(unit, plan, exec, report, budget, resources);
+        }
+
+        void Resolve(Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
+        {
+            int used = Mathf.Max(0, report.usedSecsMove + report.usedSecsAtk);
+            int refunded = Mathf.Max(0, report.refundedSecs);
+            int net = Mathf.Max(0, used - refunded);
+            int energyMove = report.energyMoveNet;
+            int energyAtk = report.energyAtkNet;
+            bool freeMove = report.freeMoveApplied;
+            int expectedFreeMoveEnergy = (freeMove && _pre.valid) ? Mathf.Max(0, _pre.moveEnergyRate) : 0;
+
+            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk})");
+
+            if (_pre.valid && budget != null)
+            {
+                int adjust = _pre.secs - net;
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                if (adjust > 0)
                 {
-                    int after = resources.Get("Energy");
-                    int logAmount = Mathf.Abs(netEnergyMove);
-                    if (freeMove && logAmount == 0 && moveEnergyRate > 0)
-                        logAmount = moveEnergyRate;
-                    string verb = netEnergyMove >= 0 ? "Spend" : "Refund";
-                    if (freeMove && netEnergyMove <= 0)
-                        verb = "Refund";
-                    string suffix = freeMove ? "Move_FreeMove" : "Move";
-                    Debug.Log($"[Res] {verb} 1P:Energy {logAmount} -> {after} ({suffix})");
+                    string reason = freeMove ? "FreeMove" : "Adjust";
+                    budget.RefundTime(adjust);
+                    Log($"[Time] Refund {unitLabel} {adjust}s (reason={reason}) -> Remain={budget.Remaining}");
+                }
+                else if (adjust < 0)
+                {
+                    budget.SpendTime(-adjust);
+                    Log($"[Time] Spend {unitLabel} {-adjust}s -> Remain={budget.Remaining}");
+                }
+            }
+
+            if (_pre.valid && resources != null)
+            {
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+
+                int moveAdjust = _pre.energyMove - energyMove;
+                int alreadyRefundedViaAdjust = moveAdjust > 0 ? moveAdjust : 0;
+                if (moveAdjust > 0)
+                {
+                    resources.Refund("Energy", moveAdjust, "Move_Adjust");
+                    Log($"[Res] Refund {unitLabel}:Energy +{moveAdjust} -> {resources.Get("Energy")} (Move)");
+                }
+                else if (moveAdjust < 0)
+                {
+                    resources.Spend("Energy", -moveAdjust, "Move_Adjust");
+                    Log($"[Res] Spend {unitLabel}:Energy {-moveAdjust} -> {resources.Get("Energy")} (Move)");
                 }
 
-                if (energyAtk != 0 || attackAdjust)
+                int freeMoveEnergyRefund = Mathf.Max(0, expectedFreeMoveEnergy - alreadyRefundedViaAdjust);
+                if (freeMoveEnergyRefund > 0)
                 {
-                    int atkSpend = energyAtk > 0 ? energyAtk : 0;
-                    int atkRefund = energyAtk < 0 ? -energyAtk : 0;
-                    if (atkSpend > 0)
-                        resources.Spend("Energy", atkSpend, "Attack");
-                    if (atkRefund > 0)
-                        resources.Refund("Energy", atkRefund, "Attack");
+                    resources.Refund("Energy", freeMoveEnergyRefund, "Move_FreeMove");
+                    Log($"[Res] Refund {unitLabel}:Energy +{freeMoveEnergyRefund} -> {resources.Get("Energy")} (Move_FreeMove)");
+                }
 
-                    int netEnergyAtk = atkSpend - atkRefund;
-                    int after = resources.Get("Energy");
-                    int atkLogAmount = Mathf.Abs(netEnergyAtk);
-                    string verb = netEnergyAtk >= 0 ? "Spend" : "Refund";
-                    string suffix = attackAdjust ? "Attack_Adjust" : "Attack";
-                    Debug.Log($"[Res] {verb} 1P:Energy {atkLogAmount} -> {after} ({suffix})");
+                int atkAdjust = _pre.energyAtk - energyAtk;
+                if (atkAdjust > 0)
+                {
+                    resources.Refund("Energy", atkAdjust, "Attack_Adjust");
+                    Log($"[Res] Refund {unitLabel}:Energy +{atkAdjust} -> {resources.Get("Energy")} (Attack_Adjust)");
+                }
+                else if (atkAdjust < 0)
+                {
+                    resources.Spend("Energy", -atkAdjust, "Attack_Adjust");
+                    Log($"[Res] Spend {unitLabel}:Energy {-atkAdjust} -> {resources.Get("Energy")} (Attack)");
                 }
             }
 
             int budgetAfter = budget != null ? budget.Remaining : 0;
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
-            ActionPhaseLogger.Log(unit, tool.Id, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
+            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
             exec.Consume();
             _activeTool = null;
             _hover = null;
-            phase = PhaseState.Idle;
+            _phase = Phase.Idle;
+            _pre = default;
+        }
+
+        ExecReportData BuildExecReport(IActionToolV2 tool, out IActionExecReportV2 exec)
+        {
+            exec = tool as IActionExecReportV2;
+            if (exec == null)
+                return default;
+
+            var data = new ExecReportData
+            {
+                valid = true,
+                usedSecsMove = Mathf.Max(0, exec.UsedSeconds),
+                usedSecsAtk = 0,
+                refundedSecs = Mathf.Max(0, exec.RefundedSeconds),
+                energyMoveNet = 0,
+                energyAtkNet = 0,
+                freeMoveApplied = false
+            };
+
+            if (tool is HexClickMover mover)
+            {
+                data.usedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
+                data.refundedSecs = Mathf.Max(0, mover.ReportRefundedSeconds);
+                data.energyMoveNet = mover.ReportEnergyMoveNet;
+                data.energyAtkNet = 0;
+                data.freeMoveApplied = mover.ReportFreeMoveApplied;
+            }
+            else if (tool is AttackControllerV2 attack)
+            {
+                data.usedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
+                data.usedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
+                data.refundedSecs = Mathf.Max(0, attack.ReportMoveRefundSeconds + attack.ReportAttackRefundSeconds);
+                data.energyMoveNet = attack.ReportEnergyMoveNet;
+                data.energyAtkNet = attack.ReportEnergyAtkNet;
+                data.freeMoveApplied = attack.ReportFreeMoveApplied;
+            }
+
+            return data;
+        }
+
+        void LogExecSummary(Unit unit, string kind, ExecReportData report)
+        {
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            string freeMove = report.freeMoveApplied ? " (FreeMove)" : string.Empty;
+            if (string.Equals(kind, "Move", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Log($"[Move] Use secs={report.usedSecsMove}s refund={report.refundedSecs}s energy={report.energyMoveNet} U={label}{freeMove}");
+            }
+            else if (string.Equals(kind, "Attack", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Log($"[Attack] Use moveSecs={report.usedSecsMove}s atkSecs={report.usedSecsAtk}s energyMove={report.energyMoveNet} energyAtk={report.energyAtkNet} U={label}{freeMove}");
+            }
+            else
+            {
+                Log($"[Action] {label} [{kind}] ExecSummary used={report.usedSecsMove + report.usedSecsAtk}s refund={report.refundedSecs}s energy={report.energyMoveNet + report.energyAtkNet}{freeMove}");
+            }
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        void Log(string message)
+        {
+            if (debugLog)
+                Debug.Log(message, this);
         }
 
         void CleanupAfterAbort(IActionToolV2 tool, bool logCancel)
         {
             if (tool == null) return;
-            if (logCancel && phase == PhaseState.Aiming)
+
+            if (logCancel && _phase == Phase.Aiming)
             {
                 var unit = ResolveUnit(tool);
                 ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
             }
-            tool.OnExitAim();
+
+            TryHideAllAimUI();
             if (_activeTool == tool)
                 _activeTool = null;
             _hover = null;
-            phase = PhaseState.Idle;
+            _phase = Phase.Idle;
+            _pre = default;
         }
 
         bool TryBeginAim(IActionToolV2 tool, Unit unit, out string reason, bool raiseHud = true)
@@ -539,16 +660,6 @@ namespace TGD.CombatV2
             if (raw.Contains("cooldown"))
                 return "cooldown";
             return "notReady";
-        }
-
-        int ResolveMoveEnergyRate(IActionToolV2 tool)
-        {
-            return tool switch
-            {
-                HexClickMover mover when mover.config != null => Mathf.Max(0, mover.config.energyCost),
-                AttackControllerV2 attack when attack.moveConfig != null => Mathf.Max(0, attack.moveConfig.energyCost),
-                _ => 0
-            };
         }
 
         bool IsCooldownReadyForConfirm(IActionToolV2 tool, ICooldownSink sink)
