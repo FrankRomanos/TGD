@@ -34,7 +34,7 @@ namespace TGD.CombatV2
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICombatActionToolV2
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -50,6 +50,7 @@ namespace TGD.CombatV2
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]
+        public bool useTMV2 = true;
         public bool UseTurnManager = true;
         public bool ManageEnergyLocally = false;
         public bool ManageTurnTimeLocally = false;
@@ -813,6 +814,17 @@ namespace TGD.CombatV2
         void IActionExecReportV2.Consume()
         {
             ClearExecReport();
+        }
+
+        ActionExecReportV2 ICombatActionToolV2.Execute(ActionPlanV2 plan)
+        {
+            var report = new ActionExecReportV2
+            {
+                kind = ActionKindV2.Move,
+                usedSecsMove = Mathf.Max(0f, plan.planSecsMove),
+                energyMoveNet = plan.planEnergyMove,
+            };
+            return report;
         }
 
     }
