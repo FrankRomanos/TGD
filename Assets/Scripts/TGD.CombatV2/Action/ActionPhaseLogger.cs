@@ -11,5 +11,17 @@ namespace TGD.CombatV2
             string suffix = string.IsNullOrEmpty(message) ? string.Empty : $" {message}";
             Debug.Log($"[Action] {label} [{toolId}] {phase}{suffix}");
         }
+
+        public static void LogFullRoundDeclared(Unit unit, string toolId, int delay)
+        {
+            var label = TurnManagerV2.FormatUnitLabel(unit);
+            Debug.Log($"[Action] {label} [{toolId}] FullRound_Declared (delay={delay})");
+        }
+
+        public static void LogFullRoundExecute(Unit unit, string toolId)
+        {
+            var label = TurnManagerV2.FormatUnitLabel(unit);
+            Debug.Log($"[FullRound] Execute {label} [{toolId}]");
+        }
     }
 }

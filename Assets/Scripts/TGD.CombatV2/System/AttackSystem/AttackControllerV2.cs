@@ -1,4 +1,5 @@
 // File: TGD.CombatV2/AttackControllerV2.cs
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TGD.CombatV2.Targeting;
@@ -18,6 +19,10 @@ namespace TGD.CombatV2
         const float ENV_MAX = 5f;
 
         public string Id => "Attack";
+        public ActionKind Kind => ActionKind.Standard;
+        static readonly string[] EMPTY_TAGS = Array.Empty<string>();
+        public IReadOnlyCollection<string> ChainTags => EMPTY_TAGS;
+        public bool CanChainAfter(string previousId, IReadOnlyCollection<string> previousTags) => false;
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -246,6 +251,24 @@ namespace TGD.CombatV2
             }
 
             return result;
+        }
+
+        public ActionCostPlan PlannedCost(Hex target)
+        {
+            var planned = PeekPlannedCost(target);
+            int moveSecs = Mathf.Max(0, planned.moveSecs);
+            int atkSecs = Mathf.Max(0, planned.atkSecs);
+            int moveEnergy = Mathf.Max(0, planned.moveEnergy);
+            int atkEnergy = Mathf.Max(0, planned.atkEnergy);
+            int totalTime = moveSecs + atkSecs;
+            int totalEnergy = moveEnergy + atkEnergy;
+            if (!planned.valid)
+            {
+                return ActionCostPlan.Invalid("(targetInvalid)");
+            }
+
+            string detail = $"(move={moveSecs}s/{moveEnergy}, atk={atkSecs}s/{atkEnergy}, total={totalTime}s/{totalEnergy})";
+            return new ActionCostPlan(true, totalTime, totalEnergy, moveSecs, atkSecs, moveEnergy, atkEnergy, detail);
         }
         struct MoveRatesSnapshot
         {
