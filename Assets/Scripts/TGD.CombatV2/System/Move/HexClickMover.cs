@@ -678,7 +678,8 @@ namespace TGD.CombatV2
             }
 
             var rates = BuildMoveRates(path[0]);
-            var passability = PassabilityFactory.ForMove(_occ, SelfActor, CurrentAnchor);
+            var startAnchor = CurrentAnchor;
+            var passability = PassabilityFactory.ForMove(_occ, SelfActor, startAnchor);
 
             float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
@@ -805,11 +806,13 @@ namespace TGD.CombatV2
 
             if (driver != null && driver.UnitRef != null)
             {
-                _bridge?.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
+                var finalAnchor = CurrentAnchor;
+                var finalFacing = SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing;
+                _bridge?.MoveCommit(finalAnchor, finalFacing);
             }
 
             _moving = false;
-            HexMoveEvents.RaiseMoveFinished(driver.UnitRef, driver.UnitRef.Position);
+            HexMoveEvents.RaiseMoveFinished(driver.UnitRef, CurrentAnchor);
             if (truncatedByBudget && !stoppedByExternal)
             {
                 HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
