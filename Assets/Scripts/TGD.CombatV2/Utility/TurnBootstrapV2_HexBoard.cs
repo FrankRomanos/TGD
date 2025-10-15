@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using TGD.HexBoard;
 using TGD.CoreV2;
-using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
     /// <summary>
-    /// æŠŠ HexBoardTestDriver æä¾›çš„ Unit ä¸åŒç‰©ä½“ä¸Šçš„ UnitRuntimeContext ç»‘å®šåˆ° TurnManagerV2ï¼Œå¹¶å¯åŠ¨å›åˆå¾ªç¯ã€‚
-    /// - æ”¯æŒ 1~4 åç©å®¶ï¼›Boss å¯é€‰ï¼ˆä¸ºç©ºåˆ™æ•Œæ–¹ç›¸ä½ä»…æ˜¾ç¤ºèµ·å§‹æç¤ºä¸ 1s åœé¡¿ï¼‰ã€‚
+    /// °Ñ HexBoardTestDriver Ìá¹©µÄ Unit ÓëÍ¬ÎïÌåÉÏµÄ UnitRuntimeContext °ó¶¨µ½ TurnManagerV2£¬²¢Æô¶¯»ØºÏÑ­»·¡£
+    /// - Ö§³Ö 1~4 ÃûÍæ¼Ò£»Boss ¿ÉÑ¡£¨Îª¿ÕÔòµĞ·½ÏàÎ»½öÏÔÊ¾ÆğÊ¼ÌáÊ¾Óë 1s Í£¶Ù£©¡£
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class TurnBootstrapV2_HexBoard : MonoBehaviour
@@ -18,16 +17,13 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
 
         [Header("Players (1~4)")]
-        public List<HexBoardTestDriver> playerDrivers = new();
+        public List<HexBoardTestDriver> playerDrivers = new(); // ÍÏ 1~4 ¸ö
         [Header("Boss (optional)")]
         public HexBoardTestDriver bossDriver;
 
-        [Header("Action Manager (optional)")]
-        public CombatActionManagerV2 actionManager;
-
         [Header("Auto Add Helpers")]
-        public bool autoAddMissingContext = false;
-        public bool autoWireAdapters = true;       
+        public bool autoAddMissingContext = false; // true Ê±£¬ÈôÈ±ÉÙ UnitRuntimeContext ½«×Ô¶¯Ìí¼ÓÒ»¸ö×îĞ¡Ä¬ÈÏ
+        public bool autoWireAdapters = true;       // true Ê±£¬×Ô¶¯Îª½ÇÉ«ÉÏµÄ Adapter ¸³ turnManager/context
 
         void Start()
         {
@@ -37,15 +33,14 @@ namespace TGD.CombatV2
                 return;
             }
 
-            //  Unit Ğ±
+            // ×éÍæ¼Ò Unit ÁĞ±í
             var playerUnits = new List<Unit>();
-            var readyDrivers = new List<HexBoardTestDriver>();
             foreach (var drv in playerDrivers)
             {
                 if (!EnsureReady(drv)) continue;
                 var ctx = drv.GetComponent<UnitRuntimeContext>();
                 if (ctx == null && autoAddMissingContext)
-                    ctx = drv.gameObject.AddComponent<UnitRuntimeContext>(); 
+                    ctx = drv.gameObject.AddComponent<UnitRuntimeContext>(); // Ä¬ÈÏ stats ÎªĞòÁĞ»¯Àï×Ô´øµÄ
 
                 if (ctx == null)
                 {
@@ -53,8 +48,7 @@ namespace TGD.CombatV2
                     continue;
                 }
 
-                readyDrivers.Add(drv);
-
+                // ¿ÉÑ¡×Ô¶¯²¼Ïß£º°Ñ Adapter ÃÇÁ¬ÉÏ TM Óë Ctx
                 if (autoWireAdapters)
                 {
                     var wire = drv.GetComponent<UnitAutoWireV2>();
@@ -68,6 +62,7 @@ namespace TGD.CombatV2
                 playerUnits.Add(drv.UnitRef);
             }
 
+            // Boss£¨¿É¿Õ£©
             Unit bossUnit = null;
             if (bossDriver != null && EnsureReady(bossDriver))
             {
@@ -77,7 +72,6 @@ namespace TGD.CombatV2
 
                 if (ctx != null)
                 {
-                    readyDrivers.Add(bossDriver);
                     if (autoWireAdapters)
                     {
                         var wire = bossDriver.GetComponent<UnitAutoWireV2>();
@@ -92,16 +86,9 @@ namespace TGD.CombatV2
                 }
             }
 
-            RegisterUnitsOnMaps(readyDrivers, playerUnits, bossUnit);
-
+            // ¿ªÕ½£¨Ö§³Ö 1~4 Íæ¼Ò£¬Boss ¿É¿Õ£©
             turnManager.StartBattle(playerUnits, bossUnit);
             Debug.Log($"[TurnBootstrap] StartBattle players={playerUnits.Count} boss={(bossUnit != null ? "yes" : "no")}", this);
-
-            var validator = EnsureTargetValidator(readyDrivers);
-            if (actionManager == null)
-                actionManager = FindFirstObjectByType<CombatActionManagerV2>();
-            if (actionManager != null && validator != null)
-                actionManager.SetTargetValidator(validator);
         }
 
         bool EnsureReady(HexBoardTestDriver drv)
@@ -115,69 +102,6 @@ namespace TGD.CombatV2
             }
             return true;
         }
-
-        void RegisterUnitsOnMaps(List<HexBoardTestDriver> drivers, List<Unit> players, Unit bossUnit)
-        {
-            if (drivers == null || drivers.Count == 0)
-                return;
-
-            var units = new List<Unit>();
-            if (players != null)
-                units.AddRange(players);
-            if (bossUnit != null)
-                units.Add(bossUnit);
-
-            if (units.Count == 0)
-                return;
-
-            foreach (var unit in units)
-            {
-                if (unit == null)
-                    continue;
-
-                var coord = unit.Position;
-                string label = TurnManagerV2.FormatUnitLabel(unit);
-                Debug.Log($"[Map] Register {label} at ({coord.q},{coord.r})", this);
-
-                foreach (var drv in drivers)
-                {
-                    if (drv == null || drv.Map == null)
-                        continue;
-                    drv.Map.Set(unit, coord);
-                }
-            }
-        }
-
-        DefaultTargetValidator EnsureTargetValidator(List<HexBoardTestDriver> drivers)
-        {
-            var validator = GetComponent<DefaultTargetValidator>();
-            if (validator == null)
-                validator = gameObject.AddComponent<DefaultTargetValidator>();
-
-            if (!validator.authoring)
-                validator.authoring = ResolveAuthoring(drivers);
-            if (!validator.environment)
-                validator.environment = FindFirstObjectByType<HexEnvironmentSystem>();
-            if (!validator.occupancyService)
-                validator.occupancyService = FindFirstObjectByType<HexOccupancyService>();
-            if (!validator.enemyRegistry)
-                validator.enemyRegistry = FindFirstObjectByType<SimpleEnemyRegistry>();
-            validator.turnManager = turnManager;
-            validator.SetDrivers(drivers);
-            return validator;
-        }
-
-        HexBoardAuthoringLite ResolveAuthoring(List<HexBoardTestDriver> drivers)
-        {
-            if (drivers != null)
-            {
-                foreach (var driver in drivers)
-                {
-                    if (driver != null && driver.authoring != null)
-                        return driver.authoring;
-                }
-            }
-            return FindFirstObjectByType<HexBoardAuthoringLite>();
-        }
     }
 }
+
