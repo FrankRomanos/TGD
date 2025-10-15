@@ -130,39 +130,49 @@ namespace TGD.CombatV2.Integration
             if (!IsReady)
                 return false;
 
+            _occ?.TempClearForOwner(_actor);
             bool success = false;
+            bool replaced = false;
 
             if (_occ.TryMove(_actor, newAnchor))
             {
                 _actor.Anchor = newAnchor;
                 _actor.Facing = newFacing;
                 _placed = true;
-                if (debugLog)
-                    Debug.Log($"[Occ] Move {IdLabel()} -> {newAnchor}", this);
-                MirrorDriver(newAnchor, newFacing);
                 success = true;
             }
             else
             {
-                _occ.Remove(_actor);
-                if (_occ.TryPlace(_actor, newAnchor, newFacing))
+                if (_occ != null)
                 {
-                    _actor.Anchor = newAnchor;
-                    _actor.Facing = newFacing;
-                    _placed = true;
-                    if (debugLog)
-                        Debug.Log($"[Occ] RePlace {IdLabel()} at {newAnchor}", this);
-                    MirrorDriver(newAnchor, newFacing);
-                    success = true;
+                    _occ.Remove(_actor);
+                    _occ.TempClearForOwner(_actor);
+                    if (_occ.TryPlace(_actor, newAnchor, newFacing))
+                    {
+                        _actor.Anchor = newAnchor;
+                        _actor.Facing = newFacing;
+                        _placed = true;
+                        success = true;
+                        replaced = true;
+                    }
                 }
             }
 
             if (success)
             {
+                if (debugLog)
+                {
+                    string verb = replaced ? "RePlace" : "Move";
+                    Debug.Log($"[Occ] {verb} {IdLabel()} -> {newAnchor}", this);
+                }
+                MirrorDriver(_actor.Anchor, _actor.Facing);
                 RaiseAnchorChanged(newAnchor);
                 return true;
             }
 
+#if UNITY_EDITOR
+            Debug.LogWarning($"[Occ] MoveCommit failed -> {newAnchor}", this);
+#endif
             return false;
         }
 

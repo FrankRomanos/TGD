@@ -306,8 +306,6 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            if (SelfActor != null)
-                _occ?.TempClearForOwner(SelfActor);
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
