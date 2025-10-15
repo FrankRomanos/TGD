@@ -706,7 +706,7 @@ namespace TGD.CombatV2
                 hit.point = ray.origin + ray.direction * t;
             }
 
-            var hex = authoring.Layout.Hex(hit.point);
+            var hex = authoring.Layout.HexAt(hit.point);
             return hex;
         }
     }
