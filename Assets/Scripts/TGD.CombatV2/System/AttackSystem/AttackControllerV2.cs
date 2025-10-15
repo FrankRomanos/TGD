@@ -298,7 +298,7 @@ namespace TGD.CombatV2
             _attackSpec = new TargetingSpec
             {
                 occupant = TargetOccupantMask.Enemy | TargetOccupantMask.Empty,
-                terrain = TargetTerrainMask.NonObstacle,
+                terrain = TargetTerrainMask.Any,
                 allowSelf = false,
                 requireOccupied = false,
                 requireEmpty = false,
@@ -485,7 +485,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateAttackTarget(unit, hex);
             if (debugLog)
-                Debug.Log($"[Action][Attack] W1/W2 {targetCheck}", this);
+                Debug.Log($"[Action][Attack] Click {hex} ¡ú {targetCheck}", this);
 
             if (!targetCheck.ok)
             {
@@ -732,7 +732,7 @@ namespace TGD.CombatV2
 
             preview.targetIsEnemy = treatAsEnemy;
 
-            var startPassBlocker = new StartPassBlocker(_occ, unit, start);
+            var startPassBlocker = new StartFootprintPassBlocker(_occ, _actor);
             List<Hex> path = null;
             Hex landing = target;
 
@@ -1159,18 +1159,24 @@ namespace TGD.CombatV2
 
         bool IsEnemyHex(Hex hex)
         {
+            if (_enemyLocator is SimpleEnemyRegistry registry)
+            {
+                if (registry.IsEnemyAt(hex, _occ))
+                    return true;
+                if (_occ != null && _occ.TryGetActor(hex, out var actorAt) && registry.IsEnemyActor(actorAt))
+                    return true;
+                return false;
+            }
             if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
                 return true;
-            if (_occ != null)
-            {
-                var actor = _occ.Get(hex);
-                if (actor != null && actor != _actor)
-                    return true;
-            }
+
+            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != _actor)
+                return true;
+
             return false;
         }
 
-        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, StartPassBlocker passBlocker = null)
+        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, StartFootprintPassBlocker passBlocker = null)
         {
             if (authoring?.Layout == null) return true;
             if (!authoring.Layout.Contains(cell)) return true;
@@ -1182,7 +1188,7 @@ namespace TGD.CombatV2
             return _occ != null && _occ.IsBlocked(cell, _actor);
         }
 
-        bool TryFindMeleePath(Hex start, Hex target, int range, StartPassBlocker startPassBlocker, out Hex landing, out List<Hex> bestPath)
+        bool TryFindMeleePath(Hex start, Hex target, int range, StartFootprintPassBlocker startPassBlocker, out Hex landing, out List<Hex> bestPath)
         {
             landing = target;
             bestPath = null;

@@ -23,6 +23,7 @@ namespace TGD.CombatV2
         public bool debugLog;
 
         readonly Dictionary<Hex, EnemyActor> _actors = new();
+        readonly HashSet<IGridActor> _actorSet = new();
         HexOccupancy _occ;
 
         void Awake()
@@ -58,6 +59,7 @@ namespace TGD.CombatV2
                 if (_occ.TryPlace(actor, entry.position, entry.facing))
                 {
                     _actors[entry.position] = actor;
+                    _actorSet.Add(actor);
                     if (debugLog)
                         Debug.Log($"[EnemyRegistry] Placed enemy {entry.id} at {entry.position}", this);
                 }
@@ -70,13 +72,23 @@ namespace TGD.CombatV2
 
         void Clear()
         {
-            if (_occ == null) { _actors.Clear(); return; }
+            if (_occ == null) { _actors.Clear(); _actorSet.Clear(); return; }
             foreach (var kv in _actors)
                 _occ.Remove(kv.Value);
             _actors.Clear();
+            _actorSet.Clear();
         }
 
-        public bool IsEnemy(Hex hex) => _actors.ContainsKey(hex);
+        public bool IsEnemy(Hex hex) => IsEnemyAt(hex, _occ);
+
+        public bool IsEnemyActor(IGridActor actor) => actor != null && _actorSet.Contains(actor);
+
+        public bool IsEnemyAt(Hex hex, HexOccupancy occ)
+        {
+            if (occ != null && occ.TryGetActor(hex, out var actor) && actor != null)
+                return IsEnemyActor(actor);
+            return _actors.ContainsKey(hex);
+        }
 
         public IEnumerable<Hex> AllEnemies => _actors.Keys;
 

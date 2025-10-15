@@ -269,7 +269,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateMoveTarget(unit, hex);
             if (debugLog)
-                Debug.Log($"[Action][Move] W1/W2 {targetCheck}", this);
+                Debug.Log($"[Action][Move] Click {hex} → {targetCheck}", this);
 
             if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
             {
@@ -469,7 +469,7 @@ namespace TGD.CombatV2
 
             var rates = BuildMoveRates(startHex);
 
-            var startPassBlocker = new StartPassBlocker(_occ, driver?.UnitRef, startHex);
+            var startPassBlocker = new StartFootprintPassBlocker(_occ, _actor);
 
             // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
             const float MR_MIN = 1f, MR_MAX = 12f;
