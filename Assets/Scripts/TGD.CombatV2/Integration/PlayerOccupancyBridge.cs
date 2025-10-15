@@ -163,7 +163,21 @@ namespace TGD.CombatV2.Integration
             public Facing4 Facing { get; set; }
             public FootprintShape Footprint => _footprint;
         }
+        void MirrorDriver(Hex anchor, Facing4 facing)
+        {
+            if (_driver == null || !_driver.IsReady) return;
+            // 更新 Unit 的逻辑坐标
+            _driver.UnitRef.Position = anchor;
+            _driver.UnitRef.Facing = facing;
 
+            // 同步 HexBoardMap（避免残留旧索引）
+            _driver.Map.Set(_driver.UnitRef, anchor);
+
+            // 刷新可见位置
+            _driver.SyncView();
+
+            if (debugLog) Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
+        }
         static FootprintShape CreateSingle()
         {
             var shape = ScriptableObject.CreateInstance<FootprintShape>();
