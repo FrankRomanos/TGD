@@ -21,7 +21,7 @@ namespace TGD.CombatV2.Targeting
         void Awake()
         {
             if (!occupancyService)
-                occupancyService = GetComponentInParent<HexBoardTestDriver>(true)?.occupancyService;
+                occupancyService = GetComponentInParent<HexOccupancyService>(true);
             _occ = occupancyService ? occupancyService.Get() : null;
         }
 
@@ -159,8 +159,6 @@ namespace TGD.CombatV2.Targeting
 
         static Unit ResolveUnit(IGridActor actor)
         {
-            if (actor is Unit unit)
-                return unit;
             if (actor is UnitGridAdapter adapter)
                 return adapter.Unit;
             return null;
