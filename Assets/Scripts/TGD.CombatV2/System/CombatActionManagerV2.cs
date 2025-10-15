@@ -245,7 +245,9 @@ namespace TGD.CombatV2
         int usedSeconds,
         int refundedSeconds,
         int moveEnergyActual,
-        int attackEnergyActual)
+          int attackEnergyActual,
+        int budgetBefore,
+        int energyBefore)
         {
             if (tool is not IActionExecReportV2 exec)
                 return (-1, -1);
@@ -255,7 +257,9 @@ namespace TGD.CombatV2
             int attackEnergy = attackEnergyActual;
             int totalEnergyActual = moveEnergy + attackEnergy;
             int planTime = Mathf.Max(0, plan.timeSeconds);
-            int planEnergyTotal = Mathf.Max(0, plan.energy);
+            int planMoveEnergy = Mathf.Max(0, plan.primaryEnergy);
+            int planAttackEnergy = Mathf.Max(0, plan.secondaryEnergy);
+            int planEnergyTotal = planMoveEnergy + planAttackEnergy;
 
             int extraUsed = Mathf.Max(0, used - planTime);
             int consumedAfterRefund = Mathf.Max(0, planTime - refunded);
@@ -282,18 +286,46 @@ namespace TGD.CombatV2
                         budget.RefundTime(-timeDelta);
 
                     budgetAfter = budget.Remaining;
-                    string timeLog;
-                    if (timeDelta > 0)
-                        timeLog = $"[Time] Spend {timeDelta}s -> Remain={budget.Remaining}";
-                    else if (timeDelta < 0)
+                    if (planTime > 0 || finalTimeSpent > 0 || timeDelta != 0)
                     {
-                        int refundAmount = -timeDelta;
-                        string suffix = freeMove ? " (FreeMove)" : string.Empty;
-                        timeLog = $"[Time] Refund {refundAmount}s -> Remain={budget.Remaining}{suffix}";
+                        int timeChangeActual = (budgetBefore >= 0 && budgetAfter >= 0)
+                       ? budgetBefore - budgetAfter
+                       : finalTimeSpent;
+
+                        string timeReason;
+                        if (timeDelta > 0)
+                            timeReason = "Adjust";
+                        else if (timeDelta < 0)
+                            timeReason = freeMove ? "FreeMove" : "Adjust";
+                        else
+                            timeReason = "Plan";
+
+                        string timeAction;
+                        int timeAmount;
+                        if (timeChangeActual > 0)
+                        {
+                            timeAction = "Spend";
+                            timeAmount = timeChangeActual;
+                        }
+                        else if (timeChangeActual < 0)
+                        {
+                            timeAction = "Refund";
+                            timeAmount = -timeChangeActual;
+                        }
+                        else if (planTime > 0 && timeReason != "Plan")
+                        {
+                            timeAction = "Refund";
+                            timeAmount = planTime;
+                        }
+                        else
+                        {
+                            timeAction = "Spend";
+                            timeAmount = planTime;
+                        }
+
+                        timeAmount = Mathf.Max(0, timeAmount);
+                        Debug.Log($"[Time] {timeAction} 1P {timeAmount}s -> Remain={budgetAfter} (reason={timeReason})", this);
                     }
-                    else
-                        timeLog = $"[Time] NoChange -> Remain={budget.Remaining}";
-                    Debug.Log(timeLog, this);
                 }
 
                 var resources = turnManager.GetResources(unit);
@@ -304,14 +336,54 @@ namespace TGD.CombatV2
                     else if (energyDelta < 0)
                         resources.Refund("Energy", -energyDelta, tool.Id);
                     energyAfter = resources.Get("Energy");
-                    string resLog;
-                    if (energyDelta > 0)
-                        resLog = $"[Res] Spend {energyDelta} -> {energyAfter}";
-                    else if (energyDelta < 0)
-                        resLog = $"[Res] Refund {-energyDelta} -> {energyAfter}";
-                    else
-                        resLog = $"[Res] NoChange -> {energyAfter}";
-                    Debug.Log(resLog, this);
+                    int energyMax = resources.GetMax("Energy");
+
+                    if (planEnergyTotal > 0 || totalEnergyActual > 0 || energyDelta != 0)
+                    {
+                        int energyChangeActual = (energyBefore >= 0 && energyAfter >= 0)
+                            ? energyBefore - energyAfter
+                            : totalEnergyActual;
+
+                        string energyAction;
+                        int energyAmount;
+                        if (energyChangeActual > 0)
+                        {
+                            energyAction = "Spend";
+                            energyAmount = energyChangeActual;
+                        }
+                        else if (energyChangeActual < 0)
+                        {
+                            energyAction = "Refund";
+                            energyAmount = -energyChangeActual;
+                        }
+                        else if (planEnergyTotal > 0 && energyDelta < 0)
+                        {
+                            energyAction = "Refund";
+                            energyAmount = Mathf.Max(planEnergyTotal, -energyDelta);
+                        }
+                        else
+                        {
+                            energyAction = "Spend";
+                            energyAmount = Mathf.Max(planEnergyTotal, totalEnergyActual);
+                        }
+
+                        energyAmount = Mathf.Max(0, energyAmount);
+
+                        string energyReason;
+                        if (energyDelta < 0 && freeMove)
+                            energyReason = "FreeMove";
+                        else if (attackEnergy > 0 || planAttackEnergy > 0)
+                            energyReason = "Attack";
+                        else if (moveEnergy > 0 || planMoveEnergy > 0)
+                            energyReason = "Move";
+                        else
+                            energyReason = "Move";
+
+                        string sign = energyAction == "Spend" ? "+" : "-";
+                        Debug.Log(
+                            $"[Res] {energyAction} 1P:Energy {sign}{energyAmount} -> {energyAfter}/{energyMax} (reason={energyReason})",
+                            this);
+                    }
                 }
             }
             exec.Consume();
@@ -518,7 +590,16 @@ namespace TGD.CombatV2
                 resolveBegin += " [FreeMove]";
             resolveBegin += ")";
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin, resolveBegin);
-            var (budgetAfter, energyAfter) = ApplyExecution(unit, tool, plan, used, refunded, moveEnergyActual, attackEnergyActual);
+            var (budgetAfter, energyAfter) = ApplyExecution(
+                unit,
+                tool,
+                plan,
+                used,
+                refunded,
+                moveEnergyActual,
+                attackEnergyActual,
+                budgetBefore,
+                energyBefore);
             ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveEnd, $"(budgetAfter={FormatBudgetValue(budgetAfter)}, energyAfter={FormatBudgetValue(energyAfter)})");
             if (exitActiveTool)
             {

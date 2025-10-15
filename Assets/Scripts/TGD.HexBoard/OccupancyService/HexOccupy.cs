@@ -34,6 +34,8 @@ namespace TGD.HexBoard
         }
 
         public bool IsBlocked(Hex c, IGridActor ignore = null) => IsBlockedInternal(c, ignore, true);
+        public bool IsBlockedIgnoringTemp(Hex c, IGridActor ignore = null)
+           => IsBlockedInternal(c, ignore, false);
 
         bool CanPlaceInternal(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore, bool includeTemp)
         {
