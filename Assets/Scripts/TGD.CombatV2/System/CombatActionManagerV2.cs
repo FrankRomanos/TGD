@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.HexBoard;
+using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
@@ -36,6 +37,9 @@ namespace TGD.CombatV2
         [Header("Tools (drag any components that implement IActionToolV2)")]
         public List<MonoBehaviour> tools = new();  // 拖 ClickMover, AttackControllerV2 等
 
+        [Header("Targeting")]
+        public MonoBehaviour targetValidatorSource;
+
         [Header("Chain Prompt")]
         public ChainPromptAutoMode chainPromptAuto = ChainPromptAutoMode.Skip;
 
@@ -49,11 +53,13 @@ namespace TGD.CombatV2
 
         ActionModeV2 _mode = ActionModeV2.Idle;
         readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
+        readonly List<IActionToolV2> _registeredTools = new();
         Unit _currentUnit; // ★ 记录当前回合单位
         IActionToolV2 _activeTool;
         Hex? _hover;
         bool _turnJustStarted;
         readonly List<IActionToolV2> _chainCandidates = new();
+        ITargetValidator _targetValidator;
         enum PlanShortageReason
         {
             None,
@@ -63,18 +69,15 @@ namespace TGD.CombatV2
 
         void Awake()
         {
+            ResolveValidatorFromSource();
             foreach (var mb in tools)
             {
                 if (!mb) continue;
                 WireTurnManager(mb);
                 if (mb is IActionToolV2 tool)
                 {
-                    if (!_toolsById.TryGetValue(tool.Id, out var list))
-                    {
-                        list = new List<IActionToolV2>();
-                        _toolsById[tool.Id] = list;
-                    }
-                    list.Add(tool);
+                    InjectValidator(tool);
+                    RegisterToolInstance(tool);
                 }
             }
         }
@@ -84,6 +87,14 @@ namespace TGD.CombatV2
             if (mb == null) return;
             switch (mb)
             {
+                case MoveToolCompat moveCompat:
+                    moveCompat.AttachTurnManager(turnManager);
+                    if (turnManager != null)
+                        WireMoveCostAdapter(moveCompat.Legacy != null ? moveCompat.Legacy.costProvider as MoveCostServiceV2Adapter : null);
+                    break;
+                case AttackToolCompat attackCompat:
+                    attackCompat.AttachTurnManager(turnManager);
+                    break;
                 case AttackControllerV2 attack:
                     attack.AttachTurnManager(turnManager);
                     break;
@@ -166,6 +177,10 @@ namespace TGD.CombatV2
         }
         Unit ResolveUnit(IActionToolV2 tool)
         {
+            if (tool is MoveToolCompat moveCompat && moveCompat.Legacy != null && moveCompat.Legacy.driver != null)
+                return moveCompat.Legacy.driver.UnitRef;
+            if (tool is AttackToolCompat attackCompat && attackCompat.Legacy != null && attackCompat.Legacy.driver != null)
+                return attackCompat.Legacy.driver.UnitRef;
             if (tool is HexClickMover mover && mover != null && mover.driver != null)
                 return mover.driver.UnitRef;
             if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
@@ -213,6 +228,10 @@ namespace TGD.CombatV2
             }
             switch (tool)
             {
+                case MoveToolCompat moveCompat:
+                    return moveCompat.TryPrecheckAim(out reason);
+                case AttackToolCompat attackCompat:
+                    return attackCompat.TryPrecheckAim(out reason);
                 case HexClickMover mover:
                     return mover.TryPrecheckAim(out reason);
                 case AttackControllerV2 attack:
@@ -271,6 +290,8 @@ namespace TGD.CombatV2
             int energyAfter = -1;
 
             var attackTool = tool as AttackControllerV2;
+            if (tool is AttackToolCompat attackCompat)
+                attackTool = attackCompat.Legacy;
             bool freeMove = attackTool != null && attackTool.FreeMoveApplied;
 
             if (turnManager != null && unit != null)
@@ -397,6 +418,55 @@ namespace TGD.CombatV2
                     energyReport.ReportMoveEnergyNet,
                     energyReport.ReportAttackEnergyNet);
             return (0, 0);
+        }
+
+        void RegisterToolInstance(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+            if (!_toolsById.TryGetValue(tool.Id, out var list))
+            {
+                list = new List<IActionToolV2>();
+                _toolsById[tool.Id] = list;
+            }
+            if (!list.Contains(tool))
+                list.Add(tool);
+            if (!_registeredTools.Contains(tool))
+                _registeredTools.Add(tool);
+        }
+
+        void InjectValidator(IActionToolV2 tool)
+        {
+            if (tool is MoveToolCompat moveCompat)
+                moveCompat.SetValidator(_targetValidator);
+            else if (tool is AttackToolCompat attackCompat)
+                attackCompat.SetValidator(_targetValidator);
+        }
+
+        void ResolveValidatorFromSource()
+        {
+            if (_targetValidator != null)
+                return;
+            if (targetValidatorSource is ITargetValidator iv)
+            {
+                _targetValidator = iv;
+                return;
+            }
+            if (targetValidatorSource != null)
+            {
+                var component = targetValidatorSource.GetComponent<ITargetValidator>();
+                if (component != null)
+                    _targetValidator = component;
+            }
+        }
+
+        public void SetTargetValidator(ITargetValidator validator)
+        {
+            _targetValidator = validator;
+            if (targetValidatorSource == null && validator is MonoBehaviour mb)
+                targetValidatorSource = mb;
+            foreach (var tool in _registeredTools)
+                InjectValidator(tool);
         }
 
         ActionCostPlan GetPlannedCost(IActionToolV2 tool, Hex hex)

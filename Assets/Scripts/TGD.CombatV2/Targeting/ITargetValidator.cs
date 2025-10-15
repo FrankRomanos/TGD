@@ -1,0 +1,28 @@
+using TGD.HexBoard;
+
+namespace TGD.CombatV2.Targeting
+{
+    public interface ITargetValidator
+    {
+        TargetCheckResult Check(Unit actor, Hex hex, TargetingSpec spec);
+    }
+
+    public enum TargetInvalidReason
+    {
+        None,
+        Self,
+        Friendly,
+        EnemyNotAllowed,
+        EmptyNotAllowed,
+        Blocked,
+        OutOfRange,
+        Unknown
+    }
+
+    public struct TargetCheckResult
+    {
+        public bool ok;
+        public TargetInvalidReason reason;
+        public Unit hitUnit;
+    }
+}

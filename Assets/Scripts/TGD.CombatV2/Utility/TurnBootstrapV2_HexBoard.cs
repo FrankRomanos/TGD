@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TGD.HexBoard;
 using TGD.CoreV2;
+using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
@@ -17,9 +18,12 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
 
         [Header("Players (1~4)")]
-        public List<HexBoardTestDriver> playerDrivers = new(); 
+        public List<HexBoardTestDriver> playerDrivers = new();
         [Header("Boss (optional)")]
         public HexBoardTestDriver bossDriver;
+
+        [Header("Action Manager (optional)")]
+        public CombatActionManagerV2 actionManager;
 
         [Header("Auto Add Helpers")]
         public bool autoAddMissingContext = false;
@@ -92,6 +96,12 @@ namespace TGD.CombatV2
 
             turnManager.StartBattle(playerUnits, bossUnit);
             Debug.Log($"[TurnBootstrap] StartBattle players={playerUnits.Count} boss={(bossUnit != null ? "yes" : "no")}", this);
+
+            var validator = EnsureTargetValidator(readyDrivers);
+            if (actionManager == null)
+                actionManager = FindFirstObjectByType<CombatActionManagerV2>();
+            if (actionManager != null && validator != null)
+                actionManager.SetTargetValidator(validator);
         }
 
         bool EnsureReady(HexBoardTestDriver drv)
@@ -136,6 +146,38 @@ namespace TGD.CombatV2
                     drv.Map.Set(unit, coord);
                 }
             }
+        }
+
+        DefaultTargetValidator EnsureTargetValidator(List<HexBoardTestDriver> drivers)
+        {
+            var validator = GetComponent<DefaultTargetValidator>();
+            if (validator == null)
+                validator = gameObject.AddComponent<DefaultTargetValidator>();
+
+            if (!validator.authoring)
+                validator.authoring = ResolveAuthoring(drivers);
+            if (!validator.environment)
+                validator.environment = FindFirstObjectByType<HexEnvironmentSystem>();
+            if (!validator.occupancyService)
+                validator.occupancyService = FindFirstObjectByType<HexOccupancyService>();
+            if (!validator.enemyRegistry)
+                validator.enemyRegistry = FindFirstObjectByType<SimpleEnemyRegistry>();
+            validator.turnManager = turnManager;
+            validator.SetDrivers(drivers);
+            return validator;
+        }
+
+        HexBoardAuthoringLite ResolveAuthoring(List<HexBoardTestDriver> drivers)
+        {
+            if (drivers != null)
+            {
+                foreach (var driver in drivers)
+                {
+                    if (driver != null && driver.authoring != null)
+                        return driver.authoring;
+                }
+            }
+            return FindFirstObjectByType<HexBoardAuthoringLite>();
         }
     }
 }
