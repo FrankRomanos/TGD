@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
-using TGD.HexBoard.Pathfinding;
+using TGD.HexBoard.Path;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -485,7 +485,7 @@ namespace TGD.CombatV2
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateAttackTarget(unit, hex);
             if (debugLog)
-                Debug.Log($"[Action][Attack] Click {hex} ¡ú {targetCheck}", this);
+                Debug.Log($"[Action][Attack] Click {hex} Â¡Ãº {targetCheck}", this);
 
             if (!targetCheck.ok)
             {
@@ -732,14 +732,14 @@ namespace TGD.CombatV2
 
             preview.targetIsEnemy = treatAsEnemy;
 
-            var startPassBlocker = new StartFootprintPassBlocker(_occ, _actor);
+            var passability = PassabilityFactory.ForApproach(_occ, _actor);
             List<Hex> path = null;
             Hex landing = target;
 
             if (treatAsEnemy)
             {
                 int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
-                if (!TryFindMeleePath(start, target, range, startPassBlocker, out landing, out path))
+                if (!TryFindMeleePath(start, target, range, passability, out landing, out path))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -749,7 +749,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if (_occ != null && _occ.IsBlocked(target, _actor))
+                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, _actor)))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -757,7 +757,7 @@ namespace TGD.CombatV2
                     return preview;
                 }
 
-                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target, startPassBlocker));
+                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target, passability));
                 if (path == null)
                 {
                     preview.valid = false;
@@ -838,6 +838,7 @@ namespace TGD.CombatV2
             Transform view = driver.unitView != null ? driver.unitView : transform;
 
             var path = preview.path;
+            var passability = PassabilityFactory.ForApproach(_occ, _actor);
             var start = path[0];
 
             if (view != null && path.Count >= 2)
@@ -936,7 +937,12 @@ namespace TGD.CombatV2
                     var from = reached[i - 1];
                     var to = reached[i];
 
-                    if (_occ.IsBlocked(to, _actor))
+                    if (passability != null && passability.IsBlocked(to))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, _actor))
                     {
                         stoppedByExternal = true;
                         break;
@@ -1176,19 +1182,24 @@ namespace TGD.CombatV2
             return false;
         }
 
-        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, StartFootprintPassBlocker passBlocker = null)
+        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)
         {
             if (authoring?.Layout == null) return true;
             if (!authoring.Layout.Contains(cell)) return true;
             if (env != null && env.IsPit(cell)) return true;
             if (cell.Equals(start)) return false;
             if (cell.Equals(landing)) return false;
-            if (passBlocker != null && passBlocker.IsBlocked(cell)) return true;
             if (_tempReservedThisAction.Contains(cell)) return true;
-            return _occ != null && _occ.IsBlocked(cell, _actor);
+            if (passability != null && passability.IsBlocked(cell)) return true;
+            if (passability == null && _occ != null && _actor != null)
+            {
+                if (!_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                    return true;
+            }
+            return false;
         }
 
-        bool TryFindMeleePath(Hex start, Hex target, int range, StartFootprintPassBlocker startPassBlocker, out Hex landing, out List<Hex> bestPath)
+        bool TryFindMeleePath(Hex start, Hex target, int range, IPassability passability, out Hex landing, out List<Hex> bestPath)
         {
             landing = target;
             bestPath = null;
@@ -1219,9 +1230,10 @@ namespace TGD.CombatV2
                         if (!candidates.Add(candidate)) continue;
                         if (!authoring.Layout.Contains(candidate)) continue;
                         if (env != null && env.IsPit(candidate)) continue;
-                        if (_occ != null && !_occ.CanPlace(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
+                        if (passability != null && passability.IsBlocked(candidate)) continue;
+                        if (passability == null && _occ != null && _actor != null && !_occ.CanPlaceIgnoringTemp(_actor, candidate, _actor.Facing, ignore: _actor)) continue;
 
-                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, startPassBlocker));
+                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, passability));
                         if (path == null) continue;
 
                         int enemyDist = DistanceToEnemy(candidate, enemyCells);

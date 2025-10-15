@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
-using TGD.HexBoard.Pathfinding;
+using TGD.HexBoard.Path;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -469,7 +469,7 @@ namespace TGD.CombatV2
 
             var rates = BuildMoveRates(startHex);
 
-            var startPassBlocker = new StartFootprintPassBlocker(_occ, _actor);
+            var passability = PassabilityFactory.ForMove(_occ, _actor);
 
             // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
             const float MR_MIN = 1f, MR_MAX = 12f;
@@ -507,10 +507,10 @@ namespace TGD.CombatV2
 
                 if (blockByUnits)
                 {
-                    if (startPassBlocker != null && startPassBlocker.IsBlocked(cell))
+                    if (passability != null && passability.IsBlocked(cell))
                         return true;
 
-                    if (_occ == null || !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor))
+                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(_actor, cell, _actor.Facing, ignore: _actor)))
                         return true;
                 }
 
@@ -615,6 +615,7 @@ namespace TGD.CombatV2
             }
 
             var rates = BuildMoveRates(path[0]);
+            var passability = PassabilityFactory.ForMove(_occ, _actor);
 
             float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
@@ -686,7 +687,12 @@ namespace TGD.CombatV2
                 var from = reached[i - 1];
                 var to = reached[i];
 
-                if (_occ.IsBlocked(to, _actor))
+                if (passability != null && passability.IsBlocked(to))
+                {
+                    stoppedByExternal = true;
+                    break;
+                }
+                if (passability == null && _occ != null && _occ.IsBlocked(to, _actor))
                 {
                     stoppedByExternal = true;
                     break;
