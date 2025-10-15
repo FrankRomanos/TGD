@@ -372,14 +372,20 @@ namespace TGD.CombatV2
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
-            _bridge = GetComponent<IActorOccupancyBridge>();
-            _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponent<PlayerOccupancyBridge>();
-
-            if (!targetValidator)
-                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
-
+            _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+            _bridge = _playerBridge as IActorOccupancyBridge;
+            if (driver == null)
+                driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (!occupancyService)
-                occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
+                occupancyService = GetComponentInParent<HexOccupancyService>(true);
+            if (!targetValidator)
+                targetValidator = GetComponentInParent<DefaultTargetValidator>(true);
+
+#if UNITY_EDITOR
+            var bridges = GetComponentsInParent<PlayerOccupancyBridge>(true);
+            if (bridges != null && bridges.Length > 1)
+                Debug.LogError($"[Guard] Multiple PlayerOccupancyBridge in parents: {bridges.Length}. Keep ONE.", this);
+#endif
 
             if (!occupancyService && driver != null)
             {
@@ -388,8 +394,8 @@ namespace TGD.CombatV2
                     occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
             }
 
-            if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
-                occupancyService = concreteBridge.occupancyService;
+            if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
+                occupancyService = _playerBridge.occupancyService;
 
             _moveSpec = new TargetingSpec
             {
@@ -409,10 +415,10 @@ namespace TGD.CombatV2
             driver?.EnsureInit();
             if (authoring?.Layout == null || driver == null || !driver.IsReady) return;
 
-            if (_bridge == null)
-                _bridge = GetComponent<IActorOccupancyBridge>();
             if (_playerBridge == null)
-                _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponent<PlayerOccupancyBridge>();
+                _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+            if (_bridge == null)
+                _bridge = _playerBridge as IActorOccupancyBridge;
 
             if (occupancyService)
                 _occ = occupancyService.Get();
@@ -428,7 +434,7 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             if (_playerBridge == null)
-                _playerBridge = GetComponent<PlayerOccupancyBridge>();
+                _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
             if (_playerBridge != null)
                 _playerBridge.AnchorChanged += HandleAnchorChanged;
         }
@@ -552,6 +558,13 @@ namespace TGD.CombatV2
         // ===== 外部 UI 调用 =====
         public void ShowRange()
         {
+#if UNITY_EDITOR
+            var unitPos = (driver != null && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
+            var anchor = CurrentAnchor;
+            var occOk = (_playerBridge != null && _playerBridge.IsReady);
+            var label = TurnManagerV2.FormatUnitLabel(driver?.UnitRef);
+            Debug.Log($"[Probe][MoveAim] unit={label} driver={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}", this);
+#endif
             _bridge?.EnsurePlacedNow();
             if (occupancyService)
                 _occ = occupancyService.Get();
@@ -624,19 +637,10 @@ namespace TGD.CombatV2
 
                 return false;
             }
-            // —— 用“权威锚点 B”构造预览用的临时 Map —— //
-            var previewMap = driver.Map;
-            bool needTemp = (previewMap == null)
-                         || (driver.UnitRef == null)
-                    || !driver.UnitRef.Position.Equals(startHex);
-
-            // 如果 driver.Map 没对齐 CurrentAnchor，就临时造一张只包含自己的 Map
-            if (needTemp)
-            {
-                previewMap = new HexBoardMap<Unit>(layout);
-                if (driver.UnitRef != null)
-                    previewMap.Set(driver.UnitRef, startHex);
-            }
+            // ---- 统一权威起点 ----
+            var previewMap = new HexBoardMap<Unit>(layout);
+            if (driver != null && driver.UnitRef != null)
+                previewMap.Set(driver.UnitRef, startHex);
 
             var result = HexMovableRange.Compute(layout, previewMap, startHex, steps, Block);
             foreach (var kv in result.Paths) _paths[kv.Key] = kv.Value;
