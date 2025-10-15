@@ -1,35 +1,11 @@
-using System;
-
 namespace TGD.CombatV2.Targeting
 {
-    public enum TargetMode
-    {
-        AnyClick,
-        GroundOnly,
-        EnemyOnly,
-        AllyOnly,
-        SelfOnly,
-        EnemyOrGround,
-        AllyOrGround,
-        AnyUnit
-    }
-
     public static class TargetingPresets
     {
         public static TargetingSpec For(TargetMode mode, int maxRange = -1)
         {
             switch (mode)
             {
-                case TargetMode.AnyClick:
-                    return new TargetingSpec
-                    {
-                        occupant = TargetOccupantMask.Any,
-                        terrain = TargetTerrainMask.Any,
-                        allowSelf = true,
-                        requireEmpty = false,
-                        requireOccupied = false,
-                        maxRangeHexes = maxRange
-                    };
                 case TargetMode.GroundOnly:
                     return new TargetingSpec
                     {
@@ -67,7 +43,7 @@ namespace TGD.CombatV2.Targeting
                         terrain = TargetTerrainMask.Any,
                         allowSelf = true,
                         requireEmpty = false,
-                        requireOccupied = true,
+                        requireOccupied = false,
                         maxRangeHexes = maxRange
                     };
                 case TargetMode.EnemyOrGround:
@@ -100,8 +76,17 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = true,
                         maxRangeHexes = maxRange
                     };
+                case TargetMode.AnyClick:
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+                    return new TargetingSpec
+                    {
+                        occupant = TargetOccupantMask.Any,
+                        terrain = TargetTerrainMask.Any,
+                        allowSelf = true,
+                        requireEmpty = false,
+                        requireOccupied = false,
+                        maxRangeHexes = maxRange
+                    };
             }
         }
     }

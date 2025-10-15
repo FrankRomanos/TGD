@@ -21,7 +21,25 @@ namespace TGD.CombatV2.Targeting
         void Awake()
         {
             if (!occupancyService)
+            {
+                var driver = GetComponentInParent<HexBoardTestDriver>(true);
+                if (driver != null)
+                {
+                    if (driver.authoring != null)
+                    {
+                        occupancyService = driver.authoring.GetComponent<HexOccupancyService>();
+                        if (!occupancyService)
+                            occupancyService = driver.authoring.GetComponentInParent<HexOccupancyService>(true);
+                    }
+
+                    if (!occupancyService)
+                        occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
+                }
+            }
+
+            if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
+
             _occ = occupancyService ? occupancyService.Get() : null;
         }
 
@@ -50,6 +68,9 @@ namespace TGD.CombatV2.Targeting
             if (spec == null)
                 return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoSpec");
 
+            if (_occ == null && occupancyService)
+                _occ = occupancyService.Get();
+
             if (_occ == null)
                 return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoOccupancyService");
 
@@ -65,22 +86,25 @@ namespace TGD.CombatV2.Targeting
             bool isEmpty = actorAt == null;
             bool enemyMarked = enemyRegistry != null && enemyRegistry.IsEnemyAt(hex, _occ);
 
-            HitKind hit;
-            if (isEmpty && !enemyMarked)
+            HitKind hit = HitKind.None;
+            if (!isEmpty)
             {
-                hit = HitKind.None;
+                if (unitAt != null && actor != null && ReferenceEquals(unitAt, actor))
+                {
+                    hit = HitKind.Self;
+                }
+                else if (enemyRegistry != null && enemyRegistry.IsEnemyActor(actorAt))
+                {
+                    hit = HitKind.Enemy;
+                }
+                else
+                {
+                    hit = HitKind.Ally;
+                }
             }
-            else if (unitAt != null && actor != null && ReferenceEquals(unitAt, actor))
-            {
-                hit = HitKind.Self;
-            }
-            else if (enemyMarked || (actorAt != null && enemyRegistry != null && enemyRegistry.IsEnemyActor(actorAt)))
+            else if (enemyMarked)
             {
                 hit = HitKind.Enemy;
-            }
-            else
-            {
-                hit = HitKind.Ally;
             }
 
             bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
@@ -108,7 +132,7 @@ namespace TGD.CombatV2.Targeting
             if (hit == HitKind.Self && !(spec.allowSelf || allowSelfMask))
                 return Reject(TargetInvalidReason.Self, "[Probe] SelfNotAllowed");
 
-            if (isEmpty && !allowEmpty)
+            if (isEmpty && hit == HitKind.None && !allowEmpty)
                 return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] EmptyNotAllowed");
 
             if (hit == HitKind.Enemy && !allowEnemy)
@@ -117,10 +141,10 @@ namespace TGD.CombatV2.Targeting
             if (hit == HitKind.Ally && !allowAlly)
                 return Reject(TargetInvalidReason.Friendly, "[Probe] AllyNotAllowed");
 
-            if (spec.requireOccupied && (isEmpty && !enemyMarked))
+            if (spec.requireOccupied && (isEmpty && hit == HitKind.None))
                 return Reject(TargetInvalidReason.EmptyNotAllowed, "[Probe] RequireOccupied");
 
-            if (spec.requireEmpty && (!isEmpty || enemyMarked))
+            if (spec.requireEmpty && (hit != HitKind.None))
                 return Reject(TargetInvalidReason.Blocked, "[Probe] RequireEmpty");
 
             if (spec.maxRangeHexes >= 0 && actor != null)
