@@ -743,7 +743,14 @@ namespace TGD.CombatV2
 
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
-            var start = unit.Position;
+
+            _bridge?.EnsurePlacedNow();
+            if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge.occupancyService)
+                _occ = playerBridge.occupancyService.Get();
+            else if (occupancyService)
+                _occ = occupancyService.Get();
+
+            var start = CurrentAnchor;
             var rates = BuildMoveRates(start);
             var preview = new PreviewData
             {
@@ -796,10 +803,6 @@ namespace TGD.CombatV2
             }
 
             preview.targetIsEnemy = treatAsEnemy;
-
-            _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
 
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, CurrentAnchor);
             List<Hex> path = null;
@@ -897,7 +900,7 @@ namespace TGD.CombatV2
             int attackSecsCharge,
             int attackEnergyPaid)
         {
-            if (preview == null || preview.path == null || preview.path.Count == 0)
+            if (preview == null)
                 yield break;
 
             ClearTempReservations("PreAction");
@@ -905,32 +908,77 @@ namespace TGD.CombatV2
             var layout = authoring.Layout;
             var unit = driver.UnitRef;
             Transform view = driver.unitView != null ? driver.unitView : transform;
-
-            var path = preview.path;
-            _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
-            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, CurrentAnchor);
-            var start = path[0];
-
-            if (view != null && path.Count >= 2)
+            var playerBridge = _bridge as PlayerOccupancyBridge;
+            if (playerBridge != null)
             {
-                var fromW = layout.World(path[0], y);
-                var toW = layout.World(path[^1], y);
+                playerBridge.EnsurePlacedNow();
+                if (playerBridge.occupancyService)
+                    _occ = playerBridge.occupancyService.Get();
+            }
+            else
+            {
+                _bridge?.EnsurePlacedNow();
+                if (occupancyService)
+                    _occ = occupancyService.Get();
+            }
+
+            var startAnchor = CurrentAnchor;
+            Facing4 finalFacing = driver != null && driver.UnitRef != null
+                ? driver.UnitRef.Facing
+                : Facing4.PlusQ;
+            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
+
+            List<Hex> executionPath = null;
+            if (preview.targetIsEnemy)
+            {
+                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                if (!TryFindMeleePath(startAnchor, preview.targetHex, range, passability, out _, out executionPath))
+                {
+                    HandleApproachAbort();
+                    yield break;
+                }
+            }
+            else
+            {
+                if ((passability != null && passability.IsBlocked(preview.targetHex)) ||
+                    (passability == null && _occ != null && _occ.IsBlocked(preview.targetHex, SelfActor)))
+                {
+                    HandleApproachAbort();
+                    yield break;
+                }
+
+                executionPath = ShortestPath(startAnchor, preview.targetHex,
+                    cell => IsBlockedForMove(cell, startAnchor, preview.targetHex, passability));
+                if (executionPath == null || executionPath.Count == 0)
+                {
+                    HandleApproachAbort();
+                    yield break;
+                }
+            }
+
+            if (executionPath == null || executionPath.Count == 0)
+            {
+                HandleApproachAbort();
+                yield break;
+            }
+
+            if (view != null && executionPath.Count >= 2)
+            {
+                var fromW = layout.World(executionPath[0], y);
+                var toW = layout.World(executionPath[^1], y);
                 float keep = attackConfig ? attackConfig.keepDeg : 45f;
                 float turn = attackConfig ? attackConfig.turnDeg : 135f;
                 float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
-                var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(finalFacing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
-                driver.UnitRef.Facing = nf;
-                if (SelfActor != null) SelfActor.Facing = nf;
+                finalFacing = nf;
             }
 
             float mrNoEnv = preview.mrNoEnv;
             float refundThreshold = attackConfig ? Mathf.Max(0.01f, attackConfig.refundThresholdSeconds) : 0.8f;
 
             var sim = MoveSimulator.Run(
-                path,
+                executionPath,
                 mrNoEnv,
                 preview.mrClick,
                 moveSecsCharge,
@@ -964,24 +1012,25 @@ namespace TGD.CombatV2
                         if (refundMove > 0f)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                     }
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
+
+                    if (attackPlanned && authoring?.Layout != null && driver?.unitView != null)
+                    {
+                        var fromW = authoring.Layout.World(startAnchor, y);
+                        var toW = authoring.Layout.World(preview.targetHex, y);
+                        float keep = attackConfig ? attackConfig.keepDeg : 45f;
+                        float turn = attackConfig ? attackConfig.turnDeg : 135f;
+                        float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                        var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(finalFacing, fromW, toW, keep, turn);
+                        yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+                        finalFacing = nf;
+                    }
+
+                    _bridge?.MoveCommit(startAnchor, finalFacing);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
 
                     if (attackPlanned)
-                    {
-                        if (authoring?.Layout != null && driver?.unitView != null)
-                        {
-                            var fromW = authoring.Layout.World(unit.Position, y);
-                            var toW = authoring.Layout.World(preview.targetHex, y);
-                            float keep = attackConfig ? attackConfig.keepDeg : 45f;
-                            float turn = attackConfig ? attackConfig.turnDeg : 135f;
-                            float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
-                            var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
-                            yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
-                            driver.UnitRef.Facing = nf;
-                            if (SelfActor != null) SelfActor.Facing = nf;
-                        }
                         TriggerAttackAnimation(unit, preview.targetHex);
-                    }
+
                     int meleeAttackUsedSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                     int meleeMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
                     _reportMoveUsedSeconds = 0;
@@ -1000,9 +1049,10 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                bool truncated = reached.Count < path.Count;
+                bool truncated = reached.Count < executionPath.Count;
                 bool stoppedByExternal = false;
                 bool attackRolledBack = false;
+                Hex lastPosition = startAnchor;
 
                 for (int i = 1; i < reached.Count; i++)
                 {
@@ -1061,30 +1111,25 @@ namespace TGD.CombatV2
                         yield return null;
                     }
 
-                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing);
-                    if (driver.Map != null)
-                    {
-                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                    }
-                    unit.Position = to;
-                    driver.SyncView();
+                    lastPosition = to;
                     _tempReservedThisAction.Add(to);
 
                     if (_sticky != null && status != null &&
-           _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
-           turns > 0 && !Mathf.Approximately(mult, 1f))
+                        _sticky.TryGetSticky(to, out var mult, out var turns, out var tag) &&
+                        turns > 0 && !Mathf.Approximately(mult, 1f))
                     {
                         status.ApplyOrRefreshExclusive(tag, mult, turns, to.ToString());
                         Debug.Log($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={mult:F2} turns={turns}", this);
                     }
                 }
 
-                if (driver != null && driver.UnitRef != null)
-                {
-                    _bridge?.MoveCommit(driver.UnitRef.Position, driver.UnitRef.Facing);
-                }
+                bool reachedDestination = executionPath.Count > 0 && lastPosition.Equals(executionPath[^1]);
+                if (!reachedDestination)
+                    truncated = true;
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit.Position);
+                _bridge?.MoveCommit(lastPosition, finalFacing);
+
+                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -1159,6 +1204,33 @@ namespace TGD.CombatV2
             finally
             {
                 ClearTempReservations("ActionEnd");
+            }
+
+            void HandleApproachAbort()
+            {
+                if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
+                    RefundMoveEnergy(moveEnergyPaid);
+                if (attackPlanned && attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
+                    RefundAttackEnergy(attackEnergyPaid);
+                if (attackPlanned)
+                    _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                if (!UseTurnManager && ManageTurnTimeLocally)
+                {
+                    float refund = moveSecsCharge;
+                    if (attackPlanned)
+                        refund += attackSecsCharge;
+                    if (refund > 0f)
+                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refund, 0f, MaxTurnSeconds);
+                }
+                _bridge?.MoveCommit(startAnchor, finalFacing);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                SetExecReport(
+                    0,
+                    Mathf.Max(0, moveSecsCharge + (attackPlanned ? attackSecsCharge : 0)),
+                    0,
+                    0,
+                    false,
+                    false);
             }
         }
         int IActionExecReportV2.UsedSeconds => ReportUsedSeconds;

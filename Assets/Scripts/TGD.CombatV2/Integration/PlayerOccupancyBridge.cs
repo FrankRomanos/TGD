@@ -11,6 +11,7 @@ namespace TGD.CombatV2.Integration
         public HexOccupancyService occupancyService;
         public FootprintShape overrideFootprint;
         public bool debugLog;
+        public bool autoMirrorDebug = false;
 
         HexBoardTestDriver _driver;
         HexOccupancy _occ;
@@ -48,6 +49,9 @@ namespace TGD.CombatV2.Integration
                 EnsurePlacedNow();
 
 #if UNITY_EDITOR
+            if (!autoMirrorDebug)
+                return;
+
             if (_driver != null && _driver.IsReady && _placed)
             {
                 var anchor = _actor.Anchor;
