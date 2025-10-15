@@ -1,204 +1,411 @@
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
-    public enum SettlementMode
-    {
-        Local,
-        TMV2,
-    }
+    public enum ActionModeV2 { Idle, MoveAim, AttackAim, ChainPrompt, Busy }
 
+    [DisallowMultipleComponent]
     public sealed class CombatActionManagerV2 : MonoBehaviour
     {
-        public SettlementMode settlement = SettlementMode.TMV2;
-        public TurnManagerV2 tm;
-        public EnergyService energy;
-        public bool debugLog = true;
+        [Header("Refs")]
+        public HexBoardAuthoringLite authoring;
+        public Camera pickCamera;
+        public LayerMask pickMask = ~0;
+        public float pickPlaneY = 0.01f;
+        public float rayMaxDistance = 2000f;
 
-        public void AimBegin(Unit u, ActionKindV2 kind)
+        [Header("Turn Runtime")]
+        public TurnManagerV2 turnManager;
+        public HexBoardTestDriver unitDriver;
+
+        [Header("Tools (drag any components that implement IActionToolV2)")]
+        public List<MonoBehaviour> tools = new();  // 拖 ClickMover, AttackControllerV2 等
+
+        [Header("Keybinds")]
+        public KeyCode keyMoveAim = KeyCode.V;
+        public KeyCode keyAttackAim = KeyCode.A;
+
+        ActionModeV2 _mode = ActionModeV2.Idle;
+        readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
+        Unit _currentUnit; // ★ 记录当前回合单位
+        IActionToolV2 _activeTool;
+        Hex? _hover;
+
+        void Awake()
         {
-            Log($"[Action] {u?.Id} [{kind}] W1_AimBegin");
+            foreach (var mb in tools)
+            {
+                if (!mb) continue;
+                WireTurnManager(mb);
+                if (mb is IActionToolV2 tool)
+                {
+                    if (!_toolsById.TryGetValue(tool.Id, out var list))
+                    {
+                        list = new List<IActionToolV2>();
+                        _toolsById[tool.Id] = list;
+                    }
+                    list.Add(tool);
+                }
+            }
         }
 
-        public void AimCancel(Unit u, ActionKindV2 kind)
+        void WireTurnManager(MonoBehaviour mb)
         {
-            Log($"[Action] {u?.Id} [{kind}] W1_AimCancel");
+            if (mb == null) return;
+            switch (mb)
+            {
+                case AttackControllerV2 attack:
+                    attack.AttachTurnManager(turnManager);
+                    break;
+                case HexClickMover mover:
+                    mover.AttachTurnManager(turnManager);
+                    if (turnManager != null)
+                        WireMoveCostAdapter(mover.costProvider as MoveCostServiceV2Adapter);
+                    break;
+                case MoveCostServiceV2Adapter moveAdapter:
+                    WireMoveCostAdapter(moveAdapter);
+                    break;
+                case AttackCostServiceV2Adapter attackAdapter:
+                    attackAdapter.turnManager = turnManager;
+                    break;
+            }
         }
 
-        public bool Confirm(Unit u, ActionPlanV2 plan, out string failReason)
+        void WireMoveCostAdapter(MoveCostServiceV2Adapter adapter)
         {
-            Log($"[Action] {u?.Id} [{plan.kind}] W2_ConfirmStart");
+            if (adapter == null) return;
+            adapter.turnManager = turnManager;
+        }
+        void OnEnable()
+        {
+            if (turnManager != null) turnManager.TurnStarted += OnTurnStarted;
+        }
+        void OnDisable()
+        {
+            if (turnManager != null) turnManager.TurnStarted -= OnTurnStarted;
+        }
+        void OnTurnStarted(TGD.HexBoard.Unit u)
+        {
+            _currentUnit = u;
+            if (_activeTool != null && ResolveUnit(_activeTool) != _currentUnit)
+                Cancel();
+        }
 
-            Log($"[Action] {u?.Id} [{plan.kind}] W2_PrecheckOk");
+        // —— 选择“属于当前回合单位”的工具 —— 
+        IActionToolV2 SelectTool(string id)
+        {
+            if (!_toolsById.TryGetValue(id, out var list)) return null;
+            foreach (var t in list)
+                if (ResolveUnit(t) == _currentUnit)
+                    return t;
+            return null;
+        }
 
-            int remain = tm != null ? tm.RemainingSeconds(u) : 0;
-            int energyBefore = energy != null ? energy.Current(u) : 0;
-            int tPlan = plan.planSecsMove + plan.planSecsAtk;
-            int ePlan = plan.planEnergyMove + plan.planEnergyAtk;
-
-            Log($"[Gate] W2 PreDeduct (move={plan.planSecsMove}s/{plan.planEnergyMove}, atk={plan.planSecsAtk}s/{plan.planEnergyAtk}, total={tPlan}s/{ePlan}, remain={remain}s, energy={energyBefore})");
-
-            if (tm != null && remain < tPlan)
+        void Update()
+        {
+            // —— 模式切换（互斥）——
+            if (_mode != ActionModeV2.Busy)
             {
-                failReason = "lackTime";
-                Log($"[Action] {u?.Id} [{plan.kind}] W2_PreDeductCheckFail (reason=lackTime)");
-                Log($"[Action] {u?.Id} [{plan.kind}] W2_ConfirmAbort (reason=lackTime)");
-                return false;
+                if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
+                if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
             }
 
-            if (energy != null && !energy.CanAfford(u, ePlan))
+            // —— 瞄准中：Hover / Confirm / Cancel —— 
+            if (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim)
             {
-                failReason = "lackEnergy";
-                Log($"[Action] {u?.Id} [{plan.kind}] W2_PreDeductCheckFail (reason=lackEnergy)");
-                Log($"[Action] {u?.Id} [{plan.kind}] W2_ConfirmAbort (reason=lackEnergy)");
+                var h = PickHexUnderMouse();
+                if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
+                {
+                    _hover = h;
+                    _activeTool?.OnHover(h.Value);
+                }
+
+                if (Input.GetMouseButtonDown(0)) Confirm();      // 左键确认
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(); // 右键/ESC 取消
+            }
+        }
+        Unit ResolveUnit(IActionToolV2 tool)
+        {
+            if (tool is HexClickMover mover && mover != null && mover.driver != null)
+                return mover.driver.UnitRef;
+            if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
+                return attack.driver.UnitRef;
+            return unitDriver != null ? unitDriver.UnitRef : null;
+        }
+
+        bool Precheck(Unit unit, IActionToolV2 tool)
+        {
+            if (turnManager == null || unit == null) return true;
+            if (_currentUnit != null && unit != _currentUnit)
                 return false;
+            return true;
+        }
+        bool PrecheckLight(IActionToolV2 tool, Unit unit, out string reason)
+        {
+            reason = null;
+            switch (tool)
+            {
+                case HexClickMover mover:
+                    return mover.TryPrecheckAim(out reason);
+                case AttackControllerV2 attack:
+                    return attack.TryPrecheckAim(out reason);
             }
 
-            failReason = null;
+            if (turnManager != null && unit != null)
+            {
+                var budget = turnManager.GetBudget(unit);
+                if (budget != null && budget.Remaining <= 0)
+                {
+                    reason = "(no-time)";
+                    return false;
+                }
+                var resources = turnManager.GetResources(unit);
+                if (resources != null && resources.Get("Energy") <= 0)
+                {
+                    reason = "(no-energy)";
+                    return false;
+                }
+            }
+
             return true;
         }
 
-        public ActionExecReportV2 Execute(Unit u, ActionPlanV2 plan, ICombatActionToolV2 tool)
+        void ApplyExecution(Unit unit, IActionToolV2 tool)
         {
-            int budgetBefore = tm != null ? tm.RemainingSeconds(u) : 0;
-            int energyBefore = energy != null ? energy.Current(u) : 0;
-            Log($"[Action] {u?.Id} [{plan.kind}] W3_ExecuteBegin (budgetBefore={budgetBefore}, energyBefore={energyBefore})");
+            if (turnManager == null || unit == null) return;
+            if (tool is not IActionExecReportV2 exec) return;
+            int used = Mathf.Max(0, exec.UsedSeconds);
+            int refunded = Mathf.Max(0, exec.RefundedSeconds);
 
-            ActionExecReportV2 report = tool != null ? tool.Execute(plan) : default;
-
-            if (plan.kind == ActionKindV2.Move)
+            var budget = turnManager.GetBudget(unit);
+            if (budget != null)
             {
-                Log($"[Move] Use secs={report.usedSecsMove}s refund={report.refundedSecs}s energy={report.energyMoveNet} U={u?.Id}{FlagTail(report)}");
+                if (used > 0) budget.SpendTime(used);
+                if (refunded > 0) budget.RefundTime(refunded);
+            }
+            var resources = turnManager.GetResources(unit);
+            if (resources != null)
+            {
+                switch (tool)
+                {
+                    case HexClickMover mover when mover.config != null:
+                        {
+                            int rate = Mathf.Max(0, mover.config.energyCost);
+                            if (rate > 0)
+                            {
+                                if (used > 0) resources.Spend("Energy", used * rate, "Move");
+                                if (refunded > 0) resources.Refund("Energy", refunded * rate, "MoveRefund");
+                            }
+                            break;
+                        }
+                    case AttackControllerV2 attack when attack.attackConfig != null:
+                        {
+                            int moveEnergy = Mathf.Max(0, attack.ReportMoveEnergyNet);
+                            int attackEnergy = Mathf.Max(0, attack.ReportAttackEnergyNet);
+                            if (moveEnergy > 0) resources.Spend("Energy", moveEnergy, "AttackMove");
+                            if (attackEnergy > 0) resources.Spend("Energy", attackEnergy, "Attack");
+                            break;
+                        }
+                }
+            }
+            exec.Consume();
+        }
+
+        // ===== 外部 UI 也可以直接用这俩 API =====
+        public void RequestAim(string toolId)
+        {
+            if (_mode == ActionModeV2.Busy || _mode == ActionModeV2.ChainPrompt) return;
+
+            var tool = SelectTool(toolId);
+            if (tool == null) return;
+
+            if (_activeTool == tool) { Cancel(); return; }
+            var unit = ResolveUnit(tool);
+            if (!PrecheckLight(tool, unit, out var reason))
+            {
+                ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W1_AimRejected, reason);
+                return;
+            }
+
+            if (_activeTool != null) Cancel();
+
+            _activeTool = tool;
+            _hover = null;
+            _activeTool.OnEnterAim();
+            _mode = (toolId == "Attack") ? ActionModeV2.AttackAim : ActionModeV2.MoveAim;
+            ActionPhaseLogger.Log(ResolveUnit(tool), tool.Id, ActionPhase.W1_AimBegin);
+        }
+
+        void ExitActiveTool(bool userInitiated)
+        {
+            if (_activeTool != null)
+            {
+                if (userInitiated && (_mode == ActionModeV2.MoveAim || _mode == ActionModeV2.AttackAim))
+                    ActionPhaseLogger.Log(ResolveUnit(_activeTool), _activeTool.Id, ActionPhase.W1_AimCancel);
+                _activeTool.OnExitAim();
+                _activeTool = null;
+            }
+            _hover = null;
+            _mode = ActionModeV2.Idle;
+        }
+        void AbortConfirm(IActionToolV2 tool, Unit unit, string reason)
+        {
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ConfirmAbort, reason);
+            if (_activeTool == tool)
+            {
+                ExitActiveTool(false);
             }
             else
             {
-                Log($"[Attack] Use moveSecs={report.usedSecsMove}s atkSecs={report.usedSecsAtk}s energyMove={report.energyMoveNet} energyAtk={report.energyAtkNet} U={u?.Id}{FlagTail(report)}");
-            }
-
-            Log($"[Action] {u?.Id} [{plan.kind}] W3_ExecuteEnd");
-            return report;
-
-            string FlagTail(ActionExecReportV2 r)
-            {
-                return (r.flags & ActionExecFlagsV2.FreeMoveApplied) != 0 ? " (FreeMove)" : string.Empty;
+                tool?.OnExitAim();
+                _hover = null;
+                _mode = ActionModeV2.Idle;
             }
         }
 
-        public void Resolve(Unit u, ActionPlanV2 plan, ActionExecReportV2 r)
+        public void Cancel(bool userInitiated = false)
         {
-            float used = r.usedSecsMove + r.usedSecsAtk;
-            float refunded = r.refundedSecs + FreeMoveRefundSeconds(r);
-            float net = Mathf.Max(0f, used - refunded);
-
-            Log($"[Action] {u?.Id} [{plan.kind}] W4_ResolveBegin (used={used}, refunded={refunded}, net={net}, energyMove={r.energyMoveNet}, energyAtk={r.energyAtkNet})");
-
-            if (tm != null)
-            {
-                if (net > 0f)
-                {
-                    tm.SpendSeconds(u, Mathf.CeilToInt(net), suppressLog: true);
-                }
-
-                if (refunded > 0f)
-                {
-                    tm.RefundSeconds(u, Mathf.CeilToInt(refunded), FreeMoveReason(r), suppressLog: true);
-                }
-            }
-
-            if (energy != null)
-            {
-                if (r.energyMoveNet != 0)
-                {
-                    energy.Apply(u, -r.energyMoveNet, plan.kind.ToString());
-                }
-
-                if (r.energyAtkNet != 0)
-                {
-                    energy.Apply(u, -r.energyAtkNet, plan.kind.ToString());
-                }
-
-                if ((r.flags & ActionExecFlagsV2.FreeMoveApplied) != 0)
-                {
-                    int energyPerSec = energy.MoveEnergyPerSecond(u);
-                    if (energyPerSec != 0)
-                    {
-                        energy.Apply(u, energyPerSec, "FreeMove");
-                    }
-                }
-            }
-
-            LogTimeAndRes(u, r, net, refunded);
-            int afterBudget = tm != null ? tm.RemainingSeconds(u) : 0;
-            int afterEnergy = energy != null ? energy.Current(u) : 0;
-            Log($"[Action] {u?.Id} [{plan.kind}] W4_ResolveEnd (budgetAfter={afterBudget}, energyAfter={afterEnergy})");
+            ExitActiveTool(userInitiated);
         }
 
-        int FreeMoveRefundSeconds(ActionExecReportV2 x)
+        public void Confirm()
         {
-            return (x.flags & ActionExecFlagsV2.FreeMoveApplied) != 0 ? 1 : 0;
-        }
-
-        string FreeMoveReason(ActionExecReportV2 x)
-        {
-            return (x.flags & ActionExecFlagsV2.FreeMoveApplied) != 0 ? "FreeMove" : "ToolReported";
-        }
-
-        void LogTimeAndRes(Unit unit, ActionExecReportV2 rep, float netSecs, float refundedSecs)
-        {
-            if (tm != null)
+            if (_activeTool == null) return;
+            var unit = ResolveUnit(_activeTool);
+            var h = _hover ?? PickHexUnderMouse();
+            if (!h.HasValue)
             {
-                int afterSecs = tm.RemainingSeconds(unit);
-                if (netSecs > 0f)
-                {
-                    Log($"[Time] Spend {unit?.Id} {Mathf.CeilToInt(netSecs)}s -> Remain={afterSecs}");
-                }
-
-                if (refundedSecs > 0f)
-                {
-                    Log($"[Time] Refund {unit?.Id} {Mathf.CeilToInt(refundedSecs)}s (reason={FreeMoveReason(rep)}) -> Remain={afterSecs}");
-                }
+                ActionPhaseLogger.Log(unit, _activeTool.Id, ActionPhase.W2_TargetInvalid, "(no-target)");
+                ActionPhaseLogger.Log(unit, _activeTool.Id, ActionPhase.W2_ConfirmAbort, "(no-target)");
+                return;
             }
 
-            if (energy != null)
+            StartCoroutine(RunW2(_activeTool, h.Value, unit));
+        }
+
+        IEnumerator RunW2(IActionToolV2 tool, Hex hex, Unit unit)
+        {
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ConfirmStart);
+
+            if (!Precheck(unit, tool))
             {
-                int afterEnergy = energy.Current(unit);
-                if (rep.energyMoveNet > 0)
+                AbortConfirm(tool, unit, "(precheck)");
+                yield break;
+            }
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_PrecheckOk);
+
+            int needTime = 0;
+            int needEnergy = 0;
+            string okMessage = "(min-plan)";
+
+            if (tool is HexClickMover mover)
+            {
+                var (timeSec, energy) = mover.PeekPlannedCost();
+                needTime = Mathf.Max(0, timeSec);
+                needEnergy = Mathf.Max(0, energy);
+                okMessage = $"(time>={needTime}s, energy>={needEnergy})";
+            }
+            else if (tool is AttackControllerV2 attack)
+            {
+                var planned = attack.PeekPlannedCost(hex);
+                int moveSecs = Mathf.Max(0, planned.moveSecs);
+                int moveEnergy = Mathf.Max(0, planned.moveEnergy);
+                int atkSecs = Mathf.Max(0, planned.atkSecs);
+                int atkEnergy = Mathf.Max(0, planned.atkEnergy);
+                needTime = moveSecs + atkSecs;
+                needEnergy = moveEnergy + atkEnergy;
+                okMessage = planned.valid
+                    ? $"(move={moveSecs}s/{moveEnergy}, atk={atkSecs}s/{atkEnergy}, total={needTime}s/{needEnergy})"
+                    : $"(min-plan move={moveSecs}s/{moveEnergy}, atk={atkSecs}s/{atkEnergy})";
+            }
+
+            bool ok = true;
+            if (turnManager != null && unit != null)
+            {
+                var budget = turnManager.GetBudget(unit);
+                if (budget != null && needTime > 0)
+                    ok &= budget.Remaining >= needTime;
+
+                var resources = turnManager.GetResources(unit);
+                if (resources != null && needEnergy > 0)
+                    ok &= resources.Get("Energy") >= needEnergy;
+            }
+
+            ActionPhaseLogger.Log(unit, tool.Id,
+                ok ? ActionPhase.W2_PreDeductCheckOk : ActionPhase.W2_PreDeductCheckFail,
+                ok ? okMessage : "(lack)");
+
+            if (!ok)
+            {
+                AbortConfirm(tool, unit, "(pre-deduct)");
+                yield break;
+            }
+
+            _mode = ActionModeV2.ChainPrompt;
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ChainPromptOpen, "(stub)");
+
+            bool autoSkipLogged = false;
+            while (_mode == ActionModeV2.ChainPrompt)
+            {
+                yield return null;
+
+                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                 {
-                    Log($"[Res] Spend {unit?.Id}:Energy -{rep.energyMoveNet} -> {afterEnergy} (Move)");
-                }
-                else if (rep.energyMoveNet < 0)
-                {
-                    Log($"[Res] Refund {unit?.Id}:Energy +{-rep.energyMoveNet} -> {afterEnergy} (Move_Adjust)");
+                    ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ChainPromptCancelled);
+                    break;
                 }
 
-                if (rep.energyAtkNet > 0)
+                if (!autoSkipLogged)
                 {
-                    Log($"[Res] Spend {unit?.Id}:Energy -{rep.energyAtkNet} -> {afterEnergy} (Attack)");
-                }
-                else if (rep.energyAtkNet < 0)
-                {
-                    Log($"[Res] Refund {unit?.Id}:Energy +{-rep.energyAtkNet} -> {afterEnergy} (Attack_Adjust)");
+                    ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W2_ChainPromptAutoSkip);
+                    autoSkipLogged = true;
                 }
 
-                if ((rep.flags & ActionExecFlagsV2.FreeMoveApplied) != 0)
-                {
-                    int energyPerSec = energy.MoveEnergyPerSecond(unit);
-                    if (energyPerSec != 0)
-                    {
-                        Log($"[Res] Refund {unit?.Id}:Energy +{energyPerSec} -> {energy.Current(unit)} (FreeMove)");
-                    }
-                }
+                break;
+            }
+
+            _mode = ActionModeV2.Busy;
+            yield return RunBusy(tool, hex, unit);
+        }
+        IEnumerator RunBusy(IActionToolV2 tool, Hex h, Unit unit)
+        {
+            _mode = ActionModeV2.Busy;
+            _hover = null;
+
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteBegin);
+            yield return tool.OnConfirm(h);   // 工具执行（移动/靠近等）
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W3_ExecuteEnd);
+
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveBegin);
+            ApplyExecution(unit, tool);
+            ActionPhaseLogger.Log(unit, tool.Id, ActionPhase.W4_ResolveEnd);
+            if (_activeTool == tool)
+                ExitActiveTool(false);
+            else
+            {
+                tool.OnExitAim();
+                _hover = null;
+                _mode = ActionModeV2.Idle;
             }
         }
 
-        [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        void Log(string message)
+
+        // ===== 拾取统一在 Manager 做，一处修就全修 =====
+        Hex? PickHexUnderMouse()
         {
-            if (debugLog)
-            {
-                Debug.Log(message, this);
-            }
+            var cam = pickCamera ? pickCamera : Camera.main;
+            if (!cam || authoring?.Layout == null) return null;
+
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out var hit, rayMaxDistance, pickMask, QueryTriggerInteraction.Ignore))
+                return authoring.Layout.HexAt(hit.point);
+
+            var plane = new Plane(Vector3.up, new Vector3(0f, pickPlaneY, 0f));
+            if (!plane.Raycast(ray, out float dist)) return null;
+            return authoring.Layout.HexAt(ray.GetPoint(dist));
         }
     }
 }

@@ -320,46 +320,16 @@ namespace TGD.CombatV2
             TurnStarted?.Invoke(runtime.Unit);
         }
 
-        public int RemainingSeconds(Unit unit)
-        {
-            var runtime = EnsureRuntime(unit, null);
-            return runtime != null ? runtime.RemainingTime : 0;
-        }
-
-        public void SpendSeconds(Unit unit, int seconds, string reason = null, bool suppressLog = false)
-        {
-            if (seconds <= 0) return;
-            var runtime = EnsureRuntime(unit, null);
-            if (runtime == null) return;
-            ApplyTimeSpend(runtime, seconds, reason, suppressLog);
-        }
-
-        public void RefundSeconds(Unit unit, int seconds, string reason = null, bool suppressLog = false)
-        {
-            if (seconds <= 0) return;
-            var runtime = EnsureRuntime(unit, null);
-            if (runtime == null) return;
-            ApplyTimeRefund(runtime, seconds, reason, suppressLog);
-        }
-
-        void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds, string reason = null, bool suppressLog = false)
+        void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds)
         {
             runtime.SpendTime(seconds);
-            if (!suppressLog)
-            {
-                string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" (reason={reason})";
-                Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}{suffix}", this);
-            }
+            Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
-        void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds, string reason = null, bool suppressLog = false)
+        void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds)
         {
             runtime.RefundTime(seconds);
-            if (!suppressLog)
-            {
-                string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" (reason={reason})";
-                Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}{suffix}", this);
-            }
+            Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
         void ModifyResource(TurnRuntimeV2 runtime, string id, int delta, string reason, bool isRefund)
