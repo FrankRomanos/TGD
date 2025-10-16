@@ -75,12 +75,18 @@ namespace TGD.CombatV2
         struct ExecReportData
         {
             public bool valid;
-            public int usedSecsMove;
-            public int usedSecsAtk;
-            public int refundedSecs;
+            public int plannedSecsMove;
+            public int plannedSecsAtk;
+            public int refundedSecsMove;
+            public int refundedSecsAtk;
             public int energyMoveNet;
             public int energyAtkNet;
             public bool freeMoveApplied;
+            public string refundTag;
+
+            public int TotalPlanned => Mathf.Max(0, plannedSecsMove + plannedSecsAtk);
+            public int TotalRefunded => Mathf.Max(0, refundedSecsMove + refundedSecsAtk);
+            public int NetSeconds => Mathf.Max(0, TotalPlanned - TotalRefunded);
         }
 
         PreDeduct _plan;
@@ -386,24 +392,27 @@ namespace TGD.CombatV2
 
         void Resolve(Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
         {
-            int used = Mathf.Max(0, report.usedSecsMove + report.usedSecsAtk);
-            int refunded = Mathf.Max(0, report.refundedSecs);
-            int net = Mathf.Max(0, used - refunded);
+            int used = report.TotalPlanned;
+            int refunded = report.TotalRefunded;
+            int net = report.NetSeconds;
             int energyMove = report.energyMoveNet;
             int energyAtk = report.energyAtkNet;
             bool freeMove = report.freeMoveApplied;
+            string refundTag = report.refundTag;
+            string reasonSuffix = string.IsNullOrEmpty(refundTag) ? string.Empty : $", refundReason={refundTag}";
 
-            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk})");
+            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}{reasonSuffix})");
 
             int plannedSecs = _plan.valid ? Mathf.Max(0, _plan.secs) : 0;
             if (budget != null && _plan.valid)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                string reason = freeMove ? "FreeMove" : "Adjust";
+                string timeReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
+                string timeSuffix = string.IsNullOrEmpty(timeReason) ? string.Empty : $" (reason={timeReason})";
                 if (net == 0 && refunded > 0 && plannedSecs > 0)
                 {
                     budget.RefundTime(plannedSecs);
-                    Log($"[Time] Refund {unitLabel} {plannedSecs}s (reason={reason}) -> Remain={budget.Remaining}");
+                    Log($"[Time] Refund {unitLabel} {plannedSecs}s{timeSuffix} -> Remain={budget.Remaining}");
                 }
                 else
                 {
@@ -414,7 +423,7 @@ namespace TGD.CombatV2
                         if (refundAmount > 0)
                         {
                             budget.RefundTime(refundAmount);
-                            Log($"[Time] Refund {unitLabel} {refundAmount}s (reason={reason}) -> Remain={budget.Remaining}");
+                            Log($"[Time] Refund {unitLabel} {refundAmount}s{timeSuffix} -> Remain={budget.Remaining}");
                         }
                     }
                     else if (delta > 0)
@@ -443,7 +452,9 @@ namespace TGD.CombatV2
                     {
                         int refundAmount = -moveDelta;
                         resources.Refund("Energy", refundAmount, "Resolve_Move");
-                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{(freeMove ? "_FreeMove" : string.Empty)})");
+                        string moveReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
+                        string moveSuffix = string.IsNullOrEmpty(moveReason) ? string.Empty : $"_{moveReason}";
+                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{moveSuffix})");
                     }
                 }
 
@@ -459,7 +470,9 @@ namespace TGD.CombatV2
                     {
                         int refundAmount = -atkDelta;
                         resources.Refund("Energy", refundAmount, "Resolve_Attack");
-                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack)");
+                        string atkReason = !string.IsNullOrEmpty(refundTag) ? refundTag : null;
+                        string atkSuffix = string.IsNullOrEmpty(atkReason) ? string.Empty : $"_{atkReason}";
+                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack{atkSuffix})");
                     }
                 }
             }
@@ -484,12 +497,14 @@ namespace TGD.CombatV2
             var data = new ExecReportData
             {
                 valid = false,
-                usedSecsMove = 0,
-                usedSecsAtk = 0,
-                refundedSecs = 0,
+                plannedSecsMove = 0,
+                plannedSecsAtk = 0,
+                refundedSecsMove = 0,
+                refundedSecsAtk = 0,
                 energyMoveNet = 0,
                 energyAtkNet = 0,
-                freeMoveApplied = false
+                freeMoveApplied = false,
+                refundTag = null
             };
 
             if (tool is HexClickMover mover)
@@ -497,11 +512,12 @@ namespace TGD.CombatV2
                 if (mover.HasPendingExecReport)
                 {
                     data.valid = true;
-                    data.usedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
-                    data.refundedSecs = Mathf.Max(0, mover.ReportRefundedSeconds);
+                    data.plannedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
+                    data.refundedSecsMove = Mathf.Max(0, mover.ReportRefundedSeconds);
                     data.energyMoveNet = mover.ReportEnergyMoveNet;
                     data.energyAtkNet = 0;
                     data.freeMoveApplied = mover.ReportFreeMoveApplied;
+                    data.refundTag = mover.ReportRefundTag;
                 }
             }
             else if (tool is AttackControllerV2 attack)
@@ -509,19 +525,21 @@ namespace TGD.CombatV2
                 if (attack.HasPendingExecReport)
                 {
                     data.valid = true;
-                    data.usedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
-                    data.usedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
-                    data.refundedSecs = Mathf.Max(0, attack.ReportMoveRefundSeconds + attack.ReportAttackRefundSeconds);
+                    data.plannedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
+                    data.plannedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
+                    data.refundedSecsMove = Mathf.Max(0, attack.ReportMoveRefundSeconds);
+                    data.refundedSecsAtk = Mathf.Max(0, attack.ReportAttackRefundSeconds);
                     data.energyMoveNet = attack.ReportEnergyMoveNet;
                     data.energyAtkNet = attack.ReportEnergyAtkNet;
                     data.freeMoveApplied = attack.ReportFreeMoveApplied;
+                    data.refundTag = attack.ReportRefundTag;
                 }
             }
             else
             {
                 data.valid = true;
-                data.usedSecsMove = Mathf.Max(0, exec.UsedSeconds);
-                data.refundedSecs = Mathf.Max(0, exec.RefundedSeconds);
+                data.plannedSecsMove = Mathf.Max(0, exec.UsedSeconds);
+                data.refundedSecsMove = Mathf.Max(0, exec.RefundedSeconds);
             }
 
             return data;
@@ -531,17 +549,18 @@ namespace TGD.CombatV2
         {
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string freeMove = report.freeMoveApplied ? " (FreeMove)" : string.Empty;
+            string reason = string.IsNullOrEmpty(report.refundTag) ? string.Empty : $" [{report.refundTag}]";
             if (string.Equals(kind, "Move", System.StringComparison.OrdinalIgnoreCase))
             {
-                Log($"[Move] Use secs={report.usedSecsMove}s refund={report.refundedSecs}s energy={report.energyMoveNet} U={label}{freeMove}");
+                Log($"[Move] Use secs={report.TotalPlanned}s refund={report.TotalRefunded}s energy={report.energyMoveNet} U={label}{freeMove}{reason}");
             }
             else if (string.Equals(kind, "Attack", System.StringComparison.OrdinalIgnoreCase))
             {
-                Log($"[Attack] Use moveSecs={report.usedSecsMove}s atkSecs={report.usedSecsAtk}s energyMove={report.energyMoveNet} energyAtk={report.energyAtkNet} U={label}{freeMove}");
+                Log($"[Attack] Use moveSecs={report.plannedSecsMove}s atkSecs={report.plannedSecsAtk}s energyMove={report.energyMoveNet} energyAtk={report.energyAtkNet} U={label}{freeMove}{reason}");
             }
             else
             {
-                Log($"[Action] {label} [{kind}] ExecSummary used={report.usedSecsMove + report.usedSecsAtk}s refund={report.refundedSecs}s energy={report.energyMoveNet + report.energyAtkNet}{freeMove}");
+                Log($"[Action] {label} [{kind}] ExecSummary used={report.TotalPlanned}s refund={report.TotalRefunded}s energy={report.energyMoveNet + report.energyAtkNet}{freeMove}{reason}");
             }
         }
 
