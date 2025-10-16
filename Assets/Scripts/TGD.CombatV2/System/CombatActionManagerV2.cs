@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using TGD.HexBoard;
 
@@ -25,6 +27,16 @@ namespace TGD.CombatV2
         [Header("Keybinds")]
         public KeyCode keyMoveAim = KeyCode.V;
         public KeyCode keyAttackAim = KeyCode.A;
+
+        [System.Serializable]
+        public struct ChainKeybind
+        {
+            public string id;
+            public KeyCode key;
+        }
+
+        [Header("Chain Keybinds")]
+        public List<ChainKeybind> chainKeybinds = new();
 
         public bool debugLog = true;
         public bool quietInternalToolLogs = true;
@@ -72,6 +84,15 @@ namespace TGD.CombatV2
             public PlannedCost cost;
         }
 
+        struct ChainOption
+        {
+            public IActionToolV2 tool;
+            public KeyCode key;
+            public int secs;
+            public int energy;
+            public ActionKind kind;
+        }
+
         struct ExecReportData
         {
             public bool valid;
@@ -89,7 +110,18 @@ namespace TGD.CombatV2
             public int NetSeconds => Mathf.Max(0, TotalPlanned - TotalRefunded);
         }
 
-        PreDeduct _plan;
+        readonly Stack<PreDeduct> _planStack = new();
+        readonly List<ChainOption> _chainBuffer = new();
+
+        void Reset()
+        {
+            chainKeybinds = new List<ChainKeybind>
+            {
+                new ChainKeybind { id = "Reaction40", key = KeyCode.Alpha1 },
+                new ChainKeybind { id = "Reaction20", key = KeyCode.Alpha2 },
+                new ChainKeybind { id = "Free10", key = KeyCode.Alpha3 }
+            };
+        }
 
         void Awake()
         {
@@ -194,6 +226,8 @@ namespace TGD.CombatV2
                 return mover.driver.UnitRef;
             if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
                 return attack.driver.UnitRef;
+            if (tool is ChainTestActionBase chain && chain != null)
+                return chain.ResolveUnit();
             return unitDriver != null ? unitDriver.UnitRef : null;
         }
 
@@ -269,7 +303,8 @@ namespace TGD.CombatV2
 
         IEnumerator ConfirmRoutine(IActionToolV2 tool, Unit unit, Hex? target)
         {
-            _plan = default;
+            _planStack.Clear();
+            _phase = Phase.Executing;
             string kind = tool.Id;
             ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
 
@@ -345,7 +380,7 @@ namespace TGD.CombatV2
                     resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
             }
 
-            _plan = new PreDeduct
+            var basePlan = new PreDeduct
             {
                 secs = cost.TotalSeconds,
                 energyMove = cost.moveEnergy,
@@ -353,8 +388,22 @@ namespace TGD.CombatV2
                 valid = true
             };
 
-            ActionPhaseLogger.Log(unit, kind, "W2_ChainPromptOpen", "(count=0)");
-            ActionPhaseLogger.Log(unit, kind, "W2_ChainPromptAbort", "(auto-skip)");
+            _planStack.Push(basePlan);
+
+            TryHideAllAimUI();
+
+            bool cancelBase = false;
+            if (ShouldOpenChainWindow(tool, unit))
+            {
+                yield return RunChainWindow(unit, actionPlan, basePlan, budget, resources, cost.TotalSeconds, cancelled => cancelBase = cancelled);
+            }
+
+            if (cancelBase)
+            {
+                NotifyConfirmAbort(tool, unit, "LinkCancelled");
+                CleanupAfterAbort(tool, false);
+                yield break;
+            }
 
             yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
         }
@@ -401,8 +450,10 @@ namespace TGD.CombatV2
 
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}{reasonSuffix})");
 
-            int plannedSecs = _plan.valid ? Mathf.Max(0, _plan.secs) : 0;
-            if (budget != null && _plan.valid)
+            PreDeduct preDeduct = _planStack.Count > 0 ? _planStack.Pop() : default;
+
+            int plannedSecs = preDeduct.valid ? Mathf.Max(0, preDeduct.secs) : 0;
+            if (budget != null && preDeduct.valid)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                 string timeReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
@@ -426,8 +477,8 @@ namespace TGD.CombatV2
             if (resources != null)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                int plannedMoveEnergy = _plan.valid ? Mathf.Max(0, _plan.energyMove) : 0;
-                int plannedAtkEnergy = _plan.valid ? Mathf.Max(0, _plan.energyAtk) : 0;
+                int plannedMoveEnergy = preDeduct.valid ? Mathf.Max(0, preDeduct.energyMove) : 0;
+                int plannedAtkEnergy = preDeduct.valid ? Mathf.Max(0, preDeduct.energyAtk) : 0;
 
                 int moveDelta = energyMove - plannedMoveEnergy;
                 if (moveDelta > 0)
@@ -467,7 +518,6 @@ namespace TGD.CombatV2
             _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
-            _plan = default;
         }
 
         ExecReportData BuildExecReport(IActionToolV2 tool, out IActionExecReportV2 exec)
@@ -522,6 +572,10 @@ namespace TGD.CombatV2
                 data.valid = true;
                 data.plannedSecsMove = Mathf.Max(0, exec.UsedSeconds);
                 data.refundedSecsMove = Mathf.Max(0, exec.RefundedSeconds);
+                if (exec is IActionEnergyReportV2 energyReport)
+                {
+                    data.energyMoveNet = energyReport.EnergyUsed;
+                }
             }
 
             return data;
@@ -568,7 +622,7 @@ namespace TGD.CombatV2
                 _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
-            _plan = default;
+            _planStack.Clear();
         }
 
         void NotifyConfirmAbort(IActionToolV2 tool, Unit unit, string reason)
@@ -637,6 +691,18 @@ namespace TGD.CombatV2
 
         PlannedCost GetBaselineCost(IActionToolV2 tool)
         {
+            if (tool is IActionCostPreviewV2 preview && preview.TryPeekCost(out var previewSecs, out var previewEnergy))
+            {
+                return new PlannedCost
+                {
+                    moveSecs = Mathf.Max(0, previewSecs),
+                    moveEnergy = Mathf.Max(0, previewEnergy),
+                    atkSecs = 0,
+                    atkEnergy = 0,
+                    valid = true
+                };
+            }
+
             if (tool is HexClickMover mover)
             {
                 int secs = Mathf.Max(1, Mathf.CeilToInt(mover.config ? mover.config.timeCostSeconds : 1f));
@@ -670,6 +736,18 @@ namespace TGD.CombatV2
 
         PlannedCost BuildPlannedCost(IActionToolV2 tool, Hex target)
         {
+            if (tool is IActionCostPreviewV2 preview && preview.TryPeekCost(out var previewSecs, out var previewEnergy))
+            {
+                return new PlannedCost
+                {
+                    moveSecs = Mathf.Max(0, previewSecs),
+                    moveEnergy = Mathf.Max(0, previewEnergy),
+                    atkSecs = 0,
+                    atkEnergy = 0,
+                    valid = true
+                };
+            }
+
             if (tool is HexClickMover mover)
             {
                 var planned = mover.PeekPlannedCost(target);
@@ -697,6 +775,252 @@ namespace TGD.CombatV2
             }
 
             return new PlannedCost { valid = true };
+        }
+
+        bool ShouldOpenChainWindow(IActionToolV2 tool, Unit unit)
+        {
+            if (tool == null || unit == null || turnManager == null)
+                return false;
+            if (tool.Kind != ActionKind.Standard)
+                return false;
+            if (!turnManager.IsPlayerPhase)
+                return false;
+            if (!turnManager.IsPlayerUnit(unit))
+                return false;
+            return true;
+        }
+
+        KeyCode ResolveChainKey(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                return KeyCode.None;
+
+            foreach (var bind in chainKeybinds)
+            {
+                if (!string.IsNullOrEmpty(bind.id) && string.Equals(bind.id, id, StringComparison.OrdinalIgnoreCase))
+                    return bind.key;
+            }
+
+            return KeyCode.None;
+        }
+
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, bool allowReaction, bool onlyFree)
+        {
+            _chainBuffer.Clear();
+
+            foreach (var pair in _toolsById)
+            {
+                foreach (var tool in pair.Value)
+                {
+                    if (tool == null)
+                        continue;
+
+                    if (ResolveUnit(tool) != unit)
+                        continue;
+
+                    if (tool.Kind != ActionKind.Reaction && tool.Kind != ActionKind.Free)
+                        continue;
+
+                    if (!allowReaction && tool.Kind == ActionKind.Reaction)
+                        continue;
+
+                    if (onlyFree && tool.Kind != ActionKind.Free)
+                        continue;
+
+                    var cost = GetBaselineCost(tool);
+                    if (!cost.valid)
+                        continue;
+
+                    int secs = cost.TotalSeconds;
+                    int energy = cost.TotalEnergy;
+
+                    if (tool.Kind == ActionKind.Reaction)
+                    {
+                        if (secs <= 0)
+                            continue;
+                        if (baseTimeCost > 0 && secs > baseTimeCost)
+                            continue;
+                        if (budget != null && secs > 0 && !budget.HasTime(secs))
+                            continue;
+                    }
+
+                    if (tool.Kind == ActionKind.Free)
+                    {
+                        if (secs != 0)
+                            continue;
+                    }
+
+                    if (resources != null && energy > 0 && !resources.Has("Energy", energy))
+                        continue;
+
+                    var key = ResolveChainKey(tool.Id);
+                    if (key == KeyCode.None)
+                        continue;
+
+                    _chainBuffer.Add(new ChainOption
+                    {
+                        tool = tool,
+                        key = key,
+                        secs = secs,
+                        energy = energy,
+                        kind = tool.Kind
+                    });
+                }
+            }
+
+            return _chainBuffer;
+        }
+
+        static string FormatChainStageLabel(int depth)
+        {
+            if (depth <= 0)
+                return "W2.1";
+            return $"W2.1.{depth}";
+        }
+
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, PreDeduct basePreDeduct, ITurnBudget budget, IResourcePool resources, int baseTimeCost, Action<bool> onComplete)
+        {
+            bool allowReaction = true;
+            bool onlyFree = false;
+            bool cancelledBase = false;
+            int depth = 0;
+            bool keepLooping = true;
+
+            while (keepLooping)
+            {
+                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowReaction, onlyFree);
+                string label = FormatChainStageLabel(depth);
+                ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
+
+                if (options.Count == 0)
+                {
+                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
+                    break;
+                }
+
+                bool resolvedStage = false;
+                while (!resolvedStage)
+                {
+                    if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                    {
+                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                        resolvedStage = true;
+                        keepLooping = false;
+                        break;
+                    }
+
+                    foreach (var option in options)
+                    {
+                        if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                        {
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
+
+                            bool executed = false;
+                            yield return ExecuteChainSelection(option, unit, budget, resources, result => executed = result);
+
+                            if (!executed)
+                                continue;
+
+                            if (option.kind == ActionKind.Reaction)
+                            {
+                                allowReaction = false;
+                                onlyFree = true;
+
+                                if (turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
+                                {
+                                    cancelledBase = true;
+                                    if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
+                                        budget.RefundTime(basePreDeduct.secs);
+                                    if (_planStack.Count > 0)
+                                        _planStack.Pop();
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
+                                }
+                            }
+                            else if (option.kind == ActionKind.Free)
+                            {
+                                allowReaction = false;
+                                onlyFree = true;
+                            }
+
+                            depth += 1;
+                            resolvedStage = true;
+                            break;
+                        }
+                    }
+
+                    if (!resolvedStage)
+                        yield return null;
+                }
+            }
+
+            onComplete?.Invoke(cancelledBase);
+        }
+
+        IEnumerator ExecuteChainSelection(ChainOption option, Unit unit, ITurnBudget budget, IResourcePool resources, Action<bool> onComplete)
+        {
+            var tool = option.tool;
+            if (tool == null)
+            {
+                onComplete?.Invoke(false);
+                yield break;
+            }
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+
+            string failReason = null;
+            if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
+                failReason = "lackTime";
+            else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
+                failReason = "lackEnergy";
+
+            if (failReason != null)
+            {
+                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
+                onComplete?.Invoke(false);
+                yield break;
+            }
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
+
+            if (budget != null && option.secs > 0)
+                budget.SpendTime(option.secs);
+
+            if (resources != null && option.energy > 0)
+            {
+                string reason = option.kind == ActionKind.Reaction ? "PreDeduct_Reaction" : "PreDeduct_Free";
+                resources.Spend("Energy", option.energy, reason);
+            }
+
+            var plan = new PreDeduct
+            {
+                secs = option.secs,
+                energyMove = option.energy,
+                energyAtk = 0,
+                valid = true
+            };
+
+            _planStack.Push(plan);
+
+            var planCost = new PlannedCost
+            {
+                moveSecs = option.secs,
+                atkSecs = 0,
+                moveEnergy = option.energy,
+                atkEnergy = 0,
+                valid = true
+            };
+
+            var actionPlan = new ActionPlan
+            {
+                kind = tool.Id,
+                target = Hex.Zero,
+                cost = planCost
+            };
+
+            yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+            onComplete?.Invoke(true);
         }
 
         static string MapAimReason(string raw)

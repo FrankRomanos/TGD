@@ -20,6 +20,7 @@ namespace TGD.CombatV2
         const float ENV_MAX = 5f;
 
         public string Id => "Attack";
+        public ActionKind Kind => ActionKind.Standard;
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;

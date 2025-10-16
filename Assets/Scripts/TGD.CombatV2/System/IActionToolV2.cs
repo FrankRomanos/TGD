@@ -10,6 +10,9 @@ namespace TGD.CombatV2
         /// 供管理器识别/绑定（如 "Move", "Attack"）
         string Id { get; }
 
+        /// 六大动作分类（标准/反应/派生/整轮/持续/自由）
+        ActionKind Kind { get; }
+
         /// 进入/退出“瞄准模式”时调用（工具自己做上色/预览/清理）
         void OnEnterAim();
         void OnExitAim();
