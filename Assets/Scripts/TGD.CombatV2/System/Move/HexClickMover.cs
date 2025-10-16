@@ -145,6 +145,8 @@ namespace TGD.CombatV2
 
         // runtime
         bool _showing = false, _moving = false;
+        bool _isAiming = false;
+        bool _isExecuting = false;
         readonly Dictionary<Hex, List<Hex>> _paths = new();
         HexAreaPainter _painter;
 
@@ -274,12 +276,30 @@ namespace TGD.CombatV2
                 reason = "(no-time)";
                 return false;
             }
-            if (_cost != null && config != null && !_cost.HasEnough(unit, config))
+            if (_cost != null && config != null)
             {
-                if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
-                reason = "(no-energy)";
-                return false;
+                if (UseTurnManager)
+                {
+                    int energyRate = Mathf.Max(0, config.energyCost);
+                    if (energyRate > 0 && _turnManager != null && unit != null)
+                    {
+                        var pool = _turnManager.GetResources(unit);
+                        if (pool != null && !pool.Has("Energy", energyRate))
+                        {
+                            if (raiseHud)
+                                HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                            reason = "(no-energy)";
+                            return false;
+                        }
+                    }
+                }
+                else if (!_cost.HasEnough(unit, config))
+                {
+                    if (raiseHud)
+                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                    reason = "(no-energy)";
+                    return false;
+                }
             }
             reason = null;
             return true;
@@ -289,9 +309,15 @@ namespace TGD.CombatV2
         {
             if (!TryPrecheckAim(out _))
                 return;
+            _isAiming = true;
+            _isExecuting = false;
             ShowRange();
         }
-        public void OnExitAim() { HideRange(); }
+        public void OnExitAim()
+        {
+            _isAiming = false;
+            HideRange();
+        }
         public void OnHover(Hex hex) { /* 可选：做 hover 高亮 */ }
 
         public IEnumerator OnConfirm(Hex hex)
@@ -349,7 +375,7 @@ namespace TGD.CombatV2
 
             if (_paths.TryGetValue(hex, out var path) && path != null && path.Count >= 2)
             {
-                yield return RunPathTween_WithTime(path);   // ★ 改：走带结算版本
+                yield return RunPathTween_WithTime(path, _planAnchorVersion);   // ★ 改：走带结算版本
             }
             else
             {
@@ -564,6 +590,8 @@ namespace TGD.CombatV2
         // ===== 外部 UI 调用 =====
         public void ShowRange()
         {
+            if (!_isAiming || _isExecuting)
+                return;
 #if UNITY_EDITOR
             var unitPos = (driver != null && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
             var anchor = CurrentAnchor;
@@ -663,7 +691,6 @@ namespace TGD.CombatV2
         public void HideRange()
         {
             _painter.Clear();
-            _paths.Clear();
             _showing = false;
             _previewDirty = true;
             _previewAnchorVersion = -1;
@@ -710,217 +737,215 @@ namespace TGD.CombatV2
         }
 
         // ===== 逐格移动 + 起步一次性转向 + 占位提交 =====
-        IEnumerator RunPathTween_WithTime(List<Hex> path)
+        IEnumerator RunPathTween_WithTime(List<Hex> path, int plannedAnchorVersion)
         {
-
             if (path == null || path.Count < 2) yield break;
 
-            if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
+            _isExecuting = true;
+
+            try
             {
-                var targetHex = path[^1];
-                Debug.LogWarning($"[Guard] Anchor changed before execute (planV={_planAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild plan.", this);
-                ShowRange();
-                _planAnchorVersion = _playerBridge.AnchorVersion;
-                if (!_paths.TryGetValue(targetHex, out var refreshed) || refreshed == null || refreshed.Count < 2)
+                if (_playerBridge != null && plannedAnchorVersion >= 0 && plannedAnchorVersion != _playerBridge.AnchorVersion)
                 {
+                    Debug.LogWarning($"[Guard] Anchor changed before execute (planV={plannedAnchorVersion} nowV={_playerBridge.AnchorVersion}). Abort.", this);
                     HexMoveEvents.RaiseRejected(driver != null ? driver.UnitRef : null, MoveBlockReason.PathBlocked, "Anchor changed.");
                     yield break;
                 }
-                path = refreshed;
-            }
 
-            _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
-                yield break;
+                _bridge?.EnsurePlacedNow();
+                if (occupancyService)
+                    _occ = occupancyService.Get();
+                if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
+                    yield break;
 
-            int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+                int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
-            if (UseTurnManager)
-            {
-                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
-                    ? _turnManager.GetBudget(driver.UnitRef)
-                    : null;
-                if (budget == null || !budget.HasTime(requiredSec))
+                if (UseTurnManager)
+                {
+                    var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
+                        ? _turnManager.GetBudget(driver.UnitRef)
+                        : null;
+                    if (budget == null || !budget.HasTime(requiredSec))
+                    {
+                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                        yield break;
+                    }
+                }
+                else if (ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
                 {
                     HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                     yield break;
                 }
-            }
-            else if (ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
-            {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                yield break;
-            }
 
-            if (_cost != null && config != null)
-            {
-                if (_cost.IsOnCooldown(driver.UnitRef, config))
-                { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
-                if (!_cost.HasEnough(driver.UnitRef, config))
-                { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
+                if (_cost != null && config != null)
+                {
+                    if (_cost.IsOnCooldown(driver.UnitRef, config))
+                    { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
+                    if (!_cost.HasEnough(driver.UnitRef, config))
+                    { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
-                if (!UseTurnManager && ManageEnergyLocally)
-                    _cost.Pay(driver.UnitRef, config);
-            }
+                    if (!UseTurnManager && ManageEnergyLocally)
+                        _cost.Pay(driver.UnitRef, config);
+                }
 
-            var rates = BuildMoveRates(path[0]);
-            var startAnchor = CurrentAnchor;
-            var passability = PassabilityFactory.ForMove(_occ, SelfActor, startAnchor);
+                var rates = BuildMoveRates(path[0]);
+                var startAnchor = CurrentAnchor;
+                var passability = PassabilityFactory.ForMove(_occ, SelfActor, startAnchor);
 
-            float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
+                float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
 
-            var sim = MoveSimulator.Run(
-                path,
-                rates.baseNoEnv,
-                rates.mrClick,
-                requiredSec,
-                SampleStepModifier,
-                refundThreshold,
-                debugLog
-            );
-            var reached = sim.ReachedPath;
+                var sim = MoveSimulator.Run(
+                    path,
+                    rates.baseNoEnv,
+                    rates.mrClick,
+                    requiredSec,
+                    SampleStepModifier,
+                    refundThreshold,
+                    debugLog
+                );
+                var reached = sim.ReachedPath;
 
-            int refunded = Mathf.Max(0, sim.RefundedSeconds);
-            int spentSec = Mathf.Max(0, requiredSec - refunded);
-            int usedSeconds = Mathf.Max(0, Mathf.CeilToInt(sim.UsedSeconds));
-            var stepRates = sim.StepEffectiveRates;
-            int energyNet = 0;
-            if (config != null)
-            {
-                int costPerSecond = Mathf.Max(0, config.energyCost);
-                energyNet = (requiredSec - refunded) * costPerSecond;
-            }
+                int refunded = Mathf.Max(0, sim.RefundedSeconds);
+                int spentSec = Mathf.Max(0, requiredSec - refunded);
+                int usedSeconds = Mathf.Max(0, Mathf.CeilToInt(sim.UsedSeconds));
+                var stepRates = sim.StepEffectiveRates;
+                int energyNet = 0;
+                if (config != null)
+                {
+                    int costPerSecond = Mathf.Max(0, config.energyCost);
+                    energyNet = (requiredSec - refunded) * costPerSecond;
+                }
 
-            if (reached == null || reached.Count < 2)
-            {
-                if (!UseTurnManager && ManageEnergyLocally)
-                    _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                if (reached == null || reached.Count < 2)
+                {
+                    if (!UseTurnManager && ManageEnergyLocally)
+                        _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                    if (!UseTurnManager && ManageTurnTimeLocally)
+                        _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
+                    HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
+                    yield break;
+                }
+
+                SetExecReport(usedSeconds, refunded, energyNet, false);
+                _moving = true;
+                if (driver.unitView != null)
+                {
+                    var fromW = authoring.Layout.World(reached[0], y);
+                    var toW = authoring.Layout.World(reached[^1], y);
+                    float keep = config ? config.keepDeg : 45f;
+                    float turn = config ? config.turnDeg : 135f;
+                    float speed = config ? config.turnSpeedDegPerSec : 720f;
+
+                    var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                    yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+                    driver.UnitRef.Facing = nf;
+                    if (SelfActor != null) SelfActor.Facing = nf;
+                }
+
+                HexMoveEvents.RaiseMoveStarted(driver.UnitRef, reached);
+
+                var layout = authoring.Layout;
+                var unit = driver.UnitRef;
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
+                bool truncatedByBudget = (reached.Count < path.Count);
+                bool stoppedByExternal = false;
+
+                for (int i = 1; i < reached.Count; i++)
+                {
+                    if (ctx != null && ctx.Entangled)
+                    {
+                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, "Break Move!");
+                        stoppedByExternal = true;
+                    }
+
+                    var from = reached[i - 1];
+                    var to = reached[i];
+
+                    if (passability != null && passability.IsBlocked(to))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+                    if (env != null && env.IsPit(to))
+                    {
+                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, "Pit");
+                        stoppedByExternal = true;
+                        break;
+                    }
+
+                    HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+
+
+                    var fromW = layout.World(from, y);
+                    var toW = layout.World(to, y);
+
+                    float effMR = (stepRates != null && (i - 1) < stepRates.Count)
+                        ? stepRates[i - 1]
+                        : Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
+                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
+
+
+                    float t = 0f;
+                    while (t < 1f)
+                    {
+                        t += Time.deltaTime / stepDuration;
+                        if (view != null) view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+                        yield return null;
+                    }
+
+
+                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing);
+                    if (_sticky != null && status != null &&
+                          _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
+                          stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
+                    {
+                        status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
+                        LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
+                    }
+
+                    if (driver.Map != null)
+                    { if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to); }
+                    unit.Position = to;
+                    driver.SyncView();
+                }
+
+                if (driver != null && driver.UnitRef != null)
+                {
+                    var finalAnchor = CurrentAnchor;
+                    var finalFacing = SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing;
+                    _bridge?.MoveCommit(finalAnchor, finalFacing);
+                }
+
+                _moving = false;
+                HexMoveEvents.RaiseMoveFinished(driver.UnitRef, CurrentAnchor);
+                if (truncatedByBudget && !stoppedByExternal)
+                {
+                    HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
+                    LogInternal("[Move] No more time.");
+                }
+
                 if (!UseTurnManager && ManageTurnTimeLocally)
-                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
-                HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
-                yield break;
-            }
-
-            SetExecReport(usedSeconds, refunded, energyNet, false);
-            _moving = true;
-            if (driver.unitView != null)
-            {
-                var fromW = authoring.Layout.World(reached[0], y);
-                var toW = authoring.Layout.World(reached[^1], y);
-                float keep = config ? config.keepDeg : 45f;
-                float turn = config ? config.turnDeg : 135f;
-                float speed = config ? config.turnSpeedDegPerSec : 720f;
-
-                var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
-                yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
-                driver.UnitRef.Facing = nf;
-                if (SelfActor != null) SelfActor.Facing = nf;
-            }
-
-            HexMoveEvents.RaiseMoveStarted(driver.UnitRef, reached);
-
-            var layout = authoring.Layout;
-            var unit = driver.UnitRef;
-            string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-            Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
-            bool truncatedByBudget = (reached.Count < path.Count);
-            bool stoppedByExternal = false;
-
-            for (int i = 1; i < reached.Count; i++)
-            {
-                if (ctx != null && ctx.Entangled)
                 {
-                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, "Break Move!");
-                    stoppedByExternal = true;
+                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
                 }
-
-                var from = reached[i - 1];
-                var to = reached[i];
-
-                if (passability != null && passability.IsBlocked(to))
+                if (refunded > 0)
                 {
-                    stoppedByExternal = true;
-                    break;
+                    if (!UseTurnManager && ManageEnergyLocally)
+                        _cost?.RefundSeconds(driver.UnitRef, config, refunded);
+                    HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
                 }
-                if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
-                {
-                    stoppedByExternal = true;
-                    break;
-                }
-                if (env != null && env.IsPit(to))
-                {
-                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, "Pit");
-                    stoppedByExternal = true;
-                    break;
-                }
-
-                HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
-
-
-                var fromW = layout.World(from, y);
-                var toW = layout.World(to, y);
-
-                float effMR = (stepRates != null && (i - 1) < stepRates.Count)
-                    ? stepRates[i - 1]
-                    : Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
-                float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
-
-
-                float t = 0f;
-                while (t < 1f)
-                {
-                    t += Time.deltaTime / stepDuration;
-                    if (view != null) view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
-                    yield return null;
-                }
-
-
-                _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing);
-                if (_sticky != null && status != null &&
-                      _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
-                      stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
-                {
-                    status.ApplyOrRefreshExclusive(tag, stickM, stickTurns, to.ToString());
-                    LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
-                }
-
-                if (driver.Map != null)
-                { if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to); }
-                unit.Position = to;
-                driver.SyncView();
             }
-
-            if (driver != null && driver.UnitRef != null)
+            finally
             {
-                var finalAnchor = CurrentAnchor;
-                var finalFacing = SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing;
-                _bridge?.MoveCommit(finalAnchor, finalFacing);
+                _isExecuting = false;
+                _planAnchorVersion = -1;
             }
-
-            _moving = false;
-            HexMoveEvents.RaiseMoveFinished(driver.UnitRef, CurrentAnchor);
-            if (truncatedByBudget && !stoppedByExternal)
-            {
-                HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
-                LogInternal("[Move] No more time.");
-            }
-
-            if (!UseTurnManager && ManageTurnTimeLocally)
-            {
-                _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
-            }
-            if (refunded > 0)
-            {
-                if (!UseTurnManager && ManageEnergyLocally)
-                    _cost?.RefundSeconds(driver.UnitRef, config, refunded);
-                HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
-            }
-            if (_showing) ShowRange();
-
-            _planAnchorVersion = -1;
-
         }
         int IActionExecReportV2.UsedSeconds => ReportUsedSeconds;
         int IActionExecReportV2.RefundedSeconds => ReportRefundedSeconds;
