@@ -27,14 +27,6 @@ namespace TGD.CombatV2
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
-            AttackEventsV2.AttackHit += OnHit;
-            AttackEventsV2.AttackHit -= OnHit;
-        void OnHit(Unit unit, Hex target)
-        {
-            if (!Match(unit) || !uiText || !root) return;
-            Show("Attack hit!");
-        }
-
             if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ★
         }
 
@@ -49,12 +41,14 @@ namespace TGD.CombatV2
 
         void OnEnable()
         {
+            AttackEventsV2.AttackHit += OnHit;
             AttackEventsV2.AttackRejected += OnRejected;
             AttackEventsV2.AttackMiss += OnMiss;
         }
 
         void OnDisable()
         {
+            AttackEventsV2.AttackHit -= OnHit;
             AttackEventsV2.AttackRejected -= OnRejected;
             AttackEventsV2.AttackMiss -= OnMiss;
             if (_co != null) { StopCoroutine(_co); _co = null; }
@@ -63,6 +57,12 @@ namespace TGD.CombatV2
 
         Unit UnitRef => driver ? driver.UnitRef : null;
         bool Match(Unit u) => !requireUnitMatch || (u != null && u == UnitRef);
+
+        void OnHit(Unit unit, Hex target)
+        {
+            if (!Match(unit) || !uiText || !root) return;
+            Show("Attack hit!");
+        }
 
         void OnRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
