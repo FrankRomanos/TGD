@@ -13,7 +13,7 @@ namespace TGD.CombatV2
         public RectTransform root;
 
         [Header("Filter")]
-        public HexBoardTestDriver driver;   // å¯é€‰å¼•ç”¨ï¼ˆè‡ªåŠ¨ç»‘å®šï¼‰
+        public HexBoardTestDriver driver;   // ¿ÉÑ¡ÒıÓÃ£¨×Ô¶¯°ó¶¨£©
         public bool requireUnitMatch = true;
 
         [Header("Behavior")]
@@ -27,7 +27,7 @@ namespace TGD.CombatV2
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // â˜…
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
         }
 
         void Awake()
@@ -35,7 +35,7 @@ namespace TGD.CombatV2
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
             if (root) _canvasGroup = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // â˜…
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
             SetVisible(false, true);
         }
 
@@ -55,7 +55,6 @@ namespace TGD.CombatV2
 
         Unit UnitRef => driver ? driver.UnitRef : null;
         bool Match(Unit u) => !requireUnitMatch || (u != null && u == UnitRef);
-
 
         void OnRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
