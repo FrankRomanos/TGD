@@ -117,11 +117,9 @@ namespace TGD.CombatV2
             {
                 case AttackControllerV2 attack:
                     attack.AttachTurnManager(turnManager);
-                    attack.suppressInternalLogs = quietInternalToolLogs;
                     break;
                 case HexClickMover mover:
                     mover.AttachTurnManager(turnManager);
-                    mover.suppressInternalLogs = quietInternalToolLogs;
                     if (turnManager != null)
                         WireMoveCostAdapter(mover.costProvider as MoveCostServiceV2Adapter);
                     break;
@@ -416,7 +414,6 @@ namespace TGD.CombatV2
                     if (refundAmount > 0)
                     {
                         budget.RefundTime(refundAmount);
-                        Log($"[Time] Refund {unitLabel} {refundAmount}s{timeSuffix} -> Remain={budget.Remaining}");
                     }
                 }
                 else if (delta > 0)
@@ -440,11 +437,13 @@ namespace TGD.CombatV2
                 else if (moveDelta < 0)
                 {
                     int refundAmount = -moveDelta;
-                    resources.Refund("Energy", refundAmount, "Resolve_Move");
-                    string moveReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
-                    string moveSuffix = string.IsNullOrEmpty(moveReason) ? string.Empty : $"_{moveReason}";
-                    Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{moveSuffix})");
+                    string moveReason = !string.IsNullOrEmpty(refundTag)
+                        ? refundTag
+                        : (freeMove ? "FreeMove" : null);
+                    bool moveSilent = string.IsNullOrEmpty(moveReason);
+                    resources.Refund("Energy", refundAmount, moveSilent ? string.Empty : moveReason, moveSilent);
                 }
+
 
                 int atkDelta = energyAtk - plannedAtkEnergy;
                 if (atkDelta > 0)
@@ -454,10 +453,9 @@ namespace TGD.CombatV2
                 else if (atkDelta < 0)
                 {
                     int refundAmount = -atkDelta;
-                    resources.Refund("Energy", refundAmount, "Resolve_Attack");
                     string atkReason = !string.IsNullOrEmpty(refundTag) ? refundTag : null;
-                    string atkSuffix = string.IsNullOrEmpty(atkReason) ? string.Empty : $"_{atkReason}";
-                    Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack{atkSuffix})");
+                    bool atkSilent = string.IsNullOrEmpty(atkReason);
+                    resources.Refund("Energy", refundAmount, atkSilent ? string.Empty : atkReason, atkSilent);
                 }
             }
 
