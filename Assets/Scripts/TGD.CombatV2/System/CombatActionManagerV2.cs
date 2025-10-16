@@ -274,15 +274,18 @@ namespace TGD.CombatV2
                 ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
                 ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
                 ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=targetInvalid)");
+                NotifyConfirmAbort(tool, unit, "targetInvalid");
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
 
-            if (!TryBeginAim(tool, unit, out _, false))
+            if (!TryBeginAim(tool, unit, out var aimReason, false))
             {
                 ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
-                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=notReady)");
-                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=notReady)");
+                string fail = string.IsNullOrEmpty(aimReason) ? "notReady" : aimReason;
+                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={fail})");
+                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={fail})");
+                NotifyConfirmAbort(tool, unit, fail);
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
@@ -320,6 +323,7 @@ namespace TGD.CombatV2
             {
                 ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={failReason})");
                 ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={failReason})");
+                NotifyConfirmAbort(tool, unit, failReason);
                 CleanupAfterAbort(tool, false);
                 yield break;
             }
@@ -479,10 +483,10 @@ namespace TGD.CombatV2
 
             var data = new ExecReportData
             {
-                valid = true,
-                usedSecsMove = Mathf.Max(0, exec.UsedSeconds),
+                valid = false,
+                usedSecsMove = 0,
                 usedSecsAtk = 0,
-                refundedSecs = Mathf.Max(0, exec.RefundedSeconds),
+                refundedSecs = 0,
                 energyMoveNet = 0,
                 energyAtkNet = 0,
                 freeMoveApplied = false
@@ -490,20 +494,34 @@ namespace TGD.CombatV2
 
             if (tool is HexClickMover mover)
             {
-                data.usedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
-                data.refundedSecs = Mathf.Max(0, mover.ReportRefundedSeconds);
-                data.energyMoveNet = mover.ReportEnergyMoveNet;
-                data.energyAtkNet = 0;
-                data.freeMoveApplied = mover.ReportFreeMoveApplied;
+                if (mover.HasPendingExecReport)
+                {
+                    data.valid = true;
+                    data.usedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
+                    data.refundedSecs = Mathf.Max(0, mover.ReportRefundedSeconds);
+                    data.energyMoveNet = mover.ReportEnergyMoveNet;
+                    data.energyAtkNet = 0;
+                    data.freeMoveApplied = mover.ReportFreeMoveApplied;
+                }
             }
             else if (tool is AttackControllerV2 attack)
             {
-                data.usedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
-                data.usedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
-                data.refundedSecs = Mathf.Max(0, attack.ReportMoveRefundSeconds + attack.ReportAttackRefundSeconds);
-                data.energyMoveNet = attack.ReportEnergyMoveNet;
-                data.energyAtkNet = attack.ReportEnergyAtkNet;
-                data.freeMoveApplied = attack.ReportFreeMoveApplied;
+                if (attack.HasPendingExecReport)
+                {
+                    data.valid = true;
+                    data.usedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
+                    data.usedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
+                    data.refundedSecs = Mathf.Max(0, attack.ReportMoveRefundSeconds + attack.ReportAttackRefundSeconds);
+                    data.energyMoveNet = attack.ReportEnergyMoveNet;
+                    data.energyAtkNet = attack.ReportEnergyAtkNet;
+                    data.freeMoveApplied = attack.ReportFreeMoveApplied;
+                }
+            }
+            else
+            {
+                data.valid = true;
+                data.usedSecsMove = Mathf.Max(0, exec.UsedSeconds);
+                data.refundedSecs = Mathf.Max(0, exec.RefundedSeconds);
             }
 
             return data;
@@ -550,6 +568,25 @@ namespace TGD.CombatV2
             _hover = null;
             _phase = Phase.Idle;
             _plan = default;
+        }
+
+        void NotifyConfirmAbort(IActionToolV2 tool, Unit unit, string reason)
+        {
+            if (tool == null)
+                return;
+
+            if (string.IsNullOrEmpty(reason))
+                reason = "notReady";
+
+            switch (tool)
+            {
+                case HexClickMover mover:
+                    mover.HandleConfirmAbort(unit, reason);
+                    break;
+                case AttackControllerV2 attack:
+                    attack.HandleConfirmAbort(unit, reason);
+                    break;
+            }
         }
 
         bool TryBeginAim(IActionToolV2 tool, Unit unit, out string reason, bool raiseHud = true)
@@ -634,14 +671,14 @@ namespace TGD.CombatV2
         {
             if (tool is HexClickMover mover)
             {
-                var (secs, energy) = mover.GetPlannedCost();
+                var planned = mover.PeekPlannedCost(target);
                 return new PlannedCost
                 {
-                    moveSecs = Mathf.Max(0, secs),
+                    moveSecs = Mathf.Max(0, planned.moveSecs),
                     atkSecs = 0,
-                    moveEnergy = Mathf.Max(0, energy),
+                    moveEnergy = Mathf.Max(0, planned.moveEnergy),
                     atkEnergy = 0,
-                    valid = true
+                    valid = planned.valid
                 };
             }
 

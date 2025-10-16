@@ -134,6 +134,8 @@ namespace TGD.CombatV2
             _pendingComboBaseCount = 0;
             LogAttackSummary();
         }
+
+        internal bool HasPendingExecReport => _reportPending;
         void LogAttackSummary()
         {
             var unit = driver != null ? driver.UnitRef : null;
@@ -769,6 +771,32 @@ namespace TGD.CombatV2
             if (debugLog)
                 LogInternal($"[Action][Attack] Reject {reason}");
             RaiseRejected(unit, mapped, message);
+        }
+
+        internal void HandleConfirmAbort(Unit unit, string reason)
+        {
+            unit ??= driver != null ? driver.UnitRef : null;
+            switch (reason)
+            {
+                case "targetInvalid":
+                    RaiseRejected(unit, AttackRejectReasonV2.NoPath, "Invalid target.");
+                    break;
+                case "lackTime":
+                    RaiseRejected(unit, AttackRejectReasonV2.CantMove, "No more time.");
+                    break;
+                case "lackEnergy":
+                    RaiseRejected(unit, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                    break;
+                case "cooldown":
+                    RaiseRejected(unit, AttackRejectReasonV2.OnCooldown, "Attack is on cooldown.");
+                    break;
+                case "notReady":
+                    RaiseRejected(unit, AttackRejectReasonV2.NotReady, "Not ready.");
+                    break;
+                default:
+                    RaiseRejected(unit, AttackRejectReasonV2.NotReady, "Action aborted.");
+                    break;
+            }
         }
 
         static (AttackRejectReasonV2 reason, string message) MapAttackReject(TargetInvalidReason reason)
