@@ -506,7 +506,7 @@ namespace TGD.CombatV2
                 reason = "(entangled)";
                 return false;
             }
-            int needSec = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
+            int needSec = 1;
             if (UseTurnManager && turnManager != null && driver != null && driver.UnitRef != null)
             {
                 var budget = turnManager.GetBudget(driver.UnitRef);
@@ -529,14 +529,6 @@ namespace TGD.CombatV2
             var pool = ResolveResourcePool();
             int energyAvailable = ResolveEnergyAvailable(pool);
             int moveEnergyCost = MoveEnergyPerSecond();
-            bool anyEnergyCost = (moveEnergyCost > 0) || (attackConfig != null && attackConfig.baseEnergyCost > 0f);
-            if (anyEnergyCost && energyAvailable <= 0)
-            {
-                if (raiseHud)
-                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
-                reason = "(no-energy)";
-                return false;
-            }
             if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
             {
                 if (raiseHud)
