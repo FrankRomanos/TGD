@@ -180,6 +180,8 @@ namespace TGD.CombatV2
             if (_runtimeByUnit.TryGetValue(unit, out var runtime))
                 runtime.Bind(context);
         }
+
+        public bool IsPlayerPhase => _currentPhaseIsPlayer;
         public UnitRuntimeContext GetContext(Unit unit)
         {
             if (unit == null) return null;

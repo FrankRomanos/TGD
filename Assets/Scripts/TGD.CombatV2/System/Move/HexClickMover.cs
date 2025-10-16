@@ -167,6 +167,7 @@ namespace TGD.CombatV2
         string _hudMsg;
         float _hudMsgUntil;
         public string Id => "Move";
+        public ActionKind Kind => ActionKind.Standard;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
         int _reportEnergyMoveNet;
