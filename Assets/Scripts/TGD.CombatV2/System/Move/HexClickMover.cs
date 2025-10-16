@@ -180,6 +180,62 @@ namespace TGD.CombatV2
             return (seconds, energyRate * seconds);
         }
 
+        public struct PlannedMoveCost
+        {
+            public int moveSecs;
+            public int moveEnergy;
+            public bool valid;
+        }
+
+        public PlannedMoveCost PeekPlannedCost(Hex target)
+        {
+            int moveSecs = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int moveEnergy = moveSecs * (config ? Mathf.Max(0, config.energyCost) : 0);
+
+            var result = new PlannedMoveCost
+            {
+                moveSecs = moveSecs,
+                moveEnergy = moveEnergy,
+                valid = false
+            };
+
+            EnsureTurnTimeInited();
+            RefreshStateForAim();
+            _bridge?.EnsurePlacedNow();
+            if (occupancyService)
+                _occ = occupancyService.Get();
+
+            if (ctx != null && ctx.Entangled)
+                return result;
+
+            if (authoring?.Layout == null || driver == null || !driver.IsReady || _bridge == null || SelfActor == null)
+                return result;
+
+            var unit = driver != null ? driver.UnitRef : null;
+            if (unit == null)
+                return result;
+
+            var targetCheck = ValidateMoveTarget(unit, target);
+            if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
+                return result;
+
+            if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
+            {
+                _previewDirty = true;
+            }
+
+            if (_previewDirty || !_paths.TryGetValue(target, out var path) || path == null || path.Count < 2)
+            {
+                if (!TryRebuildPathCache(out _))
+                    return result;
+            }
+
+            if (_paths.TryGetValue(target, out var cached) && cached != null && cached.Count >= 2)
+                result.valid = true;
+
+            return result;
+        }
+
         public (int moveSecs, int energyMove) GetPlannedCost()
         {
             var (timeSec, energy) = PeekPlannedCost();
@@ -216,6 +272,8 @@ namespace TGD.CombatV2
             _reportPending = true;
             LogMoveSummary();
         }
+
+        internal bool HasPendingExecReport => _reportPending;
 
         void LogMoveSummary()
         {
@@ -587,6 +645,87 @@ namespace TGD.CombatV2
             return Mathf.Clamp(Mathf.RoundToInt(mr), (int)MR_MIN, (int)MR_MAX);
         }
 
+        bool TryRebuildPathCache(out MovableRangeResult result)
+        {
+            result = null;
+
+            _bridge?.EnsurePlacedNow();
+            if (occupancyService)
+                _occ = occupancyService.Get();
+
+            if (authoring?.Layout == null || driver == null || !driver.IsReady || _bridge == null || SelfActor == null)
+                return false;
+
+            if (occupancyService != null && _occ == null)
+                return false;
+
+            var layout = authoring.Layout;
+            var startHex = CurrentAnchor;
+
+            var rates = BuildMoveRates(startHex);
+
+            bool startGivesSticky = rates.startIsSticky;
+            float mrNoEnv = Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
+            float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
+            float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
+
+            int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int cap = config ? config.stepsCap : 12;
+            int steps = Mathf.Min(cap, StatsMathV2.StepsAllowedF32(mrPreview, timeSec));
+
+            var passability = PassabilityFactory.ForMove(_occ, SelfActor, startHex);
+
+            var physicsBlocker =
+                (blockByPhysics && obstacleMask != 0)
+                    ? HexAreaUtil.MakeDefaultBlocker(
+                        authoring,
+                        driver?.Map,
+                        startHex,
+                        blockByUnits: false,
+                        blockByPhysics: true,
+                        obstacleMask: obstacleMask,
+                        physicsRadiusScale: physicsRadiusScale,
+                        physicsProbeHeight: physicsProbeHeight,
+                        includeTriggerColliders: false,
+                        y: y)
+                    : null;
+
+            bool Block(Hex cell)
+            {
+                if (layout != null && !layout.Contains(cell)) return true;
+
+                if (blockByUnits)
+                {
+                    if (passability != null && passability.IsBlocked(cell))
+                        return true;
+
+                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(SelfActor, cell, SelfActor.Facing, ignore: SelfActor)))
+                        return true;
+                }
+
+                if (physicsBlocker != null && physicsBlocker(cell)) return true;
+
+                if (env != null && env.IsPit(cell)) return true;
+
+                return false;
+            }
+
+            var previewMap = new HexBoardMap<Unit>(layout);
+            if (driver != null && driver.UnitRef != null)
+                previewMap.Set(driver.UnitRef, startHex);
+
+            result = HexMovableRange.Compute(layout, previewMap, startHex, steps, Block);
+
+            _paths.Clear();
+            foreach (var kv in result.Paths)
+                _paths[kv.Key] = kv.Value;
+
+            _previewDirty = false;
+            _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
+
+            return true;
+        }
+
         // ===== 外部 UI 调用 =====
         public void ShowRange()
         {
@@ -606,85 +745,27 @@ namespace TGD.CombatV2
             { HexMoveEvents.RaiseRejected(driver ? driver.UnitRef : null, MoveBlockReason.NotReady, null); return; }
 
             _painter.Clear();
-            _paths.Clear();
-
-            var layout = authoring.Layout;
-            var startHex = CurrentAnchor;
 
             if (ctx != null && ctx.Entangled)
             {
+                _paths.Clear();
+                _previewDirty = true;
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, null);
                 _showing = true;
                 return;
             }
 
-            var rates = BuildMoveRates(startHex);
-
-            var passability = PassabilityFactory.ForMove(_occ, SelfActor, startHex);
-
-            // ====== 修复：起点为“会贴附”的加速格时，预览不要把起点地形再乘一次 ======
-            const float MR_MIN = 1f, MR_MAX = 12f;
-            const float ENV_MIN = 0.1f, ENV_MAX = 5f;
-
-            bool startGivesSticky = rates.startIsSticky;
-
-            float mrNoEnv = Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
-
-            float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
-
-            float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
-
-            // 计算步数
-            int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            int cap = config ? config.stepsCap : 12;
-            int steps = Mathf.Min(cap, StatsMathV2.StepsAllowedF32(mrPreview, timeSec));
-
-            var physicsBlocker =
-                (blockByPhysics && obstacleMask != 0)
-                ? HexAreaUtil.MakeDefaultBlocker(
-                      authoring, driver?.Map, startHex,
-                      blockByUnits: false,
-                      blockByPhysics: true,
-                      obstacleMask: obstacleMask,
-                      physicsRadiusScale: physicsRadiusScale,
-                      physicsProbeHeight: physicsProbeHeight,
-                      includeTriggerColliders: false,
-                      y: y)
-                : null;
-
-            bool Block(TGD.HexBoard.Hex cell)
+            if (!TryRebuildPathCache(out var result))
             {
-                if (layout != null && !layout.Contains(cell)) return true;
-
-                if (blockByUnits)
-                {
-                    if (passability != null && passability.IsBlocked(cell))
-                        return true;
-
-                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(SelfActor, cell, SelfActor.Facing, ignore: SelfActor)))
-                        return true;
-                }
-
-                if (physicsBlocker != null && physicsBlocker(cell)) return true;
-
-                if (env != null && env.IsPit(cell)) return true;
-
-                return false;
+                _paths.Clear();
+                _previewDirty = true;
+                return;
             }
-            // ---- 统一权威起点 ----
-            var previewMap = new HexBoardMap<Unit>(layout);
-            if (driver != null && driver.UnitRef != null)
-                previewMap.Set(driver.UnitRef, startHex);
-
-            var result = HexMovableRange.Compute(layout, previewMap, startHex, steps, Block);
-            foreach (var kv in result.Paths) _paths[kv.Key] = kv.Value;
 
             _painter.Paint(result.Paths.Keys, rangeColor);
             if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor);
 
             HexMoveEvents.RaiseRangeShown(driver.UnitRef, result.Paths.Keys);
-            _previewDirty = false;
-            _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
             _showing = true;
         }
 
@@ -710,6 +791,21 @@ namespace TGD.CombatV2
             var (mapped, message) = MapMoveReject(reason);
             if (debugLog)
                 LogInternal($"[Action][Move] Reject {reason}");
+            HexMoveEvents.RaiseRejected(unit, mapped, message);
+        }
+
+        internal void HandleConfirmAbort(Unit unit, string reason)
+        {
+            unit ??= driver != null ? driver.UnitRef : null;
+            (MoveBlockReason mapped, string message) = reason switch
+            {
+                "lackTime" => (MoveBlockReason.NoBudget, "No More Time"),
+                "lackEnergy" => (MoveBlockReason.NotEnoughResource, "Not enough energy."),
+                "cooldown" => (MoveBlockReason.OnCooldown, "Move is on cooldown."),
+                "targetInvalid" => (MoveBlockReason.PathBlocked, "Invalid target."),
+                "notReady" => (MoveBlockReason.NotReady, "Not ready."),
+                _ => (MoveBlockReason.NotReady, "Action aborted.")
+            };
             HexMoveEvents.RaiseRejected(unit, mapped, message);
         }
 
