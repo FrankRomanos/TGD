@@ -380,26 +380,38 @@ namespace TGD.CombatV2
                     resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
             }
 
-            var basePlan = new PreDeduct
+            var basePreDeduct = new PreDeduct
             {
                 secs = cost.TotalSeconds,
                 energyMove = cost.moveEnergy,
                 energyAtk = cost.atkEnergy,
                 valid = true
             };
-
-            _planStack.Push(basePlan);
+            _planStack.Push(basePreDeduct);
 
             TryHideAllAimUI();
 
+            var pendingChain = new List<Tuple<IActionToolV2, ActionPlan>>();
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
-                yield return RunChainWindow(unit, actionPlan, basePlan, budget, resources, cost.TotalSeconds, cancelled => cancelBase = cancelled);
+                yield return RunChainWindow(unit, actionPlan, budget, resources, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
+            }
+
+            for (int i = pendingChain.Count - 1; i >= 0; --i)
+            {
+                var pending = pendingChain[i];
+                if (pending?.Item1 != null)
+                    yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
             }
 
             if (cancelBase)
             {
+                if (_planStack.Count > 0)
+                    _planStack.Pop();
+                if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
+                    budget.RefundTime(basePreDeduct.secs);
+                ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
                 NotifyConfirmAbort(tool, unit, "LinkCancelled");
                 CleanupAfterAbort(tool, false);
                 yield break;
@@ -878,7 +890,7 @@ namespace TGD.CombatV2
             return $"W2.1.{depth}";
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, PreDeduct basePreDeduct, ITurnBudget budget, IResourcePool resources, int baseTimeCost, Action<bool> onComplete)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ITurnBudget budget, IResourcePool resources, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
         {
             bool allowReaction = true;
             bool onlyFree = false;
@@ -915,10 +927,10 @@ namespace TGD.CombatV2
                         {
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
 
-                            bool executed = false;
-                            yield return ExecuteChainSelection(option, unit, budget, resources, result => executed = result);
+                            bool queued = false;
+                            yield return TryQueueChainSelection(option, unit, budget, resources, pendingActions, result => queued = result);
 
-                            if (!executed)
+                            if (!queued)
                                 continue;
 
                             if (option.kind == ActionKind.Reaction)
@@ -929,11 +941,6 @@ namespace TGD.CombatV2
                                 if (turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
                                 {
                                     cancelledBase = true;
-                                    if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
-                                        budget.RefundTime(basePreDeduct.secs);
-                                    if (_planStack.Count > 0)
-                                        _planStack.Pop();
-                                    ActionPhaseLogger.Log(unit, basePlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
                                 }
                             }
                             else if (option.kind == ActionKind.Free)
@@ -956,7 +963,7 @@ namespace TGD.CombatV2
             onComplete?.Invoke(cancelledBase);
         }
 
-        IEnumerator ExecuteChainSelection(ChainOption option, Unit unit, ITurnBudget budget, IResourcePool resources, Action<bool> onComplete)
+        IEnumerator TryQueueChainSelection(ChainOption option, Unit unit, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -1019,10 +1026,10 @@ namespace TGD.CombatV2
                 cost = planCost
             };
 
-            yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+            pendingActions.Add(Tuple.Create(tool, actionPlan));
+
             onComplete?.Invoke(true);
         }
-
         static string MapAimReason(string raw)
         {
             if (string.IsNullOrEmpty(raw))
