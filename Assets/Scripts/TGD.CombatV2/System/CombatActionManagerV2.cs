@@ -293,13 +293,14 @@ namespace TGD.CombatV2
                 yield break;
             }
 
+            string rejectToken = null;
             if (!TryBeginAim(tool, unit, out var aimRaw, false))
             {
                 ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
                 ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=notReady)");
                 ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=notReady)");
                 string aimReason = MapAimReason(aimRaw);
-                string rejectToken = aimReason switch
+                rejectToken = aimReason switch
                 {
                     "lackTime" => FormatAttackReject(AttackRejectReasonV2.CantMove, "No more time."),
                     "lackEnergy" => FormatAttackReject(AttackRejectReasonV2.NotEnoughResource, "Not enough energy."),
@@ -335,7 +336,7 @@ namespace TGD.CombatV2
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
 
             string failReason = null;
-            string rejectToken = null;
+            rejectToken = null;
             if (!cost.valid)
             {
                 failReason = "targetInvalid";
