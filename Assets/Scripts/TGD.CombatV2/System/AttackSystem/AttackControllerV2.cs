@@ -10,6 +10,16 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
+    public struct AttackExecBreakdown
+    {
+        public int usedMoveSecs;
+        public int usedAtkSecs;
+        public int refundedMoveSecs;
+        public int refundedAtkSecs;
+        public bool freeMoveApplied;
+        public bool rollbackSlowed;
+    }
+
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerOccupancyBridge))]
     public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
@@ -91,6 +101,8 @@ namespace TGD.CombatV2
         int _reportEnergyMoveNet;
         int _reportEnergyAtkNet;
         bool _reportFreeMove;
+        bool _reportRollbackSlowed;
+        AttackExecBreakdown _reportBreakdown;
         bool _reportPending;
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
@@ -117,18 +129,30 @@ namespace TGD.CombatV2
             _reportEnergyMoveNet = 0;
             _reportEnergyAtkNet = 0;
             _reportFreeMove = false;
+            _reportRollbackSlowed = false;
+            _reportBreakdown = default;
             _reportPending = false;
             _reportComboBaseCount = 0;
             _pendingComboBaseCount = 0;
         }
 
-        void SetExecReport(int usedSeconds, int refundedSeconds, int energyMoveNet, int energyAtkNet, bool attackExecuted, bool freeMove)
+        void SetExecReport(int energyMoveNet, int energyAtkNet, bool attackExecuted, bool freeMove, bool rollbackSlowed)
         {
-            _reportUsedSeconds = Mathf.Max(0, usedSeconds);
-            _reportRefundedSeconds = Mathf.Max(0, refundedSeconds);
+            _reportUsedSeconds = Mathf.Max(0, _reportMoveUsedSeconds + _reportAttackUsedSeconds);
+            _reportRefundedSeconds = Mathf.Max(0, _reportMoveRefundSeconds + _reportAttackRefundSeconds);
             _reportEnergyMoveNet = energyMoveNet;
             _reportEnergyAtkNet = energyAtkNet;
             _reportFreeMove = freeMove;
+            _reportRollbackSlowed = rollbackSlowed;
+            _reportBreakdown = new AttackExecBreakdown
+            {
+                usedMoveSecs = _reportMoveUsedSeconds,
+                usedAtkSecs = _reportAttackUsedSeconds,
+                refundedMoveSecs = _reportMoveRefundSeconds,
+                refundedAtkSecs = _reportAttackRefundSeconds,
+                freeMoveApplied = freeMove,
+                rollbackSlowed = rollbackSlowed
+            };
             _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
             _reportPending = true;
             _pendingComboBaseCount = 0;
@@ -1119,11 +1143,10 @@ namespace TGD.CombatV2
                     int meleeMoveEnergyNet = 0;
                     int meleeAttackEnergyNet = attackPlanned ? Mathf.Max(0, attackEnergyPaid) : 0;
                     SetExecReport(
-                        meleeAttackUsedSeconds,
-                        meleeMoveRefundSeconds,
                         meleeMoveEnergyNet,
                         meleeAttackEnergyNet,
                         attackPlanned,
+                        false,
                         false);
                     yield break;
                 }
@@ -1275,12 +1298,11 @@ namespace TGD.CombatV2
                 int attackEnergyNet = attackSuccess ? Mathf.Max(0, attackEnergyPaid) : -Mathf.Max(0, attackEnergyPaid);
 
                 SetExecReport(
-                    moveUsedSeconds + attackUsedSeconds,
-                    moveRefundSeconds + attackRefundSeconds,
                     moveEnergyNet,
                     attackEnergyNet,
                     attackSuccess,
-                    freeMoveApplied);
+                    freeMoveApplied,
+                    attackRolledBack);
             }
             finally
             {
@@ -1311,11 +1333,14 @@ namespace TGD.CombatV2
 
                 _bridge?.MoveCommit(abortAnchor, abortFacing);
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
+                _reportMoveUsedSeconds = 0;
+                _reportMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
+                _reportAttackUsedSeconds = 0;
+                _reportAttackRefundSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
                     0,
-                    Mathf.Max(0, moveSecsCharge + (attackPlanned ? attackSecsCharge : 0)),
                     0,
-                    0,
+                    false,
                     false,
                     false);
             }
@@ -1335,6 +1360,18 @@ namespace TGD.CombatV2
         public int ReportMoveRefundSeconds => _reportPending ? _reportMoveRefundSeconds : 0;
         public int ReportAttackUsedSeconds => _reportPending ? _reportAttackUsedSeconds : 0;
         public int ReportAttackRefundSeconds => _reportPending ? _reportAttackRefundSeconds : 0;
+
+        public bool TryGetAttackBreakdown(out AttackExecBreakdown breakdown)
+        {
+            if (_reportPending)
+            {
+                breakdown = _reportBreakdown;
+                return true;
+            }
+
+            breakdown = default;
+            return false;
+        }
 
 
         MoveRatesSnapshot BuildMoveRates(Hex start)

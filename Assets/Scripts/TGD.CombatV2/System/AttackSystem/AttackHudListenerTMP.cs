@@ -13,7 +13,7 @@ namespace TGD.CombatV2
         public RectTransform root;
 
         [Header("Filter")]
-        public HexBoardTestDriver driver;   // ¿ÉÑ¡ÒıÓÃ£¨×Ô¶¯°ó¶¨£©
+        public HexBoardTestDriver driver;   // å¯é€‰å¼•ç”¨ï¼ˆè‡ªåŠ¨ç»‘å®šï¼‰
         public bool requireUnitMatch = true;
 
         [Header("Behavior")]
@@ -27,7 +27,15 @@ namespace TGD.CombatV2
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
+            AttackEventsV2.AttackHit += OnHit;
+            AttackEventsV2.AttackHit -= OnHit;
+        void OnHit(Unit unit, Hex target)
+        {
+            if (!Match(unit) || !uiText || !root) return;
+            Show("Attack hit!");
+        }
+
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // â˜…
         }
 
         void Awake()
@@ -35,7 +43,7 @@ namespace TGD.CombatV2
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
             if (root) _canvasGroup = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // ¡ï
+            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>(); // â˜…
             SetVisible(false, true);
         }
 
