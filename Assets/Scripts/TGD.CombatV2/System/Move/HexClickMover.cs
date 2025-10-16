@@ -173,6 +173,7 @@ namespace TGD.CombatV2
         int _reportEnergyAtkNet;
         bool _reportFreeMove;
         bool _reportPending;
+        string _reportRefundTag;
         public (int timeSec, int energy) PeekPlannedCost()
         {
             int seconds = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
@@ -249,6 +250,7 @@ namespace TGD.CombatV2
         public int ReportMoveEnergyNet => ReportEnergyMoveNet;
         public int ReportAttackEnergyNet => ReportEnergyAtkNet;
         public bool ReportFreeMoveApplied => _reportPending && _reportFreeMove;
+        public string ReportRefundTag => _reportPending ? _reportRefundTag : null;
         public bool IsBusy => _moving;
 
 
@@ -260,28 +262,21 @@ namespace TGD.CombatV2
             _reportEnergyAtkNet = 0;
             _reportFreeMove = false;
             _reportPending = false;
+            _reportRefundTag = null;
         }
 
-        void SetExecReport(int used, int refunded, int energyMoveNet, bool freeMove)
+        void SetExecReport(int plannedSeconds, int refundedSeconds, int energyMoveNet, bool freeMove, string refundTag)
         {
-            _reportUsedSeconds = Mathf.Max(0, used);
-            _reportRefundedSeconds = Mathf.Max(0, refunded);
+            _reportUsedSeconds = Mathf.Max(0, plannedSeconds);
+            _reportRefundedSeconds = Mathf.Max(0, refundedSeconds);
             _reportEnergyMoveNet = energyMoveNet;
             _reportEnergyAtkNet = 0;
             _reportFreeMove = freeMove;
             _reportPending = true;
-            LogMoveSummary();
+            _reportRefundTag = refundTag;
         }
 
         internal bool HasPendingExecReport => _reportPending;
-
-        void LogMoveSummary()
-        {
-            var unit = driver != null ? driver.UnitRef : null;
-            string label = TurnManagerV2.FormatUnitLabel(unit);
-            string suffix = _reportFreeMove ? " (FreeMove)" : string.Empty;
-            LogInternal($"[Move] Use secs={_reportUsedSeconds}s refund={_reportRefundedSeconds}s energy={_reportEnergyMoveNet} U={label}{suffix}");
-        }
 
         void LogInternal(string message)
         {
@@ -389,8 +384,7 @@ namespace TGD.CombatV2
 
             var unit = driver != null ? driver.UnitRef : null;
             var targetCheck = ValidateMoveTarget(unit, hex);
-            if (debugLog)
-                LogInternal($"[Action][Move] Click {hex} → {targetCheck}");
+            // Phase logging handled by CombatActionManagerV2.
 
             if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
             {
@@ -401,18 +395,7 @@ namespace TGD.CombatV2
             int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
             // 再做一次兜底预检查（避免竞态）
-            if (UseTurnManager)
-            {
-                var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
-                    ? _turnManager.GetBudget(driver.UnitRef)
-                    : null;
-                if (budget == null || !budget.HasTime(needSec))
-                {
-                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                    yield break;
-                }
-            }
-            else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
+            if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                 yield break;
@@ -789,8 +772,7 @@ namespace TGD.CombatV2
         void RaiseTargetRejected(Unit unit, TargetInvalidReason reason)
         {
             var (mapped, message) = MapMoveReject(reason);
-            if (debugLog)
-                LogInternal($"[Action][Move] Reject {reason}");
+            // Phase logging handled by CombatActionManagerV2.
             HexMoveEvents.RaiseRejected(unit, mapped, message);
         }
 
@@ -856,18 +838,7 @@ namespace TGD.CombatV2
 
                 int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
 
-                if (UseTurnManager)
-                {
-                    var budget = (_turnManager != null && driver != null && driver.UnitRef != null)
-                        ? _turnManager.GetBudget(driver.UnitRef)
-                        : null;
-                    if (budget == null || !budget.HasTime(requiredSec))
-                    {
-                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
-                        yield break;
-                    }
-                }
-                else if (ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
+                if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
                 {
                     HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                     yield break;
@@ -903,7 +874,6 @@ namespace TGD.CombatV2
 
                 int refunded = Mathf.Max(0, sim.RefundedSeconds);
                 int spentSec = Mathf.Max(0, requiredSec - refunded);
-                int usedSeconds = Mathf.Max(0, Mathf.CeilToInt(sim.UsedSeconds));
                 var stepRates = sim.StepEffectiveRates;
                 int energyNet = 0;
                 if (config != null)
@@ -922,7 +892,8 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                SetExecReport(usedSeconds, refunded, energyNet, false);
+                string refundTag = refunded > 0 ? "Speed_Adjust" : null;
+                SetExecReport(requiredSec, refunded, energyNet, false, refundTag);
                 _moving = true;
                 if (driver.unitView != null)
                 {
