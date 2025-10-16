@@ -13,16 +13,15 @@ namespace TGD.CombatV2
     public struct AttackExecBreakdown
     {
         public int usedMoveSecs;
-        public int usedAtkSecs;
         public int refundedMoveSecs;
-        public int refundedAtkSecs;
+        public int usedAtkSecs;
+        public bool rolledBack;
         public bool freeMoveApplied;
-        public bool rollbackSlowed;
     }
 
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, IAttackPlannerV2
     {
         const float MR_MIN = 1f;
         const float MR_MAX = 12f;
@@ -136,22 +135,21 @@ namespace TGD.CombatV2
             _pendingComboBaseCount = 0;
         }
 
-        void SetExecReport(int energyMoveNet, int energyAtkNet, bool attackExecuted, bool freeMove, bool rollbackSlowed)
+        void SetExecReport(int energyMoveNet, int energyAtkNet, bool attackExecuted, bool freeMove, bool rolledBack)
         {
             _reportUsedSeconds = Mathf.Max(0, _reportMoveUsedSeconds + _reportAttackUsedSeconds);
             _reportRefundedSeconds = Mathf.Max(0, _reportMoveRefundSeconds + _reportAttackRefundSeconds);
             _reportEnergyMoveNet = energyMoveNet;
             _reportEnergyAtkNet = energyAtkNet;
             _reportFreeMove = freeMove;
-            _reportRollbackSlowed = rollbackSlowed;
+            _reportRollbackSlowed = rolledBack;
             _reportBreakdown = new AttackExecBreakdown
             {
                 usedMoveSecs = _reportMoveUsedSeconds,
-                usedAtkSecs = _reportAttackUsedSeconds,
                 refundedMoveSecs = _reportMoveRefundSeconds,
-                refundedAtkSecs = _reportAttackRefundSeconds,
+                usedAtkSecs = _reportAttackUsedSeconds,
                 freeMoveApplied = freeMove,
-                rollbackSlowed = rollbackSlowed
+                rolledBack = rolledBack
             };
             _reportComboBaseCount = attackExecuted ? Mathf.Max(0, _pendingComboBaseCount) : 0;
             _reportPending = true;
@@ -242,6 +240,11 @@ namespace TGD.CombatV2
             public int atkSecs;
             public int atkEnergy;
             public bool valid;
+            public bool isEnemyTarget;
+            public bool isFreeMoveCandidate;
+            public AttackRejectReasonV2 rejectReason;
+            public string rejectMessage;
+            public bool hasRejectReason;
         }
 
         public PlannedAttackCost PeekPlannedCost(Hex target)
@@ -257,7 +260,12 @@ namespace TGD.CombatV2
                 moveEnergy = moveEnergyRate * fallbackMoveSecs,
                 atkSecs = fallbackAtkSecs,
                 atkEnergy = fallbackAtkEnergy,
-                valid = false
+                valid = false,
+                isEnemyTarget = false,
+                isFreeMoveCandidate = false,
+                rejectReason = AttackRejectReasonV2.NotReady,
+                rejectMessage = string.Empty,
+                hasRejectReason = false
             };
 
             PreviewData preview = null;
@@ -275,6 +283,7 @@ namespace TGD.CombatV2
                 result.valid = true;
                 result.moveSecs = Mathf.Max(0, preview.moveSecsCharge);
                 result.moveEnergy = Mathf.Max(0, preview.moveEnergyCost);
+                result.isEnemyTarget = preview.targetIsEnemy;
                 if (preview.targetIsEnemy)
                 {
                     result.atkSecs = Mathf.Max(0, preview.attackSecsCharge);
@@ -285,6 +294,24 @@ namespace TGD.CombatV2
                     result.atkSecs = 0;
                     result.atkEnergy = 0;
                 }
+
+                if (preview.targetIsEnemy)
+                {
+                    float cutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
+                    float mrClick = Mathf.Max(0.01f, preview.mrClick);
+                    float predictedSeconds = preview.steps > 0 ? preview.steps / mrClick : 0f;
+                    result.isFreeMoveCandidate = predictedSeconds < cutoff && result.moveSecs >= 1;
+                }
+                else
+                {
+                    result.isFreeMoveCandidate = false;
+                }
+            }
+            else if (preview != null)
+            {
+                result.rejectReason = preview.rejectReason;
+                result.rejectMessage = preview.rejectMessage;
+                result.hasRejectReason = true;
             }
 
             return result;
@@ -303,7 +330,12 @@ namespace TGD.CombatV2
                 moveEnergy = moveEnergyRate * moveSecs,
                 atkSecs = atkSecs,
                 atkEnergy = atkEnergy,
-                valid = true
+                valid = true,
+                isEnemyTarget = true,
+                isFreeMoveCandidate = false,
+                rejectReason = AttackRejectReasonV2.NotReady,
+                rejectMessage = string.Empty,
+                hasRejectReason = false
             };
         }
 
@@ -314,6 +346,33 @@ namespace TGD.CombatV2
             int atkSecs = Mathf.Max(0, Mathf.CeilToInt(attackConfig ? attackConfig.baseTimeSeconds : 0f));
             int atkEnergy = attackConfig ? Mathf.Max(0, attackConfig.baseEnergyCost) : 0;
             return (moveSecs, atkSecs, moveEnergy, atkEnergy);
+        }
+
+        public bool TryGetPlan(Unit self, Hex target, out AttackPlanV2 plan, out string reasonIfFail)
+        {
+            plan = default;
+            reasonIfFail = null;
+
+            var planned = PeekPlannedCost(target);
+            if (!planned.valid)
+            {
+                if (planned.hasRejectReason)
+                    reasonIfFail = $"{planned.rejectReason}|{planned.rejectMessage ?? string.Empty}";
+                else
+                    reasonIfFail = $"{AttackRejectReasonV2.NoPath}|Invalid target.";
+                return false;
+            }
+
+            plan = new AttackPlanV2
+            {
+                moveSecs = Mathf.Max(0, planned.moveSecs),
+                attackSecs = Mathf.Max(0, planned.atkSecs),
+                energyMove = Mathf.Max(0, planned.moveEnergy),
+                energyAtk = Mathf.Max(0, planned.atkEnergy),
+                isEnemyTarget = planned.isEnemyTarget,
+                isFreeMoveCandidate = planned.isFreeMoveCandidate
+            };
+            return true;
         }
 
         public int ReportUsedSeconds => _reportPending ? _reportUsedSeconds : 0;
