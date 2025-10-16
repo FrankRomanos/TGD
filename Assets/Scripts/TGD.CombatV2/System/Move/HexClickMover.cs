@@ -48,6 +48,7 @@ namespace TGD.CombatV2
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
         public bool suppressInternalLogs = true;
+        public bool suppressBilling = false;
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]
@@ -784,7 +785,7 @@ namespace TGD.CombatV2
                     if (!_cost.HasEnough(driver.UnitRef, config))
                     { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
-                    if (!UseTurnManager && ManageEnergyLocally)
+                    if (!UseTurnManager && ManageEnergyLocally && !suppressBilling)
                         _cost.Pay(driver.UnitRef, config);
                 }
 
@@ -818,9 +819,9 @@ namespace TGD.CombatV2
 
                 if (reached == null || reached.Count < 2)
                 {
-                    if (!UseTurnManager && ManageEnergyLocally)
+                    if (!UseTurnManager && ManageEnergyLocally && !suppressBilling)
                         _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
-                    if (!UseTurnManager && ManageTurnTimeLocally)
+                    if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
                         _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                     HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
                     yield break;
@@ -930,13 +931,13 @@ namespace TGD.CombatV2
                     LogInternal("[Move] No more time.");
                 }
 
-                if (!UseTurnManager && ManageTurnTimeLocally)
+                if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
                 {
                     _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
                 }
                 if (refunded > 0)
                 {
-                    if (!UseTurnManager && ManageEnergyLocally)
+                    if (!UseTurnManager && ManageEnergyLocally && !suppressBilling)
                         _cost?.RefundSeconds(driver.UnitRef, config, refunded);
                     HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
                 }
