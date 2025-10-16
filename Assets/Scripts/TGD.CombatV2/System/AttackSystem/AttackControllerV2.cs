@@ -62,7 +62,6 @@ namespace TGD.CombatV2
         [Header("Debug")]
         public bool debugLog = true;
         public bool suppressInternalLogs = true;
-        public bool suppressBilling = false;
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
@@ -709,18 +708,18 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            if (!UseTurnManager && ManageEnergyLocally && !suppressBilling)
+            if (!UseTurnManager && ManageEnergyLocally)
                 SpendEnergy(moveEnergyCost);
             int attackEnergySpent = 0;
             if (attackPlanned)
             {
-                if (!UseTurnManager && ManageEnergyLocally && !suppressBilling && attackEnergyCost > 0)
+                if (!UseTurnManager && ManageEnergyLocally && attackEnergyCost > 0)
                     SpendEnergy(attackEnergyCost);
                 attackEnergySpent = Mathf.Max(0, attackEnergyCost);
                 _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
             }
 
-            if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+            if (!UseTurnManager && ManageTurnTimeLocally)
             {
                 _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
                 if (attackPlanned)
@@ -1084,9 +1083,9 @@ namespace TGD.CombatV2
 
                 if (reached.Count <= 1)
                 {
-                    if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally && !suppressBilling)
+                    if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                         RefundMoveEnergy(moveEnergyPaid);
-                    if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+                    if (!UseTurnManager && ManageTurnTimeLocally)
                     {
                         float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
                         if (refundMove > 0f)
@@ -1171,9 +1170,9 @@ namespace TGD.CombatV2
                     if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                     {
                         attackRolledBack = true;
-                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally && !suppressBilling)
+                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                             RefundAttackEnergy(attackEnergyPaid);
-                        if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+                        if (!UseTurnManager && ManageTurnTimeLocally)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
@@ -1211,7 +1210,7 @@ namespace TGD.CombatV2
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
-                if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+                if (!UseTurnManager && ManageTurnTimeLocally)
                 {
                     float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
                     if (refundMove > 0f)
@@ -1221,7 +1220,7 @@ namespace TGD.CombatV2
                 if (refundedSeconds > 0)
                 {
                     int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
-                    if (!UseTurnManager && ManageEnergyLocally && !suppressBilling && refundEnergy > 0)
+                    if (!UseTurnManager && ManageEnergyLocally && refundEnergy > 0)
                         RefundMoveEnergy(refundEnergy);
                 }
 
@@ -1234,11 +1233,11 @@ namespace TGD.CombatV2
                 {
                     if (!attackRolledBack)
                     {
-                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally && !suppressBilling)
+                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                             RefundAttackEnergy(attackEnergyPaid);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         AttackEventsV2.RaiseMiss(unit, "Out of reach.");
-                        if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+                        if (!UseTurnManager && ManageTurnTimeLocally)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
@@ -1277,7 +1276,7 @@ namespace TGD.CombatV2
 
                 SetExecReport(
                     moveUsedSeconds + attackUsedSeconds,
-                    moveRefundSeconds,
+                    moveRefundSeconds + attackRefundSeconds,
                     moveEnergyNet,
                     attackEnergyNet,
                     attackSuccess,
@@ -1291,13 +1290,13 @@ namespace TGD.CombatV2
 
             void HandleApproachAbort()
             {
-                if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally && !suppressBilling)
+                if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                     RefundMoveEnergy(moveEnergyPaid);
-                if (attackPlanned && attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally && !suppressBilling)
+                if (attackPlanned && attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                     RefundAttackEnergy(attackEnergyPaid);
                 if (attackPlanned)
                     _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                if (!UseTurnManager && ManageTurnTimeLocally && !suppressBilling)
+                if (!UseTurnManager && ManageTurnTimeLocally)
                 {
                     float refund = moveSecsCharge;
                     if (attackPlanned)
@@ -1312,10 +1311,6 @@ namespace TGD.CombatV2
 
                 _bridge?.MoveCommit(abortAnchor, abortFacing);
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
-                _reportMoveUsedSeconds = 0;
-                _reportMoveRefundSeconds = Mathf.Max(0, moveSecsCharge);
-                _reportAttackUsedSeconds = 0;
-                _reportAttackRefundSeconds = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
                     0,
                     Mathf.Max(0, moveSecsCharge + (attackPlanned ? attackSecsCharge : 0)),

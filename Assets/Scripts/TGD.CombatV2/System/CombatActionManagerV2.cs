@@ -59,13 +59,9 @@ namespace TGD.CombatV2
 
         struct PreDeduct
         {
-            public int moveSecs;
-            public int atkSecs;
-            public int totalSecs;
+            public int secs;
             public int energyMove;
             public int energyAtk;
-            public int remainBefore;
-            public int energyBefore;
             public bool valid;
         }
 
@@ -79,12 +75,11 @@ namespace TGD.CombatV2
         struct ExecReportData
         {
             public bool valid;
-            public int reportedUsed;
-            public int reportedRefunded;
             public int usedSecsMove;
             public int usedSecsAtk;
-            public int refundedSecsMove;
-            public int refundedSecsAtk;
+            public int refundedSecs;
+            public int energyMoveNet;
+            public int energyAtkNet;
             public bool freeMoveApplied;
         }
 
@@ -117,12 +112,10 @@ namespace TGD.CombatV2
                 case AttackControllerV2 attack:
                     attack.AttachTurnManager(turnManager);
                     attack.suppressInternalLogs = quietInternalToolLogs;
-                    attack.suppressBilling = true;
                     break;
                 case HexClickMover mover:
                     mover.AttachTurnManager(turnManager);
                     mover.suppressInternalLogs = quietInternalToolLogs;
-                    mover.suppressBilling = true;
                     if (turnManager != null)
                         WireMoveCostAdapter(mover.costProvider as MoveCostServiceV2Adapter);
                     break;
@@ -308,24 +301,18 @@ namespace TGD.CombatV2
             var resources = turnManager != null && unit != null ? turnManager.GetResources(unit) : null;
             var cooldowns = turnManager != null && unit != null ? turnManager.GetCooldowns(unit) : null;
 
-            int pm = Mathf.Max(0, cost.moveSecs);
-            int pa = Mathf.Max(0, cost.atkSecs);
-            int totalSecs = Mathf.Max(0, pm + pa);
-            int em = Mathf.Max(0, cost.moveEnergy);
-            int ea = Mathf.Max(0, cost.atkEnergy);
-
             int remain = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
 
-            Log($"[Gate] W2 PreDeduct (move={pm}s/{em}, atk={pa}s/{ea}, total={totalSecs}s/{em + ea}, remain={remain}s, energy={energyBefore})");
+            Log($"[Gate] W2 PreDeduct (move={cost.moveSecs}s/{cost.moveEnergy}, atk={cost.atkSecs}s/{cost.atkEnergy}, total={cost.TotalSeconds}s/{cost.TotalEnergy}, remain={remain}s, energy={energyBefore})");
 
             string failReason = null;
             if (!cost.valid)
                 failReason = "targetInvalid";
-            else if (budget != null && totalSecs > 0 && remain < totalSecs)
-                failReason = "lack";
-            else if (resources != null && (em + ea) > 0 && energyBefore < (em + ea))
-                failReason = "lack";
+            else if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
+                failReason = "lackTime";
+            else if (resources != null && cost.TotalEnergy > 0 && !resources.Has("Energy", cost.TotalEnergy))
+                failReason = "lackEnergy";
             else if (!IsCooldownReadyForConfirm(tool, cooldowns))
                 failReason = "cooldown";
 
@@ -339,26 +326,22 @@ namespace TGD.CombatV2
 
             ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckOk");
 
-            if (budget != null && totalSecs > 0)
-                budget.SpendTime(totalSecs);
+            if (budget != null && cost.TotalSeconds > 0)
+                budget.SpendTime(cost.TotalSeconds);
 
             if (resources != null)
             {
-                if (em > 0)
-                    resources.Spend("Energy", em, "PreDeduct_Move");
-                if (ea > 0)
-                    resources.Spend("Energy", ea, "PreDeduct_Attack");
+                if (cost.moveEnergy > 0)
+                    resources.Spend("Energy", cost.moveEnergy, "PreDeduct_Move");
+                if (cost.atkEnergy > 0)
+                    resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
             }
 
             _plan = new PreDeduct
             {
-                moveSecs = pm,
-                atkSecs = pa,
-                totalSecs = totalSecs,
-                energyMove = em,
-                energyAtk = ea,
-                remainBefore = remain,
-                energyBefore = energyBefore,
+                secs = cost.TotalSeconds,
+                energyMove = cost.moveEnergy,
+                energyAtk = cost.atkEnergy,
                 valid = true
             };
 
@@ -390,7 +373,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            LogExecSummary(unit, plan, report);
+            LogExecSummary(unit, plan.kind, report);
 
             ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
 
@@ -399,68 +382,81 @@ namespace TGD.CombatV2
 
         void Resolve(Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
         {
-            int plannedMove = _plan.valid ? Mathf.Max(0, _plan.moveSecs) : Mathf.Max(0, plan.cost.moveSecs);
-            int plannedAtk = _plan.valid ? Mathf.Max(0, _plan.atkSecs) : Mathf.Max(0, plan.cost.atkSecs);
-            int plannedTotal = Mathf.Max(0, plannedMove + plannedAtk);
-            int plannedMoveEnergy = _plan.valid ? Mathf.Max(0, _plan.energyMove) : Mathf.Max(0, plan.cost.moveEnergy);
-            int plannedAtkEnergy = _plan.valid ? Mathf.Max(0, _plan.energyAtk) : Mathf.Max(0, plan.cost.atkEnergy);
-            int remainBefore = _plan.valid ? _plan.remainBefore : (budget != null ? budget.Remaining + plannedTotal : 0);
-
-            int used = plannedTotal > 0 ? Mathf.Clamp(report.reportedUsed, 0, plannedTotal) : Mathf.Max(0, report.reportedUsed);
-            int refunded = plannedTotal > 0 ? Mathf.Clamp(report.reportedRefunded, 0, used) : Mathf.Min(Mathf.Max(0, report.reportedRefunded), used);
-            bool freeMove = report.freeMoveApplied && plannedMove > 0;
-
-            if (freeMove)
-            {
-                refunded = Mathf.Clamp(refunded + 1, 0, used);
-            }
-
+            int used = Mathf.Max(0, report.usedSecsMove + report.usedSecsAtk);
+            int refunded = Mathf.Max(0, report.refundedSecs);
             int net = Mathf.Max(0, used - refunded);
-            int refundTime = Mathf.Max(0, plannedTotal - net);
+            int energyMove = report.energyMoveNet;
+            int energyAtk = report.energyAtkNet;
+            bool freeMove = report.freeMoveApplied;
 
-            int usedMoveClamped = plannedMove > 0 ? Mathf.Clamp(report.usedSecsMove, 0, plannedMove) : 0;
-            int refundedMoveClamped = plannedMove > 0 ? Mathf.Clamp(report.refundedSecsMove, 0, usedMoveClamped) : 0;
-            int netMoveSeconds = Mathf.Max(0, usedMoveClamped - refundedMoveClamped);
-            if (freeMove && netMoveSeconds > 0)
-                netMoveSeconds = Mathf.Max(0, netMoveSeconds - 1);
+            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk})");
 
-            int refundedAtkRaw = Mathf.Max(0, report.refundedSecsAtk);
-            bool attackAdjusted = plannedAtk > 0 && report.usedSecsAtk <= 0 && refundedAtkRaw >= plannedAtk;
-
-            string reason = freeMove ? "FreeMove" : (attackAdjusted ? "Attack_Adjust" : "Refund");
-
-            int moveRate = plannedMove > 0 ? Mathf.RoundToInt((float)plannedMoveEnergy / Mathf.Max(1, plannedMove)) : 0;
-            int refundMoveEnergy = Mathf.Clamp(plannedMoveEnergy - netMoveSeconds * moveRate, 0, plannedMoveEnergy);
-
-            string energyMoveDesc = refundMoveEnergy > 0 ? $"{plannedMoveEnergy}-{refundMoveEnergy}" : plannedMoveEnergy.ToString();
-            string energyAtkDesc = attackAdjusted ? (-plannedAtkEnergy).ToString() : plannedAtkEnergy.ToString();
-
-            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMoveDesc}, energyAtk={energyAtkDesc})");
-
-            if (budget != null && plannedTotal > 0)
+            int plannedSecs = _plan.valid ? Mathf.Max(0, _plan.secs) : 0;
+            if (budget != null && _plan.valid)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                if (refundTime > 0)
+                string reason = freeMove ? "FreeMove" : "Adjust";
+                if (net == 0 && refunded > 0 && plannedSecs > 0)
                 {
-                    budget.RefundTime(refundTime);
-                    int remainAfter = remainBefore - plannedTotal + refundTime;
-                    Log($"[Time] Refund {unitLabel} {refundTime}s (reason={reason}) -> Remain={remainAfter}");
+                    budget.RefundTime(plannedSecs);
+                    Log($"[Time] Refund {unitLabel} {plannedSecs}s (reason={reason}) -> Remain={budget.Remaining}");
+                }
+                else
+                {
+                    int delta = net - plannedSecs;
+                    if (delta < 0)
+                    {
+                        int refundAmount = -delta;
+                        if (refundAmount > 0)
+                        {
+                            budget.RefundTime(refundAmount);
+                            Log($"[Time] Refund {unitLabel} {refundAmount}s (reason={reason}) -> Remain={budget.Remaining}");
+                        }
+                    }
+                    else if (delta > 0)
+                    {
+                        budget.SpendTime(delta);
+                        Log($"[Time] Spend {unitLabel} {delta}s -> Remain={budget.Remaining}");
+                    }
                 }
             }
 
             if (resources != null)
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                if (refundMoveEnergy > 0)
+                int plannedMoveEnergy = _plan.valid ? Mathf.Max(0, _plan.energyMove) : 0;
+                int plannedAtkEnergy = _plan.valid ? Mathf.Max(0, _plan.energyAtk) : 0;
+
+                int moveDelta = energyMove - plannedMoveEnergy;
+                if (moveDelta != 0)
                 {
-                    resources.Refund("Energy", refundMoveEnergy, freeMove ? "Resolve_Move_FreeMove" : "Resolve_Move");
-                    Log($"[Res] Refund {unitLabel}:Energy +{refundMoveEnergy} -> {resources.Get("Energy")} (Move{(freeMove ? "_FreeMove" : string.Empty)})");
+                    if (moveDelta > 0)
+                    {
+                        resources.Spend("Energy", moveDelta, "Resolve_Move");
+                        Log($"[Res] Spend {unitLabel}:Energy {moveDelta} -> {resources.Get("Energy")} (Move{(freeMove ? "_FreeMove" : string.Empty)})");
+                    }
+                    else
+                    {
+                        int refundAmount = -moveDelta;
+                        resources.Refund("Energy", refundAmount, "Resolve_Move");
+                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{(freeMove ? "_FreeMove" : string.Empty)})");
+                    }
                 }
 
-                if (attackAdjusted && plannedAtkEnergy > 0)
+                int atkDelta = energyAtk - plannedAtkEnergy;
+                if (atkDelta != 0)
                 {
-                    resources.Refund("Energy", plannedAtkEnergy, "Resolve_Attack_Adjust");
-                    Log($"[Res] Refund {unitLabel}:Energy +{plannedAtkEnergy} -> {resources.Get("Energy")} (Attack_Adjust)");
+                    if (atkDelta > 0)
+                    {
+                        resources.Spend("Energy", atkDelta, "Resolve_Attack");
+                        Log($"[Res] Spend {unitLabel}:Energy {atkDelta} -> {resources.Get("Energy")} (Attack)");
+                    }
+                    else
+                    {
+                        int refundAmount = -atkDelta;
+                        resources.Refund("Energy", refundAmount, "Resolve_Attack");
+                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack)");
+                    }
                 }
             }
 
@@ -484,54 +480,50 @@ namespace TGD.CombatV2
             var data = new ExecReportData
             {
                 valid = true,
-                reportedUsed = Mathf.Max(0, exec.UsedSeconds),
-                reportedRefunded = Mathf.Max(0, exec.RefundedSeconds),
-                usedSecsMove = 0,
+                usedSecsMove = Mathf.Max(0, exec.UsedSeconds),
                 usedSecsAtk = 0,
-                refundedSecsMove = 0,
-                refundedSecsAtk = 0,
+                refundedSecs = Mathf.Max(0, exec.RefundedSeconds),
+                energyMoveNet = 0,
+                energyAtkNet = 0,
                 freeMoveApplied = false
             };
 
             if (tool is HexClickMover mover)
             {
                 data.usedSecsMove = Mathf.Max(0, mover.ReportUsedSeconds);
-                data.refundedSecsMove = Mathf.Max(0, mover.ReportRefundedSeconds);
+                data.refundedSecs = Mathf.Max(0, mover.ReportRefundedSeconds);
+                data.energyMoveNet = mover.ReportEnergyMoveNet;
+                data.energyAtkNet = 0;
                 data.freeMoveApplied = mover.ReportFreeMoveApplied;
             }
             else if (tool is AttackControllerV2 attack)
             {
                 data.usedSecsMove = Mathf.Max(0, attack.ReportMoveUsedSeconds);
                 data.usedSecsAtk = Mathf.Max(0, attack.ReportAttackUsedSeconds);
-                data.refundedSecsMove = Mathf.Max(0, attack.ReportMoveRefundSeconds);
-                data.refundedSecsAtk = Mathf.Max(0, attack.ReportAttackRefundSeconds);
+                data.refundedSecs = Mathf.Max(0, attack.ReportMoveRefundSeconds + attack.ReportAttackRefundSeconds);
+                data.energyMoveNet = attack.ReportEnergyMoveNet;
+                data.energyAtkNet = attack.ReportEnergyAtkNet;
                 data.freeMoveApplied = attack.ReportFreeMoveApplied;
             }
 
             return data;
         }
 
-        void LogExecSummary(Unit unit, ActionPlan plan, ExecReportData report)
+        void LogExecSummary(Unit unit, string kind, ExecReportData report)
         {
             string label = TurnManagerV2.FormatUnitLabel(unit);
             string freeMove = report.freeMoveApplied ? " (FreeMove)" : string.Empty;
-            int plannedMoveEnergy = Mathf.Max(0, plan.cost.moveEnergy);
-            int plannedAtkEnergy = Mathf.Max(0, plan.cost.atkEnergy);
-
-            if (string.Equals(plan.kind, "Move", System.StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(kind, "Move", System.StringComparison.OrdinalIgnoreCase))
             {
-                Log($"[Move] Use secs={report.usedSecsMove}s refund={report.refundedSecsMove}s energy={plannedMoveEnergy} U={label}{freeMove}");
+                Log($"[Move] Use secs={report.usedSecsMove}s refund={report.refundedSecs}s energy={report.energyMoveNet} U={label}{freeMove}");
             }
-            else if (string.Equals(plan.kind, "Attack", System.StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(kind, "Attack", System.StringComparison.OrdinalIgnoreCase))
             {
-                Log($"[Attack] Use moveSecs={report.usedSecsMove}s atkSecs={report.usedSecsAtk}s energyMove={plannedMoveEnergy} energyAtk={plannedAtkEnergy} U={label}{freeMove}");
+                Log($"[Attack] Use moveSecs={report.usedSecsMove}s atkSecs={report.usedSecsAtk}s energyMove={report.energyMoveNet} energyAtk={report.energyAtkNet} U={label}{freeMove}");
             }
             else
             {
-                int totalUsed = Mathf.Max(0, report.reportedUsed);
-                int totalRefunded = Mathf.Max(0, report.reportedRefunded);
-                int totalEnergy = Mathf.Max(0, plan.cost.TotalEnergy);
-                Log($"[Action] {label} [{plan.kind}] ExecSummary used={totalUsed}s refund={totalRefunded}s energy={totalEnergy}{freeMove}");
+                Log($"[Action] {label} [{kind}] ExecSummary used={report.usedSecsMove + report.usedSecsAtk}s refund={report.refundedSecs}s energy={report.energyMoveNet + report.energyAtkNet}{freeMove}");
             }
         }
 
