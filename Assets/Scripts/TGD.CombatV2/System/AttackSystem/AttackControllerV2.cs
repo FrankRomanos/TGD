@@ -61,7 +61,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]
         public bool debugLog = true;
-        public bool suppressInternalLogs = true;
+        public bool suppressInternalLogs = false;
 
         HexAreaPainter _painter;
         HexOccupancy _occ;
@@ -228,13 +228,23 @@ namespace TGD.CombatV2
             public int atkEnergy;
             public bool valid;
         }
+        int ComputeAttackEnergyCost(bool treatAsEnemy)
+        {
+            if (!treatAsEnemy || attackConfig == null)
+                return 0;
+
+            int comboIndex = Mathf.Max(0, _attacksThisTurn);
+            int baseCost = Mathf.Max(0, attackConfig.baseEnergyCost);
+            float scale = 1f + 0.5f * comboIndex;
+            return Mathf.Max(0, Mathf.CeilToInt(baseCost * scale));
+        }
 
         public PlannedAttackCost PeekPlannedCost(Hex target)
         {
             int fallbackMoveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
             int moveEnergyRate = moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0;
             int fallbackAtkSecs = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0;
-            int fallbackAtkEnergy = attackConfig ? Mathf.Max(0, attackConfig.baseEnergyCost) : 0;
+            int fallbackAtkEnergy = ComputeAttackEnergyCost(true);
 
             var result = new PlannedAttackCost
             {
@@ -654,16 +664,9 @@ namespace TGD.CombatV2
             }
 
             preview.moveEnergyCost = Mathf.Max(0, preview.moveSecsCharge) * MoveEnergyPerSecond();
-            if (preview.targetIsEnemy)
-            {
-                preview.attackEnergyCost = attackConfig ? Mathf.CeilToInt(attackConfig.baseEnergyCost * (1f + 0.5f * _attacksThisTurn)) : 0;
-            }
-            else
-            {
-                preview.attackEnergyCost = 0;
+            preview.attackEnergyCost = ComputeAttackEnergyCost(preview.targetIsEnemy);
+            if (!preview.targetIsEnemy)
                 preview.attackSecsCharge = 0;
-            }
-
             bool attackPlanned = preview.targetIsEnemy;
             _pendingComboBaseCount = attackPlanned ? Mathf.Max(0, _attacksThisTurn) : 0;
             int moveSecsCharge = Mathf.Max(0, preview.moveSecsCharge);
@@ -688,18 +691,21 @@ namespace TGD.CombatV2
             }
 
             var resourcePool = ResolveResourcePool();
-            int energyAvailable = ResolveEnergyAvailable(resourcePool);
-            if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+            bool usingExternalResources = UseTurnManager && resourcePool != null;
+            if (!usingExternalResources)
             {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
-                yield break;
+                int energyAvailable = ResolveEnergyAvailable(resourcePool);
+                if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+                {
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
+                    yield break;
+                }
+                if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
+                {
+                    RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
+                    yield break;
+                }
             }
-            if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
-            {
-                RaiseRejected(driver.UnitRef, AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
-                yield break;
-            }
-
             if (!UseTurnManager && ManageEnergyLocally)
                 SpendEnergy(moveEnergyCost);
             int attackEnergySpent = 0;
@@ -948,7 +954,7 @@ namespace TGD.CombatV2
             preview.moveSecsPred = predSecs;
             preview.moveSecsCharge = chargeSecs;
             preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
-
+            preview.attackEnergyCost = ComputeAttackEnergyCost(treatAsEnemy);
             preview.valid = true;
             return preview;
         }

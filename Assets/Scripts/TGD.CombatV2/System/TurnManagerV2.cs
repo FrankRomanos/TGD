@@ -69,16 +69,16 @@ namespace TGD.CombatV2
                 return _runtime.RemainingTime >= seconds;
             }
 
-            public void SpendTime(int seconds)
+            public void SpendTime(int seconds, bool silent = false)
             {
                 if (seconds <= 0) return;
-                _manager.ApplyTimeSpend(_runtime, seconds);
+                _manager.ApplyTimeSpend(_runtime, seconds, silent);
             }
 
-            public void RefundTime(int seconds)
+            public void RefundTime(int seconds, bool silent = false)
             {
                 if (seconds <= 0) return;
-                _manager.ApplyTimeRefund(_runtime, seconds);
+                _manager.ApplyTimeRefund(_runtime, seconds, silent);
             }
         }
 
@@ -99,16 +99,16 @@ namespace TGD.CombatV2
                 return _manager.GetResourceCurrent(_runtime, id) >= value;
             }
 
-            public void Spend(string id, int value, string reason = "")
+            public void Spend(string id, int value, string reason = "", bool silent = false)
             {
                 if (value <= 0) return;
-                _manager.ModifyResource(_runtime, id, -Mathf.Abs(value), reason, false);
+                _manager.ModifyResource(_runtime, id, -Mathf.Abs(value), reason, false, silent);
             }
 
-            public void Refund(string id, int value, string reason = "")
+            public void Refund(string id, int value, string reason = "", bool silent = false)
             {
                 if (value <= 0) return;
-                _manager.ModifyResource(_runtime, id, Mathf.Abs(value), reason, true);
+                _manager.ModifyResource(_runtime, id, Mathf.Abs(value), reason, true, silent);
             }
 
             public int Get(string id) => _manager.GetResourceCurrent(_runtime, id);
@@ -320,19 +320,21 @@ namespace TGD.CombatV2
             TurnStarted?.Invoke(runtime.Unit);
         }
 
-        void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds)
+        void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds, bool silent = false)
         {
             runtime.SpendTime(seconds);
-            Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            if (!silent)
+                Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
-        void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds)
+        void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds, bool silent = false)
         {
             runtime.RefundTime(seconds);
-            Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            if (!silent)
+                Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
         }
 
-        void ModifyResource(TurnRuntimeV2 runtime, string id, int delta, string reason, bool isRefund)
+        void ModifyResource(TurnRuntimeV2 runtime, string id, int delta, string reason, bool isRefund, bool silent = false)
         {
             if (runtime == null || string.IsNullOrEmpty(id) || delta == 0) return;
 
@@ -358,6 +360,8 @@ namespace TGD.CombatV2
                     : clampMax;
                 runtime.CustomResourceMax[id] = maxAfter;
             }
+            if (silent)
+                return;
 
             string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" ({reason})";
             string unitLabel = FormatUnitLabel(runtime.Unit);

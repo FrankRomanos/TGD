@@ -47,7 +47,7 @@ namespace TGD.CombatV2
 
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
-        public bool suppressInternalLogs = true;
+        public bool suppressInternalLogs = false;
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]

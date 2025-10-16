@@ -409,28 +409,20 @@ namespace TGD.CombatV2
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                 string timeReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
                 string timeSuffix = string.IsNullOrEmpty(timeReason) ? string.Empty : $" (reason={timeReason})";
-                if (net == 0 && refunded > 0 && plannedSecs > 0)
+                int delta = net - plannedSecs;
+                if (delta < 0)
                 {
-                    budget.RefundTime(plannedSecs);
-                    Log($"[Time] Refund {unitLabel} {plannedSecs}s{timeSuffix} -> Remain={budget.Remaining}");
+                    int refundAmount = -delta;
+                    if (refundAmount > 0)
+                    {
+                        budget.RefundTime(refundAmount);
+                        Log($"[Time] Refund {unitLabel} {refundAmount}s{timeSuffix} -> Remain={budget.Remaining}");
+                    }
                 }
-                else
+                else if (delta > 0)
                 {
-                    int delta = net - plannedSecs;
-                    if (delta < 0)
-                    {
-                        int refundAmount = -delta;
-                        if (refundAmount > 0)
-                        {
-                            budget.RefundTime(refundAmount);
-                            Log($"[Time] Refund {unitLabel} {refundAmount}s{timeSuffix} -> Remain={budget.Remaining}");
-                        }
-                    }
-                    else if (delta > 0)
-                    {
-                        budget.SpendTime(delta);
-                        Log($"[Time] Spend {unitLabel} {delta}s -> Remain={budget.Remaining}");
-                    }
+                    budget.SpendTime(delta);
+                    Log($"[Time] Spend {unitLabel} {delta}s -> Remain={budget.Remaining}");
                 }
             }
 
@@ -441,39 +433,31 @@ namespace TGD.CombatV2
                 int plannedAtkEnergy = _plan.valid ? Mathf.Max(0, _plan.energyAtk) : 0;
 
                 int moveDelta = energyMove - plannedMoveEnergy;
-                if (moveDelta != 0)
+                if (moveDelta > 0)
                 {
-                    if (moveDelta > 0)
-                    {
-                        resources.Spend("Energy", moveDelta, "Resolve_Move");
-                        Log($"[Res] Spend {unitLabel}:Energy {moveDelta} -> {resources.Get("Energy")} (Move{(freeMove ? "_FreeMove" : string.Empty)})");
-                    }
-                    else
-                    {
-                        int refundAmount = -moveDelta;
-                        resources.Refund("Energy", refundAmount, "Resolve_Move");
-                        string moveReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
-                        string moveSuffix = string.IsNullOrEmpty(moveReason) ? string.Empty : $"_{moveReason}";
-                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{moveSuffix})");
-                    }
+                    resources.Spend("Energy", moveDelta, "Resolve_Move");
+                }
+                else if (moveDelta < 0)
+                {
+                    int refundAmount = -moveDelta;
+                    resources.Refund("Energy", refundAmount, "Resolve_Move");
+                    string moveReason = !string.IsNullOrEmpty(refundTag) ? refundTag : (freeMove ? "FreeMove" : null);
+                    string moveSuffix = string.IsNullOrEmpty(moveReason) ? string.Empty : $"_{moveReason}";
+                    Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Move{moveSuffix})");
                 }
 
                 int atkDelta = energyAtk - plannedAtkEnergy;
-                if (atkDelta != 0)
+                if (atkDelta > 0)
                 {
-                    if (atkDelta > 0)
-                    {
-                        resources.Spend("Energy", atkDelta, "Resolve_Attack");
-                        Log($"[Res] Spend {unitLabel}:Energy {atkDelta} -> {resources.Get("Energy")} (Attack)");
-                    }
-                    else
-                    {
-                        int refundAmount = -atkDelta;
-                        resources.Refund("Energy", refundAmount, "Resolve_Attack");
-                        string atkReason = !string.IsNullOrEmpty(refundTag) ? refundTag : null;
-                        string atkSuffix = string.IsNullOrEmpty(atkReason) ? string.Empty : $"_{atkReason}";
-                        Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack{atkSuffix})");
-                    }
+                    resources.Spend("Energy", atkDelta, "Resolve_Attack");
+                }
+                else if (atkDelta < 0)
+                {
+                    int refundAmount = -atkDelta;
+                    resources.Refund("Energy", refundAmount, "Resolve_Attack");
+                    string atkReason = !string.IsNullOrEmpty(refundTag) ? refundTag : null;
+                    string atkSuffix = string.IsNullOrEmpty(atkReason) ? string.Empty : $"_{atkReason}";
+                    Log($"[Res] Refund {unitLabel}:Energy +{refundAmount} -> {resources.Get("Energy")} (Attack{atkSuffix})");
                 }
             }
 
