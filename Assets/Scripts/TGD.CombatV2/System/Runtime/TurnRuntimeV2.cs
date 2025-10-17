@@ -16,6 +16,7 @@ namespace TGD.CombatV2
 
         public int PrepaidTime { get; private set; }
         public int RemainingTime { get; private set; }
+        public bool HasSpentTimeThisTurn { get; private set; }
 
         public Dictionary<string, int> CustomResources { get; } = new();
         public Dictionary<string, int> CustomResourceMax { get; } = new();
@@ -59,6 +60,7 @@ namespace TGD.CombatV2
                 baseBudget = tt;
             RemainingTime = Mathf.Clamp(baseBudget - prepaid, 0, tt);
             PrepaidTime = 0;
+            HasSpentTimeThisTurn = false;
         }
 
         public void FinishTurn()
@@ -69,6 +71,8 @@ namespace TGD.CombatV2
         public void SpendTime(int seconds)
         {
             RemainingTime = Mathf.Max(0, RemainingTime - Mathf.Max(0, seconds));
+            if (seconds > 0)
+                HasSpentTimeThisTurn = true;
         }
 
         public void RefundTime(int seconds)
