@@ -38,6 +38,9 @@ namespace TGD.CombatV2
         public KeyCode keyMoveAim = KeyCode.V;
         public KeyCode keyAttackAim = KeyCode.A;
 
+        [Header("Rulebook")]
+        public ActionRulebook rulebook;
+
         [System.Serializable]
         public struct ChainKeybind
         {
@@ -136,6 +139,11 @@ namespace TGD.CombatV2
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
+
+        IActionRules ResolveRules()
+        {
+            return rulebook != null ? (IActionRules)rulebook : ActionRulebook.Default;
+        }
 
         TargetSelectionCursor ChainCursor
         {
@@ -316,12 +324,52 @@ namespace TGD.CombatV2
             return null;
         }
 
+        void HandleIdleKeybind(KeyCode key, string toolId)
+        {
+            if (key == KeyCode.None || string.IsNullOrEmpty(toolId))
+                return;
+
+            if (Input.GetKeyDown(key))
+                TryRequestIdleAction(toolId);
+        }
+
+        void TryRequestIdleAction(string toolId)
+        {
+            var tool = SelectTool(toolId);
+            if (tool == null)
+                return;
+
+            if (!CanActivateAtIdle(tool))
+                return;
+
+            RequestAim(toolId);
+        }
+
+        bool CanActivateAtIdle(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return false;
+
+            var rules = ResolveRules();
+            if (rules != null && !rules.CanActivateAtIdle(tool.Kind))
+                return false;
+
+            if (rules != null && !rules.AllowFriendlyInsertions())
+            {
+                var owner = ResolveUnit(tool);
+                if (_currentUnit != null && owner != _currentUnit)
+                    return false;
+            }
+
+            return true;
+        }
+
         void Update()
         {
             if (_phase == Phase.Idle)
             {
-                if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
-                if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
+                HandleIdleKeybind(keyMoveAim, "Move");
+                HandleIdleKeybind(keyAttackAim, "Attack");
                 if (chainKeybinds != null)
                 {
                     foreach (var bind in chainKeybinds)
@@ -329,12 +377,7 @@ namespace TGD.CombatV2
                         if (bind.key == KeyCode.None || string.IsNullOrEmpty(bind.id))
                             continue;
                         if (Input.GetKeyDown(bind.key))
-                        {
-                            var chainedTool = SelectTool(bind.id);
-                            if (chainedTool == null || chainedTool.Kind != ActionKind.Reaction)
-                                continue;
-                            RequestAim(bind.id);
-                        }
+                            TryRequestIdleAction(bind.id);
                     }
                 }
             }
@@ -370,6 +413,8 @@ namespace TGD.CombatV2
 
             var tool = SelectTool(toolId);
             if (tool == null) return;
+            if (_phase == Phase.Idle && !CanActivateAtIdle(tool))
+                return;
             if (IsExecuting || IsAnyToolBusy()) return;
 
             var unit = ResolveUnit(tool);
@@ -528,7 +573,8 @@ namespace TGD.CombatV2
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
-                yield return RunChainWindow(unit, actionPlan, tool.Kind, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
+                bool isEnemyPhase = turnManager != null && !turnManager.IsPlayerPhase;
+                yield return RunChainWindow(unit, actionPlan, tool.Kind, isEnemyPhase, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
             }
 
             for (int i = pendingChain.Count - 1; i >= 0; --i)
@@ -951,24 +997,16 @@ namespace TGD.CombatV2
                 return false;
             if (!turnManager.IsPlayerUnit(unit))
                 return false;
-
-            switch (tool.Kind)
-            {
-                case ActionKind.Standard:
-                case ActionKind.Derived:
-                case ActionKind.FullRound:
-                case ActionKind.Sustained:
-                case ActionKind.Reaction:
-                case ActionKind.Free:
-                    break;
-                default:
-                    return false;
-            }
-
             if (!turnManager.IsPlayerPhase)
                 return false;
 
-            return true;
+            var rules = ResolveRules();
+            if (rules == null)
+                return false;
+
+            bool isEnemyPhase = turnManager != null && !turnManager.IsPlayerPhase;
+            var allowed = rules.AllowedChainFirstLayer(tool.Kind, isEnemyPhase);
+            return allowed != null && allowed.Count > 0;
         }
 
         KeyCode ResolveChainKey(string id)
@@ -985,19 +1023,15 @@ namespace TGD.CombatV2
             return KeyCode.None;
         }
 
-        static bool BaseKindSupportsReaction(ActionKind baseKind)
-        {
-            return baseKind == ActionKind.Standard
-                || baseKind == ActionKind.Derived
-                || baseKind == ActionKind.FullRound
-                || baseKind == ActionKind.Sustained;
-        }
-
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, ActionKind baseKind, bool allowReaction, bool onlyFree, ICooldownSink cooldowns, ISet<IActionToolV2> pending)
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending)
         {
             _chainBuffer.Clear();
+            if (allowedKinds == null || allowedKinds.Count == 0)
+                return _chainBuffer;
 
-            bool baseAllowsReaction = BaseKindSupportsReaction(baseKind);
+            var rules = ResolveRules();
+            bool enforceReactionWithinBase = rules?.ReactionMustBeWithinBaseTime() ?? true;
+            bool allowFriendlyInsertion = rules?.AllowFriendlyInsertions() ?? false;
 
             foreach (var pair in _toolsById)
             {
@@ -1006,25 +1040,26 @@ namespace TGD.CombatV2
                     if (tool == null)
                         continue;
 
-                    if (ResolveUnit(tool) != unit)
-                    {
-                        // Guard: only the active unit may contribute reaction/free follow-ups during its own turn.
+                    var owner = ResolveUnit(tool);
+                    if (!allowFriendlyInsertion && owner != unit)
                         continue;
-                    }
+                    if (allowFriendlyInsertion && owner == null)
+                        continue;
 
                     if (pending != null && pending.Contains(tool))
                         continue;
 
-                    if (tool.Kind != ActionKind.Reaction && tool.Kind != ActionKind.Free)
-                        continue;
+                    bool kindAllowed = false;
+                    for (int i = 0; i < allowedKinds.Count; i++)
+                    {
+                        if (allowedKinds[i] == tool.Kind)
+                        {
+                            kindAllowed = true;
+                            break;
+                        }
+                    }
 
-                    if (!allowReaction && tool.Kind == ActionKind.Reaction)
-                        continue;
-
-                    if (tool.Kind == ActionKind.Reaction && !baseAllowsReaction)
-                        continue;
-
-                    if (onlyFree && tool.Kind != ActionKind.Free)
+                    if (!kindAllowed)
                         continue;
 
                     var cost = GetBaselineCost(tool);
@@ -1036,21 +1071,20 @@ namespace TGD.CombatV2
 
                     if (tool.Kind == ActionKind.Reaction)
                     {
-                        if (secs <= 0)
-                            continue;
-                        if (baseTimeCost <= 0)
-                            continue;
-                        if (secs > baseTimeCost)
-                            continue;
-                        if (budget != null && secs > 0 && !budget.HasTime(secs))
-                            continue;
+                        if (enforceReactionWithinBase)
+                        {
+                            if (baseTimeCost <= 0 && secs > 0)
+                                continue;
+                            if (secs > baseTimeCost)
+                                continue;
+                        }
                     }
 
-                    if (tool.Kind == ActionKind.Free)
-                    {
-                        if (secs != 0)
-                            continue;
-                    }
+                    if (tool.Kind == ActionKind.Free && secs != 0)
+                        continue;
+
+                    if (secs > 0 && budget != null && !budget.HasTime(secs))
+                        continue;
 
                     if (resources != null && energy > 0 && !resources.Has("Energy", energy))
                         continue;
@@ -1083,30 +1117,13 @@ namespace TGD.CombatV2
             return $"W2.1.{depth}";
         }
 
-        void ResolveInitialChainState(ActionKind baseKind, out bool allowReaction, out bool onlyFree)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
         {
-            switch (baseKind)
-            {
-                case ActionKind.Standard:
-                case ActionKind.Derived:
-                case ActionKind.FullRound:
-                case ActionKind.Sustained:
-                    allowReaction = true;
-                    onlyFree = false;
-                    break;
-                default:
-                    allowReaction = false;
-                    onlyFree = true;
-                    break;
-            }
-        }
-
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
-        {
-            ResolveInitialChainState(baseKind, out bool allowReaction, out bool onlyFree);
+            var rules = ResolveRules();
+            IReadOnlyList<ActionKind> allowedKinds = rules?.AllowedChainFirstLayer(baseKind, isEnemyPhase);
             bool cancelledBase = false;
             int depth = 0;
-            bool keepLooping = true;
+            bool keepLooping = allowedKinds != null && allowedKinds.Count > 0;
             HashSet<IActionToolV2> pendingSet = null;
             if (pendingActions != null && pendingActions.Count > 0)
             {
@@ -1118,9 +1135,18 @@ namespace TGD.CombatV2
                 }
             }
 
+            if (!keepLooping)
+            {
+                string initialLabel = FormatChainStageLabel(depth);
+                ActionPhaseLogger.Log(unit, basePlan.kind, initialLabel, "(count:0)");
+                ActionPhaseLogger.Log(unit, basePlan.kind, $"{initialLabel} Skip");
+                onComplete?.Invoke(false);
+                yield break;
+            }
+
             while (keepLooping)
             {
-                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, baseKind, allowReaction, onlyFree, cooldowns, pendingSet);
+                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet);
                 string label = FormatChainStageLabel(depth);
                 ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
 
@@ -1167,21 +1193,17 @@ namespace TGD.CombatV2
                                 pendingSet.Add(outcome.tool);
                             }
 
-                            if (option.kind == ActionKind.Reaction)
+                            if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
                             {
-                                allowReaction = false;
-                                onlyFree = true;
+                                cancelledBase = true;
+                            }
 
-                                if (turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
-                                {
-                                    cancelledBase = true;
-                                }
-                            }
-                            else if (option.kind == ActionKind.Free)
-                            {
-                                allowReaction = false;
-                                onlyFree = true;
-                            }
+                            if (rules != null)
+                                allowedKinds = rules.AllowedChainNextLayer(option.kind);
+                            else
+                                allowedKinds = Array.Empty<ActionKind>();
+
+                            keepLooping = allowedKinds != null && allowedKinds.Count > 0;
 
                             depth += 1;
                             resolvedStage = true;
@@ -1288,7 +1310,7 @@ namespace TGD.CombatV2
 
             if (resources != null && option.energy > 0)
             {
-                string reason = option.kind == ActionKind.Reaction ? "PreDeduct_Reaction" : "PreDeduct_Free";
+                string reason = $"PreDeduct_{option.kind}";
                 resources.Spend("Energy", option.energy, reason);
             }
 
@@ -1440,7 +1462,12 @@ namespace TGD.CombatV2
                 return 0;
 
             var cooldowns = turnManager != null ? turnManager.GetCooldowns(unit) : null;
-            var options = BuildChainOptions(unit, budget, resources, 0, ActionKind.Free, false, true, cooldowns, null);
+            var rules = ResolveRules();
+            var allowed = rules?.AllowedAtPhaseStartFree();
+            if (allowed == null || allowed.Count == 0)
+                return 0;
+
+            var options = BuildChainOptions(unit, budget, resources, 0, allowed, cooldowns, null);
             int count = options != null ? options.Count : 0;
             options?.Clear();
             return count;
@@ -1481,7 +1508,7 @@ namespace TGD.CombatV2
             {
                 if (unit == null)
                     continue;
-                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)");
+                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)", true);
             }
         }
 
@@ -1502,10 +1529,10 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            yield return RunStartFreeChainWindow(unit, "PhaseStart(P1)");
+            yield return RunStartFreeChainWindow(unit, "PhaseStart(P1)", false);
         }
 
-        IEnumerator RunStartFreeChainWindow(Unit unit, string planKind)
+        IEnumerator RunStartFreeChainWindow(Unit unit, string planKind, bool isEnemyPhase)
         {
             if (unit == null || turnManager == null)
                 yield break;
@@ -1530,7 +1557,7 @@ namespace TGD.CombatV2
 
             var cooldowns = turnManager.GetCooldowns(unit);
 
-            yield return RunChainWindow(unit, phasePlan, ActionKind.Free,
+            yield return RunChainWindow(unit, phasePlan, ActionKind.Free, isEnemyPhase,
                 budget, resources, cooldowns, 0, pendingChain, cancelled => cancelBase = cancelled);
 
             if (cancelBase)
