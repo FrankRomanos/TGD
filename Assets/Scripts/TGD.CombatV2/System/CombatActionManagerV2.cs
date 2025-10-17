@@ -166,7 +166,8 @@ namespace TGD.CombatV2
             {
                 new ChainKeybind { id = "Reaction40", key = KeyCode.Alpha1 },
                 new ChainKeybind { id = "Reaction20", key = KeyCode.Alpha2 },
-                new ChainKeybind { id = "Free10", key = KeyCode.Alpha3 }
+                new ChainKeybind { id = "Free10", key = KeyCode.Alpha3 },
+                new ChainKeybind { id = "FullRoundTest", key = KeyCode.Alpha4 }
             };
         }
 
@@ -350,16 +351,20 @@ namespace TGD.CombatV2
             if (tool == null)
                 return false;
 
+            var owner = ResolveUnit(tool);
+
             var rules = ResolveRules();
             if (rules != null && !rules.CanActivateAtIdle(tool.Kind))
                 return false;
 
             if (rules != null && !rules.AllowFriendlyInsertions())
             {
-                var owner = ResolveUnit(tool);
                 if (_currentUnit != null && owner != _currentUnit)
                     return false;
             }
+
+            if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
+                return false;
 
             return true;
         }
@@ -516,10 +521,31 @@ namespace TGD.CombatV2
                 cost = BuildPlannedCost(tool, target.Value)
             };
 
-            var cost = actionPlan.cost;
             var budget = turnManager != null && unit != null ? turnManager.GetBudget(unit) : null;
             var resources = turnManager != null && unit != null ? turnManager.GetResources(unit) : null;
             var cooldowns = turnManager != null && unit != null ? turnManager.GetCooldowns(unit) : null;
+
+            var cost = actionPlan.cost;
+            if (tool.Kind == ActionKind.FullRound)
+            {
+                int remaining = budget != null ? Mathf.Max(0, budget.Remaining) : 0;
+                if (remaining <= 0)
+                {
+                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=lackTime)");
+                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=lackTime)");
+                    NotifyConfirmAbort(tool, unit, "lackTime");
+                    CleanupAfterAbort(tool, false);
+                    yield break;
+                }
+
+                cost.moveSecs = remaining;
+                cost.atkSecs = 0;
+                actionPlan.cost = cost;
+                cost = actionPlan.cost;
+
+                if (tool is IFullRoundActionTool frTool)
+                    frTool.PrepareFullRoundSeconds(cost.TotalSeconds);
+            }
 
             int remain = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
@@ -593,6 +619,37 @@ namespace TGD.CombatV2
                 ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
                 NotifyConfirmAbort(tool, unit, "LinkCancelled");
                 CleanupAfterAbort(tool, false);
+                yield break;
+            }
+
+            if (tool.Kind == ActionKind.FullRound && tool is IFullRoundActionTool frTool)
+            {
+                var planData = BuildFullRoundPlan(actionPlan, basePreDeduct, budget, resources);
+                frTool.TriggerFullRoundImmediate(unit, turnManager, planData);
+
+                if (budget != null)
+                    planData.budgetAfter = budget.Remaining;
+                if (resources != null)
+                    planData.energyAfter = resources.Get("Energy");
+
+                if (_planStack.Count > 0)
+                    _planStack.Pop();
+
+                ApplyCooldown(tool, unit);
+
+                if (turnManager != null && unit != null)
+                {
+                    int rounds = Mathf.Max(1, frTool.FullRoundRounds);
+                    turnManager.RegisterFullRound(unit, rounds, actionPlan.kind, frTool, planData);
+                    turnManager.EndTurn(unit);
+                }
+
+                if (tool is IActionExecReportV2 execReport)
+                    execReport.Consume();
+
+                _activeTool = null;
+                _hover = null;
+                _phase = Phase.Idle;
                 yield break;
             }
 
@@ -712,6 +769,23 @@ namespace TGD.CombatV2
             _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
+        }
+
+        FullRoundQueuedPlan BuildFullRoundPlan(ActionPlan plan, PreDeduct preDeduct, ITurnBudget budget, IResourcePool resources)
+        {
+            var queued = new FullRoundQueuedPlan
+            {
+                valid = preDeduct.valid,
+                target = plan.target,
+                plannedSeconds = Mathf.Max(0, preDeduct.secs),
+                plannedMoveEnergy = Mathf.Max(0, preDeduct.energyMove),
+                plannedAttackEnergy = Mathf.Max(0, preDeduct.energyAtk),
+                budgetBefore = budget != null ? budget.Remaining : 0,
+                energyBefore = resources != null ? resources.Get("Energy") : 0,
+                budgetAfter = budget != null ? budget.Remaining : 0,
+                energyAfter = resources != null ? resources.Get("Energy") : 0
+            };
+            return queued;
         }
 
         void ApplyCooldown(IActionToolV2 tool, Unit unit)
@@ -898,6 +972,12 @@ namespace TGD.CombatV2
                     reason = "cooldown";
                     return false;
                 }
+
+                if (tool.Kind == ActionKind.FullRound && !turnManager.CanDeclareFullRound(unit, out var frReason))
+                {
+                    reason = string.IsNullOrEmpty(frReason) ? "fullRoundBlock" : frReason;
+                    return false;
+                }
             }
 
             return true;
@@ -1045,6 +1125,12 @@ namespace TGD.CombatV2
                         continue;
                     if (allowFriendlyInsertion && owner == null)
                         continue;
+
+                    if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
+                    {
+                        Log($"[FullRound] ChainWindow skip owner={TurnManagerV2.FormatUnitLabel(owner)} id={tool.Id} reason=fullround");
+                        continue;
+                    }
 
                     if (pending != null && pending.Contains(tool))
                         continue;
@@ -1357,6 +1443,12 @@ namespace TGD.CombatV2
                 return "lackEnergy";
             if (raw.Contains("cooldown"))
                 return "cooldown";
+            if (raw.Contains("fullround"))
+                return "fullRound";
+            if (raw.Contains("prepaid"))
+                return "prepaid";
+            if (raw.Contains("timespent"))
+                return "timeSpent";
             return "notReady";
         }
 
@@ -1541,6 +1633,12 @@ namespace TGD.CombatV2
             var resources = turnManager.GetResources(unit);
 
             _planStack.Clear();
+
+            if (turnManager.HasActiveFullRound(unit))
+            {
+                Log($"[FullRound] {planKind} skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
+                yield break;
+            }
 
             var pendingChain = new List<Tuple<IActionToolV2, ActionPlan>>();
             bool cancelBase = false;

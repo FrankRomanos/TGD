@@ -38,6 +38,7 @@ namespace TGD.CombatV2
         readonly HashSet<CooldownStoreSecV2> _allCooldownStores = new();
         readonly List<Func<bool, IEnumerator>> _phaseStartGates = new();
         readonly List<Func<Unit, IEnumerator>> _turnStartGates = new();
+        readonly Dictionary<Unit, FullRoundState> _fullRoundStates = new();
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -171,6 +172,15 @@ namespace TGD.CombatV2
             }
         }
 
+        sealed class FullRoundState
+        {
+            public int roundsRemaining;
+            public int totalRounds;
+            public IFullRoundActionTool tool;
+            public string actionId;
+            public FullRoundQueuedPlan plan;
+        }
+
         public void Bind(Unit unit, UnitRuntimeContext context)
         {
             if (unit == null || context == null) return;
@@ -294,6 +304,74 @@ namespace TGD.CombatV2
             return handle;
         }
 
+        public bool HasActiveFullRound(Unit unit)
+        {
+            if (unit == null)
+                return false;
+            return _fullRoundStates.TryGetValue(unit, out var state) && state != null;
+        }
+
+        public bool CanDeclareFullRound(Unit unit, out string reason)
+        {
+            reason = null;
+            if (unit == null)
+            {
+                reason = "noUnit";
+                return false;
+            }
+
+            var runtime = EnsureRuntime(unit, null);
+            if (runtime == null)
+            {
+                reason = "noRuntime";
+                return false;
+            }
+
+            if (HasActiveFullRound(unit))
+            {
+                reason = "fullRoundActive";
+                return false;
+            }
+
+            if (runtime.RemainingTime <= 0)
+            {
+                reason = "lackTime";
+                return false;
+            }
+
+            if (runtime.PrepaidTime > 0)
+            {
+                reason = "prepaid";
+                return false;
+            }
+
+            if (runtime.HasSpentTimeThisTurn)
+            {
+                reason = "timeSpent";
+                return false;
+            }
+
+            return true;
+        }
+
+        public void RegisterFullRound(Unit unit, int rounds, string actionId, IFullRoundActionTool tool, FullRoundQueuedPlan plan)
+        {
+            if (unit == null || rounds <= 0)
+                return;
+
+            var state = new FullRoundState
+            {
+                roundsRemaining = rounds,
+                totalRounds = rounds,
+                tool = tool,
+                actionId = actionId,
+                plan = plan
+            };
+
+            _fullRoundStates[unit] = state;
+            Debug.Log($"[FullRound] Queue U={FormatUnitLabel(unit)} id={actionId} rounds={rounds}", this);
+        }
+
         public void EndTurn(Unit unit)
         {
             if (unit == null) return;
@@ -393,7 +471,74 @@ namespace TGD.CombatV2
             Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
             TurnStarted?.Invoke(runtime.Unit);
             // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
-            StartCoroutine(RunTurnStartGates(runtime.Unit));
+            bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
+            if (!skipTurn)
+                StartCoroutine(RunTurnStartGates(runtime.Unit));
+        }
+
+        bool HandleFullRoundAtTurnBegin(TurnRuntimeV2 runtime)
+        {
+            if (runtime == null)
+                return false;
+
+            if (!_fullRoundStates.TryGetValue(runtime.Unit, out var state) || state == null)
+                return false;
+
+            state.roundsRemaining = Mathf.Max(0, state.roundsRemaining - 1);
+            _fullRoundStates[runtime.Unit] = state;
+
+            string unitLabel = FormatUnitLabel(runtime.Unit);
+            string phaseLabel = FormatPhaseLabel(runtime.IsPlayer);
+
+            if (state.roundsRemaining > 0)
+            {
+                Debug.Log($"[FullRound] Skip T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId} reason=fullround roundsLeft={state.roundsRemaining}", this);
+                StartCoroutine(AutoSkipTurn(runtime.Unit));
+                return true;
+            }
+
+            var plan = state.plan;
+            Debug.Log($"[FullRound] ResolveBegin T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId} roundsTotal={state.totalRounds}", this);
+
+            if (plan.valid)
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", $"(budgetBefore={plan.budgetBefore}, energyBefore={plan.energyBefore})");
+            else
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", "(deferred)");
+
+            try
+            {
+                state.tool?.TriggerFullRoundResolution(runtime.Unit, this, plan);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex, this);
+            }
+
+            ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteEnd");
+
+            if (plan.valid)
+            {
+                int energyAction = plan.TotalEnergy;
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", $"(used={plan.plannedSeconds}, refunded=0, net={plan.NetSeconds}, energyMove={plan.plannedMoveEnergy}, energyAtk={plan.plannedAttackEnergy}, energyAction={energyAction})");
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd", $"(budgetAfter={plan.budgetAfter}, energyAfter={plan.energyAfter})");
+            }
+            else
+            {
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", "(deferred)");
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd");
+            }
+
+            Debug.Log($"[FullRound] ResolveEnd T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId}", this);
+            _fullRoundStates.Remove(runtime.Unit);
+            return false;
+        }
+
+        IEnumerator AutoSkipTurn(Unit unit)
+        {
+            if (unit == null)
+                yield break;
+            yield return null;
+            EndTurn(unit);
         }
 
         void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds, bool silent = false)

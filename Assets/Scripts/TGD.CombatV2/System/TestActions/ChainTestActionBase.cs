@@ -95,9 +95,7 @@ namespace TGD.CombatV2
         {
             _lastTarget = hex;
             Cursor?.Clear();
-            _usedSeconds = Mathf.Max(0, timeCostSeconds);
-            _refundedSeconds = 0;
-            _energyUsed = Mathf.Max(0, energyCost);
+            SetExecReport(Mathf.Max(0, timeCostSeconds), 0, Mathf.Max(0, energyCost));
             yield return null;
         }
 
@@ -118,6 +116,13 @@ namespace TGD.CombatV2
             _usedSeconds = 0;
             _refundedSeconds = 0;
             _energyUsed = 0;
+        }
+
+        protected void SetExecReport(int usedSeconds, int refundedSeconds, int energyUsed)
+        {
+            _usedSeconds = Mathf.Max(0, usedSeconds);
+            _refundedSeconds = Mathf.Max(0, refundedSeconds);
+            _energyUsed = Mathf.Max(0, energyUsed);
         }
 
         public Unit ResolveUnit()
