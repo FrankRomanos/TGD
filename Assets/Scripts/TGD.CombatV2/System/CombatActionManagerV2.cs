@@ -63,6 +63,8 @@ namespace TGD.CombatV2
         Unit _currentUnit;
         Hex? _hover;
         TargetSelectionCursor _chainCursor;
+        IHexHighlighter _aimHighlighter;
+        IHexHighlighter _chainHighlighter;
 
         struct PlannedCost
         {
@@ -132,10 +134,9 @@ namespace TGD.CombatV2
             {
                 if (_chainCursor == null)
                 {
-                    if (!tiler && authoring != null)
-                        tiler = authoring.GetComponent<HexBoardTiler>() ?? authoring.GetComponentInParent<HexBoardTiler>(true);
-                    if (tiler != null)
-                        _chainCursor = new TargetSelectionCursor(tiler);
+                    var highlighter = EnsureChainHighlighter();
+                    if (highlighter != null)
+                        _chainCursor = new TargetSelectionCursor(highlighter);
                 }
                 return _chainCursor;
             }
@@ -158,6 +159,7 @@ namespace TGD.CombatV2
             {
                 if (!mb) continue;
                 WireTurnManager(mb);
+                InjectCursorHighlighter(mb);
                 if (mb is IActionToolV2 tool)
                 {
                     if (!_toolsById.TryGetValue(tool.Id, out var list))
@@ -191,6 +193,51 @@ namespace TGD.CombatV2
                     attackAdapter.turnManager = turnManager;
                     break;
             }
+        }
+
+        void InjectCursorHighlighter(MonoBehaviour mb)
+        {
+            if (mb == null)
+                return;
+
+            switch (mb)
+            {
+                case AttackControllerV2 attack:
+                    attack.SetCursorHighlighter(EnsureAimHighlighter());
+                    break;
+                case ChainTestActionBase chainTool:
+                    chainTool.SetCursorHighlighter(EnsureChainHighlighter());
+                    break;
+            }
+        }
+
+        HexBoardTiler ResolveTiler()
+        {
+            if (!tiler && authoring != null)
+                tiler = authoring.GetComponent<HexBoardTiler>() ?? authoring.GetComponentInParent<HexBoardTiler>(true);
+            return tiler;
+        }
+
+        IHexHighlighter EnsureAimHighlighter()
+        {
+            if (_aimHighlighter == null)
+            {
+                var resolved = ResolveTiler();
+                if (resolved != null)
+                    _aimHighlighter = new HexAreaPainter(resolved);
+            }
+            return _aimHighlighter;
+        }
+
+        IHexHighlighter EnsureChainHighlighter()
+        {
+            if (_chainHighlighter == null)
+            {
+                var resolved = ResolveTiler();
+                if (resolved != null)
+                    _chainHighlighter = new HexAreaPainter(resolved);
+            }
+            return _chainHighlighter;
         }
 
         void WireMoveCostAdapter(MoveCostServiceV2Adapter adapter)

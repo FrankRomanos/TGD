@@ -9,38 +9,46 @@ namespace TGD.CombatV2.Targeting
     /// </summary>
     public sealed class TargetSelectionCursor
     {
-        readonly HexAreaPainter _painter;
+        readonly IHexHighlighter _highlighter;
+        readonly List<Hex> _last = new();
 
-        public TargetSelectionCursor(HexBoardTiler tiler)
+        public TargetSelectionCursor(IHexHighlighter highlighter)
         {
-            if (tiler != null)
-                _painter = new HexAreaPainter(tiler);
+            _highlighter = highlighter;
         }
 
         public void ShowPath(IEnumerable<Hex> cells, Color color)
         {
-            if (_painter == null)
+            if (_highlighter == null)
                 return;
 
-            _painter.Clear();
-            if (cells == null)
-                return;
+            _last.Clear();
+            if (cells != null)
+                _last.AddRange(cells);
 
-            _painter.Paint(cells, color);
+            _highlighter.Clear();
+            if (_last.Count > 0)
+                _highlighter.Paint(_last, color);
         }
 
         public void ShowSingle(Hex hex, Color color)
         {
-            if (_painter == null)
+            if (_highlighter == null)
                 return;
 
-            _painter.Clear();
-            _painter.Paint(new[] { hex }, color);
+            _last.Clear();
+            _last.Add(hex);
+            _highlighter.Clear();
+            _highlighter.Paint(_last, color);
         }
 
         public void Clear()
         {
-            _painter?.Clear();
+            if (_highlighter == null)
+                return;
+
+            _last.Clear();
+            _highlighter.Clear();
         }
     }
 }

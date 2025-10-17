@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    public sealed class HexAreaPainter
+    public sealed class HexAreaPainter : IHexHighlighter
     {
          struct TintedRenderer
         {
@@ -19,7 +19,7 @@ namespace TGD.HexBoard
 
         public void Paint(IEnumerable<Hex> cells, Color color)
         {
-            
+
             if (tiler == null || cells == null) return;
             foreach (var h in cells)
                 if (tiler.TryGetTile(h, out var go) && go) { var old = Color.white; Set(go, color); tinted.Add((go, old)); }

@@ -65,15 +65,11 @@ namespace TGD.CombatV2
         public bool suppressInternalLogs = false;
 
         TargetSelectionCursor _cursor;
+        TargetSelectionCursor Cursor => _cursor;
 
-        TargetSelectionCursor Cursor
+        public void SetCursorHighlighter(IHexHighlighter highlighter)
         {
-            get
-            {
-                if (_cursor == null && tiler != null)
-                    _cursor = new TargetSelectionCursor(tiler);
-                return _cursor;
-            }
+            _cursor = highlighter != null ? new TargetSelectionCursor(highlighter) : null;
         }
         HexOccupancy _occ;
         IActorOccupancyBridge _bridge;
@@ -377,8 +373,6 @@ namespace TGD.CombatV2
 
         void Awake()
         {
-            if (tiler)
-                _cursor = new TargetSelectionCursor(tiler);
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
