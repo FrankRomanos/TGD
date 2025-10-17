@@ -64,7 +64,20 @@ namespace TGD.CombatV2
         public bool debugLog = true;
         public bool suppressInternalLogs = false;
 
-        HexAreaPainter _painter;
+        TargetSelectionCursor _cursor;
+
+        TargetSelectionCursor Cursor
+        {
+            get
+            {
+                if (_cursor == null && tiler != null)
+                {
+                    tiler.EnsureBuilt();
+                    _cursor = new TargetSelectionCursor(tiler);
+                }
+                return _cursor;
+            }
+        }
         HexOccupancy _occ;
         IActorOccupancyBridge _bridge;
         PlayerOccupancyBridge _playerBridge;
@@ -367,7 +380,8 @@ namespace TGD.CombatV2
 
         void Awake()
         {
-            _painter = new HexAreaPainter(tiler);
+            if (tiler)
+                _cursor = new TargetSelectionCursor(tiler);
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
@@ -459,7 +473,7 @@ namespace TGD.CombatV2
             }
             ClearPendingAttack();
             ClearTempReservations("OnDisable");
-            _painter?.Clear();
+            Cursor?.Clear();
             _currentPreview = null;
             _hover = null;
             _occ = null;
@@ -481,7 +495,7 @@ namespace TGD.CombatV2
             _planAnchorVersion = -1;
             _currentPreview = null;
             _hover = null;
-            _painter?.Clear();
+            Cursor?.Clear();
         }
 
         void OnTurnStarted(Unit unit)
@@ -568,7 +582,7 @@ namespace TGD.CombatV2
             _aiming = true;
             _hover = null;
             _currentPreview = null;
-            _painter.Clear();
+            Cursor?.Clear();
             _previewDirty = true;
             _previewAnchorVersion = -1;
             _planAnchorVersion = -1;
@@ -581,7 +595,7 @@ namespace TGD.CombatV2
             _aiming = false;
             _hover = null;
             _currentPreview = null;
-            _painter.Clear();
+            Cursor?.Clear();
             _previewDirty = true;
             _previewAnchorVersion = -1;
             _planAnchorVersion = -1;
@@ -727,7 +741,7 @@ namespace TGD.CombatV2
 
             _currentPreview = null;
             _hover = null;
-            _painter.Clear();
+            Cursor?.Clear();
             AttackEventsV2.RaiseAimHidden();
 
             _moving = true;
@@ -737,7 +751,7 @@ namespace TGD.CombatV2
 
         void RenderPreview(PreviewData preview)
         {
-            _painter.Clear();
+            Cursor?.Clear();
             if (preview == null)
             {
                 AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
@@ -747,11 +761,12 @@ namespace TGD.CombatV2
             if (!preview.valid || preview.path == null)
             {
                 if (_hover.HasValue)
-                    _painter.Paint(new[] { _hover.Value }, invalidColor);
+                    Cursor?.ShowSingle(_hover.Value, invalidColor);
                 AttackEventsV2.RaiseAimShown(driver.UnitRef, System.Array.Empty<Hex>());
+                return;
             }
 
-            _painter.Paint(preview.path, previewColor);
+            Cursor?.ShowPath(preview.path, previewColor);
             AttackEventsV2.RaiseAimShown(driver.UnitRef, preview.path);
         }
 
