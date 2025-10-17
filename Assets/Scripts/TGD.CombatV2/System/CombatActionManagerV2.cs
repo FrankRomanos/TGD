@@ -47,6 +47,9 @@ namespace TGD.CombatV2
         public bool debugLog = true;
         public bool quietInternalToolLogs = true;
 
+        [Header("Phase Start Free Chain")]
+        public bool skipPhaseStartFreeChain = false;
+
         enum Phase
         {
             Idle,
@@ -123,6 +126,7 @@ namespace TGD.CombatV2
             public int TotalPlanned => Mathf.Max(0, plannedSecsMove + plannedSecsAtk);
             public int TotalRefunded => Mathf.Max(0, refundedSecsMove + refundedSecsAtk);
             public int NetSeconds => Mathf.Max(0, TotalPlanned - TotalRefunded);
+            public int TotalEnergyNet => energyMoveNet + energyAtkNet;
         }
 
         readonly Stack<PreDeduct> _planStack = new();
@@ -246,14 +250,34 @@ namespace TGD.CombatV2
             adapter.turnManager = turnManager;
         }
 
+        void RegisterPhaseGate()
+        {
+            if (turnManager != null)
+                turnManager.RegisterPhaseStartGate(HandlePhaseStartGate);
+        }
+
+        void UnregisterPhaseGate()
+        {
+            if (turnManager != null)
+                turnManager.UnregisterPhaseStartGate(HandlePhaseStartGate);
+        }
+
         void OnEnable()
         {
-            if (turnManager != null) turnManager.TurnStarted += OnTurnStarted;
+            if (turnManager != null)
+            {
+                turnManager.TurnStarted += OnTurnStarted;
+            }
+            RegisterPhaseGate();
         }
 
         void OnDisable()
         {
-            if (turnManager != null) turnManager.TurnStarted -= OnTurnStarted;
+            if (turnManager != null)
+            {
+                turnManager.TurnStarted -= OnTurnStarted;
+            }
+            UnregisterPhaseGate();
             ChainCursor?.Clear();
         }
 
@@ -472,7 +496,7 @@ namespace TGD.CombatV2
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
-                yield return RunChainWindow(unit, actionPlan, budget, resources, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
+                yield return RunChainWindow(unit, actionPlan, tool.Kind, budget, resources, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
             }
 
             for (int i = pendingChain.Count - 1; i >= 0; --i)
@@ -533,11 +557,12 @@ namespace TGD.CombatV2
             int net = report.NetSeconds;
             int energyMove = report.energyMoveNet;
             int energyAtk = report.energyAtkNet;
+            int energyAction = report.TotalEnergyNet;
             bool freeMove = report.freeMoveApplied;
             string refundTag = report.refundTag;
             string reasonSuffix = string.IsNullOrEmpty(refundTag) ? string.Empty : $", refundReason={refundTag}";
 
-            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}{reasonSuffix})");
+            ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}, energyAction={energyAction}{reasonSuffix})");
 
             PreDeduct preDeduct = _planStack.Count > 0 ? _planStack.Pop() : default;
 
@@ -870,12 +895,25 @@ namespace TGD.CombatV2
         {
             if (tool == null || unit == null || turnManager == null)
                 return false;
-            if (tool.Kind != ActionKind.Standard)
-                return false;
-            if (!turnManager.IsPlayerPhase)
-                return false;
             if (!turnManager.IsPlayerUnit(unit))
                 return false;
+
+            switch (tool.Kind)
+            {
+                case ActionKind.Standard:
+                case ActionKind.Derived:
+                case ActionKind.FullRound:
+                case ActionKind.Sustained:
+                case ActionKind.Reaction:
+                case ActionKind.Free:
+                    break;
+                default:
+                    return false;
+            }
+
+            if (!turnManager.IsPlayerPhase)
+                return false;
+
             return true;
         }
 
@@ -893,9 +931,19 @@ namespace TGD.CombatV2
             return KeyCode.None;
         }
 
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, bool allowReaction, bool onlyFree)
+        static bool BaseKindSupportsReaction(ActionKind baseKind)
+        {
+            return baseKind == ActionKind.Standard
+                || baseKind == ActionKind.Derived
+                || baseKind == ActionKind.FullRound
+                || baseKind == ActionKind.Sustained;
+        }
+
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, ActionKind baseKind, bool allowReaction, bool onlyFree)
         {
             _chainBuffer.Clear();
+
+            bool baseAllowsReaction = BaseKindSupportsReaction(baseKind);
 
             foreach (var pair in _toolsById)
             {
@@ -916,6 +964,9 @@ namespace TGD.CombatV2
                     if (!allowReaction && tool.Kind == ActionKind.Reaction)
                         continue;
 
+                    if (tool.Kind == ActionKind.Reaction && !baseAllowsReaction)
+                        continue;
+
                     if (onlyFree && tool.Kind != ActionKind.Free)
                         continue;
 
@@ -930,7 +981,9 @@ namespace TGD.CombatV2
                     {
                         if (secs <= 0)
                             continue;
-                        if (baseTimeCost > 0 && secs > baseTimeCost)
+                        if (baseTimeCost <= 0)
+                            continue;
+                        if (secs > baseTimeCost)
                             continue;
                         if (budget != null && secs > 0 && !budget.HasTime(secs))
                             continue;
@@ -970,17 +1023,34 @@ namespace TGD.CombatV2
             return $"W2.1.{depth}";
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ITurnBudget budget, IResourcePool resources, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
+        void ResolveInitialChainState(ActionKind baseKind, out bool allowReaction, out bool onlyFree)
         {
-            bool allowReaction = true;
-            bool onlyFree = false;
+            switch (baseKind)
+            {
+                case ActionKind.Standard:
+                case ActionKind.Derived:
+                case ActionKind.FullRound:
+                case ActionKind.Sustained:
+                    allowReaction = true;
+                    onlyFree = false;
+                    break;
+                default:
+                    allowReaction = false;
+                    onlyFree = true;
+                    break;
+            }
+        }
+
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, ITurnBudget budget, IResourcePool resources, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
+        {
+            ResolveInitialChainState(baseKind, out bool allowReaction, out bool onlyFree);
             bool cancelledBase = false;
             int depth = 0;
             bool keepLooping = true;
 
             while (keepLooping)
             {
-                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowReaction, onlyFree);
+                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, baseKind, allowReaction, onlyFree);
                 string label = FormatChainStageLabel(depth);
                 ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
 
@@ -1238,6 +1308,54 @@ namespace TGD.CombatV2
 
             var hex = authoring.Layout.HexAt(hit.point);
             return hex;
+        }
+
+        IEnumerator HandlePhaseStartGate(bool isPlayerPhase)
+        {
+            if (skipPhaseStartFreeChain)
+            {
+                Log($"[Free] PhaseStart({(isPlayerPhase ? "P1" : "Enemy")}) freeskip");
+                yield break;
+            }
+
+            if (turnManager == null)
+                yield break;
+
+            var unit = unitDriver != null ? unitDriver.UnitRef : null;
+            if (unit == null)
+                yield break;
+
+            var budget = turnManager.GetBudget(unit);
+            var resources = turnManager.GetResources(unit);
+
+            _planStack.Clear();
+
+            var pendingChain = new List<Tuple<IActionToolV2, ActionPlan>>();
+            bool cancelBase = false;
+
+            var phasePlan = new ActionPlan
+            {
+                kind = isPlayerPhase ? "PhaseStart(P1)" : "PhaseStart(Enemy)",
+                target = Hex.Zero,
+                cost = new PlannedCost { valid = true }
+            };
+
+            yield return RunChainWindow(unit, phasePlan, ActionKind.Free, budget, resources, 0, pendingChain, cancelled => cancelBase = cancelled);
+
+            if (cancelBase)
+            {
+                _planStack.Clear();
+                yield break;
+            }
+
+            for (int i = pendingChain.Count - 1; i >= 0; --i)
+            {
+                var pending = pendingChain[i];
+                if (pending?.Item1 != null)
+                    yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+            }
+
+            _planStack.Clear();
         }
     }
 }
