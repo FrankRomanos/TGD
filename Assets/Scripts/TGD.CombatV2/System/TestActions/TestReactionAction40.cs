@@ -13,6 +13,7 @@ namespace TGD.CombatV2
             timeCostSeconds = 2;
             energyCost = 40;
             targetMode = TargetMode.EnemyOrGround;
+            cooldownSeconds = 18;
         }
     }
 }

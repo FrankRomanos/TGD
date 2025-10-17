@@ -13,6 +13,7 @@ namespace TGD.CombatV2
             timeCostSeconds = 0;
             energyCost = 10;
             targetMode = TargetMode.AnyClick;
+            cooldownSeconds = 6;
         }
     }
 }

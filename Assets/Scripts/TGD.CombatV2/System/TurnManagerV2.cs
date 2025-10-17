@@ -816,7 +816,8 @@ namespace TGD.CombatV2
                     store.StartSeconds(skillId, 0);
                     after = 0;
                 }
-                details.Add($"{skillId}:{before}->{after}");
+                int turns = store.TurnsLeft(skillId);
+                details.Add($"{skillId}:{before}->{after} (turns={turns})");
             }
 
             string detailText = details.Count > 0 ? string.Join(";", details) : "none";

@@ -23,6 +23,9 @@ namespace TGD.CombatV2
         [Min(0)] public int timeCostSeconds = 0;
         [Min(0)] public int energyCost = 0;
 
+        [Header("Cooldown")]
+        [Min(0)] public int cooldownSeconds = 0;
+
         int _usedSeconds;
         int _refundedSeconds;
         int _energyUsed;
@@ -31,6 +34,9 @@ namespace TGD.CombatV2
 
         public string Id => actionId;
         public abstract ActionKind Kind { get; }
+
+        public virtual string CooldownId => actionId;
+        public virtual int CooldownSeconds => Mathf.Max(0, cooldownSeconds);
 
         protected virtual void Awake()
         {
