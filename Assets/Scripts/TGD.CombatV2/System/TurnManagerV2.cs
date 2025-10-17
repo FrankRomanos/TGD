@@ -171,13 +171,13 @@ namespace TGD.CombatV2
                 return store != null ? store.TurnsLeft(skillId) : 0;
             }
         }
-
         sealed class FullRoundState
         {
             public int roundsRemaining;
             public int totalRounds;
             public IFullRoundActionTool tool;
             public string actionId;
+            public FullRoundQueuedPlan plan;
         }
 
         public void Bind(Unit unit, UnitRuntimeContext context)
@@ -302,7 +302,6 @@ namespace TGD.CombatV2
             }
             return handle;
         }
-
         public bool HasActiveFullRound(Unit unit)
         {
             if (unit == null)
@@ -353,7 +352,7 @@ namespace TGD.CombatV2
             return true;
         }
 
-        public void RegisterFullRound(Unit unit, int rounds, string actionId, IFullRoundActionTool tool)
+        public void RegisterFullRound(Unit unit, int rounds, string actionId, IFullRoundActionTool tool, FullRoundQueuedPlan plan)
         {
             if (unit == null || rounds <= 0)
                 return;
@@ -363,13 +362,13 @@ namespace TGD.CombatV2
                 roundsRemaining = rounds,
                 totalRounds = rounds,
                 tool = tool,
-                actionId = actionId
+                actionId = actionId,
+                plan = plan
             };
 
             _fullRoundStates[unit] = state;
             Debug.Log($"[FullRound] Queue U={FormatUnitLabel(unit)} id={actionId} rounds={rounds}", this);
         }
-
         public void EndTurn(Unit unit)
         {
             if (unit == null) return;
@@ -495,15 +494,37 @@ namespace TGD.CombatV2
                 return true;
             }
 
+            var plan = state.plan;
             Debug.Log($"[FullRound] ResolveBegin T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId} roundsTotal={state.totalRounds}", this);
+
+            if (plan.valid)
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", $"(budgetBefore={plan.budgetBefore}, energyBefore={plan.energyBefore})");
+            else
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", "(deferred)");
+
             try
             {
-                state.tool?.TriggerFullRoundResolution(runtime.Unit, this);
+                state.tool?.TriggerFullRoundResolution(runtime.Unit, this, plan);
             }
             catch (Exception ex)
             {
                 Debug.LogException(ex, this);
             }
+
+            ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteEnd");
+
+            if (plan.valid)
+            {
+                int energyAction = plan.TotalEnergy;
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", $"(used={plan.plannedSeconds}, refunded=0, net={plan.NetSeconds}, energyMove={plan.plannedMoveEnergy}, energyAtk={plan.plannedAttackEnergy}, energyAction={energyAction})");
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd", $"(budgetAfter={plan.budgetAfter}, energyAfter={plan.energyAfter})");
+            }
+            else
+            {
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", "(deferred)");
+                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd");
+            }
+
             Debug.Log($"[FullRound] ResolveEnd T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId}", this);
             _fullRoundStates.Remove(runtime.Unit);
             return false;
@@ -568,7 +589,7 @@ namespace TGD.CombatV2
                 Debug.Log($"[Res] Spend {unitLabel}:{id} -{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
         }
 
-    
+
         (int gain, int current, int max) HandleEnergyRegen(TurnRuntimeV2 runtime)
         {
             var ctx = runtime.Context;
@@ -586,7 +607,7 @@ namespace TGD.CombatV2
             stats.Energy = Mathf.Clamp(before + gain, 0, max);
             return (gain, stats.Energy, max);
         }
- 
+
         int GetResourceCurrent(TurnRuntimeV2 runtime, string id)
         {
             if (runtime == null || string.IsNullOrEmpty(id)) return 0;
@@ -907,7 +928,7 @@ namespace TGD.CombatV2
 
                 var runtime = EnsureRuntime(unit, isPlayerHint);
                 if (runtime != null)
-                    TickCooldownsForUnit(runtime, phaseLabel);              
+                    TickCooldownsForUnit(runtime, phaseLabel);
                 TickBuffsForUnit(unit, phaseLabel);
                 if (runtime != null)
                     ApplyEnergyRegen(runtime, phaseLabel);

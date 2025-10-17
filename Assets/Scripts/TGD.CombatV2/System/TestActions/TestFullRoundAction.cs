@@ -1,6 +1,8 @@
 using System.Collections;
-using UnityEngine;
+using TGD.CombatV2;
+using TGD.CombatV2.Targeting;
 using TGD.HexBoard;
+using UnityEngine;
 
 namespace TGD.CombatV2
 {
@@ -36,16 +38,18 @@ namespace TGD.CombatV2
             _preparedSeconds = Mathf.Max(0, seconds);
         }
 
-        public void TriggerFullRoundImmediate(Unit unit, TurnManagerV2 turnManager)
+        public void TriggerFullRoundImmediate(Unit unit, TurnManagerV2 turnManager, FullRoundQueuedPlan plan)
         {
             string unitLabel = unit != null ? TurnManagerV2.FormatUnitLabel(unit) : "?";
-            Debug.Log($"[FullRound] Immediate U={unitLabel} id={Id} msg={immediateLog}", this);
+            string targetLabel = plan.valid ? plan.target.ToString() : "None";
+            Debug.Log($"[FullRound] Immediate U={unitLabel} id={Id} target={targetLabel} seconds={plan.plannedSeconds} msg={immediateLog}", this);
         }
 
-        public void TriggerFullRoundResolution(Unit unit, TurnManagerV2 turnManager)
+        public void TriggerFullRoundResolution(Unit unit, TurnManagerV2 turnManager, FullRoundQueuedPlan plan)
         {
             string unitLabel = unit != null ? TurnManagerV2.FormatUnitLabel(unit) : "?";
-            Debug.Log($"[FullRound] Resolve U={unitLabel} id={Id} msg={resolveLog}", this);
+            string targetLabel = plan.valid ? plan.target.ToString() : "None";
+            Debug.Log($"[FullRound] Resolve U={unitLabel} id={Id} target={targetLabel} seconds={plan.plannedSeconds} msg={resolveLog}", this);
         }
 
         public override IEnumerator OnConfirm(Hex hex)
