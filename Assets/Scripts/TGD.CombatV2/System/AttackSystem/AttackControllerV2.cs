@@ -219,14 +219,6 @@ namespace TGD.CombatV2
             return true;
         }
 
-        int ExternalTimeRemaining()
-        {
-            if (!UseTurnManager || turnManager == null || driver == null || driver.UnitRef == null)
-                return int.MaxValue;
-
-            var budget = turnManager.GetBudget(driver.UnitRef);
-            return budget != null ? Mathf.Max(0, budget.Remaining) : int.MaxValue;
-        }
         public struct PlannedAttackCost
         {
             public int moveSecs;

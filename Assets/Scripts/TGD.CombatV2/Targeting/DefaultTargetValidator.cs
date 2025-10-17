@@ -23,9 +23,10 @@ namespace TGD.CombatV2.Targeting
 
         void Awake()
         {
+            var driver = GetComponentInParent<HexBoardTestDriver>(true);
+
             if (!occupancyService)
             {
-                var driver = GetComponentInParent<HexBoardTestDriver>(true);
                 if (driver != null)
                 {
                     if (driver.authoring != null)
@@ -94,6 +95,11 @@ namespace TGD.CombatV2.Targeting
             if (_occ == null)
                 return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoOccupancyService");
 
+            bool ignoreEnvironment = IsAnyClick(spec);
+            bool allowsGround = AllowsGroundSelection(spec);
+            bool staticBlocked = false;
+            bool pitBlocked = false;
+
             if (spec.terrain == TargetTerrainMask.NonObstacle)
             {
                 var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
@@ -102,6 +108,18 @@ namespace TGD.CombatV2.Targeting
 
                 if (environment != null && environment.IsPit(hex))
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
+
+                if (!ignoreEnvironment && environment != null && environment.IsPit(hex))
+                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
+            }
+            else if (allowsGround && !ignoreEnvironment)
+            {
+                var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
+                if (terrainPass != null && terrainPass.IsBlocked(hex))
+                    staticBlocked = true;
+
+                if (environment != null && environment.IsPit(hex))
+                    pitBlocked = true;
             }
 
             _occ.TryGetActor(hex, out var actorAt);
@@ -203,7 +221,28 @@ namespace TGD.CombatV2.Targeting
 
             return res;
         }
+        static bool AllowsGroundSelection(TargetingSpec spec)
+        {
+            if (spec == null)
+                return false;
 
+            bool allowsEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
+            bool requiresOccupied = spec.requireOccupied;
+
+            return allowsEmpty && !requiresOccupied;
+        }
+
+        static bool IsAnyClick(TargetingSpec spec)
+        {
+            if (spec == null)
+                return false;
+
+            return spec.terrain == TargetTerrainMask.Any
+                && spec.occupant == TargetOccupantMask.Any
+                && spec.allowSelf
+                && !spec.requireEmpty
+                && !spec.requireOccupied;
+        }
         static Unit ResolveUnit(IGridActor actor)
         {
             if (actor is UnitGridAdapter adapter)
