@@ -71,10 +71,7 @@ namespace TGD.CombatV2
             get
             {
                 if (_cursor == null && tiler != null)
-                {
-                    tiler.EnsureBuilt();
                     _cursor = new TargetSelectionCursor(tiler);
-                }
                 return _cursor;
             }
         }

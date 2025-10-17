@@ -3,9 +3,14 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// ��һ�� Hex ������ Tiler�����㷨/�������
     public sealed class HexAreaPainter
     {
+         struct TintedRenderer
+        {
+            public Renderer Renderer;
+            public bool HadBlock;
+            public MaterialPropertyBlock OriginalBlock;
+        }
         readonly HexBoardTiler tiler;
         readonly List<(GameObject go, Color old)> tinted = new();
 

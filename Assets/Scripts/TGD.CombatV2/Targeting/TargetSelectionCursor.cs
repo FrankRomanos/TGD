@@ -14,10 +14,7 @@ namespace TGD.CombatV2.Targeting
         public TargetSelectionCursor(HexBoardTiler tiler)
         {
             if (tiler != null)
-            {
-                tiler.EnsureBuilt();
                 _painter = new HexAreaPainter(tiler);
-            }
         }
 
         public void ShowPath(IEnumerable<Hex> cells, Color color)

@@ -50,7 +50,7 @@ namespace TGD.CombatV2.Targeting
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Enemy | TargetOccupantMask.Empty,
-                        terrain = TargetTerrainMask.Any,
+                        terrain = TargetTerrainMask.NonObstacle,
                         allowSelf = false,
                         requireEmpty = false,
                         requireOccupied = false,

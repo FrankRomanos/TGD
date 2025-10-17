@@ -135,14 +135,12 @@ namespace TGD.CombatV2
                     if (!tiler && authoring != null)
                         tiler = authoring.GetComponent<HexBoardTiler>() ?? authoring.GetComponentInParent<HexBoardTiler>(true);
                     if (tiler != null)
-                    {
-                        tiler.EnsureBuilt();
                         _chainCursor = new TargetSelectionCursor(tiler);
-                    }
                 }
                 return _chainCursor;
             }
         }
+
 
         void Reset()
         {
