@@ -54,7 +54,10 @@ namespace TGD.CombatV2
         {
             int tt = TurnTime;
             int prepaid = Mathf.Clamp(PrepaidTime, 0, tt);
-            RemainingTime = Mathf.Clamp(tt - prepaid, 0, tt);
+            int baseBudget = Mathf.Clamp(RemainingTime, 0, tt);
+            if (baseBudget <= 0)
+                baseBudget = tt;
+            RemainingTime = Mathf.Clamp(baseBudget - prepaid, 0, tt);
             PrepaidTime = 0;
         }
 

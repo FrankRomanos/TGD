@@ -669,6 +669,7 @@ namespace TGD.CombatV2
         void OnPlayerSideEnd()
         {
             ApplySideEndTicks(true);
+            ResetPlayerBudgets();
             ClearTempAttackLayer("SideEnd");
             PlayerSideEnded?.Invoke();
             SideEnded?.Invoke(true);
@@ -688,6 +689,21 @@ namespace TGD.CombatV2
             if (occ == null) return;
             int count = occ.ClearLayer(OccLayer.TempAttack);
             Debug.Log($"[Occ] TempClear {reason} count={count}", this);
+        }
+
+        void ResetPlayerBudgets()
+        {
+            foreach (var pair in _runtimeByUnit)
+            {
+                var runtime = pair.Value;
+                if (runtime == null || !runtime.IsPlayer)
+                    continue;
+
+                int before = runtime.RemainingTime;
+                runtime.ResetBudget();
+                string unitLabel = FormatUnitLabel(runtime.Unit);
+                Debug.Log($"[Time] Reset T{_currentPhaseIndex}(Player) U={unitLabel} {before}s -> {runtime.RemainingTime}s", this);
+            }
         }
 
         readonly struct TerrainStickySample
