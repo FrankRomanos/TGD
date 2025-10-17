@@ -37,6 +37,7 @@ namespace TGD.CombatV2
         readonly HashSet<MoveRateStatusRuntime> _allMoveRateStatuses = new();
         readonly HashSet<CooldownStoreSecV2> _allCooldownStores = new();
         readonly List<Func<bool, IEnumerator>> _phaseStartGates = new();
+        readonly List<Func<Unit, IEnumerator>> _turnStartGates = new();
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -197,7 +198,35 @@ namespace TGD.CombatV2
             _phaseStartGates.Remove(gate);
         }
 
+        public void RegisterTurnStartGate(Func<Unit, IEnumerator> gate)
+        {
+            if (gate == null)
+                return;
+            if (!_turnStartGates.Contains(gate))
+                _turnStartGates.Add(gate);
+        }
+
+        public void UnregisterTurnStartGate(Func<Unit, IEnumerator> gate)
+        {
+            if (gate == null)
+                return;
+            _turnStartGates.Remove(gate);
+        }
+
         public bool IsPlayerPhase => _currentPhaseIsPlayer;
+        public IReadOnlyList<Unit> GetSideUnits(bool isPlayerSide) => isPlayerSide ? _playerUnits : _enemyUnits;
+        public int GetTurnOrderIndex(Unit unit, bool isPlayerSide)
+        {
+            if (unit == null)
+                return int.MaxValue;
+
+            var list = isPlayerSide ? _playerUnits : _enemyUnits;
+            if (list == null)
+                return int.MaxValue;
+
+            int index = list.IndexOf(unit);
+            return index >= 0 ? index : int.MaxValue;
+        }
         public UnitRuntimeContext GetContext(Unit unit)
         {
             if (unit == null) return null;
@@ -363,6 +392,8 @@ namespace TGD.CombatV2
             string unitLabel = FormatUnitLabel(runtime.Unit);
             Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
             TurnStarted?.Invoke(runtime.Unit);
+            // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
+            StartCoroutine(RunTurnStartGates(runtime.Unit));
         }
 
         void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds, bool silent = false)
@@ -510,7 +541,23 @@ namespace TGD.CombatV2
 
             return runtime;
         }
-       
+        IEnumerator RunTurnStartGates(Unit unit)
+        {
+            if (_turnStartGates.Count == 0) yield break;
+
+            var snapshot = _turnStartGates.ToArray();
+            foreach (var gate in snapshot)
+            {
+                if (gate == null) continue;
+
+                IEnumerator routine = null;
+                try { routine = gate(unit); }
+                catch (Exception ex) { Debug.LogException(ex, this); }
+
+                if (routine != null)
+                    yield return StartCoroutine(routine);
+            }
+        }
         string FormatContextLabel(UnitRuntimeContext context)
         {
             if (context == null)

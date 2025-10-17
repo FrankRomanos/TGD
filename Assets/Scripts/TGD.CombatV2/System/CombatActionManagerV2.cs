@@ -269,6 +269,10 @@ namespace TGD.CombatV2
                 turnManager.TurnStarted += OnTurnStarted;
             }
             RegisterPhaseGate();
+            if (turnManager != null)
+            {
+                turnManager.RegisterTurnStartGate(HandleTurnStartGate);
+            }
         }
 
         void OnDisable()
@@ -278,6 +282,10 @@ namespace TGD.CombatV2
                 turnManager.TurnStarted -= OnTurnStarted;
             }
             UnregisterPhaseGate();
+            if (turnManager != null)
+            {
+                turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
+            }
             ChainCursor?.Clear();
         }
 
@@ -1310,19 +1318,119 @@ namespace TGD.CombatV2
             return hex;
         }
 
-        IEnumerator HandlePhaseStartGate(bool isPlayerPhase)
+        List<Unit> BuildOrderedSideUnits(bool isPlayerSide)
         {
-            if (skipPhaseStartFreeChain)
+            if (turnManager == null)
+                return null;
+
+            var source = turnManager.GetSideUnits(isPlayerSide);
+            if (source == null || source.Count == 0)
+                return null;
+
+            var ordered = new List<Unit>(source.Count);
+            foreach (var unit in source)
             {
-                Log($"[Free] PhaseStart({(isPlayerPhase ? "P1" : "Enemy")}) freeskip");
-                yield break;
+                if (unit == null)
+                    continue;
+                ordered.Add(unit);
             }
 
+            if (ordered.Count <= 1)
+                return ordered;
+
+            ordered.Sort((a, b) =>
+            {
+                int ia = turnManager.GetTurnOrderIndex(a, isPlayerSide);
+                int ib = turnManager.GetTurnOrderIndex(b, isPlayerSide);
+
+                if (ia == ib)
+                {
+                    string la = TurnManagerV2.FormatUnitLabel(a);
+                    string lb = TurnManagerV2.FormatUnitLabel(b);
+                    return string.Compare(la, lb, StringComparison.Ordinal);
+                }
+
+                if (ia == int.MaxValue)
+                    return 1;
+                if (ib == int.MaxValue)
+                    return -1;
+
+                return ia.CompareTo(ib);
+            });
+
+            return ordered;
+        }
+
+        int PreviewStartFreeChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources)
+        {
+            if (unit == null)
+                return 0;
+
+            var options = BuildChainOptions(unit, budget, resources, 0, ActionKind.Free, false, true);
+            int count = options != null ? options.Count : 0;
+            options?.Clear();
+            return count;
+        }
+
+        void LogPhaseStartPreview(string unitLabel, string phaseKind, int count)
+        {
+            Log($"[Free] {phaseKind} W2.1 (count={count}) unit={unitLabel}");
+        }
+
+        IEnumerator HandlePhaseStartGate(bool isPlayerPhase)
+        {
             if (turnManager == null)
                 yield break;
 
-            var unit = unitDriver != null ? unitDriver.UnitRef : null;
-            if (unit == null)
+            if (isPlayerPhase)
+            {
+                // Player units handle their own free windows on TurnStart.
+                yield break;
+            }
+
+            var friendlies = BuildOrderedSideUnits(true);
+            if (friendlies == null || friendlies.Count == 0)
+                yield break;
+
+            if (skipPhaseStartFreeChain)
+            {
+                foreach (var unit in friendlies)
+                {
+                    if (unit == null)
+                        continue;
+                    Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                }
+                yield break;
+            }
+
+            foreach (var unit in friendlies)
+            {
+                if (unit == null)
+                    continue;
+                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)");
+            }
+        }
+
+        IEnumerator HandleTurnStartGate(Unit unit)
+        {
+            if (turnManager == null || unit == null)
+                yield break;
+
+            if (!turnManager.IsPlayerUnit(unit))
+                yield break;
+
+            if (skipPhaseStartFreeChain)
+            {
+                Log($"[Free] PhaseStart(P1) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                yield break;
+            }
+
+            yield return RunStartFreeChainWindow(unit, "PhaseStart(P1)");
+        }
+
+        IEnumerator RunStartFreeChainWindow(Unit unit, string planKind)
+        {
+            if (unit == null || turnManager == null)
                 yield break;
 
             var budget = turnManager.GetBudget(unit);
@@ -1335,12 +1443,16 @@ namespace TGD.CombatV2
 
             var phasePlan = new ActionPlan
             {
-                kind = isPlayerPhase ? "PhaseStart(P1)" : "PhaseStart(Enemy)",
+                kind = planKind,
                 target = Hex.Zero,
                 cost = new PlannedCost { valid = true }
             };
 
-            yield return RunChainWindow(unit, phasePlan, ActionKind.Free, budget, resources, 0, pendingChain, cancelled => cancelBase = cancelled);
+            // 可选：为了避免刚开回合时各句柄/工具还没就绪导致第一次统计为0，等1帧再开窗
+            // yield return null;
+
+            yield return RunChainWindow(unit, phasePlan, ActionKind.Free,
+                budget, resources, 0, pendingChain, cancelled => cancelBase = cancelled);
 
             if (cancelBase)
             {
@@ -1357,5 +1469,6 @@ namespace TGD.CombatV2
 
             _planStack.Clear();
         }
+
     }
 }
