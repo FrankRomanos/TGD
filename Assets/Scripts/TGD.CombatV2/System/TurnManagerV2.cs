@@ -36,6 +36,7 @@ namespace TGD.CombatV2
         readonly HashSet<UnitRuntimeContext> _allContexts = new();
         readonly HashSet<MoveRateStatusRuntime> _allMoveRateStatuses = new();
         readonly HashSet<CooldownStoreSecV2> _allCooldownStores = new();
+        readonly List<Func<bool, IEnumerator>> _phaseStartGates = new();
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -181,6 +182,21 @@ namespace TGD.CombatV2
                 runtime.Bind(context);
         }
 
+        public void RegisterPhaseStartGate(Func<bool, IEnumerator> gate)
+        {
+            if (gate == null)
+                return;
+            if (!_phaseStartGates.Contains(gate))
+                _phaseStartGates.Add(gate);
+        }
+
+        public void UnregisterPhaseStartGate(Func<bool, IEnumerator> gate)
+        {
+            if (gate == null)
+                return;
+            _phaseStartGates.Remove(gate);
+        }
+
         public bool IsPlayerPhase => _currentPhaseIsPlayer;
         public UnitRuntimeContext GetContext(Unit unit)
         {
@@ -277,6 +293,32 @@ namespace TGD.CombatV2
             }
         }
 
+        IEnumerator RunPhaseStartGates(bool isPlayer)
+        {
+            if (_phaseStartGates.Count == 0)
+                yield break;
+
+            var snapshot = _phaseStartGates.ToArray();
+            foreach (var gate in snapshot)
+            {
+                if (gate == null)
+                    continue;
+
+                IEnumerator routine = null;
+                try
+                {
+                    routine = gate(isPlayer);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
+
+                if (routine != null)
+                    yield return StartCoroutine(routine);
+            }
+        }
+
         IEnumerator RunPhase(List<Unit> units, bool isPlayer)
         {
             _phaseIndex += 1;
@@ -285,6 +327,7 @@ namespace TGD.CombatV2
 
             string phaseLabel = FormatPhaseLabel(isPlayer);
             Debug.Log($"[Phase] Begin T{_currentPhaseIndex}({phaseLabel})", this);
+            yield return RunPhaseStartGates(isPlayer);
             if (isPlayer)
                 OnPlayerPhaseBegin();
             else
