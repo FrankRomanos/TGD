@@ -109,6 +109,7 @@ namespace TGD.CombatV2
         {
             public bool queued;
             public bool cancel;
+            public IActionToolV2 tool;
         }
 
         struct ExecReportData
@@ -313,6 +314,16 @@ namespace TGD.CombatV2
             {
                 if (Input.GetKeyDown(keyMoveAim)) RequestAim("Move");
                 if (Input.GetKeyDown(keyAttackAim)) RequestAim("Attack");
+                if (chainKeybinds != null)
+                {
+                    foreach (var bind in chainKeybinds)
+                    {
+                        if (bind.key == KeyCode.None || string.IsNullOrEmpty(bind.id))
+                            continue;
+                        if (Input.GetKeyDown(bind.key))
+                            RequestAim(bind.id);
+                    }
+                }
             }
 
             if (_phase == Phase.Aiming)
@@ -504,7 +515,7 @@ namespace TGD.CombatV2
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
-                yield return RunChainWindow(unit, actionPlan, tool.Kind, budget, resources, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
+                yield return RunChainWindow(unit, actionPlan, tool.Kind, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
             }
 
             for (int i = pendingChain.Count - 1; i >= 0; --i)
@@ -555,10 +566,10 @@ namespace TGD.CombatV2
 
             ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
 
-            Resolve(unit, plan, exec, report, budget, resources);
+            Resolve(tool, unit, plan, exec, report, budget, resources);
         }
 
-        void Resolve(Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
+        void Resolve(IActionToolV2 tool, Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
         {
             int used = report.TotalPlanned;
             int refunded = report.TotalRefunded;
@@ -636,10 +647,32 @@ namespace TGD.CombatV2
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
+            ApplyCooldown(tool, unit);
+
             exec.Consume();
             _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
+        }
+
+        void ApplyCooldown(IActionToolV2 tool, Unit unit)
+        {
+            if (turnManager == null || tool == null || unit == null)
+                return;
+
+            var cooldowns = turnManager.GetCooldowns(unit);
+            if (cooldowns == null)
+                return;
+
+            switch (tool)
+            {
+                case ChainTestActionBase chainTool:
+                    int seconds = chainTool.CooldownSeconds;
+                    string skillId = chainTool.CooldownId;
+                    if (!string.IsNullOrEmpty(skillId) && seconds > 0)
+                        cooldowns.StartSeconds(skillId, seconds);
+                    break;
+            }
         }
 
         ExecReportData BuildExecReport(IActionToolV2 tool, out IActionExecReportV2 exec)
@@ -947,7 +980,7 @@ namespace TGD.CombatV2
                 || baseKind == ActionKind.Sustained;
         }
 
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, ActionKind baseKind, bool allowReaction, bool onlyFree)
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, ActionKind baseKind, bool allowReaction, bool onlyFree, ICooldownSink cooldowns, ISet<IActionToolV2> pending)
         {
             _chainBuffer.Clear();
 
@@ -965,6 +998,9 @@ namespace TGD.CombatV2
                         // Guard: only the active unit may contribute reaction/free follow-ups during its own turn.
                         continue;
                     }
+
+                    if (pending != null && pending.Contains(tool))
+                        continue;
 
                     if (tool.Kind != ActionKind.Reaction && tool.Kind != ActionKind.Free)
                         continue;
@@ -1004,6 +1040,9 @@ namespace TGD.CombatV2
                     }
 
                     if (resources != null && energy > 0 && !resources.Has("Energy", energy))
+                        continue;
+
+                    if (cooldowns != null && !IsCooldownReadyForConfirm(tool, cooldowns))
                         continue;
 
                     var key = ResolveChainKey(tool.Id);
@@ -1049,16 +1088,26 @@ namespace TGD.CombatV2
             }
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, ITurnBudget budget, IResourcePool resources, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
         {
             ResolveInitialChainState(baseKind, out bool allowReaction, out bool onlyFree);
             bool cancelledBase = false;
             int depth = 0;
             bool keepLooping = true;
+            HashSet<IActionToolV2> pendingSet = null;
+            if (pendingActions != null && pendingActions.Count > 0)
+            {
+                pendingSet = new HashSet<IActionToolV2>();
+                foreach (var tuple in pendingActions)
+                {
+                    if (tuple?.Item1 != null)
+                        pendingSet.Add(tuple.Item1);
+                }
+            }
 
             while (keepLooping)
             {
-                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, baseKind, allowReaction, onlyFree);
+                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, baseKind, allowReaction, onlyFree, cooldowns, pendingSet);
                 string label = FormatChainStageLabel(depth);
                 ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
 
@@ -1098,6 +1147,12 @@ namespace TGD.CombatV2
 
                             if (!outcome.queued)
                                 continue;
+
+                            if (outcome.tool != null)
+                            {
+                                pendingSet ??= new HashSet<IActionToolV2>();
+                                pendingSet.Add(outcome.tool);
+                            }
 
                             if (option.kind == ActionKind.Reaction)
                             {
@@ -1183,7 +1238,7 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true });
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true, tool = null });
                         yield break;
                     }
 
@@ -1194,7 +1249,7 @@ namespace TGD.CombatV2
 
                 if (!targetChosen)
                 {
-                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false });
+                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
             }
@@ -1209,7 +1264,7 @@ namespace TGD.CombatV2
             {
                 ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
                 ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
-                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false });
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
 
@@ -1254,7 +1309,7 @@ namespace TGD.CombatV2
 
             ChainCursor?.Clear();
 
-            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false });
+            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
         }
         static string MapAimReason(string raw)
         {
@@ -1279,6 +1334,11 @@ namespace TGD.CombatV2
                 skillId = mover.config.actionId;
             else if (tool is AttackControllerV2 attack && attack.attackConfig != null)
                 skillId = attack.attackConfig.name;
+            else if (tool is ChainTestActionBase chain)
+                skillId = chain.CooldownId;
+
+            if (string.IsNullOrEmpty(skillId))
+                skillId = tool?.Id;
 
             if (string.IsNullOrEmpty(skillId))
                 return true;
@@ -1366,7 +1426,8 @@ namespace TGD.CombatV2
             if (unit == null)
                 return 0;
 
-            var options = BuildChainOptions(unit, budget, resources, 0, ActionKind.Free, false, true);
+            var cooldowns = turnManager != null ? turnManager.GetCooldowns(unit) : null;
+            var options = BuildChainOptions(unit, budget, resources, 0, ActionKind.Free, false, true, cooldowns, null);
             int count = options != null ? options.Count : 0;
             options?.Clear();
             return count;
@@ -1451,8 +1512,10 @@ namespace TGD.CombatV2
             // 可选：为了避免刚开回合时各句柄/工具还没就绪导致第一次统计为0，等1帧再开窗
             // yield return null;
 
+            var cooldowns = turnManager.GetCooldowns(unit);
+
             yield return RunChainWindow(unit, phasePlan, ActionKind.Free,
-                budget, resources, 0, pendingChain, cancelled => cancelBase = cancelled);
+                budget, resources, cooldowns, 0, pendingChain, cancelled => cancelBase = cancelled);
 
             if (cancelBase)
             {
