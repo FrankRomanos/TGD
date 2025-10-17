@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
@@ -11,6 +12,7 @@ namespace TGD.CombatV2
             actionId = "Free10";
             timeCostSeconds = 0;
             energyCost = 10;
+            targetMode = TargetMode.AnyClick;
         }
     }
 }

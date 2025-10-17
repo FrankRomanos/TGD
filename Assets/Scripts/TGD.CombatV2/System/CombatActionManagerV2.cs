@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using TGD.CombatV2.Targeting;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -16,6 +17,11 @@ namespace TGD.CombatV2
         public LayerMask pickMask = ~0;
         public float pickPlaneY = 0.01f;
         public float rayMaxDistance = 2000f;
+        public HexBoardTiler tiler;
+
+        [Header("Chain Cursor Colors")]
+        public Color chainValidColor = new(1f, 0.9f, 0.2f, 0.85f);
+        public Color chainInvalidColor = new(1f, 0.3f, 0.3f, 0.7f);
 
         [Header("Turn Runtime")]
         public TurnManagerV2 turnManager;
@@ -56,6 +62,7 @@ namespace TGD.CombatV2
         IActionToolV2 _activeTool;
         Unit _currentUnit;
         Hex? _hover;
+        TargetSelectionCursor _chainCursor;
 
         struct PlannedCost
         {
@@ -93,6 +100,12 @@ namespace TGD.CombatV2
             public ActionKind kind;
         }
 
+        struct ChainQueueOutcome
+        {
+            public bool queued;
+            public bool cancel;
+        }
+
         struct ExecReportData
         {
             public bool valid;
@@ -112,6 +125,24 @@ namespace TGD.CombatV2
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
+
+        TargetSelectionCursor ChainCursor
+        {
+            get
+            {
+                if (_chainCursor == null)
+                {
+                    if (!tiler && authoring != null)
+                        tiler = authoring.GetComponent<HexBoardTiler>() ?? authoring.GetComponentInParent<HexBoardTiler>(true);
+                    if (tiler != null)
+                    {
+                        tiler.EnsureBuilt();
+                        _chainCursor = new TargetSelectionCursor(tiler);
+                    }
+                }
+                return _chainCursor;
+            }
+        }
 
         void Reset()
         {
@@ -178,6 +209,7 @@ namespace TGD.CombatV2
         void OnDisable()
         {
             if (turnManager != null) turnManager.TurnStarted -= OnTurnStarted;
+            ChainCursor?.Clear();
         }
 
         void OnTurnStarted(Unit unit)
@@ -828,7 +860,10 @@ namespace TGD.CombatV2
                         continue;
 
                     if (ResolveUnit(tool) != unit)
+                    {
+                        // Guard: only the active unit may contribute reaction/free follow-ups during its own turn.
                         continue;
+                    }
 
                     if (tool.Kind != ActionKind.Reaction && tool.Kind != ActionKind.Free)
                         continue;
@@ -927,10 +962,18 @@ namespace TGD.CombatV2
                         {
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
 
-                            bool queued = false;
-                            yield return TryQueueChainSelection(option, unit, budget, resources, pendingActions, result => queued = result);
+                            ChainQueueOutcome outcome = default;
+                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, budget, resources, pendingActions, result => outcome = result);
 
-                            if (!queued)
+                            if (outcome.cancel)
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                                keepLooping = false;
+                                resolvedStage = true;
+                                break;
+                            }
+
+                            if (!outcome.queued)
                                 continue;
 
                             if (option.kind == ActionKind.Reaction)
@@ -963,17 +1006,75 @@ namespace TGD.CombatV2
             onComplete?.Invoke(cancelledBase);
         }
 
-        IEnumerator TryQueueChainSelection(ChainOption option, Unit unit, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
+        IEnumerator TryQueueChainSelection(ChainOption option, Unit unit, string baseKind, string stageLabel, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
             {
-                onComplete?.Invoke(false);
+                onComplete?.Invoke(default);
                 yield break;
             }
 
             ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
             ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+
+            Hex selectedTarget = Hex.Zero;
+            if (tool is ChainTestActionBase chainTool)
+            {
+                bool awaitingSelection = true;
+                bool targetChosen = false;
+                var cursor = ChainCursor;
+                cursor?.Clear();
+
+                while (awaitingSelection)
+                {
+                    var hover = PickHexUnderMouse();
+                    if (hover.HasValue)
+                    {
+                        var check = chainTool.ValidateTarget(unit, hover.Value);
+                        cursor?.ShowSingle(hover.Value, check.ok ? chainValidColor : chainInvalidColor);
+
+                        if (Input.GetMouseButtonDown(0))
+                        {
+                            if (check.ok)
+                            {
+                                selectedTarget = hover.Value;
+                                ActionPhaseLogger.Log(unit, baseKind, $"{stageLabel} TargetOk", $"(id={tool.Id}, hex={hover.Value})");
+                                targetChosen = true;
+                                awaitingSelection = false;
+                            }
+                            else
+                            {
+                                ActionPhaseLogger.Log(unit, baseKind, $"{stageLabel} TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        cursor?.Clear();
+                    }
+
+                    if (!awaitingSelection)
+                        break;
+
+                    if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+                    {
+                        cursor?.Clear();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true });
+                        yield break;
+                    }
+
+                    yield return null;
+                }
+
+                cursor?.Clear();
+
+                if (!targetChosen)
+                {
+                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false });
+                    yield break;
+                }
+            }
 
             string failReason = null;
             if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
@@ -985,7 +1086,7 @@ namespace TGD.CombatV2
             {
                 ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
                 ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
-                onComplete?.Invoke(false);
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false });
                 yield break;
             }
 
@@ -1022,13 +1123,15 @@ namespace TGD.CombatV2
             var actionPlan = new ActionPlan
             {
                 kind = tool.Id,
-                target = Hex.Zero,
+                target = selectedTarget,
                 cost = planCost
             };
 
             pendingActions.Add(Tuple.Create(tool, actionPlan));
 
-            onComplete?.Invoke(true);
+            ChainCursor?.Clear();
+
+            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false });
         }
         static string MapAimReason(string raw)
         {

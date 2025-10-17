@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
@@ -11,6 +12,7 @@ namespace TGD.CombatV2
             actionId = "Reaction20";
             timeCostSeconds = 1;
             energyCost = 20;
+            targetMode = TargetMode.EnemyOrGround;
         }
     }
 }
