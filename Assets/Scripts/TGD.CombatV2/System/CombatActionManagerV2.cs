@@ -27,6 +27,10 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
         public HexBoardTestDriver unitDriver;
 
+        [SerializeField]
+        [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
+        bool registerAsGateHub = true;
+
         [Header("Tools (drag any components that implement IActionToolV2)")]
         public List<MonoBehaviour> tools = new();
 
@@ -269,10 +273,13 @@ namespace TGD.CombatV2
             {
                 turnManager.TurnStarted += OnTurnStarted;
             }
-            RegisterPhaseGate();
-            if (turnManager != null)
+            if (registerAsGateHub)
             {
-                turnManager.RegisterTurnStartGate(HandleTurnStartGate);
+                RegisterPhaseGate();
+                if (turnManager != null)
+                {
+                    turnManager.RegisterTurnStartGate(HandleTurnStartGate);
+                }
             }
         }
 
@@ -282,7 +289,8 @@ namespace TGD.CombatV2
             {
                 turnManager.TurnStarted -= OnTurnStarted;
             }
-            UnregisterPhaseGate();
+            if (registerAsGateHub)
+                UnregisterPhaseGate();
             if (turnManager != null)
             {
                 turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
@@ -321,7 +329,12 @@ namespace TGD.CombatV2
                         if (bind.key == KeyCode.None || string.IsNullOrEmpty(bind.id))
                             continue;
                         if (Input.GetKeyDown(bind.key))
+                        {
+                            var chainedTool = SelectTool(bind.id);
+                            if (chainedTool == null || chainedTool.Kind != ActionKind.Reaction)
+                                continue;
                             RequestAim(bind.id);
+                        }
                     }
                 }
             }
@@ -1478,6 +1491,9 @@ namespace TGD.CombatV2
                 yield break;
 
             if (!turnManager.IsPlayerUnit(unit))
+                yield break;
+
+            if (unitDriver != null && unitDriver.UnitRef != unit)
                 yield break;
 
             if (skipPhaseStartFreeChain)
