@@ -97,9 +97,7 @@ namespace TGD.CombatV2.Targeting
 
             bool ignoreEnvironment = IsAnyClick(spec);
             bool allowsGround = AllowsGroundSelection(spec);
-            bool staticBlocked = false;
-            bool pitBlocked = false;
-
+            // 1) 非障碍：遇到静态障碍或坑，立刻拒绝（早退）
             if (spec.terrain == TargetTerrainMask.NonObstacle)
             {
                 var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
@@ -108,20 +106,17 @@ namespace TGD.CombatV2.Targeting
 
                 if (environment != null && environment.IsPit(hex))
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
-
-                if (!ignoreEnvironment && environment != null && environment.IsPit(hex))
-                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
             }
-            else if (allowsGround && !ignoreEnvironment)
+            // 2) 允许点地面但不是 AnyClick：同样早退拦住
+            else if (AllowsGroundSelection(spec) && !IsAnyClick(spec))
             {
                 var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
                 if (terrainPass != null && terrainPass.IsBlocked(hex))
-                    staticBlocked = true;
+                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] GroundStaticBlocked");
 
                 if (environment != null && environment.IsPit(hex))
-                    pitBlocked = true;
+                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] GroundPit");
             }
-
             _occ.TryGetActor(hex, out var actorAt);
             var unitAt = ResolveUnit(actorAt);
             bool isEmpty = actorAt == null;
