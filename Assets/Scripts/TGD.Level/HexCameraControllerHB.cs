@@ -1,99 +1,130 @@
-// File: TGD.Level/HexCameraControllerHB.cs
+ï»¿// File: TGD.Level/HexCameraControllerHB.cs
 using UnityEngine;
 using Unity.Cinemachine;
+using UnityEngine.EventSystems;
 using TGD.HexBoard;
 
 namespace TGD.Level
 {
-    /// ´¿Êó±êÏà»ú¿ØÖÆ£¨ÊÊÅäÁù±ßĞÎÆåÅÌ£©
-    /// - Êó±êÖĞ¼üÍÏ×§£ºË®Æ½Ğı×ª£¨Yaw£©
-    /// - Êó±êÓÒ¼üÍÏ×§£ºÆ½ÒÆ£¨ÑØÏà»ú Forward/Right µÄË®Æ½Í¶Ó°£©
-    /// - Êó±ê¹öÂÖ£ºËõ·Å£¨CinemachineFollow.y »ò±¾µØ¾àÀë£©
-    /// - ¿ÉÑ¡£ºËÉ¿ªÖĞ¼üºó Snap µ½ 60¡ã£¨hex ÓÑºÃ£©
     [DisallowMultipleComponent]
     public class HexCameraControllerHB : MonoBehaviour
     {
         [Header("Refs")]
-        [SerializeField] CinemachineCamera cineCam;          // CM v3 Camera
-        [SerializeField] Transform pivot;                    // ¹«×ªÊàÖá£¨Ïà»ú×÷ÎªÆä×ÓÎïÌå£©
-        [SerializeField] HexBoardAuthoringLite authoring;    // ¿ÉÑ¡£ºÄÃµ½ Layout
+        [SerializeField] CinemachineCamera cineCam;
+        [SerializeField] Transform pivot;
+        [SerializeField] HexBoardAuthoringLite authoring;
         [SerializeField] HexBoardLayout layout;
 
-        [Header("Mouse Controls")]
-        [SerializeField, Tooltip("ÓÒ¼üÍÏ×§µÄÆ½ÒÆÁéÃô¶È£¨ÊÀ½çµ¥Î»/ÏñËØ£¬×Ô¶¯Ëæ¸ß¶ÈÎ¢µ÷£©")]
-        float panSensitivity = 0.02f;
-        [SerializeField, Tooltip("ÖĞ¼üÍÏ×§µÄĞı×ªÁéÃô¶È£¨¶È/ÏñËØ£©")]
-        float rotateSensitivity = 0.25f;
+        [Header("Rotate â€” MMB æŒ‰ä½")]
+        [SerializeField] float rotateDegPerScreen = 180f;
+        [SerializeField] bool snapYawTo60 = true;
 
-        [Header("Zoom")]
+        [Header("Zoom â€” æ»šè½®ï¼ˆä¿æŒä¿¯è§’ï¼‰")]
         [SerializeField] float zoomSpeed = 6f;
-        [SerializeField] float minFollowY = 1f;
+        [SerializeField] float minFollowY = 6f;
         [SerializeField] float maxFollowY = 30f;
+        [SerializeField] float tiltDeg = 53f;
+        [SerializeField] bool zoomTowardMouse = true;
+        [SerializeField] float zoomTowardLerp = 0.15f;
 
-        [Header("Quality of Life")]
-        [SerializeField, Tooltip("ËÉ¿ªÖĞ¼üÊ±¶ÔÆëµ½ 60¡ã µÄ±¶Êı")]
-        bool snapYawTo60 = true;
+        // ğŸ”’ ç¼©æ”¾ä¿æŠ¤ï¼ˆé˜²â€œä¸¢ç„¦ç‚¹â€ï¼‰
+        [SerializeField] float zoomTowardMaxStep = 2.0f;   // æ¯æ¬¡ç¼©æ”¾ pivot æœ€å¤§ç§»åŠ¨æ­¥é•¿
+        [SerializeField] float zoomTowardMaxDistance = 12f; // è¶…è¿‡è¿™ä¸ªè·ç¦»å°±å¿½ç•¥â€œæœé¼ æ ‡ç¼©æ”¾â€
 
-        // ÄÚ²¿×´Ì¬
-        bool _rotating = false;
-        bool _panning = false;
+        [Header("Edge Scroll â€” å±å¹•è¾¹ç¼˜ç§»åŠ¨")]
+        [SerializeField] bool edgeScrollEnabled = true;
+        [SerializeField] int edgeThresholdPx = 22;
+        [SerializeField] int edgeExitThresholdPx = 36;
+        [SerializeField] float edgeDwellSeconds = 0.8f;
+        [SerializeField] float baseEdgeSpeed = 10f;
+        [SerializeField] float edgeSpeedMinScale = 0.7f;
+        [SerializeField] float edgeSpeedMaxScale = 2.0f;
+        [SerializeField] bool edgeDisableWhenAnyMouseDown = true;
+
+        [Header("Key Pan â€” æ–¹å‘é”®å¹³ç§»")]
+        [SerializeField] bool keyPanEnabled = true;
+        [SerializeField] float keyPanSpeed = 10f;           // ä¸–ç•Œå•ä½/ç§’
+        [SerializeField] float keyPanFastMultiplier = 2f;   // Shift
+        [SerializeField] float keyPanSlowMultiplier = 0.5f; // Ctrl
+
+        [Header("Clamp Boundsï¼ˆå¯é€‰ï¼‰")]
+        [SerializeField] bool clampToBounds = false;
+        [SerializeField] Vector2 boundsMinXZ = new(-100f, -100f);
+        [SerializeField] Vector2 boundsMaxXZ = new(100f, 100f);
+
+        [Header("Auto Focusï¼ˆå›åˆå¼€å§‹å±…ä¸­ï¼‰")]
+        [SerializeField] float autoFocusSmooth = 0.25f;
+
+        bool _rotating;
         Vector3 _lastMousePos;
-        float _distance = 15f; // ·Ç CM Ä£Ê½ÏÂ±¸ÓÃ
+        Vector3 _focusVel;
+        bool _autoFocusActive;
+        Vector3 _autoFocusTarget;
+
+        // è¾¹ç¼˜æ»šåŠ¨çŠ¶æ€
+        bool _edgeActive;
+        float _edgeEnterTime = -1f;
 
         void Awake()
         {
             if (layout == null && authoring != null) layout = authoring.Layout;
-
             if (pivot == null)
             {
                 var go = new GameObject("CameraPivot");
                 go.transform.position = transform.position;
                 go.transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
                 pivot = go.transform;
-                transform.SetParent(pivot, worldPositionStays: true);
             }
-
-            // ³õÊ¼¶ÔÆë£ºÏà»ú¿´ pivot µÄË®Æ½Î»ÖÃ
-            transform.LookAt(new Vector3(pivot.position.x, transform.position.y, pivot.position.z));
         }
 
         void Update()
         {
-            HandleMouseRotate();
-            HandleMousePan();
-            HandleZoom();
+            HandleMouseRotate();     // ä¸­é”®æŒ‰ä½æ‰æ—‹è½¬
+            HandleKeyPan();          // â†‘â†“â†â†’ å¹³ç§»
+            HandleEdgeScroll();      // å±å¹•è¾¹ç¼˜ï¼ˆæœ‰åœç•™æ—¶é—´ï¼‰
+            HandleZoom();            // y/z è”åŠ¨ + ä¿æŠ¤
+            HandleAutoFocus();       // å›åˆå¼€å§‹å±…ä¸­
+            if (clampToBounds) ClampToMapBounds();
         }
 
-        // ========== Public API ==========
+        // ===== Public API =====
         public Hex GetFocusCoordinate()
         {
             if (layout == null) return Hex.Zero;
-            return layout.HexAt(transform.position);
+            return layout.HexAt(pivot.position);
         }
-
         public Vector3 GetFocusWorldPosition()
         {
-            if (layout == null) return transform.position;
-            var h = GetFocusCoordinate();
-            return layout.World(h, 0f);
+            return (layout != null) ? layout.World(GetFocusCoordinate(), 0f) : pivot.position;
         }
-
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            Vector3 w = layout.World(h, 0f);
-            pivot.position = w;
+            pivot.position = layout.World(h, 0f);
+        }
+        public void AutoFocus(Vector3 worldPos)
+        {
+            _autoFocusTarget = worldPos;
+            _autoFocusActive = true;
+            _focusVel = Vector3.zero;
+        }
+        public void AutoFocus(Hex h)
+        {
+            if (layout == null) return;
+            AutoFocus(layout.World(h, 0f));
         }
 
-        // ========== Mouse ==========
+        // ===== Handlers =====
 
-        // ÖĞ¼üÍÏ×§£ºË®Æ½Ğı×ª
+        // ä¸­é”®æ—‹è½¬ï¼ˆæŒ‰ä½æ‰æ—‹è½¬ï¼‰
         void HandleMouseRotate()
         {
             if (Input.GetMouseButtonDown(2))
             {
                 _rotating = true;
                 _lastMousePos = Input.mousePosition;
+                _edgeActive = false;
+                _edgeEnterTime = -1f;
             }
             else if (Input.GetMouseButtonUp(2))
             {
@@ -104,81 +135,170 @@ namespace TGD.Level
                     pivot.rotation = Quaternion.Euler(0f, snapped, 0f);
                 }
                 _rotating = false;
+                _lastMousePos = Input.mousePosition;
+                _edgeActive = false;
+                _edgeEnterTime = Time.unscaledTime + 0.2f; // æ¾æ‰‹å 0.2s å†…ä¸è§¦å‘è¾¹ç¼˜æ»šåŠ¨
             }
 
             if (!_rotating) return;
 
             var cur = Input.mousePosition;
-            var delta = cur - _lastMousePos;
+            var delta = (Vector2)(cur - _lastMousePos);
             _lastMousePos = cur;
 
-            float yawDelta = delta.x * rotateSensitivity; // ½öË®Æ½Ğı×ª
+            float normX = delta.x / Mathf.Max(1f, Screen.width);
+            float yawDelta = normX * rotateDegPerScreen; // åº¦
             pivot.Rotate(0f, yawDelta, 0f, Space.World);
         }
 
-        // ÓÒ¼üÍÏ×§£ºÆ½ÒÆ
-        void HandleMousePan()
+        // â†‘â†“â†â†’ å¹³ç§»ï¼ˆä¸è¾¹ç¼˜æ»šåŠ¨äº’æ–¥ï¼‰
+        void HandleKeyPan()
         {
-            if (Input.GetMouseButtonDown(1))
-            {
-                _panning = true;
-                _lastMousePos = Input.mousePosition;
-            }
-            else if (Input.GetMouseButtonUp(1))
-            {
-                _panning = false;
-            }
+            if (!keyPanEnabled) return;
 
-            if (!_panning) return;
+            float x = 0f, y = 0f;
+            if (Input.GetKey(KeyCode.LeftArrow)) x -= 1f;
+            if (Input.GetKey(KeyCode.RightArrow)) x += 1f;
+            if (Input.GetKey(KeyCode.DownArrow)) y -= 1f;
+            if (Input.GetKey(KeyCode.UpArrow)) y += 1f;
 
-            var cur = Input.mousePosition;
-            var delta = cur - _lastMousePos;
-            _lastMousePos = cur;
+            if (Mathf.Approximately(x, 0f) && Mathf.Approximately(y, 0f)) return;
 
-            // ¸ù¾İ¸ß¶ÈÊÊÅäÆ½ÒÆËÙ¶È£ºÔ½¸ß×ßµÃÔ½Ô¶
-            float height = CurrentCameraHeight();
-            float heightFactor = Mathf.Clamp(height * 0.02f, 0.5f, 3f);
+            float speed = keyPanSpeed;
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                speed *= keyPanFastMultiplier;
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                speed *= keyPanSlowMultiplier;
 
             Vector3 fwd = pivot.forward; fwd.y = 0f; fwd.Normalize();
             Vector3 right = pivot.right; right.y = 0f; right.Normalize();
 
-            // ÆÁÄ»ÏñËØµ½ÊÀ½çÎ»ÒÆ£ºX¡úÓÒ£¬Y¡úÇ°£¨ÉÏÎªÕı£©
-            Vector3 worldDelta = (right * delta.x + fwd * delta.y) * panSensitivity * heightFactor;
-            pivot.position += worldDelta;
+            Vector3 dir = (right * x + fwd * y);
+            if (dir.sqrMagnitude > 1f) dir.Normalize();
+
+            pivot.position += dir * speed * Time.deltaTime;
+
+            // é”®ç›˜å¹³ç§»æ—¶ç¦ç”¨è¾¹ç¼˜æ»šåŠ¨
+            _edgeActive = false;
+            _edgeEnterTime = -1f;
         }
 
-        // ¹öÂÖ£ºËõ·Å
+        // å±å¹•è¾¹ç¼˜æ»šåŠ¨ï¼ˆå¸¦åœç•™ & å›æ»ï¼‰
+        void HandleEdgeScroll()
+        {
+            if (!edgeScrollEnabled) return;
+            if (_rotating) { _edgeActive = false; _edgeEnterTime = -1f; return; }
+            if (edgeDisableWhenAnyMouseDown &&
+               (Input.GetMouseButton(0) || Input.GetMouseButton(1) || Input.GetMouseButton(2)))
+            { _edgeActive = false; _edgeEnterTime = -1f; return; }
+
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            { _edgeActive = false; _edgeEnterTime = -1f; return; }
+
+            int thr = _edgeActive ? edgeExitThresholdPx : edgeThresholdPx;
+
+            Vector2 move = Vector2.zero;
+            Vector2 mp = Input.mousePosition;
+
+            if (mp.x <= thr) move.x = -Mathf.InverseLerp(thr, 0f, mp.x);
+            else if (mp.x >= Screen.width - thr) move.x = Mathf.InverseLerp(Screen.width - thr, Screen.width, mp.x);
+
+            if (mp.y <= thr) move.y = -Mathf.InverseLerp(thr, 0f, mp.y);
+            else if (mp.y >= Screen.height - thr) move.y = Mathf.InverseLerp(Screen.height - thr, Screen.height, mp.y);
+
+            bool inside = move.sqrMagnitude > 1e-6f;
+            if (!inside) { _edgeActive = false; _edgeEnterTime = -1f; return; }
+
+            if (!_edgeActive) { _edgeActive = true; _edgeEnterTime = Time.unscaledTime; return; }
+            if (Time.unscaledTime - _edgeEnterTime < edgeDwellSeconds) return;
+
+            float h = CurrentCameraHeight();
+            float t = Mathf.InverseLerp(minFollowY, maxFollowY, Mathf.Clamp(h, minFollowY, maxFollowY));
+            float speed = baseEdgeSpeed * Mathf.Lerp(edgeSpeedMinScale, edgeSpeedMaxScale, t);
+
+            Vector3 fwd = pivot.forward; fwd.y = 0f; fwd.Normalize();
+            Vector3 right = pivot.right; right.y = 0f; right.Normalize();
+            Vector3 worldDir = (right * move.x + fwd * move.y).normalized;
+
+            float intensity = Mathf.Clamp01(move.magnitude);
+            pivot.position += worldDir * (speed * intensity) * Time.deltaTime;
+        }
+
+        // æ»šè½®ç¼©æ”¾ï¼ˆå›ºå®šä¿¯è§’ + ä¸¢ç„¦ä¿æŠ¤ï¼‰
         void HandleZoom()
         {
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Approximately(wheel, 0f)) return;
 
-            if (cineCam != null)
+            var follow = (cineCam != null) ? cineCam.GetComponent<CinemachineFollow>() : null;
+            if (follow == null) return;
+
+            var off = follow.FollowOffset;
+            float newY = Mathf.Clamp(off.y - wheel * zoomSpeed, minFollowY, maxFollowY);
+
+            float tiltRad = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
+            off.y = newY;
+            off.z = -newY / Mathf.Tan(tiltRad);
+            follow.FollowOffset = off;
+
+            if (zoomTowardMouse && TryProjectMouseToGround(out var hit))
             {
-                var follow = cineCam.GetComponent<CinemachineFollow>();
-                if (follow != null)
+                Vector3 delta = hit - pivot.position;
+                float dist = delta.magnitude;
+
+                // è¶…è¿œç›®æ ‡ä¸é‡‡ç”¨â€œæœé¼ æ ‡ç¼©æ”¾â€
+                if (dist <= zoomTowardMaxDistance)
                 {
-                    var off = follow.FollowOffset;
-                    off.y = Mathf.Clamp(off.y - wheel * zoomSpeed, minFollowY, maxFollowY);
-                    follow.FollowOffset = off;
-                    return;
+                    // åŸæ¥çš„ Lerp å†åŠ æ­¥é•¿ä¸Šé™ï¼ˆæ›´ç¨³ï¼‰
+                    Vector3 target = Vector3.Lerp(pivot.position, hit, zoomTowardLerp);
+                    Vector3 step = target - pivot.position;
+
+                    if (step.magnitude > zoomTowardMaxStep)
+                        step = step.normalized * zoomTowardMaxStep;
+
+                    pivot.position += step;
                 }
             }
+        }
 
-            // ·Ç CM Ä£Ê½¶µµ×
-            _distance = Mathf.Clamp(_distance - wheel * zoomSpeed, minFollowY, maxFollowY);
-            transform.localPosition = new Vector3(0f, _distance, -_distance);
-            transform.LookAt(new Vector3(pivot.position.x, transform.position.y, pivot.position.z));
+        void HandleAutoFocus()
+        {
+            if (!_autoFocusActive) return;
+            pivot.position = Vector3.SmoothDamp(pivot.position, _autoFocusTarget, ref _focusVel, autoFocusSmooth);
+            if ((pivot.position - _autoFocusTarget).sqrMagnitude < 0.01f)
+                _autoFocusActive = false;
         }
 
         float CurrentCameraHeight()
         {
-            if (cineCam != null)
-            {
-                var follow = cineCam.GetComponent<CinemachineFollow>();
-                if (follow != null) return follow.FollowOffset.y;
-            }
+            var follow = (cineCam != null) ? cineCam.GetComponent<CinemachineFollow>() : null;
+            if (follow != null) return follow.FollowOffset.y;
             return Mathf.Max(1f, transform.position.y - pivot.position.y);
+        }
+
+        void ClampToMapBounds()
+        {
+            var pos = pivot.position;
+            pos.x = Mathf.Clamp(pos.x, boundsMinXZ.x, boundsMaxXZ.x);
+            pos.z = Mathf.Clamp(pos.z, boundsMinXZ.y, boundsMaxXZ.y);
+            pivot.position = pos;
+        }
+
+        bool TryProjectMouseToGround(out Vector3 hit)
+        {
+            var cam = Camera.main != null ? Camera.main : GetComponent<Camera>();
+            if (cam == null) { hit = default; return false; }
+
+            var ray = cam.ScreenPointToRay(Input.mousePosition);
+            // ç”¨ç»è¿‡ pivot çš„æ°´å¹³é¢ï¼›å¦‚æœä½ çš„åœ°å½¢æœ‰é«˜åº¦ï¼Œä»¥åå¯ä»¥æ¢ Physics.Raycast + åœ°é¢å±‚
+            var plane = new Plane(Vector3.up, new Vector3(0f, pivot.position.y, 0f));
+            if (plane.Raycast(ray, out float enter))
+            {
+                hit = ray.GetPoint(enter);
+                return true;
+            }
+            hit = default;
+            return false;
         }
     }
 }
