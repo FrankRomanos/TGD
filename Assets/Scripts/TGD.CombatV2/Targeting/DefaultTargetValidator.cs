@@ -16,6 +16,9 @@ namespace TGD.CombatV2.Targeting
         [Tooltip("调试输出")]
         public bool debugLog;
 
+        [Tooltip("环境阻挡查询（Pit 等）")]
+        public HexEnvironmentSystem environment;
+
         HexOccupancy _occ;
 
         void Awake()
@@ -41,6 +44,23 @@ namespace TGD.CombatV2.Targeting
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
 
             _occ = occupancyService ? occupancyService.Get() : null;
+
+            if (!environment)
+            {
+                environment = GetComponentInParent<HexEnvironmentSystem>(true);
+                if (!environment && driver != null)
+                    environment = driver.GetComponentInParent<HexEnvironmentSystem>(true);
+            }
+
+            if (!environment && occupancyService != null)
+            {
+                environment = occupancyService.GetComponent<HexEnvironmentSystem>();
+                if (!environment && occupancyService.authoring != null)
+                {
+                    environment = occupancyService.authoring.GetComponent<HexEnvironmentSystem>()
+                        ?? occupancyService.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+                }
+            }
         }
 
         public TargetCheckResult Check(Unit actor, Hex hex, TargetingSpec spec)
@@ -79,6 +99,9 @@ namespace TGD.CombatV2.Targeting
                 var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
                 if (terrainPass != null && terrainPass.IsBlocked(hex))
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=StaticObstacle");
+
+                if (environment != null && environment.IsPit(hex))
+                    return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
             }
 
             _occ.TryGetActor(hex, out var actorAt);

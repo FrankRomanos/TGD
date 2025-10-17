@@ -56,14 +56,11 @@ namespace TGD.CombatV2
             }
         }
 
-        TargetSelectionCursor Cursor
+        TargetSelectionCursor Cursor => _cursor;
+
+        public void SetCursorHighlighter(IHexHighlighter highlighter)
         {
-            get
-            {
-                if (_cursor == null && tiler != null)
-                    _cursor = new TargetSelectionCursor(tiler);
-                return _cursor;
-            }
+            _cursor = highlighter != null ? new TargetSelectionCursor(highlighter) : null;
         }
 
         public virtual void OnEnterAim()
