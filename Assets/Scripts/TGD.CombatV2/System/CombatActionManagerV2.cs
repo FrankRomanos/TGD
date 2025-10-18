@@ -130,15 +130,18 @@ namespace TGD.CombatV2
             public int energyAtkNet;
             public bool freeMoveApplied;
             public string refundTag;
+            public bool attackExecuted;
 
             public int TotalPlanned => Mathf.Max(0, plannedSecsMove + plannedSecsAtk);
             public int TotalRefunded => Mathf.Max(0, refundedSecsMove + refundedSecsAtk);
             public int NetSeconds => Mathf.Max(0, TotalPlanned - TotalRefunded);
             public int TotalEnergyNet => energyMoveNet + energyAtkNet;
+            public bool AttackExecuted => attackExecuted;
         }
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
+        readonly List<ChainOption> _derivedBuffer = new();
 
         IActionRules ResolveRules()
         {
@@ -167,7 +170,9 @@ namespace TGD.CombatV2
                 new ChainKeybind { id = "Reaction40", key = KeyCode.Alpha1 },
                 new ChainKeybind { id = "Reaction20", key = KeyCode.Alpha2 },
                 new ChainKeybind { id = "Free10", key = KeyCode.Alpha3 },
-                new ChainKeybind { id = "FullRoundTest", key = KeyCode.Alpha4 }
+                new ChainKeybind { id = "FullRoundTest", key = KeyCode.Alpha4 },
+                new ChainKeybind { id = "DerivedAfterAttack", key = KeyCode.Alpha5 },
+                new ChainKeybind { id = "DerivedAfterDerived", key = KeyCode.Alpha6 }
             };
         }
 
@@ -678,10 +683,10 @@ namespace TGD.CombatV2
 
             ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
 
-            Resolve(tool, unit, plan, exec, report, budget, resources);
+            yield return StartCoroutine(Resolve(tool, unit, plan, exec, report, budget, resources));
         }
 
-        void Resolve(IActionToolV2 tool, Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
+        IEnumerator Resolve(IActionToolV2 tool, Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
         {
             int used = report.TotalPlanned;
             int refunded = report.TotalRefunded;
@@ -755,6 +760,10 @@ namespace TGD.CombatV2
                 }
             }
 
+            var derivedQueue = new List<Tuple<IActionToolV2, ActionPlan>>();
+            var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
+            yield return RunDerivedWindow(unit, tool, plan, report, budget, resources, cooldowns, derivedQueue);
+
             int budgetAfter = budget != null ? budget.Remaining : 0;
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
@@ -765,6 +774,16 @@ namespace TGD.CombatV2
             _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
+
+            if (derivedQueue.Count > 0)
+            {
+                for (int i = 0; i < derivedQueue.Count; i++)
+                {
+                    var pending = derivedQueue[i];
+                    if (pending?.Item1 != null)
+                        yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                }
+            }
         }
         FullRoundQueuedPlan BuildFullRoundPlan(ActionPlan plan, PreDeduct preDeduct, ITurnBudget budget, IResourcePool resources)
         {
@@ -832,6 +851,7 @@ namespace TGD.CombatV2
                     data.energyAtkNet = 0;
                     data.freeMoveApplied = mover.ReportFreeMoveApplied;
                     data.refundTag = mover.ReportRefundTag;
+                    data.attackExecuted = true;
                 }
             }
             else if (tool is AttackControllerV2 attack)
@@ -847,6 +867,7 @@ namespace TGD.CombatV2
                     data.energyAtkNet = attack.ReportEnergyAtkNet;
                     data.freeMoveApplied = attack.ReportFreeMoveApplied;
                     data.refundTag = attack.ReportRefundTag;
+                    data.attackExecuted = attack.ReportAttackExecuted;
                 }
             }
             else
@@ -858,6 +879,7 @@ namespace TGD.CombatV2
                 {
                     data.energyMoveNet = energyReport.EnergyUsed;
                 }
+                data.attackExecuted = true;
             }
 
             return data;
@@ -1295,6 +1317,290 @@ namespace TGD.CombatV2
             }
 
             onComplete?.Invoke(cancelledBase);
+        }
+
+        List<ChainOption> BuildDerivedOptions(Unit unit, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, IReadOnlyList<string> allowedIds)
+        {
+            _derivedBuffer.Clear();
+            if (allowedIds == null || allowedIds.Count == 0)
+                return _derivedBuffer;
+
+            for (int i = 0; i < allowedIds.Count; i++)
+            {
+                string id = allowedIds[i];
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
+                if (!_toolsById.TryGetValue(id, out var toolsForId))
+                    continue;
+
+                for (int j = 0; j < toolsForId.Count; j++)
+                {
+                    var tool = toolsForId[j];
+                    if (tool == null)
+                        continue;
+
+                    if (tool.Kind != ActionKind.Derived)
+                        continue;
+
+                    var owner = ResolveUnit(tool);
+                    if (owner != unit)
+                        continue;
+
+                    var cost = GetBaselineCost(tool);
+                    if (!cost.valid)
+                        continue;
+
+                    int secs = cost.TotalSeconds;
+                    int energy = cost.TotalEnergy;
+
+                    if (secs > 0 && budget != null && !budget.HasTime(secs))
+                        continue;
+
+                    if (resources != null && energy > 0 && !resources.Has("Energy", energy))
+                        continue;
+
+                    if (cooldowns != null && !IsCooldownReadyForConfirm(tool, cooldowns))
+                        continue;
+
+                    var key = ResolveChainKey(tool.Id);
+                    if (key == KeyCode.None)
+                        continue;
+
+                    _derivedBuffer.Add(new ChainOption
+                    {
+                        tool = tool,
+                        key = key,
+                        secs = secs,
+                        energy = energy,
+                        kind = tool.Kind
+                    });
+                }
+            }
+
+            return _derivedBuffer;
+        }
+
+        bool DetermineDerivedBaseSuccess(IActionToolV2 tool, ExecReportData report)
+        {
+            if (!report.valid)
+                return false;
+
+            if (tool == null)
+                return true;
+
+            if (tool is AttackControllerV2)
+                return report.AttackExecuted;
+
+            return true;
+        }
+
+        IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue)
+        {
+            derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
+
+            var rules = ResolveRules();
+            var allowedIds = rules?.AllowedDerivedActions(basePlan.kind);
+            bool baseSuccess = DetermineDerivedBaseSuccess(baseTool, report);
+
+            if (!baseSuccess)
+            {
+                Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=false)");
+                Log("[Chain] DerivedPromptAbort(base-fail)");
+                _derivedBuffer.Clear();
+                yield break;
+            }
+
+            if (allowedIds == null || allowedIds.Count == 0)
+            {
+                Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=true)");
+                Log("[Chain] DerivedPromptAbort(auto-skip)");
+                _derivedBuffer.Clear();
+                yield break;
+            }
+
+            var options = BuildDerivedOptions(unit, budget, resources, cooldowns, allowedIds);
+            Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count={options.Count}, baseSuccess=true)");
+
+            if (options.Count == 0)
+            {
+                Log("[Chain] DerivedPromptAbort(auto-skip)");
+                options.Clear();
+                yield break;
+            }
+
+            bool resolved = false;
+            while (!resolved)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                {
+                    Log("[Chain] DerivedPromptAbort(cancel)");
+                    break;
+                }
+
+                bool handled = false;
+                for (int i = 0; i < options.Count; i++)
+                {
+                    var option = options[i];
+                    if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                    {
+                        handled = true;
+                        Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
+                        ChainQueueOutcome outcome = default;
+                        yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
+
+                        if (outcome.cancel)
+                        {
+                            Log("[Chain] DerivedPromptAbort(cancel)");
+                            resolved = true;
+                        }
+                        else if (outcome.queued)
+                        {
+                            resolved = true;
+                        }
+                        break;
+                    }
+                }
+
+                if (resolved)
+                    break;
+
+                if (!handled)
+                    yield return null;
+                else
+                    yield return null;
+            }
+
+            options.Clear();
+        }
+
+        IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue, Action<ChainQueueOutcome> onComplete)
+        {
+            var tool = option.tool;
+            if (tool == null)
+            {
+                onComplete?.Invoke(default);
+                yield break;
+            }
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+
+            Hex selectedTarget = Hex.Zero;
+            if (tool is ChainTestActionBase chainTool)
+            {
+                bool awaitingSelection = true;
+                bool targetChosen = false;
+                var cursor = ChainCursor;
+                cursor?.Clear();
+
+                while (awaitingSelection)
+                {
+                    var hover = PickHexUnderMouse();
+                    if (hover.HasValue)
+                    {
+                        var check = chainTool.ValidateTarget(unit, hover.Value);
+                        cursor?.ShowSingle(hover.Value, check.ok ? chainValidColor : chainInvalidColor);
+
+                        if (Input.GetMouseButtonDown(0))
+                        {
+                            if (check.ok)
+                            {
+                                selectedTarget = hover.Value;
+                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetOk", $"(id={tool.Id}, hex={hover.Value})");
+                                targetChosen = true;
+                                awaitingSelection = false;
+                            }
+                            else
+                            {
+                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        cursor?.Clear();
+                    }
+
+                    if (!awaitingSelection)
+                        break;
+
+                    if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+                    {
+                        cursor?.Clear();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true, tool = null });
+                        yield break;
+                    }
+
+                    yield return null;
+                }
+
+                cursor?.Clear();
+
+                if (!targetChosen)
+                {
+                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                    yield break;
+                }
+            }
+
+            string failReason = null;
+            if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
+                failReason = "lackTime";
+            else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
+                failReason = "lackEnergy";
+
+            if (failReason != null)
+            {
+                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                yield break;
+            }
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
+
+            int timeBefore = budget != null ? budget.Remaining : 0;
+            int energyBefore = resources != null ? resources.Get("Energy") : 0;
+            Log($"[Gate] W2' PreDeduct planSecs={option.secs}, planEnergy={option.energy} before=Time:{timeBefore}/Energy:{energyBefore}");
+
+            if (budget != null && option.secs > 0)
+                budget.SpendTime(option.secs);
+
+            if (resources != null && option.energy > 0)
+                resources.Spend("Energy", option.energy, "PreDeduct_Derived");
+
+            var plan = new PreDeduct
+            {
+                secs = option.secs,
+                energyMove = option.energy,
+                energyAtk = 0,
+                valid = true
+            };
+
+            _planStack.Push(plan);
+
+            var planCost = new PlannedCost
+            {
+                moveSecs = option.secs,
+                atkSecs = 0,
+                moveEnergy = option.energy,
+                atkEnergy = 0,
+                valid = true
+            };
+
+            var actionPlan = new ActionPlan
+            {
+                kind = tool.Id,
+                target = selectedTarget,
+                cost = planCost
+            };
+
+            derivedQueue.Add(Tuple.Create(tool, actionPlan));
+
+            ChainCursor?.Clear();
+
+            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
         }
 
         IEnumerator TryQueueChainSelection(ChainOption option, Unit unit, string baseKind, string stageLabel, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<ChainQueueOutcome> onComplete)

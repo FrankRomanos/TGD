@@ -36,5 +36,10 @@ namespace TGD.CombatV2
         /// 友军是否允许跨回合插入自己的动作。
         /// </summary>
         bool AllowFriendlyInsertions();
+
+        /// <summary>
+        /// 指定基础动作在 W4.5 可派生的动作 ID 列表。
+        /// </summary>
+        IReadOnlyList<string> AllowedDerivedActions(string baseActionId);
     }
 }
