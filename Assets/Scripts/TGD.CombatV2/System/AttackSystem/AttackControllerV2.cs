@@ -102,6 +102,7 @@ namespace TGD.CombatV2
         int _reportComboBaseCount;
         int _pendingComboBaseCount;
         string _reportRefundTag;
+        bool _reportAttackExecuted;
         readonly HashSet<Hex> _tempReservedThisAction = new();
 
         struct PendingAttack
@@ -129,6 +130,7 @@ namespace TGD.CombatV2
             _reportComboBaseCount = 0;
             _pendingComboBaseCount = 0;
             _reportRefundTag = null;
+            _reportAttackExecuted = false;
         }
 
         void SetExecReport(
@@ -155,6 +157,7 @@ namespace TGD.CombatV2
             _reportPending = true;
             _pendingComboBaseCount = 0;
             _reportRefundTag = refundTag;
+            _reportAttackExecuted = attackExecuted;
         }
 
         internal bool HasPendingExecReport => _reportPending;
@@ -1374,6 +1377,7 @@ namespace TGD.CombatV2
         public int ReportAttackUsedSeconds => _reportPending ? _reportAttackUsedSeconds : 0;
         public int ReportAttackRefundSeconds => _reportPending ? _reportAttackRefundSeconds : 0;
         public string ReportRefundTag => _reportPending ? _reportRefundTag : null;
+        public bool ReportAttackExecuted => _reportPending && _reportAttackExecuted;
 
 
         MoveRatesSnapshot BuildMoveRates(Hex start)

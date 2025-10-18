@@ -45,6 +45,13 @@ namespace TGD.CombatV2
             public bool allowDerivedNext;
         }
 
+        [Serializable]
+        public struct DerivedRule
+        {
+            public string sourceId;
+            public string[] derivedIds;
+        }
+
         public ChainMatrixRow[] firstLayerMatrix = new[]
         {
             new ChainMatrixRow { baseKind = ActionKind.Standard,  allowReaction = true, allowFree = true, allowDerived = true },
@@ -61,9 +68,14 @@ namespace TGD.CombatV2
             new RecursionRow { chosenKind = ActionKind.Derived,  allowReactionNext = true,  allowFreeNext = true,  allowDerivedNext = false },
         };
 
+        [Header("Derived Links")]
+        public DerivedRule[] derivedRules = Array.Empty<DerivedRule>();
+
         static readonly ActionKind[] s_freeOnly = { ActionKind.Free };
         static readonly ActionKind[] s_empty = Array.Empty<ActionKind>();
         static readonly List<ActionKind> s_scratch = new();
+        static readonly List<string> s_idScratch = new();
+        static readonly string[] s_emptyIds = Array.Empty<string>();
 
         public bool CanActivateAtIdle(ActionKind kind)
         {
@@ -119,6 +131,35 @@ namespace TGD.CombatV2
 
         public bool AllowFriendlyInsertions() => allowFriendlyInsertions;
 
+        public IReadOnlyList<string> AllowedDerivedActions(string baseActionId)
+        {
+            if (string.IsNullOrEmpty(baseActionId) || derivedRules == null || derivedRules.Length == 0)
+                return s_emptyIds;
+
+            s_idScratch.Clear();
+            for (int i = 0; i < derivedRules.Length; i++)
+            {
+                var rule = derivedRules[i];
+                if (!string.IsNullOrEmpty(rule.sourceId) && string.Equals(rule.sourceId, baseActionId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (rule.derivedIds != null)
+                    {
+                        for (int j = 0; j < rule.derivedIds.Length; j++)
+                        {
+                            string id = rule.derivedIds[j];
+                            if (!string.IsNullOrEmpty(id))
+                                s_idScratch.Add(id);
+                        }
+                    }
+                }
+            }
+
+            if (s_idScratch.Count == 0)
+                return s_emptyIds;
+
+            return new List<string>(s_idScratch);
+        }
+
         static IActionRules s_default;
 
         /// <summary>
@@ -132,6 +173,11 @@ namespace TGD.CombatV2
                 {
                     var instance = CreateInstance<ActionRulebook>();
                     instance.hideFlags = HideFlags.HideAndDontSave;
+                    instance.derivedRules = new[]
+                    {
+                        new DerivedRule { sourceId = "Attack", derivedIds = new[] { "DerivedAfterAttack" } },
+                        new DerivedRule { sourceId = "DerivedAfterAttack", derivedIds = new[] { "DerivedAfterDerived" } },
+                    };
                     s_default = instance;
                 }
                 return s_default;
