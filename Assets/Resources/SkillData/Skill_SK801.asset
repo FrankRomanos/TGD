@@ -68,6 +68,7 @@ MonoBehaviour:
     duration: 0
     probability: 
     condition: 0
+    conditionNegate: 0
     visibleFields: 4
     conditionSkillStateID: 
     conditionSkillStateCheckStacks: 0
@@ -224,6 +225,7 @@ MonoBehaviour:
     duration: 0
     probability: 
     condition: 0
+    conditionNegate: 0
     visibleFields: 0
     conditionSkillStateID: 
     conditionSkillStateCheckStacks: 0
@@ -386,6 +388,7 @@ MonoBehaviour:
         duration: 0
         probability: 
         condition: 0
+        conditionNegate: 0
         visibleFields: 79
         conditionSkillStateID: 
         conditionSkillStateCheckStacks: 0

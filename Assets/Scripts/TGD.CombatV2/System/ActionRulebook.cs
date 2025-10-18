@@ -52,7 +52,7 @@ namespace TGD.CombatV2
             new ChainMatrixRow { baseKind = ActionKind.FullRound, allowReaction = true, allowFree = true, allowDerived = false },
             new ChainMatrixRow { baseKind = ActionKind.Sustained, allowReaction = true, allowFree = true, allowDerived = false },
             new ChainMatrixRow { baseKind = ActionKind.Free,      allowReaction = true, allowFree = true, allowDerived = false },
-            new ChainMatrixRow { baseKind = ActionKind.Derived,   allowReaction = true, allowFree = true, allowDerived = true },
+            new ChainMatrixRow { baseKind = ActionKind.Derived,   allowReaction = false, allowFree = false, allowDerived = true },
         };
 
         public RecursionRow[] recursionMatrix = new[]
