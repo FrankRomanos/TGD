@@ -482,6 +482,45 @@ namespace TGD.CombatV2
             StartCoroutine(ConfirmRoutine(_activeTool, unit, hex));
         }
 
+        public bool TryAutoExecuteAction(string toolId, Hex target)
+        {
+            if (_phase != Phase.Idle)
+                return false;
+
+            var tool = SelectTool(toolId);
+            if (tool == null)
+                return false;
+
+            if (!CanActivateAtIdle(tool))
+                return false;
+
+            if (IsExecuting || IsAnyToolBusy())
+                return false;
+
+            var unit = ResolveUnit(tool);
+            if (_currentUnit != null && unit != _currentUnit)
+                return false;
+
+            if (!TryBeginAim(tool, unit, out var reason))
+            {
+                if (!string.IsNullOrEmpty(reason))
+                    ActionPhaseLogger.Log(unit, tool.Id, "W1_AimReject", $"(reason={reason})");
+                return false;
+            }
+
+            if (_activeTool != null)
+                CleanupAfterAbort(_activeTool, false);
+
+            _activeTool = tool;
+            _hover = target;
+            _activeTool.OnEnterAim();
+            _phase = Phase.Aiming;
+            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+
+            StartCoroutine(ConfirmRoutine(_activeTool, unit, target));
+            return true;
+        }
+
         void TryHideAllAimUI()
         {
             if (_activeTool != null)
@@ -716,6 +755,18 @@ namespace TGD.CombatV2
             string reasonSuffix = string.IsNullOrEmpty(refundTag) ? string.Empty : $", refundReason={refundTag}";
 
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}, energyAction={energyAction}{reasonSuffix})");
+
+            if (tool is IActionResolveEffect resolveEffect)
+            {
+                try
+                {
+                    resolveEffect.OnResolve(unit, plan.target);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
+            }
 
             PreDeduct preDeduct = _planStack.Count > 0 ? _planStack.Pop() : default;
 

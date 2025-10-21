@@ -202,6 +202,14 @@ namespace TGD.CombatV2
                 _phaseStartGates.Add(gate);
         }
 
+        public bool HasReachedIdle(Unit unit)
+        {
+            if (unit == null)
+                return false;
+
+            return _runtimeByUnit.TryGetValue(unit, out var runtime) && runtime != null && runtime.HasReachedIdle;
+        }
+
         public void UnregisterPhaseStartGate(Func<bool, IEnumerator> gate)
         {
             if (gate == null)
