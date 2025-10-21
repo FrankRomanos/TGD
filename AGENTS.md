@@ -97,7 +97,7 @@
 - 同 ③：`[Turn] Tn(Enemy) End`。  
 - 一轮结束；下一轮 `T(n+1)(P1) Begin`。
 
-> **日志顺序必须完整可见**：`T1(P1) Begin → T1(P1) → T1(P1) End → T1(Enemy) Begin → T1(Enemy) → T1(Enemy) End → T2(P1) Begin → …`
+> **日志顺序必须完整可见**：`T1(P1) Begin → T1(P1)idle → T1(P1) End → T1(Enemy) Begin → T1(Enemy)idle → T1(Enemy) End → T2(P1) Begin → …`
 
 ---
 
