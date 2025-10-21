@@ -75,6 +75,20 @@ namespace TGD.CombatV2
         TargetSelectionCursor _chainCursor;
         IHexHighlighter _aimHighlighter;
         IHexHighlighter _chainHighlighter;
+        int _inputSuppressionDepth;
+
+        bool IsInputSuppressed => _inputSuppressionDepth > 0;
+
+        void PushInputSuppression()
+        {
+            _inputSuppressionDepth++;
+        }
+
+        void PopInputSuppression()
+        {
+            if (_inputSuppressionDepth > 0)
+                _inputSuppressionDepth--;
+        }
 
         struct PlannedCost
         {
@@ -374,7 +388,7 @@ namespace TGD.CombatV2
 
         void Update()
         {
-            if (_phase == Phase.Idle)
+            if (_phase == Phase.Idle && !IsInputSuppressed)
             {
                 HandleIdleKeybind(keyMoveAim, "Move");
                 HandleIdleKeybind(keyAttackAim, "Attack");
@@ -1219,104 +1233,111 @@ namespace TGD.CombatV2
 
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
         {
-            var rules = ResolveRules();
-            IReadOnlyList<ActionKind> allowedKinds = rules?.AllowedChainFirstLayer(baseKind, isEnemyPhase);
-            bool cancelledBase = false;
-            int depth = 0;
-            bool keepLooping = allowedKinds != null && allowedKinds.Count > 0;
-            HashSet<IActionToolV2> pendingSet = null;
-            if (pendingActions != null && pendingActions.Count > 0)
+            PushInputSuppression();
+            try
             {
-                pendingSet = new HashSet<IActionToolV2>();
-                foreach (var tuple in pendingActions)
+                var rules = ResolveRules();
+                IReadOnlyList<ActionKind> allowedKinds = rules?.AllowedChainFirstLayer(baseKind, isEnemyPhase);
+                bool cancelledBase = false;
+                int depth = 0;
+                bool keepLooping = allowedKinds != null && allowedKinds.Count > 0;
+                HashSet<IActionToolV2> pendingSet = null;
+                if (pendingActions != null && pendingActions.Count > 0)
                 {
-                    if (tuple?.Item1 != null)
-                        pendingSet.Add(tuple.Item1);
-                }
-            }
-
-            if (!keepLooping)
-            {
-                string initialLabel = FormatChainStageLabel(depth);
-                ActionPhaseLogger.Log(unit, basePlan.kind, initialLabel, "(count:0)");
-                ActionPhaseLogger.Log(unit, basePlan.kind, $"{initialLabel} Skip");
-                onComplete?.Invoke(false);
-                yield break;
-            }
-
-            while (keepLooping)
-            {
-                var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet);
-                string label = FormatChainStageLabel(depth);
-                ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
-
-                if (options.Count == 0)
-                {
-                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
-                    break;
-                }
-
-                bool resolvedStage = false;
-                while (!resolvedStage)
-                {
-                    if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                    pendingSet = new HashSet<IActionToolV2>();
+                    foreach (var tuple in pendingActions)
                     {
-                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-                        resolvedStage = true;
-                        keepLooping = false;
+                        if (tuple?.Item1 != null)
+                            pendingSet.Add(tuple.Item1);
+                    }
+                }
+
+                if (!keepLooping)
+                {
+                    string initialLabel = FormatChainStageLabel(depth);
+                    ActionPhaseLogger.Log(unit, basePlan.kind, initialLabel, "(count:0)");
+                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{initialLabel} Skip");
+                    onComplete?.Invoke(false);
+                    yield break;
+                }
+
+                while (keepLooping)
+                {
+                    var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet);
+                    string label = FormatChainStageLabel(depth);
+                    ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
+
+                    if (options.Count == 0)
+                    {
+                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
                         break;
                     }
 
-                    foreach (var option in options)
+                    bool resolvedStage = false;
+                    while (!resolvedStage)
                     {
-                        if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                         {
-                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                            resolvedStage = true;
+                            keepLooping = false;
+                            break;
+                        }
 
-                            ChainQueueOutcome outcome = default;
-                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, budget, resources, pendingActions, result => outcome = result);
-
-                            if (outcome.cancel)
+                        foreach (var option in options)
+                        {
+                            if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
                             {
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-                                keepLooping = false;
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
+
+                                ChainQueueOutcome outcome = default;
+                                yield return TryQueueChainSelection(option, unit, basePlan.kind, label, budget, resources, pendingActions, result => outcome = result);
+
+                                if (outcome.cancel)
+                                {
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                                    keepLooping = false;
+                                    resolvedStage = true;
+                                    break;
+                                }
+
+                                if (!outcome.queued)
+                                    continue;
+
+                                if (outcome.tool != null)
+                                {
+                                    pendingSet ??= new HashSet<IActionToolV2>();
+                                    pendingSet.Add(outcome.tool);
+                                }
+
+                                if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
+                                {
+                                    cancelledBase = true;
+                                }
+
+                                if (rules != null)
+                                    allowedKinds = rules.AllowedChainNextLayer(option.kind);
+                                else
+                                    allowedKinds = Array.Empty<ActionKind>();
+
+                                keepLooping = allowedKinds != null && allowedKinds.Count > 0;
+
+                                depth += 1;
                                 resolvedStage = true;
                                 break;
                             }
-
-                            if (!outcome.queued)
-                                continue;
-
-                            if (outcome.tool != null)
-                            {
-                                pendingSet ??= new HashSet<IActionToolV2>();
-                                pendingSet.Add(outcome.tool);
-                            }
-
-                            if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
-                            {
-                                cancelledBase = true;
-                            }
-
-                            if (rules != null)
-                                allowedKinds = rules.AllowedChainNextLayer(option.kind);
-                            else
-                                allowedKinds = Array.Empty<ActionKind>();
-
-                            keepLooping = allowedKinds != null && allowedKinds.Count > 0;
-
-                            depth += 1;
-                            resolvedStage = true;
-                            break;
                         }
+
+                        if (!resolvedStage)
+                            yield return null;
                     }
-
-                    if (!resolvedStage)
-                        yield return null;
                 }
+                onComplete?.Invoke(cancelledBase);
             }
-
-            onComplete?.Invoke(cancelledBase);
+            finally
+            {
+                PopInputSuppression();
+            }
         }
 
         List<ChainOption> BuildDerivedOptions(Unit unit, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, IReadOnlyList<string> allowedIds)
@@ -1397,81 +1418,89 @@ namespace TGD.CombatV2
 
         IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue)
         {
-            derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
-
-            var rules = ResolveRules();
-            var allowedIds = rules?.AllowedDerivedActions(basePlan.kind);
-            bool baseSuccess = DetermineDerivedBaseSuccess(baseTool, report);
-
-            if (!baseSuccess)
+            PushInputSuppression();
+            try
             {
-                Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=false)");
-                Log("[Chain] DerivedPromptAbort(base-fail)");
-                _derivedBuffer.Clear();
-                yield break;
-            }
+                derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
 
-            if (allowedIds == null || allowedIds.Count == 0)
-            {
-                Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=true)");
-                Log("[Chain] DerivedPromptAbort(auto-skip)");
-                _derivedBuffer.Clear();
-                yield break;
-            }
+                var rules = ResolveRules();
+                var allowedIds = rules?.AllowedDerivedActions(basePlan.kind);
+                bool baseSuccess = DetermineDerivedBaseSuccess(baseTool, report);
 
-            var options = BuildDerivedOptions(unit, budget, resources, cooldowns, allowedIds);
-            Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count={options.Count}, baseSuccess=true)");
-
-            if (options.Count == 0)
-            {
-                Log("[Chain] DerivedPromptAbort(auto-skip)");
-                options.Clear();
-                yield break;
-            }
-
-            bool resolved = false;
-            while (!resolved)
-            {
-                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                if (!baseSuccess)
                 {
-                    Log("[Chain] DerivedPromptAbort(cancel)");
-                    break;
+                    Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=false)");
+                    Log("[Chain] DerivedPromptAbort(base-fail)");
+                    _derivedBuffer.Clear();
+                    yield break;
                 }
 
-                bool handled = false;
-                for (int i = 0; i < options.Count; i++)
+                if (allowedIds == null || allowedIds.Count == 0)
                 {
-                    var option = options[i];
-                    if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
-                    {
-                        handled = true;
-                        Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
-                        ChainQueueOutcome outcome = default;
-                        yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
+                    Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count=0, baseSuccess=true)");
+                    Log("[Chain] DerivedPromptAbort(auto-skip)");
+                    _derivedBuffer.Clear();
+                    yield break;
+                }
 
-                        if (outcome.cancel)
-                        {
-                            Log("[Chain] DerivedPromptAbort(cancel)");
-                            resolved = true;
-                        }
-                        else if (outcome.queued)
-                        {
-                            resolved = true;
-                        }
+                var options = BuildDerivedOptions(unit, budget, resources, cooldowns, allowedIds);
+                Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count={options.Count}, baseSuccess=true)");
+
+                if (options.Count == 0)
+                {
+                    Log("[Chain] DerivedPromptAbort(auto-skip)");
+                    options.Clear();
+                    yield break;
+                }
+
+                bool resolved = false;
+                while (!resolved)
+                {
+                    if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                    {
+                        Log("[Chain] DerivedPromptAbort(cancel)");
                         break;
                     }
+
+                    bool handled = false;
+                    for (int i = 0; i < options.Count; i++)
+                    {
+                        var option = options[i];
+                        if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                        {
+                            handled = true;
+                            Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
+                            ChainQueueOutcome outcome = default;
+                            yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
+
+                            if (outcome.cancel)
+                            {
+                                Log("[Chain] DerivedPromptAbort(cancel)");
+                                resolved = true;
+                            }
+                            else if (outcome.queued)
+                            {
+                                resolved = true;
+                            }
+                            break;
+                        }
+                    }
+
+                    if (resolved)
+                        break;
+
+                    if (!handled)
+                        yield return null;
+                    else
+                        yield return null;
                 }
 
-                if (resolved)
-                    break;
-
-                if (!handled)
-                    yield return null;
-                else
-                    yield return null;
+                options.Clear();
             }
-
-            options.Clear();
+            finally
+            {
+                PopInputSuppression();
+            }
         }
 
         IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue, Action<ChainQueueOutcome> onComplete)
