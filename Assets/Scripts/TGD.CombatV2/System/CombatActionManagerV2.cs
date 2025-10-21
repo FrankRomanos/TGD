@@ -776,7 +776,10 @@ namespace TGD.CombatV2
 
             var derivedQueue = new List<Tuple<IActionToolV2, ActionPlan>>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
-            yield return RunDerivedWindow(unit, tool, plan, report, budget, resources, cooldowns, derivedQueue);
+            if (ShouldRunDerivedWindow(unit, tool))
+                yield return RunDerivedWindow(unit, tool, plan, report, budget, resources, cooldowns, derivedQueue);
+            else
+                derivedQueue.Clear();
 
             int budgetAfter = budget != null ? budget.Remaining : 0;
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
@@ -1118,6 +1121,27 @@ namespace TGD.CombatV2
             return allowed != null && allowed.Count > 0;
         }
 
+        static bool IsDerivedSourceKind(ActionKind kind)
+        {
+            return kind == ActionKind.Standard
+                || kind == ActionKind.Reaction
+                || kind == ActionKind.Derived;
+        }
+
+        bool ShouldRunDerivedWindow(Unit unit, IActionToolV2 baseTool)
+        {
+            if (unit == null || baseTool == null)
+                return false;
+            if (turnManager == null)
+                return false;
+            if (!turnManager.IsPlayerPhase)
+                return false;
+            if (!turnManager.IsPlayerUnit(unit))
+                return false;
+
+            return IsDerivedSourceKind(baseTool.Kind);
+        }
+
         KeyCode ResolveChainKey(string id)
         {
             if (string.IsNullOrEmpty(id))
@@ -1174,6 +1198,9 @@ namespace TGD.CombatV2
                     }
 
                     if (!kindAllowed)
+                        continue;
+
+                    if (tool.Kind == ActionKind.Derived)
                         continue;
 
                     var cost = GetBaselineCost(tool);
