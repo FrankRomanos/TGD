@@ -304,12 +304,6 @@ namespace TGD.CombatV2
             }
             return handle;
         }
-
-        public bool HasUnitReachedIdle(Unit unit)
-        {
-            var runtime = EnsureRuntime(unit, null);
-            return runtime != null && runtime.HasReachedIdle;
-        }
         public bool HasActiveFullRound(Unit unit)
         {
             if (unit == null)
