@@ -75,6 +75,7 @@ namespace TGD.CombatV2
         TargetSelectionCursor _chainCursor;
         IHexHighlighter _aimHighlighter;
         IHexHighlighter _chainHighlighter;
+        Coroutine _enemyTurnFreeRoutine;
         int _inputSuppressionDepth;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
@@ -323,6 +324,11 @@ namespace TGD.CombatV2
             {
                 turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
             }
+            if (_enemyTurnFreeRoutine != null)
+            {
+                StopCoroutine(_enemyTurnFreeRoutine);
+                _enemyTurnFreeRoutine = null;
+            }
             ChainCursor?.Clear();
         }
 
@@ -331,6 +337,35 @@ namespace TGD.CombatV2
             _currentUnit = unit;
             if (_activeTool != null && ResolveUnit(_activeTool) != _currentUnit)
                 Cancel(false);
+
+            if (!registerAsGateHub || turnManager == null || unit == null)
+                return;
+
+            if (!turnManager.IsEnemyUnit(unit))
+                return;
+
+            if (_enemyTurnFreeRoutine != null)
+            {
+                StopCoroutine(_enemyTurnFreeRoutine);
+                _enemyTurnFreeRoutine = null;
+            }
+
+            if (skipPhaseStartFreeChain)
+            {
+                var friendlies = BuildOrderedSideUnits(true);
+                if (friendlies != null)
+                {
+                    foreach (var friendly in friendlies)
+                    {
+                        if (friendly == null)
+                            continue;
+                        Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(friendly)}");
+                    }
+                }
+                return;
+            }
+
+            _enemyTurnFreeRoutine = StartCoroutine(RunEnemyTurnStartFreeWindow());
         }
 
         IActionToolV2 SelectTool(string id)
@@ -1924,6 +1959,25 @@ namespace TGD.CombatV2
             Log($"[Free] {phaseKind} W2.1 (count={count}) unit={unitLabel}");
         }
 
+        IEnumerator RunEnemyTurnStartFreeWindow()
+        {
+            var friendlies = BuildOrderedSideUnits(true);
+            if (friendlies == null || friendlies.Count == 0)
+            {
+                _enemyTurnFreeRoutine = null;
+                yield break;
+            }
+
+            foreach (var unit in friendlies)
+            {
+                if (unit == null)
+                    continue;
+                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)", true);
+            }
+
+            _enemyTurnFreeRoutine = null;
+        }
+
         IEnumerator HandlePhaseStartGate(bool isPlayerPhase)
         {
             if (turnManager == null)
@@ -1935,26 +1989,18 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            var friendlies = BuildOrderedSideUnits(true);
-            if (friendlies == null || friendlies.Count == 0)
-                yield break;
-
             if (skipPhaseStartFreeChain)
             {
-                foreach (var unit in friendlies)
+                var friendlies = BuildOrderedSideUnits(true);
+                if (friendlies != null)
                 {
-                    if (unit == null)
-                        continue;
-                    Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                    foreach (var unit in friendlies)
+                    {
+                        if (unit == null)
+                            continue;
+                        Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                    }
                 }
-                yield break;
-            }
-
-            foreach (var unit in friendlies)
-            {
-                if (unit == null)
-                    continue;
-                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)", true);
             }
         }
 

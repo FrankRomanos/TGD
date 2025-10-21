@@ -7,8 +7,8 @@ using TGD.CoreV2;
 namespace TGD.CombatV2
 {
     /// <summary>
-    /// °Ñ HexBoardTestDriver Ìá¹©µÄ Unit ÓëÍ¬ÎïÌåÉÏµÄ UnitRuntimeContext °ó¶¨µ½ TurnManagerV2£¬²¢Æô¶¯»ØºÏÑ­»·¡£
-    /// - Ö§³Ö 1~4 ÃûÍæ¼Ò£»Boss ¿ÉÑ¡£¨Îª¿ÕÔòµĞ·½ÏàÎ»½öÏÔÊ¾ÆğÊ¼ÌáÊ¾Óë 1s Í£¶Ù£©¡£
+    /// HexBoardTestDriver æä¾› Unit åŠå…¶ UnitRuntimeContext ç»‘å®šåˆ° TurnManagerV2ã€‚
+    /// - æ”¯æŒ 1~4 åç©å®¶ä¸å¯é€‰æ•Œäººåˆ—è¡¨ï¼Œè‡ªåŠ¨è¡¥å…¨ç¼ºå¤±ç»„ä»¶ã€‚
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class TurnBootstrapV2_HexBoard : MonoBehaviour
@@ -17,13 +17,17 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
 
         [Header("Players (1~4)")]
-        public List<HexBoardTestDriver> playerDrivers = new(); // ÍÏ 1~4 ¸ö
+        public List<HexBoardTestDriver> playerDrivers = new();
+
+        [Header("Enemies (0~4)")]
+        public List<HexBoardTestDriver> enemyDrivers = new();
+
         [Header("Boss (optional)")]
         public HexBoardTestDriver bossDriver;
 
         [Header("Auto Add Helpers")]
-        public bool autoAddMissingContext = false; // true Ê±£¬ÈôÈ±ÉÙ UnitRuntimeContext ½«×Ô¶¯Ìí¼ÓÒ»¸ö×îĞ¡Ä¬ÈÏ
-        public bool autoWireAdapters = true;       // true Ê±£¬×Ô¶¯Îª½ÇÉ«ÉÏµÄ Adapter ¸³ turnManager/context
+        public bool autoAddMissingContext = false;
+        public bool autoWireAdapters = true;
 
         void Start()
         {
@@ -33,67 +37,26 @@ namespace TGD.CombatV2
                 return;
             }
 
-            // ×éÍæ¼Ò Unit ÁĞ±í
             var playerUnits = new List<Unit>();
             foreach (var drv in playerDrivers)
-            {
-                if (!EnsureReady(drv)) continue;
-                var ctx = drv.GetComponent<UnitRuntimeContext>();
-                if (ctx == null && autoAddMissingContext)
-                    ctx = drv.gameObject.AddComponent<UnitRuntimeContext>(); // Ä¬ÈÏ stats ÎªĞòÁĞ»¯Àï×Ô´øµÄ
+                TryBindDriver(drv, playerUnits);
 
-                if (ctx == null)
-                {
-                    Debug.LogError($"[TurnBootstrap] Missing UnitRuntimeContext on {drv.name}", drv);
-                    continue;
-                }
+            var enemyUnits = new List<Unit>();
+            foreach (var drv in enemyDrivers)
+                TryBindDriver(drv, enemyUnits);
 
-                // ¿ÉÑ¡×Ô¶¯²¼Ïß£º°Ñ Adapter ÃÇÁ¬ÉÏ TM Óë Ctx
-                if (autoWireAdapters)
-                {
-                    var wire = drv.GetComponent<UnitAutoWireV2>();
-                    if (wire == null) wire = drv.gameObject.AddComponent<UnitAutoWireV2>();
-                    wire.turnManager = turnManager;
-                    wire.context = ctx;
-                    wire.Apply();
-                }
+            if (bossDriver != null && !enemyDrivers.Contains(bossDriver))
+                TryBindDriver(bossDriver, enemyUnits);
 
-                turnManager.Bind(drv.UnitRef, ctx);
-                playerUnits.Add(drv.UnitRef);
-            }
-
-            // Boss£¨¿É¿Õ£©
-            Unit bossUnit = null;
-            if (bossDriver != null && EnsureReady(bossDriver))
-            {
-                var ctx = bossDriver.GetComponent<UnitRuntimeContext>();
-                if (ctx == null && autoAddMissingContext)
-                    ctx = bossDriver.gameObject.AddComponent<UnitRuntimeContext>();
-
-                if (ctx != null)
-                {
-                    if (autoWireAdapters)
-                    {
-                        var wire = bossDriver.GetComponent<UnitAutoWireV2>();
-                        if (wire == null) wire = bossDriver.gameObject.AddComponent<UnitAutoWireV2>();
-                        wire.turnManager = turnManager;
-                        wire.context = ctx;
-                        wire.Apply();
-                    }
-
-                    turnManager.Bind(bossDriver.UnitRef, ctx);
-                    bossUnit = bossDriver.UnitRef;
-                }
-            }
-
-            // ¿ªÕ½£¨Ö§³Ö 1~4 Íæ¼Ò£¬Boss ¿É¿Õ£©
-            turnManager.StartBattle(playerUnits, bossUnit);
-            Debug.Log($"[TurnBootstrap] StartBattle players={playerUnits.Count} boss={(bossUnit != null ? "yes" : "no")}", this);
+            turnManager.StartBattle(playerUnits, enemyUnits);
+            Debug.Log($"[TurnBootstrap] StartBattle players={playerUnits.Count} enemies={enemyUnits.Count}", this);
         }
 
         bool EnsureReady(HexBoardTestDriver drv)
         {
-            if (drv == null) return false;
+            if (drv == null)
+                return false;
+
             drv.EnsureInit();
             if (!drv.IsReady)
             {
@@ -102,6 +65,38 @@ namespace TGD.CombatV2
             }
             return true;
         }
+
+        void TryBindDriver(HexBoardTestDriver drv, List<Unit> target)
+        {
+            if (drv == null || target == null)
+                return;
+
+            if (!EnsureReady(drv))
+                return;
+
+            var ctx = drv.GetComponent<UnitRuntimeContext>();
+            if (ctx == null && autoAddMissingContext)
+                ctx = drv.gameObject.AddComponent<UnitRuntimeContext>();
+
+            if (ctx == null)
+            {
+                Debug.LogError($"[TurnBootstrap] Missing UnitRuntimeContext on {drv.name}", drv);
+                return;
+            }
+
+            if (autoWireAdapters)
+            {
+                var wire = drv.GetComponent<UnitAutoWireV2>();
+                if (wire == null)
+                    wire = drv.gameObject.AddComponent<UnitAutoWireV2>();
+                wire.turnManager = turnManager;
+                wire.context = ctx;
+                wire.Apply();
+            }
+
+            turnManager.Bind(drv.UnitRef, ctx);
+            if (drv.UnitRef != null && !target.Contains(drv.UnitRef))
+                target.Add(drv.UnitRef);
+        }
     }
 }
-
