@@ -440,7 +440,6 @@ namespace TGD.CombatV2
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
-            Debug.Log($"[Phase] Idle T{_currentPhaseIndex}({phaseLabel}) ≥1s", this);
 
             foreach (var unit in units)
             {
@@ -470,7 +469,24 @@ namespace TGD.CombatV2
             // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
             bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
             if (!skipTurn)
-                StartCoroutine(RunTurnStartGates(runtime.Unit));
+                StartCoroutine(RunTurnStartSequence(runtime, _currentPhaseIndex));
+        }
+
+        IEnumerator RunTurnStartSequence(TurnRuntimeV2 runtime, int phaseIndex)
+        {
+            if (runtime == null)
+                yield break;
+
+            yield return RunTurnStartGates(runtime.Unit);
+
+            if (runtime.Unit == null)
+                yield break;
+
+            if (_activeUnit != runtime.Unit || !_waitingForEnd)
+                yield break;
+
+            string unitLabel = FormatUnitLabel(runtime.Unit);
+            Debug.Log($"[Turn] Idle T{phaseIndex}({unitLabel})", this);
         }
 
         bool HandleFullRoundAtTurnBegin(TurnRuntimeV2 runtime)
@@ -810,6 +826,8 @@ namespace TGD.CombatV2
 
         void OnPlayerSideEnd()
         {
+            string phaseLabel = FormatPhaseLabel(true);
+            Debug.Log($"[Phase] End T{_currentPhaseIndex}({phaseLabel})", this);
             ApplySideEndTicks(true);
             ResetPlayerBudgets();
             ClearTempAttackLayer("SideEnd");
@@ -819,6 +837,8 @@ namespace TGD.CombatV2
 
         void OnEnemySideEnd()
         {
+            string phaseLabel = FormatPhaseLabel(false);
+            Debug.Log($"[Phase] End T{_currentPhaseIndex}({phaseLabel})", this);
             ApplySideEndTicks(false);
             ClearTempAttackLayer("SideEnd");
             EnemySideEnded?.Invoke();
