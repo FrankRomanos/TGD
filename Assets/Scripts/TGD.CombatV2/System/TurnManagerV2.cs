@@ -13,6 +13,8 @@ namespace TGD.CombatV2
         [Header("Timing")]
         [Tooltip("相位开始时的最小停顿（秒）")]
         public float phaseStartDelaySeconds = 1f;
+        [Tooltip("自动结束回合前的最小等待（秒）")]
+        public float autoTurnEndDelaySeconds = 1f;
 
         public event Action PlayerPhaseStarted;
         public event Action EnemyPhaseStarted;
@@ -246,15 +248,15 @@ namespace TGD.CombatV2
             return null;
         }
 
-        public void StartBattle(List<Unit> players, Unit boss)
+        public void StartBattle(List<Unit> players, List<Unit> enemies)
         {
             _playerUnits.Clear();
             if (players != null)
                 _playerUnits.AddRange(players.Where(u => u != null));
 
             _enemyUnits.Clear();
-            if (boss != null)
-                _enemyUnits.Add(boss);
+            if (enemies != null)
+                _enemyUnits.AddRange(enemies.Where(u => u != null));
 
             foreach (var p in _playerUnits)
                 EnsureRuntime(p, true);
@@ -434,11 +436,11 @@ namespace TGD.CombatV2
 
             string phaseLabel = FormatPhaseLabel(isPlayer);
             Debug.Log($"[Phase] Begin T{_currentPhaseIndex}({phaseLabel})", this);
-            yield return RunPhaseStartGates(isPlayer);
             if (isPlayer)
                 OnPlayerPhaseBegin();
             else
                 OnEnemyPhaseBegin();
+            yield return RunPhaseStartGates(isPlayer);
 
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
@@ -472,7 +474,11 @@ namespace TGD.CombatV2
             // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
             bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
             if (!skipTurn)
+            {
                 StartCoroutine(RunTurnStartSequence(runtime, _currentPhaseIndex));
+                if (!runtime.IsPlayer)
+                    StartCoroutine(AutoFinishEnemyTurn(runtime));
+            }
         }
 
         IEnumerator RunTurnStartSequence(TurnRuntimeV2 runtime, int phaseIndex)
@@ -565,6 +571,24 @@ namespace TGD.CombatV2
                 yield break;
             yield return null;
             EndTurn(unit);
+        }
+
+        IEnumerator AutoFinishEnemyTurn(TurnRuntimeV2 runtime)
+        {
+            if (runtime == null || runtime.Unit == null)
+                yield break;
+
+            while (!runtime.HasReachedIdle)
+                yield return null;
+
+            float wait = Mathf.Max(0f, autoTurnEndDelaySeconds);
+            if (wait > 0f)
+                yield return new WaitForSeconds(wait);
+
+            if (!_waitingForEnd || _activeUnit != runtime.Unit)
+                yield break;
+
+            EndTurn(runtime.Unit);
         }
 
         void ApplyTimeSpend(TurnRuntimeV2 runtime, int seconds, bool silent = false)
@@ -823,18 +847,33 @@ namespace TGD.CombatV2
         }
 
         static string FormatPhaseLabel(bool isPlayer) => isPlayer ? "Player" : "Enemy";
+
+        void RefreshPhaseBeginUnits(bool isPlayerPhase)
+        {
+            if (isPlayerPhase)
+            {
+                RefreshSideUnits(_playerUnits, true);
+                RefreshSideUnits(_enemyUnits, false);
+            }
+            else
+            {
+                RefreshSideUnits(_enemyUnits, false);
+                RefreshSideUnits(_playerUnits, true);
+            }
+        }
+
         void OnPlayerPhaseBegin()
         {
             PlayerPhaseStarted?.Invoke();
             PhaseBegan?.Invoke(true);
-            RefreshSideUnits(_playerUnits, true);
+            RefreshPhaseBeginUnits(true);
         }
 
         void OnEnemyPhaseBegin()
         {
             EnemyPhaseStarted?.Invoke();
             PhaseBegan?.Invoke(false);
-            RefreshSideUnits(_enemyUnits, false);
+            RefreshPhaseBeginUnits(false);
         }
 
         void OnPlayerSideEnd()
@@ -842,7 +881,7 @@ namespace TGD.CombatV2
             string phaseLabel = FormatPhaseLabel(true);
             Debug.Log($"[Phase] End T{_currentPhaseIndex}({phaseLabel})", this);
             ApplySideEndTicks(true);
-            ResetPlayerBudgets();
+            ResetSideBudgets(true);
             ClearTempAttackLayer("SideEnd");
             PlayerSideEnded?.Invoke();
             SideEnded?.Invoke(true);
@@ -853,6 +892,7 @@ namespace TGD.CombatV2
             string phaseLabel = FormatPhaseLabel(false);
             Debug.Log($"[Phase] End T{_currentPhaseIndex}({phaseLabel})", this);
             ApplySideEndTicks(false);
+            ResetSideBudgets(false);
             ClearTempAttackLayer("SideEnd");
             EnemySideEnded?.Invoke();
             SideEnded?.Invoke(false);
@@ -866,18 +906,19 @@ namespace TGD.CombatV2
             Debug.Log($"[Occ] TempClear {reason} count={count}", this);
         }
 
-        void ResetPlayerBudgets()
+        void ResetSideBudgets(bool isPlayerSide)
         {
             foreach (var pair in _runtimeByUnit)
             {
                 var runtime = pair.Value;
-                if (runtime == null || !runtime.IsPlayer)
+                if (runtime == null || runtime.IsPlayer != isPlayerSide)
                     continue;
 
                 int before = runtime.RemainingTime;
                 runtime.ResetBudget();
                 string unitLabel = FormatUnitLabel(runtime.Unit);
-                Debug.Log($"[Time] Reset T{_currentPhaseIndex}(Player) U={unitLabel} {before}s -> {runtime.RemainingTime}s", this);
+                string phaseLabel = FormatPhaseLabel(isPlayerSide);
+                Debug.Log($"[Time] Reset T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} {before}s -> {runtime.RemainingTime}s", this);
             }
         }
 
