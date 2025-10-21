@@ -17,6 +17,8 @@ namespace TGD.CombatV2
         public int PrepaidTime { get; private set; }
         public int RemainingTime { get; private set; }
         public bool HasSpentTimeThisTurn { get; private set; }
+        public bool HasReachedIdle { get; private set; }
+        public int ActivePhaseIndex { get; private set; }
 
         public Dictionary<string, int> CustomResources { get; } = new();
         public Dictionary<string, int> CustomResourceMax { get; } = new();
@@ -61,11 +63,13 @@ namespace TGD.CombatV2
             RemainingTime = Mathf.Clamp(baseBudget - prepaid, 0, tt);
             PrepaidTime = 0;
             HasSpentTimeThisTurn = false;
+            HasReachedIdle = false;
         }
 
         public void FinishTurn()
         {
             RemainingTime = 0;
+            ActivePhaseIndex = 0;
         }
 
         public void SpendTime(int seconds)
@@ -89,6 +93,15 @@ namespace TGD.CombatV2
         public void ClearPrepaid()
         {
             PrepaidTime = 0;
+        }
+        public void SetActivePhaseIndex(int phaseIndex)
+        {
+            ActivePhaseIndex = Mathf.Max(phaseIndex, 0);
+        }
+
+        public void MarkIdleReached()
+        {
+            HasReachedIdle = true;
         }
     }
 }

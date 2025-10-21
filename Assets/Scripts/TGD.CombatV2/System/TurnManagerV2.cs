@@ -375,6 +375,8 @@ namespace TGD.CombatV2
             var runtime = EnsureRuntime(unit, null);
             if (runtime == null) return;
 
+            EnsureIdleLogged(runtime, runtime.ActivePhaseIndex);
+
             string unitLabel = FormatUnitLabel(runtime.Unit);
             Debug.Log($"[Turn] End T{_currentPhaseIndex}({unitLabel})", this);
 
@@ -396,6 +398,7 @@ namespace TGD.CombatV2
                 yield return RunPhase(_enemyUnits, false);
             }
         }
+
 
         IEnumerator RunPhaseStartGates(bool isPlayer)
         {
@@ -440,7 +443,6 @@ namespace TGD.CombatV2
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
-
             foreach (var unit in units)
             {
                 if (unit == null) continue;
@@ -461,6 +463,7 @@ namespace TGD.CombatV2
             int turnTime = runtime.TurnTime;
             int prepaid = Mathf.Clamp(runtime.PrepaidTime, 0, turnTime);
             runtime.BeginTurn();
+            runtime.SetActivePhaseIndex(_currentPhaseIndex);
             _activeUnit = runtime.Unit;
             _waitingForEnd = true;
             string unitLabel = FormatUnitLabel(runtime.Unit);
@@ -482,11 +485,21 @@ namespace TGD.CombatV2
             if (runtime.Unit == null)
                 yield break;
 
-            if (_activeUnit != runtime.Unit || !_waitingForEnd)
-                yield break;
+            EnsureIdleLogged(runtime, phaseIndex);
+        }
+
+        void EnsureIdleLogged(TurnRuntimeV2 runtime, int phaseIndexHint)
+        {
+            if (runtime == null || runtime.HasReachedIdle)
+                return;
+
+            int phaseIndex = phaseIndexHint > 0 ? phaseIndexHint : runtime.ActivePhaseIndex;
+            if (phaseIndex <= 0)
+                phaseIndex = _currentPhaseIndex;
 
             string unitLabel = FormatUnitLabel(runtime.Unit);
             Debug.Log($"[Turn] Idle T{phaseIndex}({unitLabel})", this);
+            runtime.MarkIdleReached();
         }
 
         bool HandleFullRoundAtTurnBegin(TurnRuntimeV2 runtime)
