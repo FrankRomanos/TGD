@@ -75,7 +75,6 @@ namespace TGD.CombatV2
         TargetSelectionCursor _chainCursor;
         IHexHighlighter _aimHighlighter;
         IHexHighlighter _chainHighlighter;
-        Coroutine _enemyTurnFreeRoutine;
         int _inputSuppressionDepth;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
@@ -324,11 +323,6 @@ namespace TGD.CombatV2
             {
                 turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
             }
-            if (_enemyTurnFreeRoutine != null)
-            {
-                StopCoroutine(_enemyTurnFreeRoutine);
-                _enemyTurnFreeRoutine = null;
-            }
             ChainCursor?.Clear();
         }
 
@@ -340,32 +334,6 @@ namespace TGD.CombatV2
 
             if (!registerAsGateHub || turnManager == null || unit == null)
                 return;
-
-            if (!turnManager.IsEnemyUnit(unit))
-                return;
-
-            if (_enemyTurnFreeRoutine != null)
-            {
-                StopCoroutine(_enemyTurnFreeRoutine);
-                _enemyTurnFreeRoutine = null;
-            }
-
-            if (skipPhaseStartFreeChain)
-            {
-                var friendlies = BuildOrderedSideUnits(true);
-                if (friendlies != null)
-                {
-                    foreach (var friendly in friendlies)
-                    {
-                        if (friendly == null)
-                            continue;
-                        Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(friendly)}");
-                    }
-                }
-                return;
-            }
-
-            _enemyTurnFreeRoutine = StartCoroutine(RunEnemyTurnStartFreeWindow());
         }
 
         IActionToolV2 SelectTool(string id)
@@ -1959,25 +1927,6 @@ namespace TGD.CombatV2
             Log($"[Free] {phaseKind} W2.1 (count={count}) unit={unitLabel}");
         }
 
-        IEnumerator RunEnemyTurnStartFreeWindow()
-        {
-            var friendlies = BuildOrderedSideUnits(true);
-            if (friendlies == null || friendlies.Count == 0)
-            {
-                _enemyTurnFreeRoutine = null;
-                yield break;
-            }
-
-            foreach (var unit in friendlies)
-            {
-                if (unit == null)
-                    continue;
-                yield return RunStartFreeChainWindow(unit, "PhaseStart(Enemy)", true);
-            }
-
-            _enemyTurnFreeRoutine = null;
-        }
-
         IEnumerator HandlePhaseStartGate(bool isPlayerPhase)
         {
             if (turnManager == null)
@@ -2009,19 +1958,59 @@ namespace TGD.CombatV2
             if (turnManager == null || unit == null)
                 yield break;
 
-            if (!turnManager.IsPlayerUnit(unit))
+            bool isPlayerUnit = turnManager.IsPlayerUnit(unit);
+            bool isEnemyUnit = turnManager.IsEnemyUnit(unit);
+
+            if (!isPlayerUnit && !isEnemyUnit)
                 yield break;
 
-            if (unitDriver != null && unitDriver.UnitRef != unit)
-                yield break;
-
-            if (skipPhaseStartFreeChain)
+            if (isPlayerUnit)
             {
-                Log($"[Free] PhaseStart(P1) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                if (unitDriver != null && unitDriver.UnitRef != unit)
+                    yield break;
+
+                if (skipPhaseStartFreeChain)
+                {
+                    Log($"[Free] PhaseStart(P1) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
+                    yield break;
+                }
+
+                yield return RunStartFreeChainWindow(unit, "PhaseStart(P1)", false);
                 yield break;
             }
 
-            yield return RunStartFreeChainWindow(unit, "PhaseStart(P1)", false);
+            if (unitDriver != null)
+            {
+                var driverUnit = unitDriver.UnitRef;
+                if (driverUnit != null && turnManager.IsEnemyUnit(driverUnit))
+                    yield break;
+            }
+
+            if (skipPhaseStartFreeChain)
+            {
+                var friendlies = BuildOrderedSideUnits(true);
+                if (friendlies != null)
+                {
+                    foreach (var friendly in friendlies)
+                    {
+                        if (friendly == null)
+                            continue;
+                        Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(friendly)}");
+                    }
+                }
+                yield break;
+            }
+
+            var orderedFriendlies = BuildOrderedSideUnits(true);
+            if (orderedFriendlies == null || orderedFriendlies.Count == 0)
+                yield break;
+
+            foreach (var friendly in orderedFriendlies)
+            {
+                if (friendly == null)
+                    continue;
+                yield return RunStartFreeChainWindow(friendly, "PhaseStart(Enemy)", true);
+            }
         }
 
         IEnumerator RunStartFreeChainWindow(Unit unit, string planKind, bool isEnemyPhase)
