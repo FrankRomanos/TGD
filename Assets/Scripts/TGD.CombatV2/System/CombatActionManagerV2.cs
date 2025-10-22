@@ -561,63 +561,74 @@ namespace TGD.CombatV2
             _planStack.Clear();
             _phase = Phase.Executing;
             string kind = tool.Id;
-            ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
-
-            if (!target.HasValue)
+            Unit guardUnit = null;
+            bool guardActive = false;
+            if (turnManager != null && !turnManager.IsPlayerPhase && unit != null && turnManager.IsEnemyUnit(unit))
             {
-                ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
-                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
-                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=targetInvalid)");
-                NotifyConfirmAbort(tool, unit, "targetInvalid");
-                CleanupAfterAbort(tool, false);
-                yield break;
+                turnManager.PushAutoTurnEndGuard(unit);
+                guardUnit = unit;
+                guardActive = true;
             }
 
-            if (!TryBeginAim(tool, unit, out var aimReason, false))
+            try
             {
-                ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
-                string fail = string.IsNullOrEmpty(aimReason) ? "notReady" : aimReason;
-                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={fail})");
-                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={fail})");
-                NotifyConfirmAbort(tool, unit, fail);
-                CleanupAfterAbort(tool, false);
-                yield break;
-            }
+                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
 
-            ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
-
-            var actionPlan = new ActionPlan
-            {
-                kind = kind,
-                target = target.Value,
-                cost = BuildPlannedCost(tool, target.Value)
-            };
-
-            var budget = turnManager != null && unit != null ? turnManager.GetBudget(unit) : null;
-            var resources = turnManager != null && unit != null ? turnManager.GetResources(unit) : null;
-            var cooldowns = turnManager != null && unit != null ? turnManager.GetCooldowns(unit) : null;
-
-            var cost = actionPlan.cost;
-            if (tool.Kind == ActionKind.FullRound)
-            {
-                int remaining = budget != null ? Mathf.Max(0, budget.Remaining) : 0;
-                if (remaining <= 0)
+                if (!target.HasValue)
                 {
-                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=lackTime)");
-                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=lackTime)");
-                    NotifyConfirmAbort(tool, unit, "lackTime");
+                    ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
+                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
+                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=targetInvalid)");
+                    NotifyConfirmAbort(tool, unit, "targetInvalid");
                     CleanupAfterAbort(tool, false);
                     yield break;
                 }
 
-                cost.moveSecs = remaining;
-                cost.atkSecs = 0;
-                actionPlan.cost = cost;
-                cost = actionPlan.cost;
+                if (!TryBeginAim(tool, unit, out var aimReason, false))
+                {
+                    ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
+                    string fail = string.IsNullOrEmpty(aimReason) ? "notReady" : aimReason;
+                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={fail})");
+                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={fail})");
+                    NotifyConfirmAbort(tool, unit, fail);
+                    CleanupAfterAbort(tool, false);
+                    yield break;
+                }
 
-                if (tool is IFullRoundActionTool fullRoundTool)
-                    fullRoundTool.PrepareFullRoundSeconds(cost.TotalSeconds);
-            }
+                ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
+
+                var actionPlan = new ActionPlan
+                {
+                    kind = kind,
+                    target = target.Value,
+                    cost = BuildPlannedCost(tool, target.Value)
+                };
+
+                var budget = turnManager != null && unit != null ? turnManager.GetBudget(unit) : null;
+                var resources = turnManager != null && unit != null ? turnManager.GetResources(unit) : null;
+                var cooldowns = turnManager != null && unit != null ? turnManager.GetCooldowns(unit) : null;
+
+                var cost = actionPlan.cost;
+                if (tool.Kind == ActionKind.FullRound)
+                {
+                    int remaining = budget != null ? Mathf.Max(0, budget.Remaining) : 0;
+                    if (remaining <= 0)
+                    {
+                        ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=lackTime)");
+                        ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=lackTime)");
+                        NotifyConfirmAbort(tool, unit, "lackTime");
+                        CleanupAfterAbort(tool, false);
+                        yield break;
+                    }
+
+                    cost.moveSecs = remaining;
+                    cost.atkSecs = 0;
+                    actionPlan.cost = cost;
+                    cost = actionPlan.cost;
+
+                    if (tool is IFullRoundActionTool fullRoundTool)
+                        fullRoundTool.PrepareFullRoundSeconds(cost.TotalSeconds);
+                }
 
             int remain = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
@@ -724,6 +735,13 @@ namespace TGD.CombatV2
                 yield break;
             }
             yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+        }
+        finally
+        {
+            if (guardActive && guardUnit != null)
+                turnManager.PopAutoTurnEndGuard(guardUnit);
+        }
+
         }
 
         IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources)

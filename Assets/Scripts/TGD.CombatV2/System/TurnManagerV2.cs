@@ -41,6 +41,7 @@ namespace TGD.CombatV2
         readonly List<Func<bool, IEnumerator>> _phaseStartGates = new();
         readonly List<Func<Unit, IEnumerator>> _turnStartGates = new();
         readonly Dictionary<Unit, FullRoundState> _fullRoundStates = new();
+        readonly Dictionary<Unit, int> _autoEndGuards = new();
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -208,6 +209,40 @@ namespace TGD.CombatV2
                 return false;
 
             return _runtimeByUnit.TryGetValue(unit, out var runtime) && runtime != null && runtime.HasReachedIdle;
+        }
+
+        public void PushAutoTurnEndGuard(Unit unit)
+        {
+            if (unit == null)
+                return;
+
+            if (_autoEndGuards.TryGetValue(unit, out var count))
+                _autoEndGuards[unit] = count + 1;
+            else
+                _autoEndGuards[unit] = 1;
+        }
+
+        public void PopAutoTurnEndGuard(Unit unit)
+        {
+            if (unit == null)
+                return;
+
+            if (_autoEndGuards.TryGetValue(unit, out var count))
+            {
+                count = Mathf.Max(0, count - 1);
+                if (count <= 0)
+                    _autoEndGuards.Remove(unit);
+                else
+                    _autoEndGuards[unit] = count;
+            }
+        }
+
+        int GetAutoTurnEndGuard(Unit unit)
+        {
+            if (unit == null)
+                return 0;
+
+            return _autoEndGuards.TryGetValue(unit, out var count) ? count : 0;
         }
 
         public void UnregisterPhaseStartGate(Func<bool, IEnumerator> gate)
@@ -395,6 +430,9 @@ namespace TGD.CombatV2
                 _activeUnit = null;
                 _waitingForEnd = false;
             }
+
+            if (_autoEndGuards.ContainsKey(unit))
+                _autoEndGuards.Remove(unit);
 
             runtime.FinishTurn();
             TurnEnded?.Invoke(runtime.Unit);
@@ -592,6 +630,17 @@ namespace TGD.CombatV2
             float wait = Mathf.Max(0f, autoTurnEndDelaySeconds);
             if (wait > 0f)
                 yield return new WaitForSeconds(wait);
+
+            while (true)
+            {
+                if (!_waitingForEnd || _activeUnit != runtime.Unit)
+                    yield break;
+
+                if (GetAutoTurnEndGuard(runtime.Unit) <= 0)
+                    break;
+
+                yield return null;
+            }
 
             if (!_waitingForEnd || _activeUnit != runtime.Unit)
                 yield break;
