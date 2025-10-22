@@ -1593,24 +1593,31 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
-
             Hex selectedTarget = Hex.Zero;
+            bool targetChosen = true;
+
+            tool.OnEnterAim();
+            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+
             if (tool is ChainTestActionBase chainTool)
             {
                 bool awaitingSelection = true;
-                bool targetChosen = false;
+                targetChosen = false;
                 var cursor = ChainCursor;
                 cursor?.Clear();
+                Hex? lastHover = null;
 
                 while (awaitingSelection)
                 {
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
+                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
+                        {
+                            chainTool.OnHover(hover.Value);
+                            lastHover = hover.Value;
+                        }
                         var check = chainTool.ValidateTarget(unit, hover.Value);
-                        cursor?.ShowSingle(hover.Value, check.ok ? chainValidColor : chainInvalidColor);
 
                         if (Input.GetMouseButtonDown(0))
                         {
@@ -1630,6 +1637,7 @@ namespace TGD.CombatV2
                     else
                     {
                         cursor?.Clear();
+                        lastHover = null;
                     }
 
                     if (!awaitingSelection)
@@ -1638,7 +1646,9 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true, tool = null });
+                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
+                        tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
 
@@ -1649,9 +1659,22 @@ namespace TGD.CombatV2
 
                 if (!targetChosen)
                 {
+                    tool.OnExitAim();
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
+            }
+
+            tool.OnExitAim();
+            ChainCursor?.Clear();
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+
+            if (!targetChosen)
+            {
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                yield break;
             }
 
             string failReason = null;
@@ -1722,24 +1745,31 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
-
             Hex selectedTarget = Hex.Zero;
+            bool targetChosen = true;
+
+            tool.OnEnterAim();
+            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+
             if (tool is ChainTestActionBase chainTool)
             {
                 bool awaitingSelection = true;
-                bool targetChosen = false;
+                targetChosen = false;
                 var cursor = ChainCursor;
                 cursor?.Clear();
+                Hex? lastHover = null;
 
                 while (awaitingSelection)
                 {
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
+                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
+                        {
+                            chainTool.OnHover(hover.Value);
+                            lastHover = hover.Value;
+                        }
                         var check = chainTool.ValidateTarget(unit, hover.Value);
-                        cursor?.ShowSingle(hover.Value, check.ok ? chainValidColor : chainInvalidColor);
 
                         if (Input.GetMouseButtonDown(0))
                         {
@@ -1759,6 +1789,7 @@ namespace TGD.CombatV2
                     else
                     {
                         cursor?.Clear();
+                        lastHover = null;
                     }
 
                     if (!awaitingSelection)
@@ -1767,7 +1798,9 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = true, tool = null });
+                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
+                        tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
 
@@ -1778,9 +1811,22 @@ namespace TGD.CombatV2
 
                 if (!targetChosen)
                 {
+                    tool.OnExitAim();
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
+            }
+
+            tool.OnExitAim();
+            ChainCursor?.Clear();
+
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+
+            if (!targetChosen)
+            {
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                yield break;
             }
 
             string failReason = null;
@@ -2101,6 +2147,7 @@ namespace TGD.CombatV2
             if (cancelBase)
             {
                 _planStack.Clear();
+                yield return null;
                 yield break;
             }
 
@@ -2112,6 +2159,7 @@ namespace TGD.CombatV2
             }
 
             _planStack.Clear();
+            yield return null;
         }
 
     }
