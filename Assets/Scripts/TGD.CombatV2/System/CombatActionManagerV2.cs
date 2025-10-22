@@ -168,8 +168,6 @@ namespace TGD.CombatV2
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
-        readonly HashSet<IActionToolV2> _chainFullRoundSkipLogged = new();
-        bool _chainFullRoundLogActive;
         readonly List<ChainOption> _derivedBuffer = new();
 
         IActionRules ResolveRules()
@@ -1305,17 +1303,7 @@ namespace TGD.CombatV2
                     if (allowFriendlyInsertion && ownerBudget == null && ownerResources == null && ownerCooldowns == null)
                         continue;
                     if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
-                    {
-                        if (_chainFullRoundLogActive && _chainFullRoundSkipLogged.Add(tool))
-                        {
-                            Log($"[FullRound] ChainWindow skip owner={TurnManagerV2.FormatUnitLabel(owner)} id={tool.Id} reason=fullround");
-                        }
                         continue;
-                    }
-                    else
-                    {
-                        _chainFullRoundSkipLogged.Remove(tool);
-                    }
 
                     if (pending != null && pending.Contains(tool))
                         continue;
@@ -1501,9 +1489,6 @@ namespace TGD.CombatV2
 
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
-            _chainFullRoundSkipLogged.Clear();
-            _chainFullRoundLogActive = true;
-
             PushInputSuppression();
             try
             {
@@ -1547,6 +1532,7 @@ namespace TGD.CombatV2
                     bool activeOwnerLogged = false;
                     List<ActionKind> stageNextKinds = null;
                     bool stageSuppressCancel = false;
+                    HashSet<Unit> stageFullRoundLogged = depth == 0 ? new HashSet<Unit>() : null;
 
                     while (stageActive)
                     {
@@ -1636,6 +1622,16 @@ namespace TGD.CombatV2
 
                             if (ownerOptions.Count == 0)
                             {
+                                if (stageFullRoundLogged != null
+                                    && turnManager != null
+                                    && turnManager.HasActiveFullRound(activeOwner)
+                                    && stageFullRoundLogged.Add(activeOwner))
+                                {
+                                    string ownerLabel = TurnManagerV2.FormatUnitLabel(activeOwner);
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip", $"(owner={ownerLabel} reason=fullround)");
+                                    stageLoggedOnce = true;
+                                }
+
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
@@ -1814,8 +1810,6 @@ namespace TGD.CombatV2
             }
             finally
             {
-                _chainFullRoundLogActive = false;
-                _chainFullRoundSkipLogged.Clear();
                 PopInputSuppression();
             }
         }
