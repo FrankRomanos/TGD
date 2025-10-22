@@ -1423,6 +1423,8 @@ namespace TGD.CombatV2
                     IReadOnlyList<ActionKind> nextKinds = allowedKinds;
                     bool stageHasSelection = false;
                     bool stageActive = true;
+                    bool stageLoggedOnce = false;
+                    string lastStageMessage = null;
 
                     while (stageActive)
                     {
@@ -1474,7 +1476,12 @@ namespace TGD.CombatV2
                             }
                         }
 
-                        ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
+                        if (!stageLoggedOnce || !string.Equals(lastStageMessage, message, StringComparison.Ordinal))
+                        {
+                            ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
+                            stageLoggedOnce = true;
+                            lastStageMessage = message;
+                        }
 
                         if (options.Count == 0)
                         {

@@ -5,7 +5,7 @@ using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
-    public abstract class ChainTestActionBase : MonoBehaviour, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2
+    public abstract class ChainTestActionBase : MonoBehaviour, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2
     {
         [Header("Owner")]
         public HexBoardTestDriver driver;
