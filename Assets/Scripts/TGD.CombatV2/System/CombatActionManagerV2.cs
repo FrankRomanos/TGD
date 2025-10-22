@@ -1390,6 +1390,106 @@ namespace TGD.CombatV2
             return builder.ToString();
         }
 
+        int GetChainOwnerOrder(Unit owner)
+        {
+            if (owner == null || turnManager == null)
+                return int.MaxValue;
+
+            if (turnManager.IsPlayerUnit(owner))
+                return turnManager.GetTurnOrderIndex(owner, true);
+
+            if (turnManager.IsEnemyUnit(owner))
+                return turnManager.GetTurnOrderIndex(owner, false);
+
+            return int.MaxValue - 1;
+        }
+
+        Unit ResolveNextChainOwner(List<ChainOption> options, HashSet<Unit> usedOwners)
+        {
+            if (options == null || options.Count == 0)
+                return null;
+
+            Unit bestOwner = null;
+            int bestOrder = int.MaxValue;
+            string bestLabel = null;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                var option = options[i];
+                var owner = option.owner;
+                if (owner == null)
+                    continue;
+                if (usedOwners != null && usedOwners.Contains(owner))
+                    continue;
+
+                int order = GetChainOwnerOrder(owner);
+                string label = TurnManagerV2.FormatUnitLabel(owner);
+                if (bestOwner == null
+                    || order < bestOrder
+                    || (order == bestOrder && string.CompareOrdinal(label, bestLabel) < 0))
+                {
+                    bestOwner = owner;
+                    bestOrder = order;
+                    bestLabel = label;
+                }
+            }
+
+            return bestOwner;
+        }
+
+        static string BuildOwnerStageMessage(Unit owner, int optionCount)
+        {
+            string ownerLabel = owner != null ? TurnManagerV2.FormatUnitLabel(owner) : "?";
+            return $"(owner={ownerLabel} count={optionCount})";
+        }
+
+        string BuildStageMessage(List<ChainOption> options, bool isEnemyPhase)
+        {
+            if (options == null || options.Count == 0)
+                return "(count:0)";
+
+            string message = $"(count:{options.Count})";
+
+            if (!isEnemyPhase)
+                return message;
+
+            var perOwner = new Dictionary<Unit, int>();
+            for (int i = 0; i < options.Count; i++)
+            {
+                var owner = options[i].owner;
+                if (owner == null)
+                    continue;
+                if (turnManager != null && !turnManager.IsPlayerUnit(owner))
+                    continue;
+
+                perOwner.TryGetValue(owner, out var current);
+                perOwner[owner] = current + 1;
+            }
+
+            if (perOwner.Count == 0)
+                return message;
+
+            var ordered = perOwner.Keys
+                .Select(u => (unit: u, label: TurnManagerV2.FormatUnitLabel(u)))
+                .OrderBy(t => t.label, StringComparer.Ordinal)
+                .ToList();
+
+            var breakdown = new System.Text.StringBuilder();
+            foreach (var entry in ordered)
+            {
+                if (breakdown.Length > 0)
+                    breakdown.Append(' ');
+                breakdown.Append(entry.label);
+                breakdown.Append(" count=");
+                breakdown.Append(perOwner[entry.unit]);
+            }
+
+            if (breakdown.Length > 0)
+                return $"(count:{options.Count} {breakdown})";
+
+            return message;
+        }
+
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false)
         {
             PushInputSuppression();
@@ -1426,12 +1526,14 @@ namespace TGD.CombatV2
                     string label = FormatChainStageLabel(depth);
                     var stageKinds = allowedKinds;
                     var stageOwnersUsed = new HashSet<Unit>();
-                    IReadOnlyList<ActionKind> nextKinds = allowedKinds;
                     bool stageHasSelection = false;
                     bool stageActive = true;
                     bool stageLoggedOnce = false;
                     string lastStageMessage = null;
                     bool stageCancelledByInput = false;
+                    Unit activeOwner = null;
+                    bool activeOwnerLogged = false;
+                    List<ActionKind> stageNextKinds = null;
 
                     while (stageActive)
                     {
@@ -1446,70 +1548,130 @@ namespace TGD.CombatV2
                             }
                         }
 
-                        string message = $"(count:{options.Count})";
-                        if (isEnemyPhase && options.Count > 0)
+                        if (activeOwner != null)
                         {
-                            var perOwner = new Dictionary<Unit, int>();
-                            foreach (var option in options)
+                            bool ownerStillAvailable = false;
+                            for (int i = 0; i < options.Count; i++)
                             {
-                                var owner = option.owner;
-                                if (owner == null)
-                                    continue;
-                                if (turnManager != null && !turnManager.IsPlayerUnit(owner))
-                                    continue;
-                                perOwner.TryGetValue(owner, out var current);
-                                perOwner[owner] = current + 1;
-                            }
-
-                            if (perOwner.Count > 0)
-                            {
-                                var ordered = perOwner.Keys
-                                    .Select(u => (unit: u, label: TurnManagerV2.FormatUnitLabel(u)))
-                                    .OrderBy(t => t.label, StringComparer.Ordinal)
-                                    .ToList();
-
-                                var breakdown = new System.Text.StringBuilder();
-                                foreach (var entry in ordered)
+                                if (options[i].owner == activeOwner)
                                 {
-                                    if (breakdown.Length > 0)
-                                        breakdown.Append(' ');
-                                    breakdown.Append(entry.label);
-                                    breakdown.Append(" count=");
-                                    breakdown.Append(perOwner[entry.unit]);
+                                    ownerStillAvailable = true;
+                                    break;
                                 }
-
-                                if (breakdown.Length > 0)
-                                    message = $"(count:{options.Count} {breakdown})";
                             }
-                        }
 
-                        if (!stageLoggedOnce || !string.Equals(lastStageMessage, message, StringComparison.Ordinal))
-                        {
-                            ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
-                            stageLoggedOnce = true;
-                            lastStageMessage = message;
+                            if (!ownerStillAvailable)
+                            {
+                                stageOwnersUsed.Add(activeOwner);
+                                activeOwner = null;
+                                activeOwnerLogged = false;
+                                continue;
+                            }
                         }
 
                         if (options.Count == 0)
                         {
+                            if (!stageLoggedOnce)
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, label, "(count:0)");
+                                stageLoggedOnce = true;
+                            }
+
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
                             stageActive = false;
                             break;
+                        }
+
+                        bool ownerMode = false;
+                        for (int i = 0; i < options.Count; i++)
+                        {
+                            if (options[i].owner != null)
+                            {
+                                ownerMode = true;
+                                break;
+                            }
+                        }
+
+                        if (ownerMode && activeOwner == null)
+                        {
+                            activeOwner = ResolveNextChainOwner(options, stageOwnersUsed);
+                            activeOwnerLogged = false;
+
+                            if (activeOwner == null)
+                                ownerMode = false;
+                        }
+
+                        List<ChainOption> ownerOptions = options;
+                        if (ownerMode && activeOwner != null)
+                        {
+                            ownerOptions = new List<ChainOption>();
+                            for (int i = 0; i < options.Count; i++)
+                            {
+                                if (options[i].owner == activeOwner)
+                                    ownerOptions.Add(options[i]);
+                            }
+
+                            if (ownerOptions.Count == 0)
+                            {
+                                stageOwnersUsed.Add(activeOwner);
+                                activeOwner = null;
+                                activeOwnerLogged = false;
+                                continue;
+                            }
+                        }
+
+                        string message;
+                        if (ownerMode && activeOwner != null)
+                        {
+                            message = BuildOwnerStageMessage(activeOwner, ownerOptions.Count);
+                            if (!activeOwnerLogged)
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
+                                stageLoggedOnce = true;
+                                activeOwnerLogged = true;
+                            }
+                        }
+                        else
+                        {
+                            message = BuildStageMessage(options, isEnemyPhase);
+                            if (!stageLoggedOnce || !string.Equals(lastStageMessage, message, StringComparison.Ordinal))
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
+                                stageLoggedOnce = true;
+                                lastStageMessage = message;
+                            }
                         }
 
                         bool handledInput = false;
 
                         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                         {
-                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                            string cancelSuffix = null;
+                            if (ownerMode && activeOwner != null)
+                                cancelSuffix = $"(owner={TurnManagerV2.FormatUnitLabel(activeOwner)})";
+
+                            if (!string.IsNullOrEmpty(cancelSuffix))
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel", cancelSuffix);
+                            else
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+
+                            if (ownerMode && activeOwner != null)
+                            {
+                                stageOwnersUsed.Add(activeOwner);
+                                activeOwner = null;
+                                activeOwnerLogged = false;
+                                yield return null;
+                                continue;
+                            }
+
                             stageActive = false;
                             stageCancelledByInput = true;
                             break;
                         }
 
-                        for (int i = 0; i < options.Count; i++)
+                        for (int i = 0; i < ownerOptions.Count; i++)
                         {
-                            var option = options[i];
+                            var option = ownerOptions[i];
                             if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
                                 continue;
 
@@ -1528,14 +1690,20 @@ namespace TGD.CombatV2
                             {
                                 if (isEnemyPhase)
                                 {
-                                    // 敌方回合：取消当前这次“目标选择”，但不关闭层，也不结束连锁
-                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection");
-                                    handledInput = true;  // 标记本帧已处理输入
-                                    break;                // 跳出 for，回到 stage 循环下一帧
+                                    string cancelSelectionSuffix = ownerMode && activeOwner != null
+                                        ? $"(owner={TurnManagerV2.FormatUnitLabel(activeOwner)})"
+                                        : null;
+
+                                    if (!string.IsNullOrEmpty(cancelSelectionSuffix))
+                                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection", cancelSelectionSuffix);
+                                    else
+                                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection");
+
+                                    handledInput = true;
+                                    break;
                                 }
                                 else
                                 {
-                                    // 我方 Idle 连锁：按你的设计，取消 = 结束整个连锁
                                     ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
                                     keepLooping = false;
                                     stageActive = false;
@@ -1561,9 +1729,22 @@ namespace TGD.CombatV2
                                 cancelledBase = true;
 
                             if (rules != null)
-                                nextKinds = rules.AllowedChainNextLayer(option.kind) ?? Array.Empty<ActionKind>();
-                            else
-                                nextKinds = Array.Empty<ActionKind>();
+                            {
+                                var allowedNext = rules.AllowedChainNextLayer(option.kind);
+                                if (allowedNext != null && allowedNext.Count > 0)
+                                {
+                                    stageNextKinds ??= new List<ActionKind>();
+                                    for (int j = 0; j < allowedNext.Count; j++)
+                                    {
+                                        var nextKind = allowedNext[j];
+                                        if (!stageNextKinds.Contains(nextKind))
+                                            stageNextKinds.Add(nextKind);
+                                    }
+                                }
+                            }
+
+                            activeOwner = null;
+                            activeOwnerLogged = false;
 
                             break;
                         }
@@ -1572,9 +1753,7 @@ namespace TGD.CombatV2
                             break;
 
                         if (handledInput)
-                        {
                             continue;
-                        }
 
                         yield return null;
                     }
@@ -1594,7 +1773,10 @@ namespace TGD.CombatV2
                         break;
                     }
 
-                    allowedKinds = nextKinds ?? Array.Empty<ActionKind>();
+                    if (stageNextKinds != null && stageNextKinds.Count > 0)
+                        allowedKinds = stageNextKinds;
+                    else
+                        allowedKinds = Array.Empty<ActionKind>();
                     depth += 1;
                     keepLooping = allowedKinds != null && allowedKinds.Count > 0;
                 }
