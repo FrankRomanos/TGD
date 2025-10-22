@@ -1238,7 +1238,7 @@ namespace TGD.CombatV2
 
             var rules = ResolveRules();
             bool enforceReactionWithinBase = rules?.ReactionMustBeWithinBaseTime() ?? true;
-            bool allowFriendlyInsertion = rules?.AllowFriendlyInsertions() ?? false;
+            bool allowFriendlyInsertion = isEnemyPhase || (rules?.AllowFriendlyInsertions() ?? false);
 
             foreach (var pair in _toolsById)
             {
