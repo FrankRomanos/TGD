@@ -563,11 +563,15 @@ namespace TGD.CombatV2
             string kind = tool.Id;
             Unit guardUnit = null;
             bool guardActive = false;
-            if (turnManager != null && !turnManager.IsPlayerPhase && unit != null)
+            if (turnManager != null && !turnManager.IsPlayerPhase)
             {
-                turnManager.PushAutoTurnEndGuard(unit);
-                guardUnit = unit;
-                guardActive = true;
+                // 敌方回合：guard 键应当是当前激活的敌人，而不是本动作的 owner（可能是友方）
+                guardUnit = turnManager.ActiveUnit ?? unit;
+                if (guardUnit != null)
+                {
+                    turnManager.PushAutoTurnEndGuard(guardUnit);
+                    guardActive = true;
+                }
             }
 
             try
@@ -1248,15 +1252,15 @@ namespace TGD.CombatV2
             return KeyCode.None;
         }
 
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending, bool isEnemyPhase)
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending, bool isEnemyPhase, bool restrictToOwner)
         {
             _chainBuffer.Clear();
             if (allowedKinds == null || allowedKinds.Count == 0)
                 return _chainBuffer;
 
             var rules = ResolveRules();
+            bool allowFriendlyInsertion = !restrictToOwner && (isEnemyPhase || (rules?.AllowFriendlyInsertions() ?? false));
             bool enforceReactionWithinBase = rules?.ReactionMustBeWithinBaseTime() ?? true;
-            bool allowFriendlyInsertion = isEnemyPhase || (rules?.AllowFriendlyInsertions() ?? false);
 
             foreach (var pair in _toolsById)
             {
@@ -1266,6 +1270,8 @@ namespace TGD.CombatV2
                         continue;
 
                     var owner = ResolveUnit(tool);
+                    if (restrictToOwner && owner != unit)
+                        continue;
                     if (!allowFriendlyInsertion && owner != unit)
                         continue;
                     if (allowFriendlyInsertion && owner == null)
@@ -1384,7 +1390,7 @@ namespace TGD.CombatV2
             return builder.ToString();
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false)
         {
             PushInputSuppression();
             try
@@ -1428,7 +1434,7 @@ namespace TGD.CombatV2
 
                     while (stageActive)
                     {
-                        var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase);
+                        var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase, restrictToOwner);
                         if (stageOwnersUsed.Count > 0 && options.Count > 0)
                         {
                             for (int i = options.Count - 1; i >= 0; --i)
@@ -1518,10 +1524,21 @@ namespace TGD.CombatV2
 
                             if (outcome.cancel)
                             {
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-                                keepLooping = false;
-                                stageActive = false;
-                                break;
+                                if (isEnemyPhase)
+                                {
+                                    // 敌方回合：取消当前这次“目标选择”，但不关闭层，也不结束连锁
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection");
+                                    handledInput = true;  // 标记本帧已处理输入
+                                    break;                // 跳出 for，回到 stage 循环下一帧
+                                }
+                                else
+                                {
+                                    // 我方 Idle 连锁：按你的设计，取消 = 结束整个连锁
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                                    keepLooping = false;
+                                    stageActive = false;
+                                    break;
+                                }
                             }
 
                             if (!outcome.queued)
@@ -2185,9 +2202,9 @@ namespace TGD.CombatV2
             var allowed = rules?.AllowedAtPhaseStartFree();
             if (allowed == null || allowed.Count == 0)
                 return 0;
-
             bool enemyPhase = turnManager != null && turnManager.IsEnemyUnit(unit);
-            var options = BuildChainOptions(unit, budget, resources, 0, allowed, cooldowns, null, enemyPhase);
+            var options = BuildChainOptions(unit, budget, resources, 0, allowed,
+                cooldowns, null, enemyPhase, /*restrictToOwner:*/ enemyPhase);
             int count = options != null ? options.Count : 0;
             options?.Clear();
             return count;
@@ -2250,6 +2267,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
+            // 敌方分支：整批友方连锁期间加守卫，避免被 AutoFinishEnemyTurn 抢先结束
             if (unitDriver != null)
             {
                 var driverUnit = unitDriver.UnitRef;
@@ -2264,24 +2282,33 @@ namespace TGD.CombatV2
                 {
                     foreach (var friendly in friendlies)
                     {
-                        if (friendly == null)
-                            continue;
+                        if (friendly == null) continue;
                         Log($"[Free] PhaseStart(Enemy) freeskip unit={TurnManagerV2.FormatUnitLabel(friendly)}");
                     }
                 }
                 yield break;
             }
 
-            var orderedFriendlies = BuildOrderedSideUnits(true);
-            if (orderedFriendlies == null || orderedFriendlies.Count == 0)
-                yield break;
-
-            foreach (var friendly in orderedFriendlies)
+            turnManager.PushAutoTurnEndGuard(unit);   // <<< 开守卫（整批）
+            try
             {
-                if (friendly == null)
-                    continue;
-                yield return RunStartFreeChainWindow(friendly, "PhaseStart(Enemy)", true);
+                var orderedFriendlies = BuildOrderedSideUnits(true);
+                if (orderedFriendlies != null)
+                {
+                    foreach (var friendly in orderedFriendlies)
+                    {
+                        if (friendly == null) continue;
+                        // 敌方回合：依次为每个友方打开一次自由连锁窗口
+                        yield return RunStartFreeChainWindow(friendly, "PhaseStart(Enemy)", true);
+                    }
+                }
             }
+            finally
+            {
+                turnManager.PopAutoTurnEndGuard(unit); // <<< 全部处理完再关守卫
+            }
+
+            yield break;
         }
 
         IEnumerator RunStartFreeChainWindow(Unit unit, string planKind, bool isEnemyPhase)
@@ -2310,18 +2337,20 @@ namespace TGD.CombatV2
                 cost = new PlannedCost { valid = true }
             };
 
-            // 可选：为了避免刚开回合时各句柄/工具还没就绪导致第一次统计为0，等1帧再开窗
-            // yield return null;
-
             var cooldowns = turnManager.GetCooldowns(unit);
 
-            yield return RunChainWindow(unit, phasePlan, ActionKind.Free, isEnemyPhase,
-                budget, resources, cooldowns, 0, pendingChain, cancelled => cancelBase = cancelled);
+            // 你项目里的 RunChainWindow 如果带 “restrictToOwner”等布尔尾参，保持原来调用方式
+            yield return RunChainWindow(
+                unit, phasePlan, ActionKind.Free, isEnemyPhase,
+                budget, resources, cooldowns, 0,
+                pendingChain,
+                cancelled => cancelBase = cancelled,
+                isEnemyPhase ? true : false // 若你方法签名没有这个参数，就删掉这一位
+            );
 
             if (cancelBase)
             {
                 _planStack.Clear();
-                yield return null;
                 yield break;
             }
 
@@ -2333,8 +2362,8 @@ namespace TGD.CombatV2
             }
 
             _planStack.Clear();
-            yield return null;
         }
+
 
     }
 }

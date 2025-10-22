@@ -86,7 +86,7 @@ namespace TGD.CombatV2
             while (actionManager.IsExecuting)
                 yield return null;
 
-            turnManager.EndTurn(unit);
+            //turnManager.EndTurn(unit);
 
             _pendingRoutine = null;
         }

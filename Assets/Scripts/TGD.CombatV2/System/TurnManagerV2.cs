@@ -27,6 +27,8 @@ namespace TGD.CombatV2
 
         readonly List<Unit> _playerUnits = new();
         readonly List<Unit> _enemyUnits = new();
+        public Unit ActiveUnit => _activeUnit;
+
 
         readonly Dictionary<Unit, UnitRuntimeContext> _contextByUnit = new();
         readonly Dictionary<Unit, TurnRuntimeV2> _runtimeByUnit = new();
