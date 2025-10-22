@@ -1431,6 +1431,7 @@ namespace TGD.CombatV2
                     bool stageActive = true;
                     bool stageLoggedOnce = false;
                     string lastStageMessage = null;
+                    bool stageCancelledByInput = false;
 
                     while (stageActive)
                     {
@@ -1502,6 +1503,7 @@ namespace TGD.CombatV2
                         {
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
                             stageActive = false;
+                            stageCancelledByInput = true;
                             break;
                         }
 
@@ -1575,6 +1577,12 @@ namespace TGD.CombatV2
                         }
 
                         yield return null;
+                    }
+
+                    if (stageCancelledByInput)
+                    {
+                        yield return null;
+                        stageCancelledByInput = false;
                     }
 
                     if (!keepLooping)
