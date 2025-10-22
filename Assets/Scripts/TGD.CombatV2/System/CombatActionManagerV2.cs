@@ -1490,7 +1490,7 @@ namespace TGD.CombatV2
             return message;
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
             PushInputSuppression();
             try
@@ -1534,9 +1534,17 @@ namespace TGD.CombatV2
                     Unit activeOwner = null;
                     bool activeOwnerLogged = false;
                     List<ActionKind> stageNextKinds = null;
+                    bool stageSuppressCancel = false;
 
                     while (stageActive)
                     {
+                        if (stageSuppressCancel)
+                        {
+                            stageSuppressCancel = false;
+                            yield return null;
+                            continue;
+                        }
+
                         var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase, restrictToOwner);
                         if (stageOwnersUsed.Count > 0 && options.Count > 0)
                         {
@@ -1583,12 +1591,15 @@ namespace TGD.CombatV2
                         }
 
                         bool ownerMode = false;
-                        for (int i = 0; i < options.Count; i++)
+                        if (allowOwnerCancel)
                         {
-                            if (options[i].owner != null)
+                            for (int i = 0; i < options.Count; i++)
                             {
-                                ownerMode = true;
-                                break;
+                                if (options[i].owner != null)
+                                {
+                                    ownerMode = true;
+                                    break;
+                                }
                             }
                         }
 
@@ -1655,7 +1666,7 @@ namespace TGD.CombatV2
                             else
                                 ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
 
-                            if (ownerMode && activeOwner != null)
+                            if (ownerMode && activeOwner != null && allowOwnerCancel && !stageHasSelection)
                             {
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
@@ -1712,7 +1723,14 @@ namespace TGD.CombatV2
                             }
 
                             if (!outcome.queued)
+                            {
+                                if (!outcome.cancel)
+                                {
+                                    stageSuppressCancel = true;
+                                    handledInput = true;
+                                }
                                 break;
+                            }
 
                             if (outcome.tool != null)
                             {
@@ -2535,7 +2553,8 @@ namespace TGD.CombatV2
                 budget, resources, cooldowns, 0,
                 pendingChain,
                 cancelled => cancelBase = cancelled,
-                isEnemyPhase ? true : false // 若你方法签名没有这个参数，就删掉这一位
+                isEnemyPhase ? true : false, // 若你方法签名没有这个参数，就删掉这一位
+                isEnemyPhase
             );
 
             if (cancelBase)
