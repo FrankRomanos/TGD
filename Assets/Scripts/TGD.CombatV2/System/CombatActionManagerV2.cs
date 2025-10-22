@@ -124,6 +124,19 @@ namespace TGD.CombatV2
             public int secs;
             public int energy;
             public ActionKind kind;
+            public Unit owner;
+            public ITurnBudget budget;
+            public IResourcePool resources;
+            public ICooldownSink cooldowns;
+        }
+
+        struct ChainQueuedAction
+        {
+            public IActionToolV2 tool;
+            public Unit owner;
+            public ActionPlan plan;
+            public ITurnBudget budget;
+            public IResourcePool resources;
         }
 
         struct ChainQueueOutcome
@@ -654,7 +667,7 @@ namespace TGD.CombatV2
 
             TryHideAllAimUI();
 
-            var pendingChain = new List<Tuple<IActionToolV2, ActionPlan>>();
+            var pendingChain = new List<ChainQueuedAction>();
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
@@ -665,8 +678,8 @@ namespace TGD.CombatV2
             for (int i = pendingChain.Count - 1; i >= 0; --i)
             {
                 var pending = pendingChain[i];
-                if (pending?.Item1 != null)
-                    yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                if (pending.tool != null)
+                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
             }
 
             if (cancelBase)
@@ -1161,16 +1174,23 @@ namespace TGD.CombatV2
         {
             if (tool == null || unit == null || turnManager == null)
                 return false;
-            if (!turnManager.IsPlayerUnit(unit))
-                return false;
-            if (!turnManager.IsPlayerPhase)
-                return false;
+
+            bool isEnemyPhase = !turnManager.IsPlayerPhase;
+            if (!isEnemyPhase)
+            {
+                if (!turnManager.IsPlayerUnit(unit))
+                    return false;
+            }
+            else
+            {
+                if (!turnManager.IsEnemyUnit(unit))
+                    return false;
+            }
 
             var rules = ResolveRules();
             if (rules == null)
                 return false;
 
-            bool isEnemyPhase = turnManager != null && !turnManager.IsPlayerPhase;
             var allowed = rules.AllowedChainFirstLayer(tool.Kind, isEnemyPhase);
             return allowed != null && allowed.Count > 0;
         }
@@ -1210,7 +1230,7 @@ namespace TGD.CombatV2
             return KeyCode.None;
         }
 
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending)
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending, bool isEnemyPhase)
         {
             _chainBuffer.Clear();
             if (allowedKinds == null || allowedKinds.Count == 0)
@@ -1231,6 +1251,32 @@ namespace TGD.CombatV2
                     if (!allowFriendlyInsertion && owner != unit)
                         continue;
                     if (allowFriendlyInsertion && owner == null)
+                        continue;
+                    if (allowFriendlyInsertion && isEnemyPhase)
+                    {
+                        if (turnManager == null || owner == null || !turnManager.IsPlayerUnit(owner))
+                            continue;
+                    }
+                    else if (allowFriendlyInsertion && owner != unit)
+                    {
+                        if (turnManager != null && turnManager.IsEnemyUnit(owner))
+                            continue;
+                    }
+
+                    ITurnBudget ownerBudget = budget;
+                    IResourcePool ownerResources = resources;
+                    ICooldownSink ownerCooldowns = cooldowns;
+                    if (owner != unit)
+                    {
+                        if (turnManager == null)
+                            continue;
+
+                        ownerBudget = turnManager.GetBudget(owner);
+                        ownerResources = turnManager.GetResources(owner);
+                        ownerCooldowns = turnManager.GetCooldowns(owner);
+                    }
+
+                    if (allowFriendlyInsertion && ownerBudget == null && ownerResources == null && ownerCooldowns == null)
                         continue;
                     if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
                     {
@@ -1278,13 +1324,13 @@ namespace TGD.CombatV2
                     if (tool.Kind == ActionKind.Free && secs != 0)
                         continue;
 
-                    if (secs > 0 && budget != null && !budget.HasTime(secs))
+                    if (secs > 0 && ownerBudget != null && !ownerBudget.HasTime(secs))
                         continue;
 
-                    if (resources != null && energy > 0 && !resources.Has("Energy", energy))
+                    if (ownerResources != null && energy > 0 && !ownerResources.Has("Energy", energy))
                         continue;
 
-                    if (cooldowns != null && !IsCooldownReadyForConfirm(tool, cooldowns))
+                    if (ownerCooldowns != null && !IsCooldownReadyForConfirm(tool, ownerCooldowns))
                         continue;
 
                     var key = ResolveChainKey(tool.Id);
@@ -1297,7 +1343,11 @@ namespace TGD.CombatV2
                         key = key,
                         secs = secs,
                         energy = energy,
-                        kind = tool.Kind
+                        kind = tool.Kind,
+                        owner = owner,
+                        budget = ownerBudget,
+                        resources = ownerResources,
+                        cooldowns = ownerCooldowns
                     });
                 }
             }
@@ -1309,10 +1359,14 @@ namespace TGD.CombatV2
         {
             if (depth <= 0)
                 return "W2.1";
-            return $"W2.1.{depth}";
+
+            var builder = new System.Text.StringBuilder("W2.1");
+            for (int i = 0; i < depth; i++)
+                builder.Append(".1");
+            return builder.ToString();
         }
 
-        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<bool> onComplete)
+        IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete)
         {
             PushInputSuppression();
             try
@@ -1326,10 +1380,11 @@ namespace TGD.CombatV2
                 if (pendingActions != null && pendingActions.Count > 0)
                 {
                     pendingSet = new HashSet<IActionToolV2>();
-                    foreach (var tuple in pendingActions)
+                    for (int i = 0; i < pendingActions.Count; i++)
                     {
-                        if (tuple?.Item1 != null)
-                            pendingSet.Add(tuple.Item1);
+                        var entry = pendingActions[i];
+                        if (entry.tool != null)
+                            pendingSet.Add(entry.tool);
                     }
                 }
 
@@ -1344,9 +1399,46 @@ namespace TGD.CombatV2
 
                 while (keepLooping)
                 {
-                    var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet);
+                    var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet, isEnemyPhase);
                     string label = FormatChainStageLabel(depth);
-                    ActionPhaseLogger.Log(unit, basePlan.kind, label, $"(count:{options.Count})");
+                    string message = $"(count:{options.Count})";
+                    if (isEnemyPhase && options.Count > 0)
+                    {
+                        var perOwner = new Dictionary<Unit, int>();
+                        foreach (var option in options)
+                        {
+                            var owner = option.owner;
+                            if (owner == null)
+                                continue;
+                            if (turnManager != null && !turnManager.IsPlayerUnit(owner))
+                                continue;
+                            perOwner.TryGetValue(owner, out var current);
+                            perOwner[owner] = current + 1;
+                        }
+
+                        if (perOwner.Count > 0)
+                        {
+                            var ordered = perOwner.Keys
+                                .Select(u => (unit: u, label: TurnManagerV2.FormatUnitLabel(u)))
+                                .OrderBy(t => t.label, StringComparer.Ordinal)
+                                .ToList();
+
+                            var breakdown = new System.Text.StringBuilder();
+                            foreach (var entry in ordered)
+                            {
+                                if (breakdown.Length > 0)
+                                    breakdown.Append(' ');
+                                breakdown.Append(entry.label);
+                                breakdown.Append(" count=");
+                                breakdown.Append(perOwner[entry.unit]);
+                            }
+
+                            if (breakdown.Length > 0)
+                                message = $"(count:{options.Count} {breakdown})";
+                        }
+                    }
+
+                    ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
 
                     if (options.Count == 0)
                     {
@@ -1355,13 +1447,22 @@ namespace TGD.CombatV2
                     }
 
                     bool resolvedStage = false;
+                    bool hasAnyQueued = pendingActions != null && pendingActions.Count > 0;
                     while (!resolvedStage)
                     {
                         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                         {
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
                             resolvedStage = true;
-                            keepLooping = false;
+                            if (!hasAnyQueued)
+                            {
+                                keepLooping = false;
+                            }
+                            else
+                            {
+                                depth += 1;
+                                keepLooping = allowedKinds != null && allowedKinds.Count > 0;
+                            }
                             break;
                         }
 
@@ -1369,10 +1470,14 @@ namespace TGD.CombatV2
                         {
                             if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
                             {
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})");
+                                string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
+                                string selectSuffix = option.owner != null && option.owner != unit
+                                    ? $"(id={option.tool.Id}, owner={ownerLabel}, kind={option.kind}, secs={option.secs}, energy={option.energy})"
+                                    : $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})";
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
 
                                 ChainQueueOutcome outcome = default;
-                                yield return TryQueueChainSelection(option, unit, basePlan.kind, label, budget, resources, pendingActions, result => outcome = result);
+                                yield return TryQueueChainSelection(option, unit, basePlan.kind, label, pendingActions, result => outcome = result);
 
                                 if (outcome.cancel)
                                 {
@@ -1404,6 +1509,7 @@ namespace TGD.CombatV2
                                 keepLooping = allowedKinds != null && allowedKinds.Count > 0;
 
                                 depth += 1;
+                                hasAnyQueued = pendingActions != null && pendingActions.Count > 0;
                                 resolvedStage = true;
                                 break;
                             }
@@ -1736,7 +1842,7 @@ namespace TGD.CombatV2
             onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
         }
 
-        IEnumerator TryQueueChainSelection(ChainOption option, Unit unit, string baseKind, string stageLabel, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> pendingActions, Action<ChainQueueOutcome> onComplete)
+        IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -1748,8 +1854,12 @@ namespace TGD.CombatV2
             Hex selectedTarget = Hex.Zero;
             bool targetChosen = true;
 
+            var owner = option.owner;
+            if (owner == null)
+                owner = ResolveUnit(tool);
+
             tool.OnEnterAim();
-            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+            ActionPhaseLogger.Log(owner, tool.Id, "W1_AimBegin");
 
             if (tool is ChainTestActionBase chainTool)
             {
@@ -1769,20 +1879,20 @@ namespace TGD.CombatV2
                             chainTool.OnHover(hover.Value);
                             lastHover = hover.Value;
                         }
-                        var check = chainTool.ValidateTarget(unit, hover.Value);
+                        var check = chainTool.ValidateTarget(owner, hover.Value);
 
                         if (Input.GetMouseButtonDown(0))
                         {
                             if (check.ok)
                             {
                                 selectedTarget = hover.Value;
-                                ActionPhaseLogger.Log(unit, baseKind, $"{stageLabel} TargetOk", $"(id={tool.Id}, hex={hover.Value})");
+                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetOk", $"(id={tool.Id}, hex={hover.Value})");
                                 targetChosen = true;
                                 awaitingSelection = false;
                             }
                             else
                             {
-                                ActionPhaseLogger.Log(unit, baseKind, $"{stageLabel} TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
+                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
                             }
                         }
                     }
@@ -1798,7 +1908,7 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
+                        ActionPhaseLogger.Log(owner, tool.Id, "W1_AimCancel");
                         tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
@@ -1820,8 +1930,8 @@ namespace TGD.CombatV2
             tool.OnExitAim();
             ChainCursor?.Clear();
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+            ActionPhaseLogger.Log(owner, tool.Id, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(owner, tool.Id, "W2_PrecheckOk");
 
             if (!targetChosen)
             {
@@ -1830,6 +1940,8 @@ namespace TGD.CombatV2
             }
 
             string failReason = null;
+            var budget = option.budget;
+            var resources = option.resources;
             if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
                 failReason = "lackTime";
             else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
@@ -1837,13 +1949,13 @@ namespace TGD.CombatV2
 
             if (failReason != null)
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
+                ActionPhaseLogger.Log(owner, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(owner, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
                 onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
+            ActionPhaseLogger.Log(owner, tool.Id, "W2_PreDeductCheckOk");
 
             if (budget != null && option.secs > 0)
                 budget.SpendTime(option.secs);
@@ -1880,7 +1992,14 @@ namespace TGD.CombatV2
                 cost = planCost
             };
 
-            pendingActions.Add(Tuple.Create(tool, actionPlan));
+            pendingActions.Add(new ChainQueuedAction
+            {
+                tool = tool,
+                owner = owner,
+                plan = actionPlan,
+                budget = budget,
+                resources = resources
+            });
 
             ChainCursor?.Clear();
 
@@ -2013,7 +2132,8 @@ namespace TGD.CombatV2
             if (allowed == null || allowed.Count == 0)
                 return 0;
 
-            var options = BuildChainOptions(unit, budget, resources, 0, allowed, cooldowns, null);
+            bool enemyPhase = turnManager != null && turnManager.IsEnemyUnit(unit);
+            var options = BuildChainOptions(unit, budget, resources, 0, allowed, cooldowns, null, enemyPhase);
             int count = options != null ? options.Count : 0;
             options?.Clear();
             return count;
@@ -2126,7 +2246,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            var pendingChain = new List<Tuple<IActionToolV2, ActionPlan>>();
+            var pendingChain = new List<ChainQueuedAction>();
             bool cancelBase = false;
 
             var phasePlan = new ActionPlan
@@ -2154,8 +2274,8 @@ namespace TGD.CombatV2
             for (int i = pendingChain.Count - 1; i >= 0; --i)
             {
                 var pending = pendingChain[i];
-                if (pending?.Item1 != null)
-                    yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                if (pending.tool != null)
+                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
             }
 
             _planStack.Clear();
