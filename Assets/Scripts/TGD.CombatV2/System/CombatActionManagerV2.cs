@@ -168,6 +168,8 @@ namespace TGD.CombatV2
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
+        readonly HashSet<IActionToolV2> _chainFullRoundSkipLogged = new();
+        bool _chainFullRoundLogActive;
         readonly List<ChainOption> _derivedBuffer = new();
 
         IActionRules ResolveRules()
@@ -1304,8 +1306,15 @@ namespace TGD.CombatV2
                         continue;
                     if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
                     {
-                        Log($"[FullRound] ChainWindow skip owner={TurnManagerV2.FormatUnitLabel(owner)} id={tool.Id} reason=fullround");
+                        if (_chainFullRoundLogActive && _chainFullRoundSkipLogged.Add(tool))
+                        {
+                            Log($"[FullRound] ChainWindow skip owner={TurnManagerV2.FormatUnitLabel(owner)} id={tool.Id} reason=fullround");
+                        }
                         continue;
+                    }
+                    else
+                    {
+                        _chainFullRoundSkipLogged.Remove(tool);
                     }
 
                     if (pending != null && pending.Contains(tool))
@@ -1492,6 +1501,9 @@ namespace TGD.CombatV2
 
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
+            _chainFullRoundSkipLogged.Clear();
+            _chainFullRoundLogActive = true;
+
             PushInputSuppression();
             try
             {
@@ -1802,6 +1814,8 @@ namespace TGD.CombatV2
             }
             finally
             {
+                _chainFullRoundLogActive = false;
+                _chainFullRoundSkipLogged.Clear();
                 PopInputSuppression();
             }
         }
