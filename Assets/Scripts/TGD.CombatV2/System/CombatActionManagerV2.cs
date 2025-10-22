@@ -1303,10 +1303,7 @@ namespace TGD.CombatV2
                     if (allowFriendlyInsertion && ownerBudget == null && ownerResources == null && ownerCooldowns == null)
                         continue;
                     if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
-                    {
-                        Log($"[FullRound] ChainWindow skip owner={TurnManagerV2.FormatUnitLabel(owner)} id={tool.Id} reason=fullround");
                         continue;
-                    }
 
                     if (pending != null && pending.Contains(tool))
                         continue;
@@ -1535,6 +1532,7 @@ namespace TGD.CombatV2
                     bool activeOwnerLogged = false;
                     List<ActionKind> stageNextKinds = null;
                     bool stageSuppressCancel = false;
+                    HashSet<Unit> stageFullRoundLogged = depth == 0 ? new HashSet<Unit>() : null;
 
                     while (stageActive)
                     {
@@ -1624,6 +1622,16 @@ namespace TGD.CombatV2
 
                             if (ownerOptions.Count == 0)
                             {
+                                if (stageFullRoundLogged != null
+                                    && turnManager != null
+                                    && turnManager.HasActiveFullRound(activeOwner)
+                                    && stageFullRoundLogged.Add(activeOwner))
+                                {
+                                    string ownerLabel = TurnManagerV2.FormatUnitLabel(activeOwner);
+                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip", $"(owner={ownerLabel} reason=fullround)");
+                                    stageLoggedOnce = true;
+                                }
+
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
