@@ -66,6 +66,7 @@ namespace TGD.CombatV2
         {
             new RecursionRow { chosenKind = ActionKind.Reaction, allowReactionNext = false, allowFreeNext = true,  allowDerivedNext = false },
             new RecursionRow { chosenKind = ActionKind.Derived,  allowReactionNext = true,  allowFreeNext = true,  allowDerivedNext = false },
+            new RecursionRow { chosenKind = ActionKind.Free,      allowReactionNext = false, allowFreeNext = true,  allowDerivedNext = false },
         };
 
         [Header("Derived Links")]
