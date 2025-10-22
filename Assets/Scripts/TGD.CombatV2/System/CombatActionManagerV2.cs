@@ -1612,7 +1612,7 @@ namespace TGD.CombatV2
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
-                        if (!lastHover.HasValue || lastHover.Value != hover.Value)
+                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
                         {
                             chainTool.OnHover(hover.Value);
                             lastHover = hover.Value;
@@ -1764,7 +1764,7 @@ namespace TGD.CombatV2
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
-                        if (!lastHover.HasValue || lastHover.Value != hover.Value)
+                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
                         {
                             chainTool.OnHover(hover.Value);
                             lastHover = hover.Value;

@@ -23,9 +23,14 @@ namespace TGD.CombatV2
             if (action == null)
                 action = GetComponent<ChainTestActionBase>();
             if (actionManager == null)
-                actionManager = FindObjectOfType<CombatActionManagerV2>();
+                actionManager = FindFirstObjectByType<CombatActionManagerV2>();
             if (turnManager == null)
-                turnManager = actionManager != null ? actionManager.turnManager : FindObjectOfType<TurnManagerV2>();
+            {
+                if (actionManager != null && actionManager.turnManager != null)
+                    turnManager = actionManager.turnManager;
+                else
+                    turnManager = FindFirstObjectByType<TurnManagerV2>();
+            }
         }
 
         void OnEnable()
