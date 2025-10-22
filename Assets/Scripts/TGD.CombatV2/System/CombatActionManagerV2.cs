@@ -563,7 +563,7 @@ namespace TGD.CombatV2
             string kind = tool.Id;
             Unit guardUnit = null;
             bool guardActive = false;
-            if (turnManager != null && !turnManager.IsPlayerPhase && unit != null && turnManager.IsEnemyUnit(unit))
+            if (turnManager != null && !turnManager.IsPlayerPhase && unit != null)
             {
                 turnManager.PushAutoTurnEndGuard(unit);
                 guardUnit = unit;
@@ -1417,125 +1417,154 @@ namespace TGD.CombatV2
 
                 while (keepLooping)
                 {
-                    var options = BuildChainOptions(unit, budget, resources, baseTimeCost, allowedKinds, cooldowns, pendingSet, isEnemyPhase);
                     string label = FormatChainStageLabel(depth);
-                    string message = $"(count:{options.Count})";
-                    if (isEnemyPhase && options.Count > 0)
+                    var stageKinds = allowedKinds;
+                    var stageOwnersUsed = new HashSet<Unit>();
+                    IReadOnlyList<ActionKind> nextKinds = allowedKinds;
+                    bool stageHasSelection = false;
+                    bool stageActive = true;
+
+                    while (stageActive)
                     {
-                        var perOwner = new Dictionary<Unit, int>();
-                        foreach (var option in options)
+                        var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase);
+                        if (stageOwnersUsed.Count > 0 && options.Count > 0)
                         {
-                            var owner = option.owner;
-                            if (owner == null)
-                                continue;
-                            if (turnManager != null && !turnManager.IsPlayerUnit(owner))
-                                continue;
-                            perOwner.TryGetValue(owner, out var current);
-                            perOwner[owner] = current + 1;
+                            for (int i = options.Count - 1; i >= 0; --i)
+                            {
+                                var owner = options[i].owner;
+                                if (owner != null && stageOwnersUsed.Contains(owner))
+                                    options.RemoveAt(i);
+                            }
                         }
 
-                        if (perOwner.Count > 0)
+                        string message = $"(count:{options.Count})";
+                        if (isEnemyPhase && options.Count > 0)
                         {
-                            var ordered = perOwner.Keys
-                                .Select(u => (unit: u, label: TurnManagerV2.FormatUnitLabel(u)))
-                                .OrderBy(t => t.label, StringComparer.Ordinal)
-                                .ToList();
-
-                            var breakdown = new System.Text.StringBuilder();
-                            foreach (var entry in ordered)
+                            var perOwner = new Dictionary<Unit, int>();
+                            foreach (var option in options)
                             {
+                                var owner = option.owner;
+                                if (owner == null)
+                                    continue;
+                                if (turnManager != null && !turnManager.IsPlayerUnit(owner))
+                                    continue;
+                                perOwner.TryGetValue(owner, out var current);
+                                perOwner[owner] = current + 1;
+                            }
+
+                            if (perOwner.Count > 0)
+                            {
+                                var ordered = perOwner.Keys
+                                    .Select(u => (unit: u, label: TurnManagerV2.FormatUnitLabel(u)))
+                                    .OrderBy(t => t.label, StringComparer.Ordinal)
+                                    .ToList();
+
+                                var breakdown = new System.Text.StringBuilder();
+                                foreach (var entry in ordered)
+                                {
+                                    if (breakdown.Length > 0)
+                                        breakdown.Append(' ');
+                                    breakdown.Append(entry.label);
+                                    breakdown.Append(" count=");
+                                    breakdown.Append(perOwner[entry.unit]);
+                                }
+
                                 if (breakdown.Length > 0)
-                                    breakdown.Append(' ');
-                                breakdown.Append(entry.label);
-                                breakdown.Append(" count=");
-                                breakdown.Append(perOwner[entry.unit]);
+                                    message = $"(count:{options.Count} {breakdown})";
                             }
-
-                            if (breakdown.Length > 0)
-                                message = $"(count:{options.Count} {breakdown})";
                         }
-                    }
 
-                    ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
+                        ActionPhaseLogger.Log(unit, basePlan.kind, label, message);
 
-                    if (options.Count == 0)
-                    {
-                        ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
-                        break;
-                    }
-
-                    bool resolvedStage = false;
-                    bool hasAnyQueued = pendingActions != null && pendingActions.Count > 0;
-                    while (!resolvedStage)
-                    {
-                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                        if (options.Count == 0)
                         {
-                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-                            resolvedStage = true;
-                            if (!hasAnyQueued)
-                            {
-                                keepLooping = false;
-                            }
-                            else
-                            {
-                                depth += 1;
-                                keepLooping = allowedKinds != null && allowedKinds.Count > 0;
-                            }
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
+                            stageActive = false;
                             break;
                         }
 
-                        foreach (var option in options)
+                        bool handledInput = false;
+
+                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                         {
-                            if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
-                            {
-                                string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
-                                string selectSuffix = option.owner != null && option.owner != unit
-                                    ? $"(id={option.tool.Id}, owner={ownerLabel}, kind={option.kind}, secs={option.secs}, energy={option.energy})"
-                                    : $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})";
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
-
-                                ChainQueueOutcome outcome = default;
-                                yield return TryQueueChainSelection(option, unit, basePlan.kind, label, pendingActions, result => outcome = result);
-
-                                if (outcome.cancel)
-                                {
-                                    ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-                                    keepLooping = false;
-                                    resolvedStage = true;
-                                    break;
-                                }
-
-                                if (!outcome.queued)
-                                    continue;
-
-                                if (outcome.tool != null)
-                                {
-                                    pendingSet ??= new HashSet<IActionToolV2>();
-                                    pendingSet.Add(outcome.tool);
-                                }
-
-                                if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
-                                {
-                                    cancelledBase = true;
-                                }
-
-                                if (rules != null)
-                                    allowedKinds = rules.AllowedChainNextLayer(option.kind);
-                                else
-                                    allowedKinds = Array.Empty<ActionKind>();
-
-                                keepLooping = allowedKinds != null && allowedKinds.Count > 0;
-
-                                depth += 1;
-                                hasAnyQueued = pendingActions != null && pendingActions.Count > 0;
-                                resolvedStage = true;
-                                break;
-                            }
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                            stageActive = false;
+                            break;
                         }
 
-                        if (!resolvedStage)
-                            yield return null;
+                        for (int i = 0; i < options.Count; i++)
+                        {
+                            var option = options[i];
+                            if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
+                                continue;
+
+                            handledInput = true;
+
+                            string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
+                            string selectSuffix = option.owner != null && option.owner != unit
+                                ? $"(id={option.tool.Id}, owner={ownerLabel}, kind={option.kind}, secs={option.secs}, energy={option.energy})"
+                                : $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})";
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
+
+                            ChainQueueOutcome outcome = default;
+                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, pendingActions, result => outcome = result);
+
+                            if (outcome.cancel)
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+                                keepLooping = false;
+                                stageActive = false;
+                                break;
+                            }
+
+                            if (!outcome.queued)
+                                break;
+
+                            if (outcome.tool != null)
+                            {
+                                pendingSet ??= new HashSet<IActionToolV2>();
+                                pendingSet.Add(outcome.tool);
+                            }
+
+                            if (option.owner != null)
+                                stageOwnersUsed.Add(option.owner);
+
+                            stageHasSelection = true;
+
+                            if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
+                                cancelledBase = true;
+
+                            if (rules != null)
+                                nextKinds = rules.AllowedChainNextLayer(option.kind) ?? Array.Empty<ActionKind>();
+                            else
+                                nextKinds = Array.Empty<ActionKind>();
+
+                            break;
+                        }
+
+                        if (!stageActive)
+                            break;
+
+                        if (handledInput)
+                        {
+                            continue;
+                        }
+
+                        yield return null;
                     }
+
+                    if (!keepLooping)
+                        break;
+
+                    if (!stageHasSelection)
+                    {
+                        keepLooping = false;
+                        break;
+                    }
+
+                    allowedKinds = nextKinds ?? Array.Empty<ActionKind>();
+                    depth += 1;
+                    keepLooping = allowedKinds != null && allowedKinds.Count > 0;
                 }
                 onComplete?.Invoke(cancelledBase);
             }
