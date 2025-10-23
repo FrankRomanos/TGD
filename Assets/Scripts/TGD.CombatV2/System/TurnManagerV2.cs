@@ -24,6 +24,7 @@ namespace TGD.CombatV2
         public event Action<bool> SideEnded;
         public event Action<Unit> TurnStarted;
         public event Action<Unit> TurnEnded;
+        public event Action<Unit> UnitTurnTimeDepleted;
 
         readonly List<Unit> _playerUnits = new();
         readonly List<Unit> _enemyUnits = new();
@@ -44,6 +45,7 @@ namespace TGD.CombatV2
         readonly List<Func<Unit, IEnumerator>> _turnStartGates = new();
         readonly Dictionary<Unit, FullRoundState> _fullRoundStates = new();
         readonly Dictionary<Unit, int> _autoEndGuards = new();
+        readonly HashSet<Unit> _turnTimeDepletedUnits = new();
 
         [Header("Environment")]
         public HexEnvironmentSystem environment;
@@ -510,14 +512,14 @@ namespace TGD.CombatV2
 
         void BeginTurn(TurnRuntimeV2 runtime)
         {
-            int turnTime = runtime.TurnTime;
-            int prepaid = Mathf.Clamp(runtime.PrepaidTime, 0, turnTime);
-            runtime.BeginTurn();
+            var snapshot = runtime.BeginTurn();
+            int turnTime = snapshot.BaseNew;
             runtime.SetActivePhaseIndex(_currentPhaseIndex);
             _activeUnit = runtime.Unit;
             _waitingForEnd = true;
             string unitLabel = FormatUnitLabel(runtime.Unit);
-            Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={prepaid} Remain={runtime.RemainingTime}", this);
+            Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={snapshot.Prepaid} Remain={runtime.RemainingTime} BasePrev={snapshot.BasePrev} RemainPrev={snapshot.RemainPrev} Rebased={snapshot.RemainAfterRebase}", this);
+            HandleTurnTimeFloor(runtime, snapshot.BaseNew);
             TurnStarted?.Invoke(runtime.Unit);
             // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
             bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
@@ -793,6 +795,7 @@ namespace TGD.CombatV2
                 }
             }
 
+            HandleTurnTimeFloor(runtime, runtime.BaseTimeForNext);
             return runtime;
         }
         IEnumerator RunTurnStartGates(Unit unit)
@@ -974,10 +977,34 @@ namespace TGD.CombatV2
                     continue;
 
                 int before = runtime.RemainingTime;
-                runtime.ResetBudget();
+                int basePrev = runtime.BaseTimeForNext;
+                int baseNew = runtime.ResetBudget();
                 string unitLabel = FormatUnitLabel(runtime.Unit);
                 string phaseLabel = FormatPhaseLabel(isPlayerSide);
-                Debug.Log($"[Time] Reset T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} {before}s -> {runtime.RemainingTime}s", this);
+                Debug.Log($"[Time] Reset T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} {before}s -> {runtime.RemainingTime}s basePrev={basePrev} baseNew={baseNew}", this);
+                HandleTurnTimeFloor(runtime, baseNew);
+            }
+        }
+
+        void HandleTurnTimeFloor(TurnRuntimeV2 runtime, int baseSeconds)
+        {
+            if (runtime == null || runtime.Unit == null)
+                return;
+
+            if (baseSeconds <= 0)
+            {
+                if (_turnTimeDepletedUnits.Add(runtime.Unit))
+                {
+                    int speed = runtime.Context != null ? runtime.Context.Speed : 0;
+                    string unitLabel = FormatUnitLabel(runtime.Unit);
+                    Debug.LogWarning($"[Turn] BaseTimeZero U={unitLabel} speed={speed} (hook pending)", this);
+                    UnitTurnTimeDepleted?.Invoke(runtime.Unit);
+                }
+            }
+            else if (_turnTimeDepletedUnits.Remove(runtime.Unit))
+            {
+                string unitLabel = FormatUnitLabel(runtime.Unit);
+                Debug.Log($"[Turn] BaseTimeRestore U={unitLabel} base={baseSeconds}", this);
             }
         }
 

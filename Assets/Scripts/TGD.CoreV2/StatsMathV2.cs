@@ -8,10 +8,14 @@ namespace TGD.CoreV2
     {
         public const int BaseTurnSeconds = 6;
 
-        // Ê±¼ä / ²½Êý
-        public static int TurnTime(int speedSeconds) => BaseTurnSeconds + Mathf.Max(0, speedSeconds);
+        // Ê± / 
+        public static int TurnTime(int speedSeconds)
+        {
+            int turnSeconds = BaseTurnSeconds + speedSeconds;
+            return Mathf.Max(0, turnSeconds);
+        }
 
-        // ±©»÷
+        // 
         public static float CritChanceRaw(float baseChance, int rating, float addPct, float ratingPer1Pct = 30f)
         {
             float fromRating = (ratingPer1Pct > 0f) ? (rating / ratingPer1Pct) * 0.01f : 0f;
@@ -21,7 +25,7 @@ namespace TGD.CoreV2
         public static float CritOverflow(float raw) => Mathf.Max(0f, raw - 1f);
         public static float CritMultiplier(int critDamagePct) => Mathf.Max(1f, critDamagePct / 100f);
 
-        // ¾«Í¨£¨ÔÊÐí >1£©
+        // Í¨ >1
         public static float MasteryValue(float baseP, int rating, float addPct, float baseRatingPer1Pct = 20f, float classCoeff = 1f)
         {
             float per1Pct = baseRatingPer1Pct > 0f ? baseRatingPer1Pct : 1f;
@@ -29,7 +33,7 @@ namespace TGD.CoreV2
             return Mathf.Max(0f, baseP + fromRating + addPct);
         }
 
-        // »¤¼× DR£¨Õ¼Î»£¬¿É°´ÀàÐÍ¶àÌ×²ÎÊý£©
+        //  DRÕ¼Î»É°Í¶×²
         public static float ArmorDR(float armor, float threshold = 200f, float cap = 0.80f, float k2 = 160f)
         {
             if (armor <= 0f) return 0f;
@@ -40,17 +44,17 @@ namespace TGD.CoreV2
             return Mathf.Clamp(drAtT + rest * inc, 0f, cap);
         }
 
-        // Ãë¡ú»ØºÏ
+        // Øº
         public static int CooldownToTurns(int seconds)
             => (seconds <= 0) ? 0 : (seconds + BaseTurnSeconds - 1) / BaseTurnSeconds;
 
-        // ¡ª¡ª ÒÆËÙ¹¤¾ß ¡ª¡ª
+        //  Ù¹ 
 
         /// <summary>
-        /// ³Ë·¨ºóÔÙ¼Ó·¨£ºMR = baseR * ¦°(mults) + flatAfter
-        /// - baseR: Ãæ°å»ù´¡
-        /// - mults: Õ½¶·ÖÐ/Ìù¸½/µØÐÎµÈ°Ù·Ö±È£¨³Ë·¨£©
-        /// - flatAfter: ¸ß¹óÆ½¼Ó£¨ÔÚ³Ë·¨Ö®ºó¼Ó£©
+        /// Ë·Ù¼Ó·MR = baseR * (mults) + flatAfter
+        /// - baseR: 
+        /// - mults: Õ½//ÎµÈ°Ù·Ö±È£Ë·
+        /// - flatAfter: ß¹Æ½Ó£Ú³Ë·Ö®Ó£
         /// </summary>
         public static float MR_MultiThenFlat(int baseR, IEnumerable<float> mults, float flatAfter)
         {
@@ -64,28 +68,28 @@ namespace TGD.CoreV2
             return Mathf.Max(0.01f, mr);
         }
 
-        /// <summary>¸ø¡°ÏÔÊ¾/Ô¤ÀÀ¡±ÓÃ£ºÄ³ MR ÔÚ timeSec ÃëÄÚ¿É×ß²½Êý£¨ÏòÏÂÈ¡Õû£©¡£</summary>
+        /// <summary>Ê¾/Ô¤Ã£Ä³ MR  timeSec Ú¿ß²È¡</summary>
         public static int StepsAllowedF32(float mr, int timeSec)
         {
             return Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(0.01f, mr) * Mathf.Max(1, timeSec)));
         }
 
-        // ====== Îª¼æÈÝ¾Éµ÷ÓÃ£¬±£Áô¾É API£¬ÄÚ²¿×ßÐÂ¹«Ê½ ======
+        // ====== ÎªÝ¾ÉµÃ£ APIÚ²Â¹Ê½ ======
 
         /// <summary>
-        /// ¾É£º»ù´¡+£¨Óë»ù´¡Ïà¹ØµÄ°Ù·Ö±È£©+Æ½¼Ó ¡ª¡ª ÏÖÔÚµÈ¼ÛÎª£ºÆ½¼Óµ±×÷¡°³ËºóÆ½¼Ó¡±
+        /// É£+ØµÄ°Ù·Ö±È£+Æ½  ÚµÈ¼ÎªÆ½ÓµËºÆ½Ó¡
         /// </summary>
         public static int EffectiveMoveRateFromBase(int baseR, IEnumerable<float> percentMults, int flatAddLegacy)
         {
             float mr = MR_MultiThenFlat(
                 Mathf.Max(1, baseR),
                 percentMults,
-                flatAddLegacy // ¾ÉµÄ¡°Æ½¼Ó¡±µ±×÷¸ß¹óÆ½¼ÓÊ¹ÓÃ£¨³Ë·¨ºóÔÙ¼Ó£©
+                flatAddLegacy // ÉµÄ¡Æ½Ó¡ß¹Æ½Ê¹Ã£Ë·Ù¼Ó£
             );
             return Mathf.Max(1, Mathf.FloorToInt(mr + 1e-3f));
         }
 
-        /// <summary>¾É£º¸ø¡°ÏÔÊ¾/Ô¤ÀÀ¡±ÓÃµÄ²½Êý¼ÆËã£¨int °æ£©£¬ÄÚ²¿×ª float¡£</summary>
+        /// <summary>É£Ê¾/Ô¤ÃµÄ²ã£¨int æ£©Ú²×ª float</summary>
         public static int StepsAllowed(int mrInt, int timeSec)
         {
             return StepsAllowedF32(Mathf.Max(1, mrInt), timeSec);

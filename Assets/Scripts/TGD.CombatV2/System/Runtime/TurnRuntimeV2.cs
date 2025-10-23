@@ -20,6 +20,29 @@ namespace TGD.CombatV2
         public bool HasReachedIdle { get; private set; }
         public int ActivePhaseIndex { get; private set; }
 
+        public int BaseTimeForNext => _baseTimeForNext;
+        int _baseTimeForNext;
+
+        public readonly struct BeginSnapshot
+        {
+            public readonly int BasePrev;
+            public readonly int BaseNew;
+            public readonly int RemainPrev;
+            public readonly int RemainAfterRebase;
+            public readonly int Prepaid;
+            public readonly int RemainAfterPrepaid;
+
+            public BeginSnapshot(int basePrev, int baseNew, int remainPrev, int remainAfterRebase, int prepaid, int remainAfterPrepaid)
+            {
+                BasePrev = basePrev;
+                BaseNew = baseNew;
+                RemainPrev = remainPrev;
+                RemainAfterRebase = remainAfterRebase;
+                Prepaid = prepaid;
+                RemainAfterPrepaid = remainAfterPrepaid;
+            }
+        }
+
         public Dictionary<string, int> CustomResources { get; } = new();
         public Dictionary<string, int> CustomResourceMax { get; } = new();
 
@@ -47,23 +70,36 @@ namespace TGD.CombatV2
             }
         }
 
-        public void ResetBudget()
+        public int ResetBudget()
         {
-            int tt = TurnTime;
-            RemainingTime = Mathf.Clamp(tt, 0, tt);
+            int baseNew = Mathf.Max(0, TurnTime);
+            _baseTimeForNext = baseNew;
+            RemainingTime = baseNew;
+            return baseNew;
         }
 
-        public void BeginTurn()
+        public BeginSnapshot BeginTurn()
         {
-            int tt = TurnTime;
-            int prepaid = Mathf.Clamp(PrepaidTime, 0, tt);
-            int baseBudget = Mathf.Clamp(RemainingTime, 0, tt);
-            if (baseBudget <= 0)
-                baseBudget = tt;
-            RemainingTime = Mathf.Clamp(baseBudget - prepaid, 0, tt);
+            int basePrev = Mathf.Max(0, _baseTimeForNext);
+            int remainPrev = Mathf.Max(0, RemainingTime);
+            if (basePrev > 0)
+                remainPrev = Mathf.Min(remainPrev, basePrev);
+
+            int baseNew = Mathf.Max(0, TurnTime);
+            int delta = Mathf.Max(baseNew - basePrev, 0);
+            int remainAfterRebase = Mathf.Clamp(remainPrev + delta, 0, baseNew);
+
+            _baseTimeForNext = baseNew;
+
+            int prepaid = Mathf.Clamp(PrepaidTime, 0, baseNew);
+            int remainAfterPrepaid = Mathf.Max(0, remainAfterRebase - prepaid);
+
+            RemainingTime = remainAfterPrepaid;
             PrepaidTime = 0;
             HasSpentTimeThisTurn = false;
             HasReachedIdle = false;
+
+            return new BeginSnapshot(basePrev, baseNew, remainPrev, remainAfterRebase, prepaid, remainAfterPrepaid);
         }
 
         public void FinishTurn()
@@ -81,8 +117,12 @@ namespace TGD.CombatV2
 
         public void RefundTime(int seconds)
         {
-            RemainingTime = Mathf.Max(0, RemainingTime + Mathf.Max(0, seconds));
-            RemainingTime = Mathf.Min(RemainingTime, TurnTime);
+            if (seconds <= 0)
+                return;
+
+            RemainingTime = Mathf.Max(0, RemainingTime + seconds);
+            if (_baseTimeForNext >= 0)
+                RemainingTime = Mathf.Min(RemainingTime, _baseTimeForNext);
         }
 
         public void ApplyPrepaid(int seconds)
