@@ -278,6 +278,25 @@ namespace TGD.CombatV2
             return secs <= Mathf.Max(0, _bonusTurn.remaining);
         }
 
+        string EvaluateBudgetFailure(Unit unit, int secs, int energy, ITurnBudget budget, IResourcePool resources)
+        {
+            if (!HasBonusTime(unit, secs))
+                return "lackTime";
+
+            if (secs > 0 && budget != null && !budget.HasTime(secs))
+                return "lackTime";
+
+            if (energy > 0 && resources != null && !resources.Has("Energy", energy))
+                return "lackEnergy";
+
+            return null;
+        }
+
+        bool MeetsBudget(Unit unit, int secs, int energy, ITurnBudget budget, IResourcePool resources)
+        {
+            return EvaluateBudgetFailure(unit, secs, energy, budget, resources) == null;
+        }
+
         void BeginBonusTurn(Unit unit, int capSeconds, string sourceId)
         {
             if (unit == null)
@@ -971,13 +990,10 @@ namespace TGD.CombatV2
             string failReason = null;
             if (!cost.valid)
                 failReason = "targetInvalid";
-            else if (IsBonusTurnFor(unit) && cost.TotalSeconds > GetBonusRemaining(unit))
-                failReason = "lackTime";
-            else if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
-                failReason = "lackTime";
-            else if (resources != null && cost.TotalEnergy > 0 && !resources.Has("Energy", cost.TotalEnergy))
-                failReason = "lackEnergy";
-            else if (!IsCooldownReadyForConfirm(tool, cooldowns))
+            else
+                failReason = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
+
+            if (failReason == null && !IsCooldownReadyForConfirm(tool, cooldowns))
                 failReason = "cooldown";
 
             if (failReason != null)
@@ -1442,23 +1458,12 @@ namespace TGD.CombatV2
             if (turnManager != null && unit != null)
             {
                 var cost = GetBaselineCost(tool);
-                if (IsBonusTurnFor(unit) && cost.TotalSeconds > GetBonusRemaining(unit))
-                {
-                    reason = "lackTime";
-                    return false;
-                }
-
                 var budget = turnManager.GetBudget(unit);
-                if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
-                {
-                    reason = "lackTime";
-                    return false;
-                }
-
                 var resources = turnManager.GetResources(unit);
-                if (resources != null && cost.TotalEnergy > 0 && !resources.Has("Energy", cost.TotalEnergy))
+                var budgetFail = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
+                if (budgetFail != null)
                 {
-                    reason = "lackEnergy";
+                    reason = budgetFail;
                     return false;
                 }
 
@@ -1720,13 +1725,7 @@ namespace TGD.CombatV2
                     if (tool.Kind == ActionKind.Free && secs != 0)
                         continue;
 
-                    if (!HasBonusTime(owner, secs))
-                        continue;
-
-                    if (secs > 0 && ownerBudget != null && !ownerBudget.HasTime(secs))
-                        continue;
-
-                    if (ownerResources != null && energy > 0 && !ownerResources.Has("Energy", energy))
+                    if (!MeetsBudget(owner, secs, energy, ownerBudget, ownerResources))
                         continue;
 
                     if (ownerCooldowns != null && !IsCooldownReadyForConfirm(tool, ownerCooldowns))
@@ -2243,10 +2242,7 @@ namespace TGD.CombatV2
                     int secs = cost.TotalSeconds;
                     int energy = cost.TotalEnergy;
 
-                    if (secs > 0 && budget != null && !budget.HasTime(secs))
-                        continue;
-
-                    if (resources != null && energy > 0 && !resources.Has("Energy", energy))
+                    if (!MeetsBudget(unit, secs, energy, budget, resources))
                         continue;
 
                     if (cooldowns != null && !IsCooldownReadyForConfirm(tool, cooldowns))
@@ -2482,13 +2478,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            string failReason = null;
-            if (!HasBonusTime(unit, option.secs))
-                failReason = "lackTime";
-            else if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
-                failReason = "lackTime";
-            else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
-                failReason = "lackEnergy";
+            string failReason = EvaluateBudgetFailure(unit, option.secs, option.energy, budget, resources);
 
             if (failReason != null)
             {
@@ -2653,15 +2643,9 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            string failReason = null;
             var budget = option.budget;
             var resources = option.resources;
-            if (!HasBonusTime(owner, option.secs))
-                failReason = "lackTime";
-            else if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
-                failReason = "lackTime";
-            else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
-                failReason = "lackEnergy";
+            string failReason = EvaluateBudgetFailure(owner, option.secs, option.energy, budget, resources);
 
             if (failReason != null)
             {
