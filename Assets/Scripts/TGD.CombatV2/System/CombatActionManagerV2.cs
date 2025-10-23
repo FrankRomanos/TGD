@@ -11,6 +11,8 @@ namespace TGD.CombatV2
     [DisallowMultipleComponent]
     public sealed class CombatActionManagerV2 : MonoBehaviour
     {
+        static CombatActionManagerV2 s_gateHubInstance;
+
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
         public Camera pickCamera;
@@ -85,6 +87,7 @@ namespace TGD.CombatV2
         int _endTurnGuardDepth;
         int _queuedActionsPending;
         int _chainWindowDepth;
+        bool _ownsGateHub;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -381,9 +384,6 @@ namespace TGD.CombatV2
                 case MoveCostServiceV2Adapter moveAdapter:
                     WireMoveCostAdapter(moveAdapter);
                     break;
-                case AttackCostServiceV2Adapter attackAdapter:
-                    attackAdapter.turnManager = turnManager;
-                    break;
             }
         }
 
@@ -456,13 +456,14 @@ namespace TGD.CombatV2
             {
                 turnManager.TurnStarted += OnTurnStarted;
             }
-            if (registerAsGateHub)
+            if (registerAsGateHub && TryClaimGateHub())
             {
                 RegisterPhaseGate();
                 if (turnManager != null)
                 {
                     turnManager.RegisterTurnStartGate(HandleTurnStartGate);
                 }
+                _ownsGateHub = true;
             }
         }
 
@@ -472,13 +473,39 @@ namespace TGD.CombatV2
             {
                 turnManager.TurnStarted -= OnTurnStarted;
             }
-            if (registerAsGateHub)
+            if (_ownsGateHub)
+            {
                 UnregisterPhaseGate();
-            if (turnManager != null)
+                if (turnManager != null)
+                {
+                    turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
+                }
+                ReleaseGateHub();
+                _ownsGateHub = false;
+            }
+            else if (turnManager != null)
             {
                 turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
             }
             ChainCursor?.Clear();
+        }
+
+        bool TryClaimGateHub()
+        {
+            if (s_gateHubInstance != null && s_gateHubInstance != this)
+            {
+                Debug.LogWarning($"[CAM] Multiple gate hubs detected. '{s_gateHubInstance.name}' already registered as gate hub.", this);
+                return false;
+            }
+
+            s_gateHubInstance = this;
+            return true;
+        }
+
+        void ReleaseGateHub()
+        {
+            if (ReferenceEquals(s_gateHubInstance, this))
+                s_gateHubInstance = null;
         }
 
         void OnTurnStarted(Unit unit)

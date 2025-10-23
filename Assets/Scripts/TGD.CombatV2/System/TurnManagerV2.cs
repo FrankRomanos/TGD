@@ -24,6 +24,7 @@ namespace TGD.CombatV2
         public event Action<bool> SideEnded;
         public event Action<Unit> TurnStarted;
         public event Action<Unit> TurnEnded;
+        public event Action<Unit> UnitRuntimeChanged;
         public event Action<Unit> UnitTurnTimeDepleted;
 
         readonly List<Unit> _playerUnits = new();
@@ -443,6 +444,7 @@ namespace TGD.CombatV2
 
             runtime.FinishTurn();
             TurnEnded?.Invoke(runtime.Unit);
+            RaiseUnitRuntimeChanged(runtime.Unit);
         }
 
         IEnumerator BattleLoop()
@@ -524,6 +526,7 @@ namespace TGD.CombatV2
             Debug.Log($"[Turn] Begin T{_currentPhaseIndex}({unitLabel}) TT={turnTime} Prepaid={snapshot.Prepaid} Remain={runtime.RemainingTime} BasePrev={snapshot.BasePrev} RemainPrev={snapshot.RemainPrev} Rebased={snapshot.RemainAfterRebase}", this);
             HandleTurnTimeFloor(runtime, snapshot.BaseNew);
             TurnStarted?.Invoke(runtime.Unit);
+            RaiseUnitRuntimeChanged(runtime.Unit);
             // ★ 新增：玩家/敌人任何一方的回合开始时，执行已注册的 TurnStart gates（你的 HandleTurnStartGate 就在这里跑）
             bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
             if (!skipTurn)
@@ -660,6 +663,7 @@ namespace TGD.CombatV2
             runtime.SpendTime(seconds);
             if (!silent)
                 Debug.Log($"[Time] Spend {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
         void ApplyTimeRefund(TurnRuntimeV2 runtime, int seconds, bool silent = false)
@@ -667,6 +671,7 @@ namespace TGD.CombatV2
             runtime.RefundTime(seconds);
             if (!silent)
                 Debug.Log($"[Time] Refund {FormatUnitLabel(runtime.Unit)} {seconds}s -> Remain={runtime.RemainingTime}", this);
+            RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
         void ModifyResource(TurnRuntimeV2 runtime, string id, int delta, string reason, bool isRefund, bool silent = false)
@@ -695,15 +700,17 @@ namespace TGD.CombatV2
                     : clampMax;
                 runtime.CustomResourceMax[id] = maxAfter;
             }
-            if (silent)
-                return;
+            if (!silent)
+            {
+                string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" ({reason})";
+                string unitLabel = FormatUnitLabel(runtime.Unit);
+                if (isRefund)
+                    Debug.Log($"[Res] Refund {unitLabel}:{id} +{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
+                else
+                    Debug.Log($"[Res] Spend {unitLabel}:{id} -{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
+            }
 
-            string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $" ({reason})";
-            string unitLabel = FormatUnitLabel(runtime.Unit);
-            if (isRefund)
-                Debug.Log($"[Res] Refund {unitLabel}:{id} +{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
-            else
-                Debug.Log($"[Res] Spend {unitLabel}:{id} -{Mathf.Abs(delta)} -> {after}/{Mathf.Max(0, maxAfter)}{suffix}", this);
+            RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
 
@@ -762,6 +769,13 @@ namespace TGD.CombatV2
         void LogCooldownAdd(TurnRuntimeV2 runtime, string skillId, int delta, int left, int turns)
         {
             Debug.Log($"[CD] AddSeconds {FormatUnitLabel(runtime.Unit)}:{skillId} += {delta}s -> {left}s (turns={turns})", this);
+        }
+
+        void RaiseUnitRuntimeChanged(Unit unit)
+        {
+            if (unit == null)
+                return;
+            UnitRuntimeChanged?.Invoke(unit);
         }
 
         TurnRuntimeV2 EnsureRuntime(Unit unit, bool? isPlayerHint)
@@ -1166,10 +1180,12 @@ namespace TGD.CombatV2
             if (regen.max <= 0)
             {
                 Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} +{regen.gain} -> {regen.current}/{regen.max}", this);
+                RaiseUnitRuntimeChanged(runtime?.Unit);
                 return;
             }
 
             Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
+            RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
         public bool IsPlayerUnit(Unit unit) => unit != null && _playerUnits.Contains(unit);
