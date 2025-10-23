@@ -195,6 +195,9 @@ namespace TGD.CombatV2
 
         BonusTurnState _bonusTurn;
 
+        public Unit CurrentBonusTurnUnit => IsBonusTurnActive ? _bonusTurn.unit : null;
+        public int CurrentBonusTurnRemaining => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.remaining) : 0;
+
         IActionRules ResolveRules()
         {
             return rulebook != null ? (IActionRules)rulebook : ActionRulebook.Default;
@@ -258,6 +261,15 @@ namespace TGD.CombatV2
             if (IsBonusTurnFor(unit))
                 return false;
             return turnManager != null && !turnManager.IsPlayerPhase;
+        }
+
+        bool HasBonusTime(Unit unit, int secs)
+        {
+            if (secs <= 0)
+                return true;
+            if (!IsBonusTurnFor(unit))
+                return true;
+            return secs <= Mathf.Max(0, _bonusTurn.remaining);
         }
 
         void BeginBonusTurn(Unit unit, int capSeconds, string sourceId)
@@ -1694,6 +1706,9 @@ namespace TGD.CombatV2
                     if (tool.Kind == ActionKind.Free && secs != 0)
                         continue;
 
+                    if (!HasBonusTime(owner, secs))
+                        continue;
+
                     if (secs > 0 && ownerBudget != null && !ownerBudget.HasTime(secs))
                         continue;
 
@@ -2448,7 +2463,9 @@ namespace TGD.CombatV2
             }
 
             string failReason = null;
-            if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
+            if (!HasBonusTime(unit, option.secs))
+                failReason = "lackTime";
+            else if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
                 failReason = "lackTime";
             else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
                 failReason = "lackEnergy";
@@ -2480,6 +2497,8 @@ namespace TGD.CombatV2
                 energyAtk = 0,
                 valid = true
             };
+
+            ApplyBonusPreDeduct(unit, ref plan);
 
             _planStack.Push(plan);
 
@@ -2617,7 +2636,9 @@ namespace TGD.CombatV2
             string failReason = null;
             var budget = option.budget;
             var resources = option.resources;
-            if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
+            if (!HasBonusTime(owner, option.secs))
+                failReason = "lackTime";
+            else if (budget != null && option.secs > 0 && !budget.HasTime(option.secs))
                 failReason = "lackTime";
             else if (resources != null && option.energy > 0 && !resources.Has("Energy", option.energy))
                 failReason = "lackEnergy";
@@ -2648,6 +2669,8 @@ namespace TGD.CombatV2
                 energyAtk = 0,
                 valid = true
             };
+
+            ApplyBonusPreDeduct(owner, ref plan);
 
             _planStack.Push(plan);
 

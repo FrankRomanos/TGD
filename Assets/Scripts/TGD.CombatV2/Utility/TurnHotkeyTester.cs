@@ -55,13 +55,23 @@ namespace TGD.CombatV2
             if (tm == null || cam == null)
                 return;
 
-            if (_current == null || tm.ActiveUnit != _current || !tm.IsPlayerPhase)
+            Unit target = null;
+            if (_current != null && tm.IsPlayerPhase && tm.ActiveUnit == _current)
+            {
+                target = _current;
+            }
+            else if (cam != null && cam.CurrentBonusTurnUnit != null)
+            {
+                target = cam.CurrentBonusTurnUnit;
+            }
+
+            if (target == null)
                 return;
 
             if (!Input.GetKeyDown(endTurnKey))
                 return;
 
-            cam.RequestEndTurn(_current);
+            cam.RequestEndTurn(target);
         }
 
         static TurnManagerV2 FindManager()
