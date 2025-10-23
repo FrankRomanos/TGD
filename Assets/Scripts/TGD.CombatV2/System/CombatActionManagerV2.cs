@@ -76,6 +76,10 @@ namespace TGD.CombatV2
         IHexHighlighter _aimHighlighter;
         IHexHighlighter _chainHighlighter;
         int _inputSuppressionDepth;
+        bool _pendingEndTurn;
+        Unit _pendingEndTurnUnit;
+        int _endTurnGuardDepth;
+        int _queuedActionsPending;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
 
@@ -345,6 +349,11 @@ namespace TGD.CombatV2
             if (_activeTool != null && ResolveUnit(_activeTool) != _currentUnit)
                 Cancel(false);
 
+            if (_pendingEndTurn && unit != _pendingEndTurnUnit)
+                ClearPendingEndTurn();
+
+            _queuedActionsPending = 0;
+
             if (!registerAsGateHub || turnManager == null || unit == null)
                 return;
         }
@@ -371,6 +380,9 @@ namespace TGD.CombatV2
 
         void TryRequestIdleAction(string toolId)
         {
+            if (_pendingEndTurn)
+                return;
+
             var tool = SelectTool(toolId);
             if (tool == null)
                 return;
@@ -404,7 +416,7 @@ namespace TGD.CombatV2
 
         void Update()
         {
-            if (_phase == Phase.Idle && !IsInputSuppressed)
+            if (_phase == Phase.Idle && !IsInputSuppressed && !_pendingEndTurn)
             {
                 HandleIdleKeybind(keyMoveAim, "Move");
                 HandleIdleKeybind(keyAttackAim, "Attack");
@@ -432,6 +444,106 @@ namespace TGD.CombatV2
                 if (Input.GetMouseButtonDown(0)) Confirm();
                 if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(true);
             }
+
+            if (_pendingEndTurn)
+                TryFinalizeEndTurn();
+        }
+
+        bool HasPendingEndTurn => _pendingEndTurn && _pendingEndTurnUnit != null;
+
+        bool IsPendingEndTurnFor(Unit unit)
+        {
+            return HasPendingEndTurn && unit != null && unit == _pendingEndTurnUnit;
+        }
+
+        void ClearPendingEndTurn()
+        {
+            _pendingEndTurn = false;
+            _pendingEndTurnUnit = null;
+            _queuedActionsPending = 0;
+        }
+
+        bool CanFinalizeEndTurn()
+        {
+            if (!_pendingEndTurn || turnManager == null)
+                return false;
+
+            var unit = _pendingEndTurnUnit;
+            if (unit == null)
+                return false;
+
+            if (!turnManager.IsPlayerPhase)
+                return false;
+
+            if (turnManager.ActiveUnit != unit)
+                return false;
+
+            if (_phase != Phase.Idle)
+                return false;
+
+            if (IsInputSuppressed)
+                return false;
+
+            if (_activeTool != null)
+                return false;
+
+            if (_planStack.Count > 0)
+                return false;
+
+            if (_endTurnGuardDepth > 0)
+                return false;
+
+            if (_queuedActionsPending > 0)
+                return false;
+
+            return true;
+        }
+
+        void TryFinalizeEndTurn()
+        {
+            if (!CanFinalizeEndTurn())
+                return;
+
+            var unit = _pendingEndTurnUnit;
+            ClearPendingEndTurn();
+            turnManager.EndTurn(unit);
+        }
+
+        public bool RequestEndTurn(Unit unit = null)
+        {
+            if (turnManager == null)
+                return false;
+
+            if (unit == null)
+                unit = _currentUnit;
+
+            if (unit == null)
+                return false;
+
+            if (!turnManager.IsPlayerPhase || !turnManager.IsPlayerUnit(unit))
+                return false;
+
+            if (turnManager.ActiveUnit != unit)
+                return false;
+
+            if (!turnManager.HasReachedIdle(unit))
+                return false;
+
+            if (_pendingEndTurn)
+            {
+                _pendingEndTurnUnit = unit;
+            }
+            else
+            {
+                _pendingEndTurn = true;
+                _pendingEndTurnUnit = unit;
+            }
+
+            if (_phase == Phase.Aiming && _activeTool != null)
+                Cancel(true);
+
+            TryFinalizeEndTurn();
+            return true;
         }
 
         Unit ResolveUnit(IActionToolV2 tool)
@@ -447,11 +559,14 @@ namespace TGD.CombatV2
 
         public void RequestAim(string toolId)
         {
+            if (_pendingEndTurn)
+                return;
+
             if (_phase != Phase.Idle) return;
 
             var tool = SelectTool(toolId);
             if (tool == null) return;
-            if (_phase == Phase.Idle && !CanActivateAtIdle(tool))
+            if (!CanActivateAtIdle(tool))
                 return;
             if (IsExecuting || IsAnyToolBusy()) return;
 
@@ -497,6 +612,9 @@ namespace TGD.CombatV2
 
         public bool TryAutoExecuteAction(string toolId, Hex target)
         {
+            if (_pendingEndTurn)
+                return false;
+
             if (_phase != Phase.Idle)
                 return false;
 
@@ -694,7 +812,11 @@ namespace TGD.CombatV2
             {
                 var pending = pendingChain[i];
                 if (pending.tool != null)
+                {
+                    if (_queuedActionsPending > 0)
+                        _queuedActionsPending--;
                     yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                }
             }
 
             if (cancelBase)
@@ -739,6 +861,7 @@ namespace TGD.CombatV2
                 yield break;
             }
             yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+            TryFinalizeEndTurn();
         }
         finally
         {
@@ -750,31 +873,40 @@ namespace TGD.CombatV2
 
         IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources)
         {
-            _phase = Phase.Executing;
-            _hover = null;
-            TryHideAllAimUI();
-
-            int budgetBefore = budget != null ? budget.Remaining : 0;
-            int energyBefore = resources != null ? resources.Get("Energy") : 0;
-            ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteBegin", $"(budgetBefore={budgetBefore}, energyBefore={energyBefore})");
-
-            var routine = tool.OnConfirm(plan.target);
-            if (routine != null)
-                yield return StartCoroutine(routine);
-
-            var report = BuildExecReport(tool, out var exec);
-            if (!report.valid || exec == null)
+            _endTurnGuardDepth++;
+            try
             {
+                _phase = Phase.Executing;
+                _hover = null;
+                TryHideAllAimUI();
+
+                int budgetBefore = budget != null ? budget.Remaining : 0;
+                int energyBefore = resources != null ? resources.Get("Energy") : 0;
+                ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteBegin", $"(budgetBefore={budgetBefore}, energyBefore={energyBefore})");
+
+                var routine = tool.OnConfirm(plan.target);
+                if (routine != null)
+                    yield return StartCoroutine(routine);
+
+                var report = BuildExecReport(tool, out var exec);
+                if (!report.valid || exec == null)
+                {
+                    ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
+                    CleanupAfterAbort(tool, false);
+                    yield break;
+                }
+
+                LogExecSummary(unit, plan.kind, report);
+
                 ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
-                CleanupAfterAbort(tool, false);
-                yield break;
+
+                yield return StartCoroutine(Resolve(tool, unit, plan, exec, report, budget, resources));
             }
-
-            LogExecSummary(unit, plan.kind, report);
-
-            ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
-
-            yield return StartCoroutine(Resolve(tool, unit, plan, exec, report, budget, resources));
+            finally
+            {
+                _endTurnGuardDepth = Mathf.Max(0, _endTurnGuardDepth - 1);
+                TryFinalizeEndTurn();
+            }
         }
 
         IEnumerator Resolve(IActionToolV2 tool, Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
@@ -865,10 +997,16 @@ namespace TGD.CombatV2
 
             var derivedQueue = new List<Tuple<IActionToolV2, ActionPlan>>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
-            if (ShouldRunDerivedWindow(unit, tool))
+            bool shouldDerived = ShouldRunDerivedWindow(unit, tool);
+            bool skipDerived = shouldDerived && _pendingEndTurn && IsPendingEndTurnFor(unit);
+            if (shouldDerived && !skipDerived)
                 yield return RunDerivedWindow(unit, tool, plan, report, budget, resources, cooldowns, derivedQueue);
             else
+            {
+                if (shouldDerived && skipDerived)
+                    Log($"[Chain] DerivedPromptAbort(from={plan.kind}, reason=EndTurn)");
                 derivedQueue.Clear();
+            }
 
             int budgetAfter = budget != null ? budget.Remaining : 0;
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
@@ -887,9 +1025,14 @@ namespace TGD.CombatV2
                 {
                     var pending = derivedQueue[i];
                     if (pending?.Item1 != null)
+                    {
+                        if (_queuedActionsPending > 0)
+                            _queuedActionsPending--;
                         yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                    }
                 }
             }
+            TryFinalizeEndTurn();
         }
         FullRoundQueuedPlan BuildFullRoundPlan(ActionPlan plan, PreDeduct preDeduct, ITurnBudget budget, IResourcePool resources)
         {
@@ -1033,6 +1176,7 @@ namespace TGD.CombatV2
             _hover = null;
             _phase = Phase.Idle;
             _planStack.Clear();
+            TryFinalizeEndTurn();
         }
 
         void NotifyConfirmAbort(IActionToolV2 tool, Unit unit, string reason)
@@ -1661,6 +1805,18 @@ namespace TGD.CombatV2
                             }
                         }
 
+                        if (_pendingEndTurn)
+                        {
+                            string cancelSuffix = ownerMode && activeOwner != null
+                                ? $"(owner={TurnManagerV2.FormatUnitLabel(activeOwner)}, reason=EndTurn)"
+                                : "(reason=EndTurn)";
+                            ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel", cancelSuffix);
+                            stageActive = false;
+                            stageCancelledByInput = true;
+                            keepLooping = false;
+                            break;
+                        }
+
                         bool handledInput = false;
 
                         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
@@ -1811,6 +1967,7 @@ namespace TGD.CombatV2
             finally
             {
                 PopInputSuppression();
+                TryFinalizeEndTurn();
             }
         }
 
@@ -1930,6 +2087,12 @@ namespace TGD.CombatV2
                 bool resolved = false;
                 while (!resolved)
                 {
+                    if (_pendingEndTurn)
+                    {
+                        Log("[Chain] DerivedPromptAbort(cancel-endturn)");
+                        break;
+                    }
+
                     if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                     {
                         Log("[Chain] DerivedPromptAbort(cancel)");
@@ -2002,6 +2165,15 @@ namespace TGD.CombatV2
 
                 while (awaitingSelection)
                 {
+                    if (_pendingEndTurn)
+                    {
+                        cursor?.Clear();
+                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel", "(reason=EndTurn)");
+                        tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                        yield break;
+                    }
+
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
@@ -2124,6 +2296,8 @@ namespace TGD.CombatV2
 
             derivedQueue.Add(Tuple.Create(tool, actionPlan));
 
+            _queuedActionsPending++;
+
             ChainCursor?.Clear();
 
             onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
@@ -2158,6 +2332,15 @@ namespace TGD.CombatV2
 
                 while (awaitingSelection)
                 {
+                    if (_pendingEndTurn)
+                    {
+                        cursor?.Clear();
+                        ActionPhaseLogger.Log(owner, tool.Id, "W1_AimCancel", "(reason=EndTurn)");
+                        tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                        yield break;
+                    }
+
                     var hover = PickHexUnderMouse();
                     if (hover.HasValue)
                     {
@@ -2287,6 +2470,8 @@ namespace TGD.CombatV2
                 budget = budget,
                 resources = resources
             });
+
+            _queuedActionsPending++;
 
             ChainCursor?.Clear();
 
@@ -2575,10 +2760,15 @@ namespace TGD.CombatV2
             {
                 var pending = pendingChain[i];
                 if (pending.tool != null)
+                {
+                    if (_queuedActionsPending > 0)
+                        _queuedActionsPending--;
                     yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                }
             }
 
             _planStack.Clear();
+            TryFinalizeEndTurn();
         }
 
 
