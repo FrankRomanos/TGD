@@ -113,40 +113,10 @@ namespace TGD.CombatV2
 
         bool WireAttackCosts()
         {
-            var atk = GetComponent<AttackCostServiceV2Adapter>();
-            if (atk == null)
-                return false;
-
-            bool changed = false;
-
-            if (atk.turnManager != turnManager)
-            {
-                atk.turnManager = turnManager;
-                changed = true;
-            }
-
-            if (atk.ctx != context)
-            {
-                atk.ctx = context;
-                changed = true;
-            }
-
-            if (context != null)
-            {
-                if (atk.cooldownHub == null && context.cooldownHub != null)
-                {
-                    atk.cooldownHub = context.cooldownHub;
-                    changed = true;
-                }
-
-                if (atk.stats == null && context.stats != null)
-                {
-                    atk.stats = context.stats;
-                    changed = true;
-                }
-            }
-
-            return changed;
+#if UNITY_EDITOR
+            // 如不想看提示，删掉这行即可
+#endif
+            return false;
         }
 
         bool WireStatusRuntime()
