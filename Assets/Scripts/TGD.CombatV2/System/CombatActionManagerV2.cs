@@ -112,6 +112,7 @@ namespace TGD.CombatV2
             public int energyMove;
             public int energyAtk;
             public bool valid;
+            public int bonusSecs;
         }
 
         struct ActionPlan
@@ -174,9 +175,109 @@ namespace TGD.CombatV2
         readonly List<ChainOption> _chainBuffer = new();
         readonly List<ChainOption> _derivedBuffer = new();
 
+        struct BonusTurnState
+        {
+            public bool active;
+            public Unit unit;
+            public int cap;
+            public int remaining;
+            public string sourceId;
+
+            public void Reset()
+            {
+                active = false;
+                unit = null;
+                cap = 0;
+                remaining = 0;
+                sourceId = null;
+            }
+        }
+
+        BonusTurnState _bonusTurn;
+
         IActionRules ResolveRules()
         {
             return rulebook != null ? (IActionRules)rulebook : ActionRulebook.Default;
+        }
+
+        bool IsBonusTurnActive => _bonusTurn.active && _bonusTurn.unit != null;
+
+        bool IsBonusTurnFor(Unit unit)
+        {
+            return IsBonusTurnActive && unit != null && unit == _bonusTurn.unit;
+        }
+
+        int GetBonusRemaining(Unit unit)
+        {
+            return IsBonusTurnFor(unit) ? Mathf.Max(0, _bonusTurn.remaining) : int.MaxValue;
+        }
+
+        void ApplyBonusPreDeduct(Unit unit, ref PreDeduct preDeduct)
+        {
+            if (!IsBonusTurnFor(unit))
+                return;
+
+            int secs = Mathf.Max(0, preDeduct.secs);
+            if (secs <= 0)
+                return;
+
+            _bonusTurn.remaining = Mathf.Max(0, _bonusTurn.remaining - secs);
+            preDeduct.bonusSecs = secs;
+        }
+
+        void ApplyBonusResolve(Unit unit, PreDeduct preDeduct, int netSeconds)
+        {
+            if (!IsBonusTurnFor(unit))
+                return;
+
+            if (!preDeduct.valid || preDeduct.bonusSecs <= 0)
+                return;
+
+            int planned = Mathf.Max(0, preDeduct.bonusSecs);
+            int delta = netSeconds - planned;
+            if (delta < 0)
+            {
+                int refund = -delta;
+                _bonusTurn.remaining = Mathf.Min(_bonusTurn.cap, _bonusTurn.remaining + refund);
+            }
+            else if (delta > 0)
+            {
+                _bonusTurn.remaining = Mathf.Max(0, _bonusTurn.remaining - delta);
+            }
+        }
+
+        bool IsEffectivePlayerPhase(Unit unit)
+        {
+            if (IsBonusTurnFor(unit))
+                return true;
+            return turnManager != null && turnManager.IsPlayerPhase;
+        }
+
+        bool IsEffectiveEnemyPhase(Unit unit)
+        {
+            if (IsBonusTurnFor(unit))
+                return false;
+            return turnManager != null && !turnManager.IsPlayerPhase;
+        }
+
+        void BeginBonusTurn(Unit unit, int capSeconds, string sourceId)
+        {
+            if (unit == null)
+                return;
+
+            _bonusTurn.active = true;
+            _bonusTurn.unit = unit;
+            _bonusTurn.cap = Mathf.Max(0, capSeconds);
+            _bonusTurn.remaining = Mathf.Max(0, capSeconds);
+            _bonusTurn.sourceId = sourceId;
+        }
+
+        void EndBonusTurn(Unit unit)
+        {
+            if (!IsBonusTurnFor(unit))
+                return;
+
+            _bonusTurn.Reset();
         }
 
         TargetSelectionCursor ChainCursor
@@ -399,6 +500,14 @@ namespace TGD.CombatV2
                 return false;
             var owner = ResolveUnit(tool);
 
+            if (IsBonusTurnActive)
+            {
+                if (!IsBonusTurnFor(owner))
+                    return false;
+                if (tool.Kind == ActionKind.FullRound)
+                    return false;
+            }
+
             var rules = ResolveRules();
             if (rules != null && !rules.CanActivateAtIdle(tool.Kind))
                 return false;
@@ -472,10 +581,10 @@ namespace TGD.CombatV2
             if (unit == null)
                 return false;
 
-            if (!turnManager.IsPlayerPhase)
+            if (!IsEffectivePlayerPhase(unit))
                 return false;
 
-            if (turnManager.ActiveUnit != unit)
+            if (!IsBonusTurnFor(unit) && turnManager.ActiveUnit != unit)
                 return false;
 
             if (_phase != Phase.Idle)
@@ -506,7 +615,79 @@ namespace TGD.CombatV2
 
             var unit = _pendingEndTurnUnit;
             ClearPendingEndTurn();
-            turnManager.EndTurn(unit);
+            if (IsBonusTurnFor(unit))
+            {
+                EndBonusTurn(unit);
+            }
+            else
+            {
+                turnManager.EndTurn(unit);
+            }
+        }
+
+        IEnumerator RunSustainedBonusTurns(int capSeconds, string actionId)
+        {
+            if (turnManager == null)
+                yield break;
+            if (capSeconds <= 0)
+                yield break;
+
+            var players = turnManager.GetSideUnits(true);
+            if (players == null || players.Count == 0)
+                yield break;
+
+            var snapshot = new List<Unit>(players.Count);
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i] != null)
+                    snapshot.Add(players[i]);
+            }
+
+            if (snapshot.Count == 0)
+                yield break;
+
+            var prevUnit = _currentUnit;
+            var prevPhase = _phase;
+            bool prevPending = _pendingEndTurn;
+            var prevPendingUnit = _pendingEndTurnUnit;
+
+            _pendingEndTurn = false;
+            _pendingEndTurnUnit = null;
+
+            foreach (var unit in snapshot)
+            {
+                if (unit == null)
+                    continue;
+
+                BeginBonusTurn(unit, capSeconds, actionId);
+
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
+
+                _currentUnit = unit;
+                _phase = Phase.Idle;
+                _activeTool = null;
+                _hover = null;
+
+                while (IsBonusTurnFor(unit))
+                {
+                    if (IsBonusTurnFor(unit) && _bonusTurn.remaining <= 0 && !_pendingEndTurn)
+                    {
+                        _pendingEndTurn = true;
+                        _pendingEndTurnUnit = unit;
+                        TryFinalizeEndTurn();
+                    }
+                    yield return null;
+                }
+
+                Debug.Log($"[Turn] End BonusT({unitLabel})", this);
+            }
+
+            _currentUnit = prevUnit;
+            _phase = prevPhase;
+            _pendingEndTurn = prevPending;
+            _pendingEndTurnUnit = prevPendingUnit;
+            _bonusTurn.Reset();
         }
 
         public bool RequestEndTurn(Unit unit = null)
@@ -520,13 +701,17 @@ namespace TGD.CombatV2
             if (unit == null)
                 return false;
 
-            if (!turnManager.IsPlayerPhase || !turnManager.IsPlayerUnit(unit))
+            bool effectivePlayer = IsEffectivePlayerPhase(unit);
+            if (!effectivePlayer)
                 return false;
 
-            if (turnManager.ActiveUnit != unit)
+            if (!IsBonusTurnFor(unit) && !turnManager.IsPlayerUnit(unit))
                 return false;
 
-            if (!turnManager.HasReachedIdle(unit))
+            if (!IsBonusTurnFor(unit) && turnManager.ActiveUnit != unit)
+                return false;
+
+            if (!IsBonusTurnFor(unit) && !turnManager.HasReachedIdle(unit))
                 return false;
 
             if (_pendingEndTurn)
@@ -681,7 +866,7 @@ namespace TGD.CombatV2
             string kind = tool.Id;
             Unit guardUnit = null;
             bool guardActive = false;
-            if (turnManager != null && !turnManager.IsPlayerPhase)
+            if (turnManager != null && !IsEffectivePlayerPhase(unit))
             {
                 // 敌方回合：guard 键应当是当前激活的敌人，而不是本动作的 owner（可能是友方）
                 guardUnit = turnManager.ActiveUnit ?? unit;
@@ -760,6 +945,8 @@ namespace TGD.CombatV2
             string failReason = null;
             if (!cost.valid)
                 failReason = "targetInvalid";
+            else if (IsBonusTurnFor(unit) && cost.TotalSeconds > GetBonusRemaining(unit))
+                failReason = "lackTime";
             else if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
                 failReason = "lackTime";
             else if (resources != null && cost.TotalEnergy > 0 && !resources.Has("Energy", cost.TotalEnergy))
@@ -796,6 +983,7 @@ namespace TGD.CombatV2
                 energyAtk = cost.atkEnergy,
                 valid = true
             };
+            ApplyBonusPreDeduct(unit, ref basePreDeduct);
             _planStack.Push(basePreDeduct);
 
             TryHideAllAimUI();
@@ -804,7 +992,7 @@ namespace TGD.CombatV2
             bool cancelBase = false;
             if (ShouldOpenChainWindow(tool, unit))
             {
-                bool isEnemyPhase = turnManager != null && !turnManager.IsPlayerPhase;
+                bool isEnemyPhase = IsEffectiveEnemyPhase(unit);
                 yield return RunChainWindow(unit, actionPlan, tool.Kind, isEnemyPhase, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
             }
 
@@ -825,10 +1013,18 @@ namespace TGD.CombatV2
                     _planStack.Pop();
                 if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
                     budget.RefundTime(basePreDeduct.secs);
+                if (IsBonusTurnFor(unit) && basePreDeduct.valid && basePreDeduct.bonusSecs > 0)
+                    _bonusTurn.remaining = Mathf.Min(_bonusTurn.cap, _bonusTurn.remaining + basePreDeduct.bonusSecs);
                 ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
                 NotifyConfirmAbort(tool, unit, "LinkCancelled");
                 CleanupAfterAbort(tool, false);
                 yield break;
+            }
+
+            if (tool.Kind == ActionKind.Sustained)
+            {
+                int bonusCap = Mathf.Max(0, basePreDeduct.secs);
+                yield return RunSustainedBonusTurns(bonusCap, actionPlan.kind);
             }
             if (tool.Kind == ActionKind.FullRound && tool is IFullRoundActionTool frTool)
             {
@@ -958,6 +1154,8 @@ namespace TGD.CombatV2
                     Log($"[Time] Spend {unitLabel} {delta}s -> Remain={budget.Remaining}");
                 }
             }
+
+            ApplyBonusResolve(unit, preDeduct, net);
 
             if (resources != null)
             {
@@ -1218,6 +1416,12 @@ namespace TGD.CombatV2
             if (turnManager != null && unit != null)
             {
                 var cost = GetBaselineCost(tool);
+                if (IsBonusTurnFor(unit) && cost.TotalSeconds > GetBonusRemaining(unit))
+                {
+                    reason = "lackTime";
+                    return false;
+                }
+
                 var budget = turnManager.GetBudget(unit);
                 if (budget != null && cost.TotalSeconds > 0 && !budget.HasTime(cost.TotalSeconds))
                 {
@@ -1341,7 +1545,8 @@ namespace TGD.CombatV2
             if (tool == null || unit == null || turnManager == null)
                 return false;
 
-            bool isEnemyPhase = !turnManager.IsPlayerPhase;
+            bool treatAsPlayerPhase = IsEffectivePlayerPhase(unit);
+            bool isEnemyPhase = !treatAsPlayerPhase;
             if (!isEnemyPhase)
             {
                 if (!turnManager.IsPlayerUnit(unit))
@@ -1374,7 +1579,7 @@ namespace TGD.CombatV2
                 return false;
             if (turnManager == null)
                 return false;
-            if (!turnManager.IsPlayerPhase)
+            if (!IsEffectivePlayerPhase(unit))
                 return false;
             if (!turnManager.IsPlayerUnit(unit))
                 return false;
@@ -1907,7 +2112,7 @@ namespace TGD.CombatV2
 
                             stageHasSelection = true;
 
-                            if (option.kind == ActionKind.Reaction && turnManager != null && turnManager.IsPlayerPhase && turnManager.IsPlayerUnit(unit))
+                            if (option.kind == ActionKind.Reaction && turnManager != null && IsEffectivePlayerPhase(unit) && turnManager.IsPlayerUnit(unit))
                                 cancelledBase = true;
 
                             if (rules != null)
