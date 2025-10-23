@@ -57,6 +57,10 @@ namespace TGD.CombatV2
         [Header("Phase Start Free Chain")]
         public bool skipPhaseStartFreeChain = false;
 
+        [Header("Sustained Bonus Turns")]
+        [Tooltip("Automatically finish bonus idle turns when their allotted time is consumed.")]
+        public bool autoEndBonusTurns = true;
+
         enum Phase
         {
             Idle,
@@ -80,8 +84,10 @@ namespace TGD.CombatV2
         Unit _pendingEndTurnUnit;
         int _endTurnGuardDepth;
         int _queuedActionsPending;
+        int _chainWindowDepth;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
+        bool IsAnyChainWindowActive => _chainWindowDepth > 0;
 
         void PushInputSuppression()
         {
@@ -683,7 +689,15 @@ namespace TGD.CombatV2
 
                 while (IsBonusTurnFor(unit))
                 {
-                    if (IsBonusTurnFor(unit) && _bonusTurn.remaining <= 0 && !_pendingEndTurn)
+                    if (autoEndBonusTurns
+                        && _bonusTurn.remaining <= 0
+                        && !_pendingEndTurn
+                        && !IsAnyChainWindowActive
+                        && _queuedActionsPending <= 0
+                        && _planStack.Count == 0
+                        && _activeTool == null
+                        && !IsInputSuppressed
+                        && _phase == Phase.Idle)
                     {
                         _pendingEndTurn = true;
                         _pendingEndTurnUnit = unit;
@@ -1853,6 +1867,7 @@ namespace TGD.CombatV2
 
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
+            _chainWindowDepth++;
             PushInputSuppression();
             try
             {
@@ -2187,6 +2202,8 @@ namespace TGD.CombatV2
             finally
             {
                 PopInputSuppression();
+                if (_chainWindowDepth > 0)
+                    _chainWindowDepth--;
                 TryFinalizeEndTurn();
             }
         }
@@ -2269,6 +2286,7 @@ namespace TGD.CombatV2
 
         IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue)
         {
+            _chainWindowDepth++;
             PushInputSuppression();
             try
             {
@@ -2357,6 +2375,8 @@ namespace TGD.CombatV2
             finally
             {
                 PopInputSuppression();
+                if (_chainWindowDepth > 0)
+                    _chainWindowDepth--;
             }
         }
 
