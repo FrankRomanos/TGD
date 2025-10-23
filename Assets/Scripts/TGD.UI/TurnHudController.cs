@@ -11,10 +11,10 @@ using TGD.Data;
 namespace TGD.UI
 {
     /// <summary>
-    /// ³öÊÖµ¥Î» HUD£º
-    /// ¶¥£ºÄÜÁ¿Ìõ£¨ÏÔÊ¾£ºµ±Ç°/×î´ó + EnergyRegenPer2s£©
-    /// ÖÐ£ºÖ°Òµ×ÊÔ´²ÊÌõ£¨×Ô¶¯É¨Ãè¸ÃÖ°Òµ¼¼ÄÜÀïµÄ×ÊÔ´ÀàÐÍ£¬ÅÅ³ý HP/Energy£©
-    /// µ×£º»ØºÏÊ±¼ä¶¹£¨TurnTime ¸öÐ¡Í¼±ê£¬µãÁÁ RemainingTime£©
+    /// ÖµÎ» HUD
+    /// Ê¾Ç°/ + EnergyRegenPer2s
+    /// Ð£Ö°ÒµÔ´Ô¶É¨Ö°ÒµÔ´Í£Å³ HP/Energy
+    /// ×£ØºÊ±ä¶¹TurnTime Ð¡Í¼ê£¬ RemainingTime
     /// </summary>
     public sealed class TurnHudController : BaseTurnUiBehaviour
     {
@@ -23,26 +23,26 @@ namespace TGD.UI
 
         [Header("Energy")]
         public Slider energySlider;
-        public TMP_Text energyText;                 // ¡°cur/max  +regen/2s¡±
+        public TMP_Text energyText;                 // cur/max  +regen/2s
         [Range(1f, 20f)] public float energyLerp = 10f;
 
         [Header("Class Resource Strip")]
-        public Transform stripRoot;                 // Ë®Æ½ÈÝÆ÷
-        public GameObject stripCellPrefab;          // Ð¡³¤ÌõÔ¤ÖÆ£¨Image£¬½¨Òé 18x8£©
+        public Transform stripRoot;                 // Ë®Æ½
+        public GameObject stripCellPrefab;          // Ð¡Ô¤Æ£Image 18x8
         [Range(0f, 1f)] public float offAlpha = 0.25f;
         public float groupGap = 8f;
 
         [Header("Turn Time (beans)")]
-        public Transform timeRoot;                  // Ë®Æ½ÈÝÆ÷
-        public GameObject timePipPrefab;            // Ð¡ÇòÔ¤ÖÆ£¨Image£¬½¨Òé 14x14£©
+        public Transform timeRoot;                  // Ë®Æ½
+        public GameObject timePipPrefab;            // Ð¡Ô¤Æ£Image 14x14
         public Color timeTint = Color.white;
         [Range(0f, 1f)] public float timeOffAlpha = 0.25f;
-        public TMP_Text timeText;                   // ¿ÉÑ¡£¬ÏÔÊ¾Êý×Ö
+        public TMP_Text timeText;                   // Ñ¡Ê¾
 
         [Header("Update")]
         public float updateInterval = 0.1f;
 
-        // ÔËÐÐÌ¬
+        // Ì¬
         Unit _active;
         float _timer;
 
@@ -94,21 +94,28 @@ namespace TGD.UI
             }
         }
 
-        // ---------- ¹¹½¨ ----------
+        protected override void HandleRuntimeChanged(Unit u)
+        {
+            if (!ReferenceEquals(_active, u))
+                return;
+            RefreshImmediate();
+        }
+
+        // ----------  ----------
         void RebuildStrip()
         {
-            // Çå¿Õ
+            // 
             for (int i = stripRoot.childCount - 1; i >= 0; --i)
                 Destroy(stripRoot.GetChild(i).gameObject);
             _segments.Clear();
-            _typeSnapshot.Clear();            // ¡ï ¹Ø¼üÐÞ¸´£ºÇÐÈËÊ±ÏÈÇå¿Õ¿ìÕÕ
+            _typeSnapshot.Clear();            //  Ø¼Þ¸Ê±Õ¿
 
             if (_active == null) return;
 
-            // 1) É¨Ãè¸ÃÖ°Òµ¼¼ÄÜ ¡ú ×ÊÔ´ÀàÐÍ¼¯ºÏ£¨ÅÅ³ý HP/Energy£©
+            // 1) É¨Ö°Òµ  Ô´Í¼Ï£Å³ HP/Energy
             var types = CollectTypesFromSkills(_active.ClassId);
 
-            // 2) ´´½¨
+            // 2) 
             bool firstGroup = true;
             foreach (var t in types)
             {
@@ -161,12 +168,12 @@ namespace TGD.UI
             _timeLastMax = total;
         }
 
-        // ---------- Ë¢ÐÂ ----------
+        // ---------- Ë¢ ----------
         void RefreshImmediate()
         {
             if (_active?.Stats == null) return;
 
-            // ÄÜÁ¿ÎÄ±¾£ºcur/max +regen/2s
+            // Ä±cur/max +regen/2s
             float cur = TryGetFloat(_active.Stats, "Energy");
             float max = Mathf.Max(1f, TryGetFloat(_active.Stats, "MaxEnergy", 100f));
             float regen = TryGetFloat(_active.Stats, "EnergyRegenPer2s", 0f);
@@ -246,7 +253,7 @@ namespace TGD.UI
             if (timeText) timeText.text = remain.ToString();
         }
 
-        // ---------- ¹¤¾ß ----------
+        // ----------  ----------
         List<CostResourceType> CollectTypesFromSkills(string classId)
         {
             var set = new HashSet<CostResourceType>();
@@ -271,7 +278,7 @@ namespace TGD.UI
                 }
             }
             var list = new List<CostResourceType>(set);
-            list.Sort((a, b) => ((int)a).CompareTo((int)b)); // ÎÈ¶¨Ë³Ðò
+            list.Sort((a, b) => ((int)a).CompareTo((int)b)); // È¶Ë³
             return list;
         }
 
@@ -313,7 +320,7 @@ namespace TGD.UI
             };
         }
 
-        // ·´Éä£º¶Á Stats
+        // ä£º Stats
         static float TryGetFloat(object stats, string key, float fallback = 0f)
         {
             if (stats == null) return fallback;
@@ -348,7 +355,7 @@ namespace TGD.UI
         }
         static string FirstUpper(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
-        // ÏÔÒþ
+        // 
         void Show(bool on, bool instant = false)
         {
             if (!canvasGroup) return;

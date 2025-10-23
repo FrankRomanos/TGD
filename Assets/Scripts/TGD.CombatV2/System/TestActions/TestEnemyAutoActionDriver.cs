@@ -86,7 +86,7 @@ namespace TGD.CombatV2
             while (actionManager.IsExecuting)
                 yield return null;
 
-            //turnManager.EndTurn(unit);
+            //turnManager.EndTurn(unit); // 仅用作早期定位
 
             _pendingRoutine = null;
         }

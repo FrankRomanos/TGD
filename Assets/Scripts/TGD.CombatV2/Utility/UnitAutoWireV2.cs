@@ -183,18 +183,8 @@ namespace TGD.CombatV2
 
             bool changed = false;
 
-            var moveHuds = GetComponentsInChildren<MoveHudListenerTMP>(true);
-            foreach (var hud in moveHuds)
-            {
-                if (hud != null && hud.driver == null)
-                {
-                    hud.driver = driver;
-                    changed = true;
-                }
-            }
-
-            var attackHuds = GetComponentsInChildren<AttackHudListenerTMP>(true);
-            foreach (var hud in attackHuds)
+            var hudListeners = GetComponentsInChildren<ActionHudMessageListenerTMP>(true);
+            foreach (var hud in hudListeners)
             {
                 if (hud != null && hud.driver == null)
                 {

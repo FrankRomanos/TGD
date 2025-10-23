@@ -1,101 +1,127 @@
 // Assets/Scripts/TGD.UI/BaseTurnUiBehaviour.cs
 using UnityEngine;
 using TGD.Combat;
+using TGD.CombatV2;
+using Unit = TGD.HexBoard.Unit;
 
 namespace TGD.UI
 {
     /// <summary>
-    /// 统一：查找 CombatLoop，订阅战斗总线的回合事件，启用时若已有激活单位则补一次回调。
+    /// 统一：查找 TurnManagerV2，订阅统一的 UnitRuntimeChanged 事件；仍保留 legacy CombatLoop 引用以兼容旧式执行入口。
     /// </summary>
     public abstract class BaseTurnUiBehaviour : MonoBehaviour
     {
         [Header("Combat (optional)")]
         [SerializeField] protected CombatLoop combat;
 
-        ICombatEventBus _eventBus;
+        [Header("Turn Manager (optional)")]
+        [SerializeField] protected TurnManagerV2 turnManager;
+
         bool _pendingInitialSync;
+        Unit _active;
 
         protected virtual void Awake()
         {
             if (!combat)
                 combat = FindFirstObjectByTypeSafe<CombatLoop>();
+            if (!turnManager)
+                turnManager = FindFirstObjectByTypeSafe<TurnManagerV2>();
             _pendingInitialSync = true;
         }
 
         protected virtual void OnEnable()
         {
-            RefreshCombatReference();
+            RefreshReferences();
+            SubscribeTurnManager(turnManager);
             TryInitialSync();
         }
 
         protected virtual void OnDisable()
         {
-            SubscribeEventBus(null);
+            SubscribeTurnManager(null);
         }
 
         protected virtual void LateUpdate()
         {
-            RefreshCombatReference();
+            RefreshReferences();
             TryInitialSync();
         }
 
-        void RefreshCombatReference()
+        void RefreshReferences()
         {
             if (!combat)
                 combat = FindFirstObjectByTypeSafe<CombatLoop>();
-
-            SubscribeEventBus(combat ? combat.EventBus : null);
+            var resolvedTm = turnManager ? turnManager : FindFirstObjectByTypeSafe<TurnManagerV2>();
+            SubscribeTurnManager(resolvedTm);
         }
 
-        void SubscribeEventBus(ICombatEventBus next)
+        void SubscribeTurnManager(TurnManagerV2 next)
         {
-            if (ReferenceEquals(next, _eventBus))
+            if (ReferenceEquals(next, turnManager))
                 return;
 
-            if (_eventBus != null)
-            {
-                _eventBus.OnTurnBegin -= OnTurnBeginEvent;
-                _eventBus.OnTurnEnd -= OnTurnEndEvent;
-            }
+            if (turnManager != null)
+                turnManager.UnitRuntimeChanged -= OnRuntimeChanged;
 
-            _eventBus = next;
+            turnManager = next;
 
-            if (_eventBus != null)
+            if (turnManager != null)
             {
-                _eventBus.OnTurnBegin += OnTurnBeginEvent;
-                _eventBus.OnTurnEnd += OnTurnEndEvent;
+                turnManager.UnitRuntimeChanged += OnRuntimeChanged;
                 _pendingInitialSync = true;
             }
         }
 
         void TryInitialSync()
         {
-            if (!_pendingInitialSync || combat == null)
+            if (!_pendingInitialSync || turnManager == null)
                 return;
 
-            var cur = combat.GetActiveUnit();
+            var cur = turnManager.ActiveUnit;
             if (cur != null)
+            {
+                _active = cur;
                 HandleTurnBegan(cur);
+                HandleRuntimeChanged(cur);
+            }
 
             _pendingInitialSync = false;
         }
 
-        void OnTurnBeginEvent(Unit unit)
+        void OnRuntimeChanged(Unit unit)
         {
-            if (unit == null)
+            if (turnManager == null || unit == null)
                 return;
-            HandleTurnBegan(unit);
-        }
 
-        void OnTurnEndEvent(Unit unit)
-        {
-            if (unit == null)
+            var active = turnManager.ActiveUnit;
+            if (active != null && unit == active)
+            {
+                if (_active != active)
+                {
+                    _active = active;
+                    HandleTurnBegan(active);
+                }
+                HandleRuntimeChanged(active);
                 return;
-            HandleTurnEnded(unit);
+            }
+
+            if (_active != null && _active == unit && active != unit)
+            {
+                var ended = _active;
+                _active = null;
+                HandleTurnEnded(ended);
+            }
+            else if (_active != null && active == null && unit == _active)
+            {
+                var ended = _active;
+                _active = null;
+                HandleTurnEnded(ended);
+            }
         }
 
         protected abstract void HandleTurnBegan(Unit u);
         protected abstract void HandleTurnEnded(Unit u);
+        protected virtual void HandleRuntimeChanged(Unit u) { }
 
 #if UNITY_2023_1_OR_NEWER
         protected static T FindFirstObjectByTypeSafe<T>() where T : Object
