@@ -380,21 +380,24 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            if (runtime.RemainingTime <= 0)
+            if (!runtime.HasReachedIdle)
+            {
+                reason = "notIdle";
+                return false;
+            }
+
+            int baseTime = Mathf.Max(0, runtime.BaseTimeForNext);
+            int remaining = Mathf.Max(0, runtime.RemainingTime);
+
+            if (baseTime <= 0 || remaining <= 0)
             {
                 reason = "lackTime";
                 return false;
             }
 
-            if (runtime.PrepaidTime > 0)
+            if (remaining != baseTime)
             {
-                reason = "prepaid";
-                return false;
-            }
-
-            if (runtime.HasSpentTimeThisTurn)
-            {
-                reason = "timeSpent";
+                reason = "notFullBudget";
                 return false;
             }
 
