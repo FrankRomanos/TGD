@@ -706,6 +706,12 @@ namespace TGD.CombatV2
                 _activeTool = null;
                 _hover = null;
 
+                if (turnManager != null && turnManager.HasActiveFullRound(unit))
+                {
+                    Log($"[FullRound] BonusT skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
+                    EndBonusTurn(unit);
+                }
+
                 while (IsBonusTurnFor(unit))
                 {
                     if (autoEndBonusTurns
