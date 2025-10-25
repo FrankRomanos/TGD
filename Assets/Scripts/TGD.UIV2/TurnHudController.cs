@@ -24,11 +24,13 @@ namespace TGD.UI
         [Header("Health")]
         public Image healthFill;
         public TMP_Text healthValue;
+        public TurnHudStatGauge healthGauge;
 
         [Header("Energy")]
         public Image energyFill;
         public TMP_Text energyValue;
         public TMP_Text energyRegen;
+        public TurnHudStatGauge energyGauge;
 
         [Header("Time Budget")]
         public RectTransform hourglassContainer;
@@ -43,8 +45,10 @@ namespace TGD.UI
 
         Unit _displayUnit;
         readonly List<Image> _hourglassPool = new();
+        readonly List<bool> _hourglassConsumedState = new();
         bool _enemyPhaseActive;
-        bool _chainDisplayActive;
+        bool _hourglassStateInitialized;
+        bool _forceInstantStats;
 
         static T AutoFind<T>() where T : Object
         {
@@ -63,6 +67,11 @@ namespace TGD.UI
                 combatManager = AutoFind<CombatActionManagerV2>();
 
             CacheInitialHourglasses();
+
+            if (!healthGauge && healthFill)
+                healthGauge = healthFill.GetComponentInParent<TurnHudStatGauge>();
+            if (!energyGauge && energyFill)
+                energyGauge = energyFill.GetComponentInParent<TurnHudStatGauge>();
         }
 
         void OnEnable()
@@ -122,16 +131,23 @@ namespace TGD.UI
                 var img = child.GetComponent<Image>();
                 if (!img) continue;
 
-                ApplyHourglassSize(img);   // ⬅ 改成下面这个版本
+                PrepareHourglass(img);
                 _hourglassPool.Add(img);
             }
 
             // 改完尺寸后，强制重建一遍布局，立刻生效
             LayoutRebuilder.ForceRebuildLayoutImmediate(hourglassContainer);
+            EnsureHourglassStateCapacity(_hourglassPool.Count);
         }
 
         void OnTurnStarted(Unit unit)
         {
+            if (!IsPlayerUnit(unit) && _enemyPhaseActive)
+            {
+                RefreshAll();
+                return;
+            }
+
             RefreshDisplayUnit(unit);
         }
 
@@ -152,13 +168,23 @@ namespace TGD.UI
             _enemyPhaseActive = !isPlayerPhase;
             if (isPlayerPhase)
             {
-                _chainDisplayActive = false;
                 RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
             }
             else
             {
-                _chainDisplayActive = false;
-                RefreshDisplayUnit(null);
+                var focus = GetCurrentChainFocus();
+                if (IsPlayerUnit(focus))
+                {
+                    RefreshDisplayUnit(focus);
+                }
+                else if (IsPlayerUnit(_displayUnit))
+                {
+                    RefreshAll();
+                }
+                else
+                {
+                    RefreshDisplayUnit(ResolveFirstPlayerUnit());
+                }
             }
         }
 
@@ -166,28 +192,52 @@ namespace TGD.UI
         {
             if (unit == null)
             {
-                if (!_enemyPhaseActive)
+                if (_enemyPhaseActive)
+                {
+                    if (!IsPlayerUnit(_displayUnit))
+                        RefreshDisplayUnit(ResolveFirstPlayerUnit());
+                    else
+                        RefreshAll();
+                }
+                else
+                {
                     RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+                }
                 return;
             }
 
-            if (_enemyPhaseActive)
+            if (!IsPlayerUnit(unit))
             {
-                _chainDisplayActive = true;
-                RefreshDisplayUnit(unit);
+                if (_enemyPhaseActive)
+                {
+                    if (!IsPlayerUnit(_displayUnit))
+                        RefreshDisplayUnit(ResolveFirstPlayerUnit());
+                    else
+                        RefreshAll();
+                }
+                else
+                {
+                    RefreshAll();
+                }
+                return;
             }
-            else
-            {
-                RefreshDisplayUnit(unit);
-            }
+
+            RefreshDisplayUnit(unit);
         }
 
         void RefreshDisplayUnit(Unit unit)
         {
-            if (unit == _displayUnit)
+            if (unit != null && unit == _displayUnit)
+            {
+                RefreshAll();
                 return;
+            }
 
+            bool changed = unit != _displayUnit;
             _displayUnit = unit;
+            _hourglassStateInitialized = false;
+            if (changed)
+                _forceInstantStats = true;
             RefreshAll();
         }
 
@@ -199,11 +249,14 @@ namespace TGD.UI
 
         void RefreshStats()
         {
+            bool instant = _forceInstantStats;
+            _forceInstantStats = false;
+
             if (_displayUnit == null)
             {
                 SetUnitLabel("-");
-                UpdateHealth(0, 0);
-                UpdateEnergy(0, 0, 0);
+                UpdateHealth(0, 0, instant);
+                UpdateEnergy(0, 0, 0, instant);
                 UpdateHourglasses(0, 0);
                 return;
             }
@@ -216,12 +269,12 @@ namespace TGD.UI
 
             int hp = stats != null ? Mathf.Max(0, stats.HP) : 0;
             int maxHp = stats != null ? Mathf.Max(1, stats.MaxHP) : 1;
-            UpdateHealth(hp, maxHp);
+            UpdateHealth(hp, maxHp, instant);
 
             int energy = stats != null ? Mathf.Max(0, stats.Energy) : 0;
             int maxEnergy = stats != null ? Mathf.Max(0, stats.MaxEnergy) : 0;
             int regenPer2s = stats != null ? Mathf.Max(0, stats.EnergyRegenPer2s) : 0;
-            UpdateEnergy(energy, maxEnergy, regenPer2s);
+            UpdateEnergy(energy, maxEnergy, regenPer2s, instant);
 
             int baseTime = 0;
             int remaining = 0;
@@ -245,8 +298,14 @@ namespace TGD.UI
             UpdateHourglasses(baseTime, baseTime - remaining);
         }
 
-        void UpdateHealth(int current, int max)
+        void UpdateHealth(int current, int max, bool immediate)
         {
+            if (healthGauge)
+            {
+                healthGauge.SetValue(current, max, null, immediate);
+                return;
+            }
+
             if (healthFill)
                 healthFill.fillAmount = max > 0 ? current / (float)max : 0f;
 
@@ -254,8 +313,15 @@ namespace TGD.UI
                 healthValue.text = max > 0 ? $"{current}/{max}" : "0/0";
         }
 
-        void UpdateEnergy(int current, int max, int regen)
+        void UpdateEnergy(int current, int max, int regen, bool immediate)
         {
+            if (energyGauge)
+            {
+                string regenText = $"+{regen}";
+                energyGauge.SetValue(current, max, regenText, immediate);
+                return;
+            }
+
             float fill = max > 0 ? current / (float)max : 0f;
             if (energyFill)
                 energyFill.fillAmount = Mathf.Clamp01(fill);
@@ -282,6 +348,9 @@ namespace TGD.UI
 
             EnsureHourglassPool(maxTime);
 
+            for (int i = _hourglassConsumedState.Count; i < _hourglassPool.Count; i++)
+                _hourglassConsumedState.Add(false);
+
             for (int i = 0; i < _hourglassPool.Count; i++)
             {
                 var image = _hourglassPool[i];
@@ -292,15 +361,39 @@ namespace TGD.UI
                 if (image.gameObject.activeSelf != active)
                     image.gameObject.SetActive(active);
 
+                var animator = EnsureHourglassAnimator(image);
+                if (animator != null)
+                    animator.ConfigureSprites(hourglassAvailableSprite, hourglassConsumedSprite, hourglassAvailableColor, hourglassConsumedColor);
+
                 if (!active)
+                {
+                    if (animator != null)
+                        animator.SetConsumed(false, false);
+                    if (i < _hourglassConsumedState.Count)
+                        _hourglassConsumedState[i] = false;
                     continue;
+                }
 
                 bool consumed = i < used;
-                image.sprite = consumed
-                    ? (hourglassConsumedSprite ? hourglassConsumedSprite : hourglassAvailableSprite)
-                    : hourglassAvailableSprite;
-                image.color = consumed ? hourglassConsumedColor : hourglassAvailableColor;
+                bool animate = _hourglassStateInitialized && i < _hourglassConsumedState.Count && _hourglassConsumedState[i] != consumed;
+
+                if (animator != null)
+                {
+                    animator.SetConsumed(consumed, animate);
+                }
+                else
+                {
+                    image.sprite = consumed
+                        ? (hourglassConsumedSprite ? hourglassConsumedSprite : hourglassAvailableSprite)
+                        : hourglassAvailableSprite;
+                    image.color = consumed ? hourglassConsumedColor : hourglassAvailableColor;
+                }
+
+                if (i < _hourglassConsumedState.Count)
+                    _hourglassConsumedState[i] = consumed;
             }
+
+            _hourglassStateInitialized = maxTime > 0;
         }
 
         void EnsureHourglassPool(int count)
@@ -328,13 +421,13 @@ namespace TGD.UI
 
                 if (img)
                 {
-                    if (!img.sprite && hourglassAvailableSprite)
-                        img.sprite = hourglassAvailableSprite;
-                    img.color = hourglassAvailableColor;
-                    ApplyHourglassSize(img);
+                    PrepareHourglass(img);
                     _hourglassPool.Add(img);
                 }
             }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(hourglassContainer);
+            EnsureHourglassStateCapacity(_hourglassPool.Count);
         }
 
         void ApplyHourglassSize(Image image)
@@ -395,15 +488,78 @@ namespace TGD.UI
             if (!isPlayerUnit)
                 return false;
 
-            bool playerPhase = turnManager != null && turnManager.IsPlayerPhase;
-            bool hasBonus = combatManager != null && combatManager.IsBonusTurnFor(_displayUnit);
-            if (hasBonus)
+            if (_enemyPhaseActive)
                 return true;
 
-            if (_enemyPhaseActive && !playerPhase)
-                return _chainDisplayActive;
+            bool playerPhase = turnManager != null && turnManager.IsPlayerPhase;
+            if (playerPhase)
+                return true;
 
-            return playerPhase;
+            bool hasBonus = combatManager != null && combatManager.IsBonusTurnFor(_displayUnit);
+            return hasBonus;
+        }
+
+        void PrepareHourglass(Image image)
+        {
+            if (!image)
+                return;
+
+            image.raycastTarget = false;
+            if (!image.sprite && hourglassAvailableSprite)
+                image.sprite = hourglassAvailableSprite;
+            image.color = hourglassAvailableColor;
+
+            ApplyHourglassSize(image);
+
+            var animator = EnsureHourglassAnimator(image);
+            if (animator != null)
+                animator.ConfigureSprites(hourglassAvailableSprite, hourglassConsumedSprite, hourglassAvailableColor, hourglassConsumedColor);
+        }
+
+        TurnHudHourglass EnsureHourglassAnimator(Image image)
+        {
+            if (!image)
+                return null;
+
+            var animator = image.GetComponent<TurnHudHourglass>();
+            if (!animator)
+                animator = image.gameObject.AddComponent<TurnHudHourglass>();
+            return animator;
+        }
+
+        void EnsureHourglassStateCapacity(int count)
+        {
+            while (_hourglassConsumedState.Count < count)
+                _hourglassConsumedState.Add(false);
+        }
+
+        Unit ResolveFirstPlayerUnit()
+        {
+            if (!turnManager)
+                return null;
+
+            var list = turnManager.GetSideUnits(true);
+            if (list == null)
+                return null;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var unit = list[i];
+                if (unit != null)
+                    return unit;
+            }
+
+            return null;
+        }
+
+        Unit GetCurrentChainFocus()
+        {
+            return combatManager != null ? combatManager.CurrentChainFocus : null;
+        }
+
+        bool IsPlayerUnit(Unit unit)
+        {
+            return unit != null && turnManager != null && turnManager.IsPlayerUnit(unit);
         }
     }
 }
