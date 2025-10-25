@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML
+    xmlns:ui="UnityEngine.UIElements"
+    xmlns:uie="UnityEditor.UIElements">
+
+  <ui:Style src="ChainPopup.uss" />
+
+  <ui:VisualElement name="overlay" class="overlay">
+    <ui:VisualElement name="window" class="window">
+
+      <ui:Label name="header" class="title" text="Begin Turn (Player)" />
+
+      <ui:ScrollView name="list" class="list" mode="Vertical" />
+
+      <ui:VisualElement name="footer" class="footer">
+        <ui:Label  name="noneLabel"  class="none-label" text="不做反应。" />
+        <ui:Toggle name="noneToggle" class="select-dot" />
+      </ui:VisualElement>
+
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>

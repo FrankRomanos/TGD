@@ -1,0 +1,131 @@
+/* 遮罩 */
+.overlay {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background-color: rgba(0,0,0,0.35);
+    align-items: center;
+    justify-content: center;
+}
+
+/* 弹窗 */
+.window {
+    width: 720px;
+    max-width: 90%;
+    background-color: #1a1a1a;
+    border-radius: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 18px;
+    padding-bottom: 14px;
+    gap: 12px;
+    -unity-font-style: normal;
+}
+
+/* 标题 */
+.title {
+    color: #ffffff;
+    font-size: 26px;
+    unity-font-style-and-weight: bold;
+    margin-left: 4px;
+    margin-right: 4px;
+}
+
+/* 列表滚动区 */
+.list {
+    height: 360px;     /* 自行改高 */
+    background-color: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* 列表中的一行（由脚本生成并赋 class="row"） */
+.row {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    gap: 12px;
+}
+
+/* 单位名 */
+.unit {
+    color: #ffffff;
+    unity-font-style-and-weight: bold;
+    min-width: 150px;
+    margin-right: 6px;
+}
+
+/* 技能容器（行里中间的流式区） */
+.skills {
+    flex-grow: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 技能小块 */
+.skill-btn {
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: rgba(255,255,255,0.15);
+    color: #eaeaea;
+    background-color: rgba(255,255,255,0.06);
+}
+
+/* 右侧圆形选择点（使用 Toggle） */
+.select-dot {
+    width: 22px;
+    height: 22px;
+    border-width: 2px;
+    border-color: #49b36b;
+    border-radius: 11px;
+    margin-left: 8px;
+    margin-right: 4px;
+    background-color: transparent;
+    /* 隐藏 Toggle 自带的文字标签 */
+}
+.select-dot .unity-toggle__label,
+.select-dot > Label {
+    display: none;
+}
+/* 定制选中填充：兼容不同 Unity 版本的子元素命名 */
+.select-dot .unity-toggle__checkmark,
+.select-dot .unity-checkmark {
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    background-color: transparent;
+    margin-left: 3px;
+    margin-top: 3px;
+}
+/* 选中时填充绿色 */
+.select-dot:checked .unity-toggle__checkmark,
+.select-dot:checked .unity-checkmark {
+    background-color: #34c759;
+}
+
+/* 底部“不做反应” */
+.footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+}
+.none-label {
+    color: #d6d6d6;
+    margin-right: 6px;
+}

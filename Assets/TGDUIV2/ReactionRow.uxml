@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement class="row">
+    <ui:Label name="unitLabel" class="unit" text="Unit Name" />
+    <ui:VisualElement name="skills" class="skills" />
+  </ui:VisualElement>
+</ui:UXML>
