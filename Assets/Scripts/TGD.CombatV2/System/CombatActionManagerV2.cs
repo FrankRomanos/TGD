@@ -211,6 +211,7 @@ namespace TGD.CombatV2
         public Unit CurrentBonusTurnUnit => IsBonusTurnActive ? _bonusTurn.unit : null;
         public int CurrentBonusTurnRemaining => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.remaining) : 0;
         public int CurrentBonusTurnCap => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.cap) : 0;
+        public Unit CurrentChainFocus => _currentChainFocus;
 
         IActionRules ResolveRules()
         {
