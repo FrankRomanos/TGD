@@ -162,7 +162,8 @@ namespace TGD.UI
         void Enqueue(string message)
         {
             var color = ResolveColor(message);
-            _queue.Enqueue((message, color));
+            string display = FormatDisplayMessage(message);
+            _queue.Enqueue((display, color));
             if (!_showing)
                 TryDisplayNext();
         }
@@ -191,6 +192,21 @@ namespace TGD.UI
                 return friendlyColor;
 
             return friendlyColor;
+        }
+
+        string FormatDisplayMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return string.Empty;
+
+            if (!message.StartsWith("[Turn]"))
+                return message;
+
+            int extraIndex = message.IndexOf(" TT=");
+            if (extraIndex > 0)
+                return message.Substring(0, extraIndex).TrimEnd();
+
+            return message;
         }
 
         string ExtractLabel(string message)
