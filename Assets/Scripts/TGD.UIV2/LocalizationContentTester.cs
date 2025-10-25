@@ -6,7 +6,7 @@ using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
 using UnityEngine.ResourceManagement.AsyncOperations;  // AsyncOperationHandle<T>
 
-namespace TGD.UI
+namespace TGD.UIV2
 {
     public class LocalizationTestWithoutIsReady : MonoBehaviour
     {

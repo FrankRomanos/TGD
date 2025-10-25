@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="glassEmpty" x1="128" y1="48" x2="128" y2="208" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#CFE5E5"/>
+      <stop offset="1" stop-color="#A7C7C7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer silhouette -->
+  <path d="M48 28 H208 a16 16 0 0 1 16 16 v8 a28 28 0 0 1 -12 23 L160 112 l52 37
+           a28 28 0 0 1 12 23 v8 a16 16 0 0 1 -16 16 H48 a16 16 0 0 1 -16 -16 v-8
+           a28 28 0 0 1 12 -23 l52 -37 -52 -37 a28 28 0 0 1 -12 -23 v-8 a16 16 0 0 1 16 -16 z"
+        fill="white" stroke="#111111" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Caps -->
+  <rect x="64" y="36" width="128" height="26" rx="12" fill="#D6D6D6" stroke="#9A9A9A" stroke-width="2"/>
+  <rect x="64" y="194" width="128" height="26" rx="12" fill="#D6D6D6" stroke="#9A9A9A" stroke-width="2"/>
+
+  <!-- Empty glass -->
+  <path d="M84 64 h88 a8 8 0 0 1 8 8 v0
+           c0 24 -40 36 -40 56 s40 32 40 56 v0 a8 8 0 0 1 -8 8 h-88 a8 8 0 0 1 -8 -8 v0
+           c0 -24 40 -36 40 -56 s-40 -32 -40 -56 v0 a8 8 0 0 1 8 -8 z"
+        fill="url(#glassEmpty)" stroke="#6A8A8A" stroke-width="4"/>
+
+  <!-- Minimal sand residue -->
+  <rect x="96" y="188" width="64" height="8" rx="4" fill="#E0BE7A" opacity="0.6"/>
+</svg>

@@ -29,6 +29,8 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
         public HexBoardTestDriver unitDriver;
 
+        public event Action<Unit> ChainFocusChanged;
+
         [SerializeField]
         [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
         bool registerAsGateHub = true;
@@ -88,6 +90,7 @@ namespace TGD.CombatV2
         int _queuedActionsPending;
         int _chainWindowDepth;
         bool _ownsGateHub;
+        int _bonusPlanDepth = -1;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -183,6 +186,7 @@ namespace TGD.CombatV2
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
         readonly List<ChainOption> _derivedBuffer = new();
+        Unit _currentChainFocus;
 
         struct BonusTurnState
         {
@@ -206,15 +210,16 @@ namespace TGD.CombatV2
 
         public Unit CurrentBonusTurnUnit => IsBonusTurnActive ? _bonusTurn.unit : null;
         public int CurrentBonusTurnRemaining => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.remaining) : 0;
+        public int CurrentBonusTurnCap => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.cap) : 0;
 
         IActionRules ResolveRules()
         {
             return rulebook != null ? (IActionRules)rulebook : ActionRulebook.Default;
         }
 
-        bool IsBonusTurnActive => _bonusTurn.active && _bonusTurn.unit != null;
+        public bool IsBonusTurnActive => _bonusTurn.active && _bonusTurn.unit != null;
 
-        bool IsBonusTurnFor(Unit unit)
+        public bool IsBonusTurnFor(Unit unit)
         {
             return IsBonusTurnActive && unit != null && unit == _bonusTurn.unit;
         }
@@ -310,6 +315,7 @@ namespace TGD.CombatV2
             _bonusTurn.cap = Mathf.Max(0, capSeconds);
             _bonusTurn.remaining = Mathf.Max(0, capSeconds);
             _bonusTurn.sourceId = sourceId;
+            SetChainFocus(unit);
         }
 
         void EndBonusTurn(Unit unit)
@@ -318,6 +324,15 @@ namespace TGD.CombatV2
                 return;
 
             _bonusTurn.Reset();
+            SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
+        }
+
+        void SetChainFocus(Unit unit)
+        {
+            if (_currentChainFocus == unit)
+                return;
+            _currentChainFocus = unit;
+            ChainFocusChanged?.Invoke(unit);
         }
 
         TargetSelectionCursor ChainCursor
@@ -660,7 +675,8 @@ namespace TGD.CombatV2
             if (_activeTool != null)
                 return false;
 
-            if (_planStack.Count > 0)
+            int allowedPlanDepth = _bonusPlanDepth >= 0 ? _bonusPlanDepth : 0;
+            if (_planStack.Count > allowedPlanDepth)
                 return false;
 
             if (_endTurnGuardDepth > 0)
@@ -714,58 +730,66 @@ namespace TGD.CombatV2
             var prevPhase = _phase;
             bool prevPending = _pendingEndTurn;
             var prevPendingUnit = _pendingEndTurnUnit;
+            int prevPlanDepth = _bonusPlanDepth;
 
             _pendingEndTurn = false;
             _pendingEndTurnUnit = null;
+            _bonusPlanDepth = Mathf.Max(0, _planStack.Count);
 
-            foreach (var unit in snapshot)
+            try
             {
-                if (unit == null)
-                    continue;
-
-                BeginBonusTurn(unit, capSeconds, actionId);
-
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
-
-                _currentUnit = unit;
-                _phase = Phase.Idle;
-                _activeTool = null;
-                _hover = null;
-
-                if (turnManager != null && turnManager.HasActiveFullRound(unit))
+                foreach (var unit in snapshot)
                 {
-                    Log($"[FullRound] BonusT skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
-                    EndBonusTurn(unit);
-                }
+                    if (unit == null)
+                        continue;
 
-                while (IsBonusTurnFor(unit))
-                {
-                    if (autoEndBonusTurns
-                        && _bonusTurn.remaining <= 0
-                        && !_pendingEndTurn
-                        && !IsAnyChainWindowActive
-                        && _queuedActionsPending <= 0
-                        && _planStack.Count == 0
-                        && _activeTool == null
-                        && !IsInputSuppressed
-                        && _phase == Phase.Idle)
+                    BeginBonusTurn(unit, capSeconds, actionId);
+
+                    string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                    Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
+
+                    _currentUnit = unit;
+                    _phase = Phase.Idle;
+                    _activeTool = null;
+                    _hover = null;
+
+                    if (turnManager != null && turnManager.HasActiveFullRound(unit))
                     {
-                        _pendingEndTurn = true;
-                        _pendingEndTurnUnit = unit;
-                        TryFinalizeEndTurn();
+                        Log($"[FullRound] BonusT skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
+                        EndBonusTurn(unit);
                     }
-                    yield return null;
+
+                    while (IsBonusTurnFor(unit))
+                    {
+                        if (autoEndBonusTurns
+                            && _bonusTurn.remaining <= 0
+                            && !_pendingEndTurn
+                            && !IsAnyChainWindowActive
+                            && _queuedActionsPending <= 0
+                            && _planStack.Count <= _bonusPlanDepth
+                            && _activeTool == null
+                            && !IsInputSuppressed
+                            && _phase == Phase.Idle)
+                        {
+                            _pendingEndTurn = true;
+                            _pendingEndTurnUnit = unit;
+                            TryFinalizeEndTurn();
+                        }
+                        yield return null;
+                    }
+
+                    Debug.Log($"[Turn] End BonusT({unitLabel})", this);
                 }
-
-                Debug.Log($"[Turn] End BonusT({unitLabel})", this);
             }
-
-            _currentUnit = prevUnit;
-            _phase = prevPhase;
-            _pendingEndTurn = prevPending;
-            _pendingEndTurnUnit = prevPendingUnit;
-            _bonusTurn.Reset();
+            finally
+            {
+                _currentUnit = prevUnit;
+                _phase = prevPhase;
+                _pendingEndTurn = prevPending;
+                _pendingEndTurnUnit = prevPendingUnit;
+                _bonusPlanDepth = prevPlanDepth;
+                _bonusTurn.Reset();
+            }
         }
 
         public bool RequestEndTurn(Unit unit = null)
@@ -1901,6 +1925,7 @@ namespace TGD.CombatV2
         {
             _chainWindowDepth++;
             PushInputSuppression();
+            SetChainFocus(unit);
             try
             {
                 var rules = ResolveRules();
@@ -1982,6 +2007,7 @@ namespace TGD.CombatV2
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
+                                SetChainFocus(unit);
                                 continue;
                             }
                         }
@@ -2017,6 +2043,8 @@ namespace TGD.CombatV2
                             activeOwner = ResolveNextChainOwner(options, stageOwnersUsed);
                             activeOwnerLogged = false;
 
+                            SetChainFocus(activeOwner != null ? activeOwner : unit);
+
                             if (activeOwner == null)
                                 ownerMode = false;
                         }
@@ -2046,6 +2074,7 @@ namespace TGD.CombatV2
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
+                                SetChainFocus(unit);
                                 continue;
                             }
                         }
@@ -2170,7 +2199,10 @@ namespace TGD.CombatV2
                             }
 
                             if (option.owner != null)
+                            {
+                                SetChainFocus(option.owner);
                                 stageOwnersUsed.Add(option.owner);
+                            }
 
                             stageHasSelection = true;
 
@@ -2194,12 +2226,16 @@ namespace TGD.CombatV2
 
                             activeOwner = null;
                             activeOwnerLogged = false;
+                            SetChainFocus(unit);
 
                             break;
                         }
 
                         if (!stageActive)
+                        {
+                            SetChainFocus(unit);
                             break;
+                        }
 
                         if (handledInput)
                             continue;
@@ -2233,6 +2269,7 @@ namespace TGD.CombatV2
             }
             finally
             {
+                SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
                     _chainWindowDepth--;
