@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,7 +31,7 @@ namespace TGD.UI
         public TMP_Text energyRegen;
 
         [Header("Time Budget")]
-        public Transform hourglassContainer;
+        public RectTransform hourglassContainer;
         public GameObject hourglassPrefab;
         public Sprite hourglassAvailableSprite;
         public Sprite hourglassConsumedSprite;
@@ -112,21 +112,22 @@ namespace TGD.UI
         void CacheInitialHourglasses()
         {
             _hourglassPool.Clear();
-            if (!hourglassContainer)
-                return;
+            if (!hourglassContainer) return;
 
             for (int i = 0; i < hourglassContainer.childCount; i++)
             {
                 var child = hourglassContainer.GetChild(i);
-                if (!child)
-                    continue;
+                if (!child) continue;
+
                 var img = child.GetComponent<Image>();
-                if (img)
-                {
-                    ApplyHourglassSize(img);
-                    _hourglassPool.Add(img);
-                }
+                if (!img) continue;
+
+                ApplyHourglassSize(img);   // ⬅ 改成下面这个版本
+                _hourglassPool.Add(img);
             }
+
+            // 改完尺寸后，强制重建一遍布局，立刻生效
+            LayoutRebuilder.ForceRebuildLayoutImmediate(hourglassContainer);
         }
 
         void OnTurnStarted(Unit unit)
@@ -338,20 +339,27 @@ namespace TGD.UI
 
         void ApplyHourglassSize(Image image)
         {
-            if (!image)
-                return;
+            if (!image) return;
 
-            if (hourglassSize.x <= 0f && hourglassSize.y <= 0f)
-                return;
-
-            var rect = image.rectTransform;
-            if (!rect)
-                return;
+            // 1) 用 LayoutElement 才能赢过 HorizontalLayoutGroup
+            var le = image.GetComponent<LayoutElement>();
+            if (!le) le = image.gameObject.AddComponent<LayoutElement>();
 
             if (hourglassSize.x > 0f)
-                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, hourglassSize.x);
+            {
+                le.preferredWidth = hourglassSize.x;
+                le.minWidth = hourglassSize.x;        // 防止被压扁
+                le.flexibleWidth = 0f;                // 不吃弹性空间
+            }
             if (hourglassSize.y > 0f)
-                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, hourglassSize.y);
+            {
+                le.preferredHeight = hourglassSize.y;
+                le.minHeight = hourglassSize.y;
+                le.flexibleHeight = 0f;
+            }
+
+            // 2) 可选：保持图标不变形
+            image.preserveAspect = true;
         }
 
         void SetUnitLabel(string label)
