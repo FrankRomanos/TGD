@@ -15,20 +15,30 @@
     max-width: 94%;
     max-height: 88%;
     flex-direction: column;
-    background-color: #15121d;
-    background-image: linear-gradient(160deg, rgba(66, 54, 86, 0.92), rgba(17, 16, 26, 0.96));
-    border-radius: 20px;
-    border-top-left-radius: 18px;
-    border-top-right-radius: 18px;
+    background-color: #120f19;
+    background-image: linear-gradient(180deg, rgba(87, 77, 115, 0.32) 0%, rgba(27, 23, 36, 0.94) 38%, rgba(11, 9, 15, 0.98) 100%);
+    border-radius: 22px;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
     border-width: 1px;
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 32px 72px rgba(0, 0, 0, 0.55);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 36px 88px rgba(0, 0, 0, 0.65);
     overflow: hidden;
 }
 
 .top-accent {
-    height: 4px;
-    background-image: linear-gradient(90deg, #d3a84a, #f6e3a2, #8edc8b);
+    height: 5px;
+    background-image: linear-gradient(90deg, rgba(219, 181, 97, 0.92), rgba(241, 225, 177, 0.88), rgba(142, 220, 139, 0.92));
+}
+
+.window-glow {
+    position: absolute;
+    left: -14%;
+    right: -14%;
+    top: -120px;
+    height: 220px;
+    background-image: radial-gradient(70% 90% at 50% 10%, rgba(246, 222, 160, 0.66) 0%, rgba(224, 200, 140, 0.22) 55%, rgba(16, 13, 24, 0) 100%);
+    pointer-events: none;
 }
 
 .header {
@@ -48,33 +58,35 @@
 }
 
 .phase-label {
-    color: #f0e4c8;
-    font-size: 26px;
+    color: #f4e5c6;
+    font-size: 27px;
     unity-font-style-and-weight: bold;
-    letter-spacing: 0.3px;
-    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+    letter-spacing: 0.4px;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
 }
 
 .prompt-label {
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 18px;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 19px;
     unity-font-style-and-weight: bold;
-    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+    letter-spacing: 0.25px;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
 }
 
 .count-chip {
     align-self: center;
     align-items: center;
     justify-content: center;
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 16px;
+    padding-right: 16px;
     padding-top: 6px;
     padding-bottom: 6px;
-    border-radius: 20px;
+    border-radius: 24px;
     border-width: 1px;
-    border-color: rgba(255, 255, 255, 0.18);
-    background-color: rgba(20, 101, 93, 0.3);
-    background-image: linear-gradient(120deg, rgba(78, 166, 154, 0.55), rgba(24, 59, 74, 0.55));
+    border-color: rgba(196, 240, 224, 0.45);
+    background-color: rgba(37, 78, 74, 0.45);
+    background-image: linear-gradient(130deg, rgba(117, 197, 183, 0.58), rgba(30, 73, 85, 0.65));
+    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.35), 0 6px 12px rgba(0, 0, 0, 0.35);
 }
 
 .count-label {
@@ -87,9 +99,10 @@
 .context-label {
     margin-left: 28px;
     margin-right: 28px;
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 16px;
-    line-height: 20px;
+    color: rgba(236, 229, 215, 0.82);
+    font-size: 17px;
+    line-height: 22px;
+    letter-spacing: 0.2px;
 }
 
 .divider {
@@ -108,14 +121,15 @@
     margin-left: 24px;
     margin-right: 24px;
     margin-bottom: 12px;
-    padding-left: 8px;
-    padding-right: 8px;
-    padding-top: 6px;
-    padding-bottom: 12px;
-    border-radius: 14px;
-    background-color: rgba(10, 10, 16, 0.55);
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+    padding-bottom: 16px;
+    border-radius: 16px;
+    background-color: rgba(18, 17, 25, 0.78);
     border-width: 1px;
     border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .list > .unity-content-container {
@@ -126,16 +140,16 @@
 
 .row {
     flex-direction: column;
-    gap: 12px;
-    background-color: rgba(31, 29, 41, 0.88);
-    border-radius: 12px;
+    gap: 14px;
+    background-color: rgba(29, 25, 40, 0.92);
+    border-radius: 14px;
     border-width: 1px;
-    border-color: rgba(255, 255, 255, 0.04);
-    padding-left: 18px;
-    padding-right: 18px;
-    padding-top: 16px;
-    padding-bottom: 16px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.06);
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
 .row-head {
@@ -146,15 +160,16 @@
 }
 
 .unit {
-    color: #f6eedd;
+    color: #f6ebd3;
     unity-font-style-and-weight: bold;
-    font-size: 20px;
-    letter-spacing: 0.2px;
+    font-size: 21px;
+    letter-spacing: 0.3px;
 }
 
 .unit-subtitle {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(217, 214, 222, 0.58);
     font-size: 14px;
+    letter-spacing: 0.18px;
 }
 
 .skills {
@@ -166,27 +181,30 @@
     flex-direction: row;
     align-items: center;
     gap: 16px;
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 16px;
+    padding-right: 16px;
     padding-top: 12px;
     padding-bottom: 12px;
-    border-radius: 10px;
+    border-radius: 12px;
     border-width: 1px;
     border-color: rgba(255, 255, 255, 0.08);
-    background-color: rgba(24, 23, 32, 0.92);
-    background-image: linear-gradient(120deg, rgba(61, 59, 73, 0.4), rgba(18, 17, 24, 0.4));
-    transition-property: background-color, border-color;
+    background-color: rgba(27, 27, 36, 0.92);
+    background-image: linear-gradient(135deg, rgba(55, 54, 69, 0.52), rgba(21, 20, 29, 0.76));
+    transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .option-root:hover {
-    border-color: rgba(159, 243, 224, 0.55);
-    background-color: rgba(32, 40, 46, 0.92);
+    border-color: rgba(178, 232, 216, 0.7);
+    background-color: rgba(39, 52, 58, 0.92);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 18px rgba(0, 0, 0, 0.3);
 }
 
 .option-root.selected {
-    border-color: rgba(95, 213, 170, 0.85);
-    background-image: linear-gradient(120deg, rgba(54, 107, 89, 0.75), rgba(21, 35, 40, 0.9));
+    border-color: rgba(101, 233, 183, 0.9);
+    background-image: linear-gradient(135deg, rgba(68, 122, 103, 0.82), rgba(24, 37, 42, 0.95));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 22px rgba(0, 0, 0, 0.35);
 }
 
 .option-root.disabled {
@@ -194,13 +212,33 @@
     border-color: rgba(255, 255, 255, 0.04);
 }
 
-.icon {
-    width: 46px;
-    height: 46px;
-    border-radius: 8px;
-    background-color: rgba(0, 0, 0, 0.35);
+.icon-slot {
+    width: 50px;
+    height: 50px;
+    border-radius: 14px;
+    background-color: rgba(15, 19, 24, 0.75);
     border-width: 1px;
     border-color: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    justify-content: center;
+    align-items: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.icon-highlight {
+    width: 120%;
+    height: 120%;
+    background-image: radial-gradient(80% 60% at 50% 20%, rgba(250, 232, 182, 0.8) 0%, rgba(250, 232, 182, 0.25) 45%, rgba(19, 24, 29, 0) 100%), linear-gradient(180deg, rgba(62, 121, 109, 0.72), rgba(21, 33, 41, 0.92));
+    border-radius: 16px;
+}
+
+.option-root.selected .icon-slot {
+    border-color: rgba(114, 232, 186, 0.9);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 20px rgba(28, 82, 72, 0.6);
+}
+
+.option-root.selected .icon-highlight {
+    background-image: radial-gradient(82% 64% at 50% 18%, rgba(170, 247, 204, 0.82) 0%, rgba(170, 247, 204, 0.32) 46%, rgba(32, 60, 53, 0) 100%), linear-gradient(180deg, rgba(69, 143, 116, 0.78), rgba(24, 43, 40, 0.98));
 }
 
 .labels {
@@ -210,32 +248,34 @@
 }
 
 .opt-name {
-    color: #f6f3ef;
+    color: #f8f4ec;
     unity-font-style-and-weight: bold;
-    font-size: 17px;
-    letter-spacing: 0.2px;
+    font-size: 18px;
+    letter-spacing: 0.25px;
 }
 
 .opt-meta {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(216, 222, 232, 0.65);
     font-size: 13px;
+    letter-spacing: 0.18px;
 }
 
 .check {
-    width: 24px;
-    height: 24px;
-    border-radius: 12px;
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
     border-width: 2px;
-    border-color: rgba(159, 243, 224, 0.6);
-    background-color: transparent;
+    border-color: rgba(140, 215, 196, 0.65);
+    background-color: rgba(18, 24, 26, 0.65);
     justify-content: center;
     align-items: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .option-root.selected .check {
-    background-color: #3ed48c;
+    background-color: #36d17f;
     border-color: #56f3a8;
-    box-shadow: 0 0 12px rgba(62, 212, 140, 0.6);
+    box-shadow: 0 0 14px rgba(62, 212, 140, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .option-root.disabled .check {
@@ -249,16 +289,17 @@
     gap: 12px;
     padding-left: 24px;
     padding-right: 24px;
-    padding-top: 16px;
-    padding-bottom: 20px;
+    padding-top: 18px;
+    padding-bottom: 22px;
     border-top-width: 1px;
     border-top-color: rgba(255, 255, 255, 0.08);
-    background-color: rgba(10, 10, 16, 0.55);
+    background-color: rgba(14, 14, 20, 0.72);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .none-label {
-    color: rgba(255, 255, 255, 0.65);
-    font-size: 15px;
+    color: rgba(224, 222, 230, 0.75);
+    font-size: 16px;
 }
 
 .select-dot {
@@ -269,9 +310,10 @@
     border-radius: 12px;
     margin-left: 4px;
     margin-right: 4px;
-    background-color: transparent;
-    transition-property: background-color, border-color;
+    background-color: rgba(22, 29, 32, 0.5);
+    transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .select-dot .unity-toggle__label,
@@ -292,5 +334,5 @@
 .select-dot:checked .unity-toggle__checkmark,
 .select-dot:checked .unity-checkmark {
     background-color: #34c759;
-    box-shadow: 0 0 10px rgba(52, 199, 89, 0.6);
+    box-shadow: 0 0 12px rgba(52, 199, 89, 0.72);
 }

@@ -8,6 +8,7 @@
   <ui:VisualElement name="overlay" class="overlay">
     <ui:VisualElement name="window" class="window">
       <ui:VisualElement class="top-accent" />
+      <ui:VisualElement class="window-glow" picking-mode="Ignore" />
 
       <ui:VisualElement class="header">
         <ui:VisualElement class="title-block">

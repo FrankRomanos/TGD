@@ -1,6 +1,8 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
     <ui:VisualElement name="root" class="option-root">
-        <ui:Image name="icon" class="icon" />
+        <ui:VisualElement name="icon" class="icon-slot">
+            <ui:VisualElement class="icon-highlight" />
+        </ui:VisualElement>
         <ui:VisualElement class="labels">
             <ui:Label name="name" text="技能名称" class="opt-name" />
             <ui:Label name="meta" text="消耗10 能量 · 冷却6s" class="opt-meta" />
