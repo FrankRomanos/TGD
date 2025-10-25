@@ -90,6 +90,7 @@ namespace TGD.CombatV2
         int _queuedActionsPending;
         int _chainWindowDepth;
         bool _ownsGateHub;
+        int _bonusPlanDepth = -1;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -674,7 +675,8 @@ namespace TGD.CombatV2
             if (_activeTool != null)
                 return false;
 
-            if (_planStack.Count > 0)
+            int allowedPlanDepth = _bonusPlanDepth >= 0 ? _bonusPlanDepth : 0;
+            if (_planStack.Count > allowedPlanDepth)
                 return false;
 
             if (_endTurnGuardDepth > 0)
@@ -728,58 +730,66 @@ namespace TGD.CombatV2
             var prevPhase = _phase;
             bool prevPending = _pendingEndTurn;
             var prevPendingUnit = _pendingEndTurnUnit;
+            int prevPlanDepth = _bonusPlanDepth;
 
             _pendingEndTurn = false;
             _pendingEndTurnUnit = null;
+            _bonusPlanDepth = Mathf.Max(0, _planStack.Count);
 
-            foreach (var unit in snapshot)
+            try
             {
-                if (unit == null)
-                    continue;
-
-                BeginBonusTurn(unit, capSeconds, actionId);
-
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
-
-                _currentUnit = unit;
-                _phase = Phase.Idle;
-                _activeTool = null;
-                _hover = null;
-
-                if (turnManager != null && turnManager.HasActiveFullRound(unit))
+                foreach (var unit in snapshot)
                 {
-                    Log($"[FullRound] BonusT skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
-                    EndBonusTurn(unit);
-                }
+                    if (unit == null)
+                        continue;
 
-                while (IsBonusTurnFor(unit))
-                {
-                    if (autoEndBonusTurns
-                        && _bonusTurn.remaining <= 0
-                        && !_pendingEndTurn
-                        && !IsAnyChainWindowActive
-                        && _queuedActionsPending <= 0
-                        && _planStack.Count == 0
-                        && _activeTool == null
-                        && !IsInputSuppressed
-                        && _phase == Phase.Idle)
+                    BeginBonusTurn(unit, capSeconds, actionId);
+
+                    string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                    Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
+
+                    _currentUnit = unit;
+                    _phase = Phase.Idle;
+                    _activeTool = null;
+                    _hover = null;
+
+                    if (turnManager != null && turnManager.HasActiveFullRound(unit))
                     {
-                        _pendingEndTurn = true;
-                        _pendingEndTurnUnit = unit;
-                        TryFinalizeEndTurn();
+                        Log($"[FullRound] BonusT skip unit={TurnManagerV2.FormatUnitLabel(unit)} reason=fullround");
+                        EndBonusTurn(unit);
                     }
-                    yield return null;
+
+                    while (IsBonusTurnFor(unit))
+                    {
+                        if (autoEndBonusTurns
+                            && _bonusTurn.remaining <= 0
+                            && !_pendingEndTurn
+                            && !IsAnyChainWindowActive
+                            && _queuedActionsPending <= 0
+                            && _planStack.Count <= _bonusPlanDepth
+                            && _activeTool == null
+                            && !IsInputSuppressed
+                            && _phase == Phase.Idle)
+                        {
+                            _pendingEndTurn = true;
+                            _pendingEndTurnUnit = unit;
+                            TryFinalizeEndTurn();
+                        }
+                        yield return null;
+                    }
+
+                    Debug.Log($"[Turn] End BonusT({unitLabel})", this);
                 }
-
-                Debug.Log($"[Turn] End BonusT({unitLabel})", this);
             }
-
-            _currentUnit = prevUnit;
-            _phase = prevPhase;
-            _pendingEndTurn = prevPending;
-            _pendingEndTurnUnit = prevPendingUnit;
-            _bonusTurn.Reset();
+            finally
+            {
+                _currentUnit = prevUnit;
+                _phase = prevPhase;
+                _pendingEndTurn = prevPending;
+                _pendingEndTurnUnit = prevPendingUnit;
+                _bonusPlanDepth = prevPlanDepth;
+                _bonusTurn.Reset();
+            }
         }
 
         public bool RequestEndTurn(Unit unit = null)

@@ -37,11 +37,14 @@ namespace TGD.UI
         public Sprite hourglassConsumedSprite;
         public Color hourglassAvailableColor = Color.white;
         public Color hourglassConsumedColor = new(0.4f, 0.4f, 0.4f, 1f);
+        public Vector2 hourglassSize = new(48f, 48f);
         public float visibleAlpha = 1f;
         public float hiddenAlpha = 0f;
 
         Unit _displayUnit;
         readonly List<Image> _hourglassPool = new();
+        bool _enemyPhaseActive;
+        bool _chainDisplayActive;
 
         static T AutoFind<T>() where T : Object
         {
@@ -119,7 +122,10 @@ namespace TGD.UI
                     continue;
                 var img = child.GetComponent<Image>();
                 if (img)
+                {
+                    ApplyHourglassSize(img);
                     _hourglassPool.Add(img);
+                }
             }
         }
 
@@ -142,15 +148,37 @@ namespace TGD.UI
 
         void OnPhaseBegan(bool isPlayerPhase)
         {
-            RefreshVisibility();
+            _enemyPhaseActive = !isPlayerPhase;
+            if (isPlayerPhase)
+            {
+                _chainDisplayActive = false;
+                RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+            }
+            else
+            {
+                _chainDisplayActive = false;
+                RefreshDisplayUnit(null);
+            }
         }
 
         void OnChainFocusChanged(Unit unit)
         {
             if (unit == null)
-                RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : null);
-            else
+            {
+                if (!_enemyPhaseActive)
+                    RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+                return;
+            }
+
+            if (_enemyPhaseActive)
+            {
+                _chainDisplayActive = true;
                 RefreshDisplayUnit(unit);
+            }
+            else
+            {
+                RefreshDisplayUnit(unit);
+            }
         }
 
         void RefreshDisplayUnit(Unit unit)
@@ -302,9 +330,28 @@ namespace TGD.UI
                     if (!img.sprite && hourglassAvailableSprite)
                         img.sprite = hourglassAvailableSprite;
                     img.color = hourglassAvailableColor;
+                    ApplyHourglassSize(img);
                     _hourglassPool.Add(img);
                 }
             }
+        }
+
+        void ApplyHourglassSize(Image image)
+        {
+            if (!image)
+                return;
+
+            if (hourglassSize.x <= 0f && hourglassSize.y <= 0f)
+                return;
+
+            var rect = image.rectTransform;
+            if (!rect)
+                return;
+
+            if (hourglassSize.x > 0f)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, hourglassSize.x);
+            if (hourglassSize.y > 0f)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, hourglassSize.y);
         }
 
         void SetUnitLabel(string label)
@@ -342,7 +389,13 @@ namespace TGD.UI
 
             bool playerPhase = turnManager != null && turnManager.IsPlayerPhase;
             bool hasBonus = combatManager != null && combatManager.IsBonusTurnFor(_displayUnit);
-            return playerPhase || hasBonus;
+            if (hasBonus)
+                return true;
+
+            if (_enemyPhaseActive && !playerPhase)
+                return _chainDisplayActive;
+
+            return playerPhase;
         }
     }
 }
