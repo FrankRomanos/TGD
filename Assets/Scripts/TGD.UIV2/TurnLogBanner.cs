@@ -51,7 +51,8 @@ namespace TGD.UI
             return FindObjectOfType<T>();
 #endif
         }
-
+        [SerializeField] float lingerAfterEmpty = 0.2f;
+        float _emptySince = -1f;
         void Awake()
         {
             if (!turnManager)
@@ -73,20 +74,30 @@ namespace TGD.UI
         {
             Application.logMessageReceived -= HandleLogMessage;
             UnregisterManagerEvents();
+
             _queue.Clear();
             _showing = false;
             _timer = 0f;
+
             if (_fadeRoutine != null)
             {
                 StopCoroutine(_fadeRoutine);
                 _fadeRoutine = null;
             }
-            bool targetVisible = !autoHideWhenEmpty;
-            _isVisible = !targetVisible;
-            SetVisible(targetVisible);
-            if (messageText)
-                messageText.text = string.Empty;
+
+            // 直接落地，不走协程
+            if (canvasGroup)
+            {
+                bool targetVisible = !autoHideWhenEmpty;
+                canvasGroup.alpha = targetVisible ? 1f : 0f;
+                canvasGroup.interactable = targetVisible;
+                canvasGroup.blocksRaycasts = targetVisible;
+            }
+
+            _isVisible = !autoHideWhenEmpty;
+            if (messageText) messageText.text = string.Empty;
         }
+
 
         void Update()
         {
@@ -273,13 +284,16 @@ namespace TGD.UI
         {
             if (_queue.Count == 0)
             {
-                if (autoHideWhenEmpty)
-                    SetVisible(false);
-                if (messageText)
-                    messageText.text = string.Empty;
+                if (_emptySince < 0f) _emptySince = Time.time;
+                if (Time.time - _emptySince >= lingerAfterEmpty)
+                {
+                    if (autoHideWhenEmpty) SetVisible(false);
+                    if (messageText) messageText.text = string.Empty;
+                }
                 return;
             }
 
+            _emptySince = -1f; // 有消息了，清除空闲计时
             var entry = _queue.Dequeue();
             if (messageText)
             {
@@ -298,7 +312,6 @@ namespace TGD.UI
             {
                 if (!visible && canvasGroup)
                 {
-                    // Ensure interactable/raycast state matches requested visibility even when skipping fade
                     canvasGroup.interactable = false;
                     canvasGroup.blocksRaycasts = false;
                 }
@@ -307,40 +320,32 @@ namespace TGD.UI
 
             _isVisible = visible;
 
-            if (canvasGroup)
+            if (!canvasGroup)
             {
-                if (_fadeRoutine != null)
-                {
-                    StopCoroutine(_fadeRoutine);
-                    _fadeRoutine = null;
-                }
-
-                if (!visible)
-                {
-                    canvasGroup.interactable = false;
-                    canvasGroup.blocksRaycasts = false;
-                }
-                else
-                {
-                    canvasGroup.interactable = true;
-                    canvasGroup.blocksRaycasts = true;
-                }
-
-                if (!enableFade)
-                {
-                    canvasGroup.alpha = visible ? 1f : 0f;
-                }
-                else
-                {
-                    _fadeRoutine = StartCoroutine(FadeCanvas(visible));
-                }
-
+                if (messageText) messageText.enabled = visible;
                 return;
             }
 
-            if (messageText)
-                messageText.enabled = visible;
+            // >>> 关键：在物体未启用或不需要淡入淡出时，直接设置，不开协程
+            if (!enableFade || !isActiveAndEnabled || !gameObject.activeInHierarchy)
+            {
+                canvasGroup.alpha = visible ? 1f : 0f;
+                canvasGroup.interactable = visible;
+                canvasGroup.blocksRaycasts = visible;
+                return;
+            }
+
+            if (_fadeRoutine != null)
+            {
+                StopCoroutine(_fadeRoutine);
+                _fadeRoutine = null;
+            }
+
+            canvasGroup.interactable = visible;
+            canvasGroup.blocksRaycasts = visible;
+            _fadeRoutine = StartCoroutine(FadeCanvas(visible));
         }
+
 
         IEnumerator FadeCanvas(bool visible)
         {

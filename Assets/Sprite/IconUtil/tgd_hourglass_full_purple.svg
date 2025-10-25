@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="glassGradTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E8DCFF"/>
+      <stop offset="100%" stop-color="#C8B0FF"/>
+    </linearGradient>
+    <linearGradient id="glassGradBot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C8B0FF"/>
+      <stop offset="100%" stop-color="#E8DCFF"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <rect x="80" y="48" rx="56" ry="56" width="352" height="96"
+          fill="#D6B16B" stroke="#0B0B0B" stroke-width="28" />
+    <rect x="80" y="368" rx="56" ry="56" width="352" height="96"
+          fill="#D6B16B" stroke="#0B0B0B" stroke-width="28" />
+  </g>
+
+  <g stroke="#0B0B0B" stroke-width="22" stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M144,128 L368,128 L256,256 L368,384 L144,384 L256,256 Z" />
+  </g>
+
+  <polygon points="178,160 334,160 256,256" fill="url(#glassGradTop)" stroke="#5136C0" stroke-width="10" opacity="0.9"/>
+  <polygon points="178,352 334,352 256,256" fill="url(#glassGradBot)" stroke="#5136C0" stroke-width="10" opacity="0.9"/>
+
+  <rect x="206" y="184" width="160" height="16" rx="8" fill="#FFFFFF" opacity="0.45"/>
+  <circle cx="268" cy="216" r="7" fill="#FFFFFF" opacity="0.35"/>
+  <circle cx="236" cy="202" r="5" fill="#FFFFFF" opacity="0.35"/>
+
+  <ellipse cx="256" cy="420" rx="92" ry="18" fill="#000000" opacity="0.18"/>
+</svg>
