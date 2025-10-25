@@ -29,6 +29,8 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
         public HexBoardTestDriver unitDriver;
 
+        public event Action<Unit> ChainFocusChanged;
+
         [SerializeField]
         [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
         bool registerAsGateHub = true;
@@ -183,6 +185,7 @@ namespace TGD.CombatV2
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
         readonly List<ChainOption> _derivedBuffer = new();
+        Unit _currentChainFocus;
 
         struct BonusTurnState
         {
@@ -206,15 +209,16 @@ namespace TGD.CombatV2
 
         public Unit CurrentBonusTurnUnit => IsBonusTurnActive ? _bonusTurn.unit : null;
         public int CurrentBonusTurnRemaining => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.remaining) : 0;
+        public int CurrentBonusTurnCap => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.cap) : 0;
 
         IActionRules ResolveRules()
         {
             return rulebook != null ? (IActionRules)rulebook : ActionRulebook.Default;
         }
 
-        bool IsBonusTurnActive => _bonusTurn.active && _bonusTurn.unit != null;
+        public bool IsBonusTurnActive => _bonusTurn.active && _bonusTurn.unit != null;
 
-        bool IsBonusTurnFor(Unit unit)
+        public bool IsBonusTurnFor(Unit unit)
         {
             return IsBonusTurnActive && unit != null && unit == _bonusTurn.unit;
         }
@@ -310,6 +314,7 @@ namespace TGD.CombatV2
             _bonusTurn.cap = Mathf.Max(0, capSeconds);
             _bonusTurn.remaining = Mathf.Max(0, capSeconds);
             _bonusTurn.sourceId = sourceId;
+            SetChainFocus(unit);
         }
 
         void EndBonusTurn(Unit unit)
@@ -318,6 +323,15 @@ namespace TGD.CombatV2
                 return;
 
             _bonusTurn.Reset();
+            SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
+        }
+
+        void SetChainFocus(Unit unit)
+        {
+            if (_currentChainFocus == unit)
+                return;
+            _currentChainFocus = unit;
+            ChainFocusChanged?.Invoke(unit);
         }
 
         TargetSelectionCursor ChainCursor
@@ -1901,6 +1915,7 @@ namespace TGD.CombatV2
         {
             _chainWindowDepth++;
             PushInputSuppression();
+            SetChainFocus(unit);
             try
             {
                 var rules = ResolveRules();
@@ -1982,6 +1997,7 @@ namespace TGD.CombatV2
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
+                                SetChainFocus(unit);
                                 continue;
                             }
                         }
@@ -2017,6 +2033,8 @@ namespace TGD.CombatV2
                             activeOwner = ResolveNextChainOwner(options, stageOwnersUsed);
                             activeOwnerLogged = false;
 
+                            SetChainFocus(activeOwner != null ? activeOwner : unit);
+
                             if (activeOwner == null)
                                 ownerMode = false;
                         }
@@ -2046,6 +2064,7 @@ namespace TGD.CombatV2
                                 stageOwnersUsed.Add(activeOwner);
                                 activeOwner = null;
                                 activeOwnerLogged = false;
+                                SetChainFocus(unit);
                                 continue;
                             }
                         }
@@ -2170,7 +2189,10 @@ namespace TGD.CombatV2
                             }
 
                             if (option.owner != null)
+                            {
+                                SetChainFocus(option.owner);
                                 stageOwnersUsed.Add(option.owner);
+                            }
 
                             stageHasSelection = true;
 
@@ -2194,12 +2216,16 @@ namespace TGD.CombatV2
 
                             activeOwner = null;
                             activeOwnerLogged = false;
+                            SetChainFocus(unit);
 
                             break;
                         }
 
                         if (!stageActive)
+                        {
+                            SetChainFocus(unit);
                             break;
+                        }
 
                         if (handledInput)
                             continue;
@@ -2233,6 +2259,7 @@ namespace TGD.CombatV2
             }
             finally
             {
+                SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
                     _chainWindowDepth--;

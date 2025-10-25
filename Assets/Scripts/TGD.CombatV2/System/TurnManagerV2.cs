@@ -10,6 +10,24 @@ namespace TGD.CombatV2
 {
     public sealed class TurnManagerV2 : MonoBehaviour
     {
+        public readonly struct TurnRuntimeSnapshot
+        {
+            public readonly Unit unit;
+            public readonly int remaining;
+            public readonly int baseTime;
+            public readonly int prepaid;
+            public readonly int turnTime;
+
+            public TurnRuntimeSnapshot(Unit unit, int remaining, int baseTime, int prepaid, int turnTime)
+            {
+                this.unit = unit;
+                this.remaining = Mathf.Max(0, remaining);
+                this.baseTime = Mathf.Max(0, baseTime);
+                this.prepaid = Mathf.Max(0, prepaid);
+                this.turnTime = Mathf.Max(0, turnTime);
+            }
+        }
+
         [Header("Timing")]
         [Tooltip("相位开始时的最小停顿（秒）")]
         public float phaseStartDelaySeconds = 1f;
@@ -294,6 +312,22 @@ namespace TGD.CombatV2
             if (_runtimeByUnit.TryGetValue(unit, out var runtime))
                 return runtime.Context;
             return null;
+        }
+
+        public bool TryGetRuntimeSnapshot(Unit unit, out TurnRuntimeSnapshot snapshot)
+        {
+            snapshot = default;
+            var runtime = EnsureRuntime(unit, null);
+            if (runtime == null)
+                return false;
+
+            snapshot = new TurnRuntimeSnapshot(
+                runtime.Unit,
+                runtime.RemainingTime,
+                runtime.BaseTimeForNext,
+                runtime.PrepaidTime,
+                runtime.TurnTime);
+            return true;
         }
 
         public void StartBattle(List<Unit> players, List<Unit> enemies)
@@ -916,7 +950,7 @@ namespace TGD.CombatV2
 
         static bool IsEnergy(string id) => string.Equals(id, "Energy", StringComparison.OrdinalIgnoreCase);
 
-        internal static string FormatUnitLabel(Unit unit)
+        public static string FormatUnitLabel(Unit unit)
         {
             if (unit == null)
                 return "?";
