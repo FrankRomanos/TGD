@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace TGD.CoreV2
 {
-    /// <summary>³¡¾°ÄÚ¹²ÏíÒ»·İÀäÈ´´æ´¢£¬·½±ã¶à¸ö¶¯×÷Ò»ÆğÓÃ¡£</summary>
+    /// <summary>åœºæ™¯å†…å…±äº«ä¸€ä»½å†·å´å­˜å‚¨ï¼Œæ–¹ä¾¿å¤šä¸ªåŠ¨ä½œä¸€èµ·ç”¨ã€‚</summary>
     public sealed class CooldownHubV2 : MonoBehaviour
     {
         public CooldownStoreSecV2 secStore = new CooldownStoreSecV2();
