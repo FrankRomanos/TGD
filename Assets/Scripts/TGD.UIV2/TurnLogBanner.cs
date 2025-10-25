@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -25,11 +26,22 @@ namespace TGD.UI
         public float displaySeconds = 2f;
         public bool autoHideWhenEmpty = true;
 
+        [Header("Fade Animation")]
+        public bool enableFade = true;
+        [Min(0f)]
+        public float fadeInDuration = 0.25f;
+        [Min(0f)]
+        public float fadeOutDuration = 0.25f;
+        public AnimationCurve fadeInCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+        public AnimationCurve fadeOutCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
+
         readonly Queue<(string message, Color color)> _queue = new();
         readonly HashSet<string> _playerLabels = new();
         readonly HashSet<string> _enemyLabels = new();
         float _timer;
         bool _showing;
+        bool _isVisible;
+        Coroutine _fadeRoutine;
 
         static T AutoFind<T>() where T : Object
         {
@@ -50,6 +62,8 @@ namespace TGD.UI
         {
             RegisterManagerEvents();
             Application.logMessageReceived += HandleLogMessage;
+            bool initialVisible = !autoHideWhenEmpty;
+            _isVisible = !initialVisible;
             SetVisible(!autoHideWhenEmpty);
             if (messageText)
                 messageText.text = string.Empty;
@@ -62,7 +76,14 @@ namespace TGD.UI
             _queue.Clear();
             _showing = false;
             _timer = 0f;
-            SetVisible(!autoHideWhenEmpty);
+            if (_fadeRoutine != null)
+            {
+                StopCoroutine(_fadeRoutine);
+                _fadeRoutine = null;
+            }
+            bool targetVisible = !autoHideWhenEmpty;
+            _isVisible = !targetVisible;
+            SetVisible(targetVisible);
             if (messageText)
                 messageText.text = string.Empty;
         }
@@ -273,16 +294,86 @@ namespace TGD.UI
 
         void SetVisible(bool visible)
         {
+            if (_isVisible == visible)
+            {
+                if (!visible && canvasGroup)
+                {
+                    // Ensure interactable/raycast state matches requested visibility even when skipping fade
+                    canvasGroup.interactable = false;
+                    canvasGroup.blocksRaycasts = false;
+                }
+                return;
+            }
+
+            _isVisible = visible;
+
             if (canvasGroup)
             {
-                canvasGroup.alpha = visible ? 1f : 0f;
-                canvasGroup.interactable = visible;
-                canvasGroup.blocksRaycasts = visible;
+                if (_fadeRoutine != null)
+                {
+                    StopCoroutine(_fadeRoutine);
+                    _fadeRoutine = null;
+                }
+
+                if (!visible)
+                {
+                    canvasGroup.interactable = false;
+                    canvasGroup.blocksRaycasts = false;
+                }
+                else
+                {
+                    canvasGroup.interactable = true;
+                    canvasGroup.blocksRaycasts = true;
+                }
+
+                if (!enableFade)
+                {
+                    canvasGroup.alpha = visible ? 1f : 0f;
+                }
+                else
+                {
+                    _fadeRoutine = StartCoroutine(FadeCanvas(visible));
+                }
+
                 return;
             }
 
             if (messageText)
                 messageText.enabled = visible;
+        }
+
+        IEnumerator FadeCanvas(bool visible)
+        {
+            float duration = visible ? fadeInDuration : fadeOutDuration;
+            AnimationCurve curve = visible ? fadeInCurve : fadeOutCurve;
+            float startAlpha = canvasGroup.alpha;
+            float endAlpha = visible ? 1f : 0f;
+
+            if (duration <= 0f)
+            {
+                canvasGroup.alpha = endAlpha;
+            }
+            else
+            {
+                float elapsed = 0f;
+                while (elapsed < duration)
+                {
+                    elapsed += Time.deltaTime;
+                    float t = Mathf.Clamp01(elapsed / duration);
+                    float curveValue = curve != null ? curve.Evaluate(t) : t;
+                    canvasGroup.alpha = Mathf.LerpUnclamped(startAlpha, endAlpha, curveValue);
+                    yield return null;
+                }
+                canvasGroup.alpha = endAlpha;
+            }
+
+            if (!visible)
+            {
+                canvasGroup.interactable = false;
+                canvasGroup.blocksRaycasts = false;
+            }
+
+            _fadeRoutine = null;
         }
     }
 }
