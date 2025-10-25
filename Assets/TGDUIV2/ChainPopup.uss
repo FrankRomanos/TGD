@@ -1,107 +1,284 @@
-/* 遮罩 */
+/* Overlay background */
 .overlay {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
-    background-color: rgba(0,0,0,0.35);
+    background-color: rgba(0, 0, 0, 0.55);
     align-items: center;
     justify-content: center;
+    padding: 32px;
 }
 
-/* 弹窗 */
+/* Core window */
 .window {
-    width: 720px;
-    max-width: 90%;
-    background-color: #1a1a1a;
-    border-radius: 16px;
-    padding-left: 20px;
-    padding-right: 20px;
-    padding-top: 18px;
-    padding-bottom: 14px;
-    gap: 12px;
-    -unity-font-style: normal;
+    position: relative;
+    width: 760px;
+    max-width: 94%;
+    max-height: 88%;
+    flex-direction: column;
+    background-color: #15121d;
+    background-image: linear-gradient(160deg, rgba(66, 54, 86, 0.92), rgba(17, 16, 26, 0.96));
+    border-radius: 20px;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 32px 72px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
 }
 
-/* 标题 */
-.title {
-    color: #ffffff;
+.top-accent {
+    height: 4px;
+    background-image: linear-gradient(90deg, #d3a84a, #f6e3a2, #8edc8b);
+}
+
+.header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-top: 24px;
+    padding-bottom: 12px;
+    gap: 16px;
+}
+
+.title-block {
+    flex-direction: column;
+    gap: 4px;
+}
+
+.phase-label {
+    color: #f0e4c8;
     font-size: 26px;
     unity-font-style-and-weight: bold;
-    margin-left: 4px;
-    margin-right: 4px;
+    letter-spacing: 0.3px;
+    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
 }
 
-/* 列表滚动区 */
+.prompt-label {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 18px;
+    unity-font-style-and-weight: bold;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+}
+
+.count-chip {
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-radius: 20px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.18);
+    background-color: rgba(20, 101, 93, 0.3);
+    background-image: linear-gradient(120deg, rgba(78, 166, 154, 0.55), rgba(24, 59, 74, 0.55));
+}
+
+.count-label {
+    color: #9ff3e0;
+    font-size: 16px;
+    unity-font-style-and-weight: bold;
+    letter-spacing: 0.4px;
+}
+
+.context-label {
+    margin-left: 28px;
+    margin-right: 28px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 16px;
+    line-height: 20px;
+}
+
+.divider {
+    margin-top: 16px;
+    margin-bottom: 12px;
+    margin-left: 24px;
+    margin-right: 24px;
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(0, 0, 0, 0.35);
+}
+
 .list {
-    height: 360px;     /* 自行改高 */
-    background-color: rgba(255,255,255,0.03);
-    border-radius: 10px;
+    flex-grow: 1;
+    margin-left: 24px;
+    margin-right: 24px;
+    margin-bottom: 12px;
     padding-left: 8px;
     padding-right: 8px;
     padding-top: 6px;
-    padding-bottom: 6px;
+    padding-bottom: 12px;
+    border-radius: 14px;
+    background-color: rgba(10, 10, 16, 0.55);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* 列表中的一行（由脚本生成并赋 class="row"） */
+.list > .unity-content-container {
+    flex-direction: column;
+    gap: 12px;
+    padding-right: 6px;
+}
+
 .row {
+    flex-direction: column;
+    gap: 12px;
+    background-color: rgba(31, 29, 41, 0.88);
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.04);
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.row-head {
     flex-direction: row;
-    align-items: center;
-    background-color: rgba(255,255,255,0.04);
-    border-radius: 8px;
-    margin-top: 6px;
-    margin-bottom: 6px;
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    align-items: baseline;
+    justify-content: space-between;
     gap: 12px;
 }
 
-/* 单位名 */
 .unit {
-    color: #ffffff;
+    color: #f6eedd;
     unity-font-style-and-weight: bold;
-    min-width: 150px;
-    margin-right: 6px;
+    font-size: 20px;
+    letter-spacing: 0.2px;
 }
 
-/* 技能容器（行里中间的流式区） */
+.unit-subtitle {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 14px;
+}
+
 .skills {
-    flex-grow: 1;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.option-root {
     flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-/* 技能小块 */
-.skill-btn {
-    padding-left: 10px;
-    padding-right: 10px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-    border-radius: 6px;
+    align-items: center;
+    gap: 16px;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-radius: 10px;
     border-width: 1px;
-    border-color: rgba(255,255,255,0.15);
-    color: #eaeaea;
-    background-color: rgba(255,255,255,0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(24, 23, 32, 0.92);
+    background-image: linear-gradient(120deg, rgba(61, 59, 73, 0.4), rgba(18, 17, 24, 0.4));
+    transition-property: background-color, border-color;
+    transition-duration: 0.16s;
 }
 
-/* 右侧圆形选择点（使用 Toggle） */
-.select-dot {
-    width: 22px;
-    height: 22px;
+.option-root:hover {
+    border-color: rgba(159, 243, 224, 0.55);
+    background-color: rgba(32, 40, 46, 0.92);
+}
+
+.option-root.selected {
+    border-color: rgba(95, 213, 170, 0.85);
+    background-image: linear-gradient(120deg, rgba(54, 107, 89, 0.75), rgba(21, 35, 40, 0.9));
+}
+
+.option-root.disabled {
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.04);
+}
+
+.icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.35);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.labels {
+    flex-grow: 1;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.opt-name {
+    color: #f6f3ef;
+    unity-font-style-and-weight: bold;
+    font-size: 17px;
+    letter-spacing: 0.2px;
+}
+
+.opt-meta {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 13px;
+}
+
+.check {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
     border-width: 2px;
-    border-color: #49b36b;
-    border-radius: 11px;
-    margin-left: 8px;
+    border-color: rgba(159, 243, 224, 0.6);
+    background-color: transparent;
+    justify-content: center;
+    align-items: center;
+}
+
+.option-root.selected .check {
+    background-color: #3ed48c;
+    border-color: #56f3a8;
+    box-shadow: 0 0 12px rgba(62, 212, 140, 0.6);
+}
+
+.option-root.disabled .check {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 16px;
+    padding-bottom: 20px;
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(10, 10, 16, 0.55);
+}
+
+.none-label {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 15px;
+}
+
+.select-dot {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+    border-color: rgba(95, 213, 170, 0.8);
+    border-radius: 12px;
+    margin-left: 4px;
     margin-right: 4px;
     background-color: transparent;
-    /* 隐藏 Toggle 自带的文字标签 */
+    transition-property: background-color, border-color;
+    transition-duration: 0.16s;
 }
+
 .select-dot .unity-toggle__label,
 .select-dot > Label {
     display: none;
 }
-/* 定制选中填充：兼容不同 Unity 版本的子元素命名 */
+
 .select-dot .unity-toggle__checkmark,
 .select-dot .unity-checkmark {
     width: 12px;
@@ -111,21 +288,9 @@
     margin-left: 3px;
     margin-top: 3px;
 }
-/* 选中时填充绿色 */
+
 .select-dot:checked .unity-toggle__checkmark,
 .select-dot:checked .unity-checkmark {
     background-color: #34c759;
-}
-
-/* 底部“不做反应” */
-.footer {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 6px;
-}
-.none-label {
-    color: #d6d6d6;
-    margin-right: 6px;
+    box-shadow: 0 0 10px rgba(52, 199, 89, 0.6);
 }

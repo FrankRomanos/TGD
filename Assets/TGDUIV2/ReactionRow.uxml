@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
   <ui:VisualElement class="row">
-    <ui:Label name="unitLabel" class="unit" text="Unit Name" />
+    <ui:VisualElement class="row-head">
+      <ui:Label name="unitLabel" class="unit" text="Unit Name" />
+      <ui:Label name="unitSubtitle" class="unit-subtitle" text="可连锁 3 项" />
+    </ui:VisualElement>
     <ui:VisualElement name="skills" class="skills" />
   </ui:VisualElement>
 </ui:UXML>
