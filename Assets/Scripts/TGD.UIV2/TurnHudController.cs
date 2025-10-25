@@ -24,11 +24,13 @@ namespace TGD.UI
         [Header("Health")]
         public Image healthFill;
         public TMP_Text healthValue;
+        public TurnHudStatGauge healthGauge;
 
         [Header("Energy")]
         public Image energyFill;
         public TMP_Text energyValue;
         public TMP_Text energyRegen;
+        public TurnHudStatGauge energyGauge;
 
         [Header("Time Budget")]
         public RectTransform hourglassContainer;
@@ -46,6 +48,7 @@ namespace TGD.UI
         readonly List<bool> _hourglassConsumedState = new();
         bool _enemyPhaseActive;
         bool _hourglassStateInitialized;
+        bool _forceInstantStats;
 
         static T AutoFind<T>() where T : Object
         {
@@ -64,6 +67,11 @@ namespace TGD.UI
                 combatManager = AutoFind<CombatActionManagerV2>();
 
             CacheInitialHourglasses();
+
+            if (!healthGauge && healthFill)
+                healthGauge = healthFill.GetComponentInParent<TurnHudStatGauge>();
+            if (!energyGauge && energyFill)
+                energyGauge = energyFill.GetComponentInParent<TurnHudStatGauge>();
         }
 
         void OnEnable()
@@ -225,8 +233,11 @@ namespace TGD.UI
                 return;
             }
 
+            bool changed = unit != _displayUnit;
             _displayUnit = unit;
             _hourglassStateInitialized = false;
+            if (changed)
+                _forceInstantStats = true;
             RefreshAll();
         }
 
@@ -238,11 +249,14 @@ namespace TGD.UI
 
         void RefreshStats()
         {
+            bool instant = _forceInstantStats;
+            _forceInstantStats = false;
+
             if (_displayUnit == null)
             {
                 SetUnitLabel("-");
-                UpdateHealth(0, 0);
-                UpdateEnergy(0, 0, 0);
+                UpdateHealth(0, 0, instant);
+                UpdateEnergy(0, 0, 0, instant);
                 UpdateHourglasses(0, 0);
                 return;
             }
@@ -255,12 +269,12 @@ namespace TGD.UI
 
             int hp = stats != null ? Mathf.Max(0, stats.HP) : 0;
             int maxHp = stats != null ? Mathf.Max(1, stats.MaxHP) : 1;
-            UpdateHealth(hp, maxHp);
+            UpdateHealth(hp, maxHp, instant);
 
             int energy = stats != null ? Mathf.Max(0, stats.Energy) : 0;
             int maxEnergy = stats != null ? Mathf.Max(0, stats.MaxEnergy) : 0;
             int regenPer2s = stats != null ? Mathf.Max(0, stats.EnergyRegenPer2s) : 0;
-            UpdateEnergy(energy, maxEnergy, regenPer2s);
+            UpdateEnergy(energy, maxEnergy, regenPer2s, instant);
 
             int baseTime = 0;
             int remaining = 0;
@@ -284,8 +298,14 @@ namespace TGD.UI
             UpdateHourglasses(baseTime, baseTime - remaining);
         }
 
-        void UpdateHealth(int current, int max)
+        void UpdateHealth(int current, int max, bool immediate)
         {
+            if (healthGauge)
+            {
+                healthGauge.SetValue(current, max, null, immediate);
+                return;
+            }
+
             if (healthFill)
                 healthFill.fillAmount = max > 0 ? current / (float)max : 0f;
 
@@ -293,8 +313,15 @@ namespace TGD.UI
                 healthValue.text = max > 0 ? $"{current}/{max}" : "0/0";
         }
 
-        void UpdateEnergy(int current, int max, int regen)
+        void UpdateEnergy(int current, int max, int regen, bool immediate)
         {
+            if (energyGauge)
+            {
+                string regenText = $"+{regen}";
+                energyGauge.SetValue(current, max, regenText, immediate);
+                return;
+            }
+
             float fill = max > 0 ? current / (float)max : 0f;
             if (energyFill)
                 energyFill.fillAmount = Mathf.Clamp01(fill);
