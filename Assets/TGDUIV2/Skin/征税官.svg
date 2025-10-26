@@ -1,0 +1,84 @@
+<!--?xml version="1.0" encoding="UTF-8"?-->
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .s{ fill:none; stroke:#C8B07A; stroke-width:8; stroke-linecap:round; stroke-linejoin:round; }
+      .s2{ fill:none; stroke:#C8B07A; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; opacity:.9; }
+      .s3{ fill:none; stroke:#C8B07A; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.75; }
+    </style>
+    <!-- 月桂叶（线稿） -->
+    <path id="leaf" d="M0,-15 C7,-13 13,-7 15,0 C13,7 7,13 0,15 C-6,9 -6,-9 0,-15 Z"></path>
+  </defs>
+
+  <!-- 盾形（heater shield）：更“骑士时代”的外轮廓 -->
+  <path class="s" d="M256,64
+           C324,64 372,64 404,80
+           C412,84 416,92 416,104
+           L416,228
+           C416,320 340,388 256,440
+           C172,388 96,320 96,228
+           L96,104
+           C96,92 100,84 108,80
+           C140,64 188,64 256,64 Z"></path>
+
+  <!-- 盾内第二道细边，营造雕刻感 -->
+  <path class="s3" d="M256,84
+           C318,84 362,84 390,98
+           L390,228
+           C390,306 328,362 256,408
+           C184,362 122,306 122,228
+           L122,98
+           C150,84 194,84 256,84 Z"></path>
+
+  <!-- 顶冠：fleur-de-lis 三峰王冠（更中世纪） -->
+  <g transform="translate(256,120)">
+    <path class="s" d="M-52,26 L52,26"></path>
+    <!-- 中央百合 -->
+    <path class="s" d="M0,-16 C8,-8 10,2 0,10 C-10,2 -8,-8 0,-16 Z"></path>
+    <path class="s" d="M-12,26 L0,6 L12,26"></path>
+    <!-- 左右小百合 -->
+    <path class="s2" d="M-34,26 L-26,10 L-18,26"></path>
+    <path class="s2" d="M34,26 L26,10 L18,26"></path>
+  </g>
+
+  <!-- 下方缎带（空白，可未来刻字） -->
+  <g transform="translate(256,392)">
+    <path class="s2" d="M-120,0 C-72,24 72,24 120,0"></path>
+    <path class="s3" d="M-118,-6 C-70,18 70,18 118,-6"></path>
+  </g>
+
+  <!-- 月桂（左右各5叶，收束到盾底） -->
+  <g transform="translate(256,336) rotate(-150)">
+    <use href="#leaf" class="s2" transform="translate(0,0)"></use>
+    <use href="#leaf" class="s2" transform="translate(22,0) rotate(12) scale(.98)"></use>
+    <use href="#leaf" class="s2" transform="translate(44,0) rotate(24) scale(.96)"></use>
+    <use href="#leaf" class="s2" transform="translate(66,0) rotate(36) scale(.94)"></use>
+    <use href="#leaf" class="s2" transform="translate(88,0) rotate(48) scale(.92)"></use>
+  </g>
+  <g transform="translate(256,336) scale(-1,1) rotate(-150)">
+    <use href="#leaf" class="s2" transform="translate(0,0)"></use>
+    <use href="#leaf" class="s2" transform="translate(22,0) rotate(12) scale(.98)"></use>
+    <use href="#leaf" class="s2" transform="translate(44,0) rotate(24) scale(.96)"></use>
+    <use href="#leaf" class="s2" transform="translate(66,0) rotate(36) scale(.94)"></use>
+    <use href="#leaf" class="s2" transform="translate(88,0) rotate(48) scale(.92)"></use>
+  </g>
+
+  <!-- 中央：长剑 × 羽笔（交叉执权） -->
+  <g transform="translate(256,258)">
+    <!-- 长剑 -->
+    <path class="s" d="M-116,90 L116,-90"></path>
+    <path class="s2" d="M-84,54 L-72,66 L-60,54"></path>       <!-- 护手简化 -->
+    <path class="s3" d="M93,-75 L103,-95"></path>             <!-- 剑尖刻线 -->
+    <!-- 羽笔 -->
+    <path class="s" d="M-116,-90 C-60,-54 -14,-22 116,90"></path>
+    <path class="s3" d="M70,42 L86,62"></path>
+    <path class="s3" d="M54,34 L64,52"></path>
+  </g>
+
+  <!-- 徽心：龙晶六边形（轻微切面线） -->
+  <g transform="translate(256,240)">
+    <polygon class="s" points="0,-52 45,-26 45,26 0,52 -45,26 -45,-26"></polygon>
+    <path class="s2" d="M-28,-6 L0,-22 L28,-6"></path>
+    <path class="s3" d="M-14,12 L14,12"></path>
+  </g>
+</svg>
