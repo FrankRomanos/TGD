@@ -190,7 +190,7 @@ namespace TGD.UIV2
         void InitializeWindowScale()
         {
             float targetScale = allowUxmlScale && _windowWrap != null
-                ? Mathf.Max(0.1f, _windowWrap.resolvedStyle.scale.x)
+                ? Mathf.Max(0.1f, _windowWrap.resolvedStyle.scale.value.x)
                 : 0f;
 
             if (targetScale <= 0f)
