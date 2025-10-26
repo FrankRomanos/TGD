@@ -15,7 +15,7 @@
 /* Core window */
 .window {
     position: relative;
-    width: 820px;
+    width: 760px;
     max-width: 95%;
     max-height: 88%;
     flex-direction: column;
@@ -69,10 +69,10 @@
     position: relative;
     flex-direction: column;
     gap: 12px;
-    padding-left: 36px;
-    padding-right: 36px;
-    padding-top: 26px;
-    padding-bottom: 24px;
+    padding-left: 30px;
+    padding-right: 30px;
+    padding-top: 24px;
+    padding-bottom: 22px;
     min-height: 0;
     z-index: 1;
 }
@@ -121,11 +121,12 @@
     align-self: flex-start;
     align-items: center;
     justify-content: center;
-    padding-left: 18px;
-    padding-right: 18px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    border-radius: 28px;
+    min-height: 36px;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: 22px;
     border-width: 1.5px;
     border-color: rgba(244, 214, 155, 0.92);
     background-color: rgba(128, 34, 56, 0.82);
@@ -134,9 +135,10 @@
 
 .count-label {
     color: #f8ebc7;
-    font-size: 17px;
+    font-size: 18px;
     unity-font-style-and-weight: bold;
-    letter-spacing: 0.45px;
+    letter-spacing: 0.4px;
+    unity-text-align: middle-center;
 }
 
 .context-label {
@@ -225,11 +227,11 @@
 .option-root {
     flex-direction: row;
     align-items: center;
-    gap: 16px;
-    padding-left: 18px;
-    padding-right: 18px;
-    padding-top: 12px;
-    padding-bottom: 12px;
+    gap: 14px;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 11px;
+    padding-bottom: 11px;
     border-radius: 14px;
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.22);
@@ -258,8 +260,8 @@
 
 
 .icon-slot {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     border-radius: 14px;
     background-color: rgba(20, 9, 13, 0.75);
     border-width: 1px;
