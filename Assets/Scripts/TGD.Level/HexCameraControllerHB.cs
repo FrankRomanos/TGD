@@ -2,9 +2,11 @@
 using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
+using TGD.CombatV2;
 using TGD.HexBoard;
+using TGD.UIV2;
 
-namespace TGD.Level
+namespace TGD.LevelV2
 {
     [DisallowMultipleComponent]
     public class HexCameraControllerHB : MonoBehaviour
@@ -53,13 +55,19 @@ namespace TGD.Level
         [SerializeField] Vector2 boundsMaxXZ = new(100f, 100f);
 
         [Header("Auto Focus（回合开始居中）")]
-        [SerializeField] float autoFocusSmooth = 0.25f;
+        [SerializeField] TurnManagerV2 turnManager;
+        [SerializeField] bool autoFocusOnTurnStart = true;
+        [SerializeField] Vector3 turnFocusOffset = Vector3.zero;
+        [SerializeField, Min(0.01f)] float autoFocusSmooth = 0.35f;
 
         bool _rotating;
         Vector3 _lastMousePos;
         Vector3 _focusVel;
         bool _autoFocusActive;
         Vector3 _autoFocusTarget;
+        Vector3 _homePivotPosition;
+        float _homeYaw;
+        TurnManagerV2 _boundTurnManager;
 
         // 边缘滚动状态
         bool _edgeActive;
@@ -75,14 +83,40 @@ namespace TGD.Level
                 go.transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
                 pivot = go.transform;
             }
+
+            CacheHome();
+            EnsureTurnManagerBinding();
+        }
+
+        void Start()
+        {
+            CacheHome();
+            EnsureTurnManagerBinding();
+        }
+
+        void OnEnable()
+        {
+            EnsureTurnManagerBinding();
+        }
+
+        void OnDisable()
+        {
+            UnbindTurnManager();
+        }
+
+        void OnDestroy()
+        {
+            UnbindTurnManager();
         }
 
         void Update()
         {
+            EnsureTurnManagerBinding();
             HandleMouseRotate();     // 中键按住才旋转
             HandleKeyPan();          // ↑↓←→ 平移
             HandleEdgeScroll();      // 屏幕边缘（有停留时间）
             HandleZoom();            // y/z 联动 + 保护
+            HandleHomeHotkey();      // 空格回到默认视角
             HandleAutoFocus();       // 回合开始居中
             if (clampToBounds) ClampToMapBounds();
         }
@@ -100,10 +134,17 @@ namespace TGD.Level
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            pivot.position = layout.World(h, 0f);
+            Vector3 pos = layout.World(h, 0f);
+            if (pivot)
+                pos.y = pivot.position.y;
+            pivot.position = pos;
         }
         public void AutoFocus(Vector3 worldPos)
         {
+            if (!pivot)
+                return;
+
+            worldPos.y = pivot.position.y;
             _autoFocusTarget = worldPos;
             _autoFocusActive = true;
             _focusVel = Vector3.zero;
@@ -112,6 +153,12 @@ namespace TGD.Level
         {
             if (layout == null) return;
             AutoFocus(layout.World(h, 0f));
+        }
+
+        public float AutoFocusDampTime
+        {
+            get => autoFocusSmooth;
+            set => autoFocusSmooth = Mathf.Max(0.01f, value);
         }
 
         // ===== Handlers =====
@@ -178,6 +225,9 @@ namespace TGD.Level
 
             pivot.position += dir * speed * Time.deltaTime;
 
+            if (_autoFocusActive)
+                CancelAutoFocus();
+
             // 键盘平移时禁用边缘滚动
             _edgeActive = false;
             _edgeEnterTime = -1f;
@@ -222,11 +272,17 @@ namespace TGD.Level
 
             float intensity = Mathf.Clamp01(move.magnitude);
             pivot.position += worldDir * (speed * intensity) * Time.deltaTime;
+
+            if (_autoFocusActive)
+                CancelAutoFocus();
         }
 
         // 滚轮缩放（固定俯角 + 丢焦保护）
         void HandleZoom()
         {
+            if (ChainPopupState.IsVisible)
+                return;
+
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Approximately(wheel, 0f)) return;
 
@@ -261,10 +317,21 @@ namespace TGD.Level
             }
         }
 
+        void HandleHomeHotkey()
+        {
+            if (!Input.GetKeyDown(KeyCode.Space) || !pivot)
+                return;
+
+            AutoFocus(_homePivotPosition);
+            var euler = pivot.eulerAngles;
+            pivot.rotation = Quaternion.Euler(0f, _homeYaw, 0f);
+        }
+
         void HandleAutoFocus()
         {
             if (!_autoFocusActive) return;
-            pivot.position = Vector3.SmoothDamp(pivot.position, _autoFocusTarget, ref _focusVel, autoFocusSmooth);
+            float smooth = Mathf.Max(0.01f, autoFocusSmooth);
+            pivot.position = Vector3.SmoothDamp(pivot.position, _autoFocusTarget, ref _focusVel, smooth);
             if ((pivot.position - _autoFocusTarget).sqrMagnitude < 0.01f)
                 _autoFocusActive = false;
         }
@@ -299,6 +366,92 @@ namespace TGD.Level
             }
             hit = default;
             return false;
+        }
+
+        void CacheHome()
+        {
+            if (!pivot)
+                return;
+
+            _homePivotPosition = pivot.position;
+            _homeYaw = pivot.eulerAngles.y;
+        }
+
+        void CancelAutoFocus()
+        {
+            _autoFocusActive = false;
+            _focusVel = Vector3.zero;
+        }
+
+        void EnsureTurnManagerBinding()
+        {
+            var target = turnManager ? turnManager : FindTurnManager();
+            if (ReferenceEquals(target, _boundTurnManager))
+                return;
+
+            UnbindTurnManager();
+
+            if (target == null)
+                return;
+
+            _boundTurnManager = target;
+            turnManager = target;
+            _boundTurnManager.TurnStarted += HandleTurnStarted;
+            if (_boundTurnManager.ActiveUnit != null && autoFocusOnTurnStart)
+                HandleTurnStarted(_boundTurnManager.ActiveUnit);
+        }
+
+        void UnbindTurnManager()
+        {
+            if (_boundTurnManager == null)
+                return;
+
+            _boundTurnManager.TurnStarted -= HandleTurnStarted;
+            _boundTurnManager = null;
+        }
+
+        void HandleTurnStarted(Unit unit)
+        {
+            if (!autoFocusOnTurnStart || unit == null)
+                return;
+
+            if (TryResolveUnitFocus(unit, out var focus))
+                AutoFocus(focus);
+        }
+
+        bool TryResolveUnitFocus(Unit unit, out Vector3 focus)
+        {
+            focus = default;
+            if (unit == null)
+                return false;
+
+            var bridge = TGD.Level.CombatViewBridge.Instance;
+            if (bridge != null && bridge.TryGetActor(unit, out var actor) && actor)
+            {
+                focus = actor.transform.position;
+            }
+            else if (layout != null)
+            {
+                focus = layout.World(unit.Position, 0f);
+            }
+            else
+            {
+                return false;
+            }
+
+            if (pivot)
+                focus.y = pivot.position.y;
+            focus += turnFocusOffset;
+            return true;
+        }
+
+        static TurnManagerV2 FindTurnManager()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<TurnManagerV2>(FindObjectsInactive.Include);
+#else
+            return FindObjectOfType<TurnManagerV2>();
+#endif
         }
     }
 }

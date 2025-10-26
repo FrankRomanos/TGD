@@ -291,6 +291,7 @@ namespace TGD.CombatV2
         }
 
         public bool IsPlayerPhase => _currentPhaseIsPlayer;
+        public int CurrentPhaseIndex => _currentPhaseIndex;
         public IReadOnlyList<Unit> GetSideUnits(bool isPlayerSide) => isPlayerSide ? _playerUnits : _enemyUnits;
         public int GetTurnOrderIndex(Unit unit, bool isPlayerSide)
         {
