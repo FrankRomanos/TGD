@@ -2144,6 +2144,10 @@ namespace TGD.CombatV2
             _chainWindowDepth++;
             PushInputSuppression();
             SetChainFocus(unit);
+
+            IChainPopupUI popup = null;
+            bool popupOpened = false;
+
             try
             {
                 var rules = ResolveRules();
@@ -2163,8 +2167,7 @@ namespace TGD.CombatV2
                     }
                 }
 
-                var popup = ChainPopupUI;
-                bool popupOpened = false;
+                popup = ChainPopupUI;
                 if (popup != null && keepLooping)
                 {
                     popup.OpenWindow(BuildChainPopupWindow(unit, basePlan, baseKind, isEnemyPhase));

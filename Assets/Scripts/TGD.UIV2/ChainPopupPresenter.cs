@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
 
-namespace TGD.UI
+namespace TGD.UIV2
 {
     [DisallowMultipleComponent]
     public sealed class ChainPopupPresenter : MonoBehaviour, IChainPopupUI
@@ -372,7 +372,7 @@ namespace TGD.UI
             if (_document == null)
                 return;
 
-            var panel = _document.rootVisualElement?.panel as BaseRuntimePanel;
+            var panel = _document.rootVisualElement?.panel;
             if (panel == null)
                 return;
 
