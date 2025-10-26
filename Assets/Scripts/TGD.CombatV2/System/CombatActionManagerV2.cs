@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.CombatV2.Targeting;
-using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2

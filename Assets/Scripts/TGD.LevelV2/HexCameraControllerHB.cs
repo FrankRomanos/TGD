@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 using TGD.HexBoard;
 using TGD.UIV2;
 
-namespace TGD.Level
+namespace TGD.LevelV2
 {
     [DisallowMultipleComponent]
     public class HexCameraControllerHB : MonoBehaviour
