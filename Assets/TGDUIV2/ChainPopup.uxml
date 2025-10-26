@@ -11,6 +11,7 @@
                             <ui:Label name="phaseLabel" text="Begin T1(1P)" class="phase-label" />
                             <ui:Label name="promptLabel" text="是否进行连锁？" class="prompt-label" />
                         </ui:VisualElement>
+                        <ui:Label name="contextLabel" class="context-label" />
                     </ui:VisualElement>
                     <ui:ScrollView name="list" mode="Vertical" class="list">
                         <ui:VisualElement class="option-root">
@@ -20,7 +21,6 @@
                             <ui:VisualElement class="labels">
                                 <ui:VisualElement class="name-row">
                                     <ui:Label name="optionNameA" text="毁灭狂怒" class="opt-name" />
-                                    <ui:Label name="optionKeyA" text="Q" class="opt-key" />
                                 </ui:VisualElement>
                                 <ui:Label name="optionMetaA" text="Free Reaction · 1.2s" class="opt-meta" />
                             </ui:VisualElement>
@@ -33,7 +33,6 @@
                             <ui:VisualElement class="labels">
                                 <ui:VisualElement class="name-row">
                                     <ui:Label name="optionNameB" text="元素亲和：抗性" class="opt-name" />
-                                    <ui:Label name="optionKeyB" text="E" class="opt-key" />
                                 </ui:VisualElement>
                                 <ui:Label name="optionMetaB" text="Chain Skill · 0.6s" class="opt-meta" />
                             </ui:VisualElement>

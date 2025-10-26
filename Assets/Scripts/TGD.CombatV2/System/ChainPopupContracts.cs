@@ -51,16 +51,18 @@ namespace TGD.CombatV2
 
     public readonly struct ChainPopupWindowData
     {
-        public ChainPopupWindowData(string header, string prompt, bool isEnemyPhase)
+        public ChainPopupWindowData(string header, string prompt, bool isEnemyPhase, string context = null)
         {
             Header = header;
             Prompt = prompt;
             IsEnemyPhase = isEnemyPhase;
+            Context = context;
         }
 
         public string Header { get; }
         public string Prompt { get; }
         public bool IsEnemyPhase { get; }
+        public string Context { get; }
     }
 
     public interface IChainPopupUI

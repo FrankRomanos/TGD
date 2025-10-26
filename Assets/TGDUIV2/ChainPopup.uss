@@ -119,11 +119,17 @@
 .context-label {
     margin-left: 8px;
     margin-right: 8px;
+    margin-top: -4px;
+    margin-bottom: 2px;
     color: rgba(247, 219, 198, 0.88);
     font-size: 18px;
     line-height: 24px;
     letter-spacing: 0.3px;
     text-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+}
+
+.context-label:empty {
+    display: none;
 }
 
 .divider {
@@ -420,6 +426,8 @@
     justify-content: center;
     align-items: center;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    margin-top: -2px;
+    margin-bottom: 2px;
 }
 
 .option-root.selected .check {
@@ -439,8 +447,8 @@
     gap: 12px;
     padding-left: 12px;
     padding-right: 12px;
-    padding-top: 16px;
-    padding-bottom: 8px;
+    padding-top: 12px;
+    padding-bottom: 10px;
     border-top-width: 1px;
     border-top-color: rgba(244, 211, 147, 0.18);
     background-color: rgba(24, 8, 18, 0.72);
@@ -451,6 +459,7 @@
     color: rgba(246, 222, 196, 0.8);
     font-size: 16px;
     letter-spacing: 0.2px;
+    margin-bottom: 2px;
 }
 
 .select-dot {
@@ -461,6 +470,8 @@
     border-radius: 12px;
     margin-left: 4px;
     margin-right: 4px;
+    margin-top: -2px;
+    margin-bottom: 2px;
     background-color: rgba(26, 10, 18, 0.5);
     transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;

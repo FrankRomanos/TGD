@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.CombatV2.Targeting;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -2055,6 +2056,13 @@ namespace TGD.CombatV2
             return new ChainPopupWindowData(header, prompt, isEnemyPhase);
         }
 
+        ChainPopupWindowData BuildDerivedPopupWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, bool isEnemyPhase)
+        {
+            string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
+            string prompt = BuildChainWindowPrompt(basePlan, ActionKind.Derived, isEnemyPhase);
+            return new ChainPopupWindowData(header, prompt, isEnemyPhase);
+        }
+
         string BuildChainWindowHeader(Unit unit, ActionPlan basePlan, bool isEnemyPhase)
         {
             if (!string.IsNullOrEmpty(basePlan.kind)
@@ -2655,8 +2663,6 @@ namespace TGD.CombatV2
                         continue;
 
                     var key = ResolveChainKey(tool.Id);
-                    if (key == KeyCode.None)
-                        continue;
 
                     _derivedBuffer.Add(new ChainOption
                     {
@@ -2690,6 +2696,10 @@ namespace TGD.CombatV2
         {
             _chainWindowDepth++;
             PushInputSuppression();
+
+            IChainPopupUI popup = null;
+            bool popupOpened = false;
+
             try
             {
                 derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
@@ -2724,18 +2734,66 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
+                popup = ChainPopupUI;
+                bool isEnemyPhase = turnManager != null && turnManager.IsEnemyUnit(unit);
+                if (popup != null)
+                {
+                    popup.OpenWindow(BuildDerivedPopupWindow(unit, baseTool, basePlan, isEnemyPhase));
+                    popup.SetAnchor(ResolveChainAnchor(unit));
+                    UpdateChainPopupStage(popup, "W4.5", options, true);
+                    popupOpened = true;
+                }
+
                 bool resolved = false;
                 while (!resolved)
                 {
                     if (_pendingEndTurn)
                     {
                         Log("[Chain] DerivedPromptAbort(cancel-endturn)");
+                        resolved = true;
                         break;
+                    }
+
+                    if (popupOpened)
+                    {
+                        if (popup.TryConsumeSkip())
+                        {
+                            Log("[Chain] DerivedPromptAbort(cancel)");
+                            resolved = true;
+                            break;
+                        }
+
+                        if (popup.TryConsumeSelection(out int selectedIndex))
+                        {
+                            if (selectedIndex >= 0 && selectedIndex < options.Count)
+                            {
+                                var option = options[selectedIndex];
+                                Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
+                                ChainQueueOutcome outcome = default;
+                                yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
+
+                                if (outcome.cancel)
+                                {
+                                    Log("[Chain] DerivedPromptAbort(cancel)");
+                                    resolved = true;
+                                }
+                                else if (outcome.queued)
+                                {
+                                    resolved = true;
+                                }
+
+                                if (!resolved && popupOpened)
+                                    UpdateChainPopupStage(popup, "W4.5", options, true);
+
+                                continue;
+                            }
+                        }
                     }
 
                     if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                     {
                         Log("[Chain] DerivedPromptAbort(cancel)");
+                        resolved = true;
                         break;
                     }
 
@@ -2776,6 +2834,9 @@ namespace TGD.CombatV2
             }
             finally
             {
+                if (popupOpened && popup != null)
+                    popup.CloseWindow();
+
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
                     _chainWindowDepth--;

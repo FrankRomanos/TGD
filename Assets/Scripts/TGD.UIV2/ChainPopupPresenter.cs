@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using TGD.AudioV2;
 using TGD.CombatV2;
 
 namespace TGD.UIV2
@@ -32,6 +33,7 @@ namespace TGD.UIV2
         VisualElement _windowWrap;
         Label _phaseLabel;
         Label _promptLabel;
+        Label _contextLabel;
         ScrollView _list;
         VisualElement _footer;
         Label _noneLabel;
@@ -127,6 +129,7 @@ namespace TGD.UIV2
                 _windowWrap = root.Q<VisualElement>("window-wrap");
                 _phaseLabel = root.Q<Label>("phaseLabel");
                 _promptLabel = root.Q<Label>("promptLabel");
+                _contextLabel = root.Q<Label>("contextLabel");
                 _list = root.Q<ScrollView>("list");
                 _footer = root.Q<VisualElement>("footer");
                 _noneLabel = root.Q<Label>("noneLabel");
@@ -173,6 +176,11 @@ namespace TGD.UIV2
                 _overlay.style.display = DisplayStyle.None;
             if (_windowWrap != null)
                 _windowWrap.style.display = DisplayStyle.None;
+            if (_contextLabel != null)
+            {
+                _contextLabel.text = string.Empty;
+                _contextLabel.style.display = DisplayStyle.None;
+            }
             _visible = false;
             _windowActive = false;
             ChainPopupState.NotifyVisibility(false);
@@ -250,6 +258,14 @@ namespace TGD.UIV2
                 _phaseLabel.text = window.Header ?? string.Empty;
             if (_promptLabel != null)
                 _promptLabel.text = window.Prompt ?? string.Empty;
+            if (_contextLabel != null)
+            {
+                string context = window.Context ?? string.Empty;
+                _contextLabel.text = context;
+                _contextLabel.style.display = string.IsNullOrEmpty(context)
+                    ? DisplayStyle.None
+                    : DisplayStyle.Flex;
+            }
 
             _pendingSelection = -1;
             _skipRequested = false;
@@ -262,6 +278,7 @@ namespace TGD.UIV2
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
+            BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
         }
 
@@ -277,6 +294,11 @@ namespace TGD.UIV2
                 _overlay.style.display = DisplayStyle.None;
             if (_windowWrap != null)
                 _windowWrap.style.display = DisplayStyle.None;
+            if (_contextLabel != null)
+            {
+                _contextLabel.text = string.Empty;
+                _contextLabel.style.display = DisplayStyle.None;
+            }
 
             RefreshSelectionVisuals();
             ChainPopupState.NotifyVisibility(false);
@@ -439,9 +461,8 @@ namespace TGD.UIV2
 
             if (entry.key != null)
             {
-                string keyText = FormatKeyLabel(data.Key);
-                entry.key.text = keyText;
-                entry.key.style.display = string.IsNullOrEmpty(keyText) ? DisplayStyle.None : DisplayStyle.Flex;
+                entry.key.text = string.Empty;
+                entry.key.style.display = DisplayStyle.None;
             }
 
             return entry;
@@ -464,20 +485,6 @@ namespace TGD.UIV2
             }
 
             return new VisualElement();
-        }
-
-        static string FormatKeyLabel(KeyCode key)
-        {
-            if (key == KeyCode.None)
-                return string.Empty;
-
-            if (key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9)
-                return ((char)('0' + (key - KeyCode.Alpha0))).ToString();
-
-            if (key >= KeyCode.Keypad0 && key <= KeyCode.Keypad9)
-                return ((char)('0' + (key - KeyCode.Keypad0))).ToString();
-
-            return key.ToString();
         }
 
         public bool TryConsumeSelection(out int index)
