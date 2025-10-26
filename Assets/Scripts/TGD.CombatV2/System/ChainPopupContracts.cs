@@ -5,7 +5,15 @@ namespace TGD.CombatV2
 {
     public readonly struct ChainPopupOptionData
     {
-        public ChainPopupOptionData(string id, string name, string meta, Sprite icon, KeyCode key, bool interactable = true)
+        public ChainPopupOptionData(
+            string id,
+            string name,
+            string meta,
+            Sprite icon,
+            KeyCode key,
+            bool interactable = true,
+            bool startsGroup = false,
+            string groupLabel = null)
         {
             Id = id;
             Name = name;
@@ -13,6 +21,8 @@ namespace TGD.CombatV2
             Icon = icon;
             Key = key;
             Interactable = interactable;
+            StartsGroup = startsGroup;
+            GroupLabel = groupLabel;
         }
 
         public string Id { get; }
@@ -21,6 +31,8 @@ namespace TGD.CombatV2
         public Sprite Icon { get; }
         public KeyCode Key { get; }
         public bool Interactable { get; }
+        public bool StartsGroup { get; }
+        public string GroupLabel { get; }
     }
 
     public readonly struct ChainPopupStageData

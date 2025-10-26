@@ -14,14 +14,14 @@ namespace TGD.UIV2
         [SerializeField] VisualTreeAsset optionAsset;
 
         [Header("Display")]
-        [SerializeField, Min(0.1f)] float defaultScale = 0.4f;
+        [SerializeField, Min(0.1f)] float defaultScale = 1f;
         [SerializeField] bool allowUxmlScale = false;
 
         [Header("Placement")]
-        [SerializeField] Camera worldCamera;
-        [SerializeField] Vector3 worldOffset = new(0f, 2.4f, 0f);
-        [SerializeField] Vector2 anchorPadding = new(160f, -48f);
-        [SerializeField] float edgePadding = 32f;
+        [SerializeField] Vector2 screenAnchor = new(0.72f, 0.38f);
+        [SerializeField] Vector2 screenOffset = new(-28f, 20f);
+        [SerializeField] Vector2 windowPivot = new(0.5f, 0.5f);
+        [SerializeField] float edgePadding = 24f;
 
         [Header("Fallbacks")]
         [SerializeField] Sprite fallbackIcon;
@@ -46,9 +46,6 @@ namespace TGD.UIV2
         bool _visible;
         bool _listPrepared;
         bool _scaleInitialized;
-        Transform _anchor;
-        Vector3 _anchorWorld;
-        bool _hasAnchorWorld;
         float _documentScale = 1f;
 
         struct OptionEntry
@@ -59,6 +56,8 @@ namespace TGD.UIV2
             public Label name;
             public Label meta;
             public Label key;
+            public VisualElement groupHeader;
+            public Label groupLabel;
         }
 
         void Awake()
@@ -76,7 +75,7 @@ namespace TGD.UIV2
         void EnsureDocument()
         {
             if (!_scaleInitialized)
-                _documentScale = Mathf.Max(0.1f, defaultScale);
+                _documentScale = Mathf.Max(1f, defaultScale);
 
             if (_document == null)
             {
@@ -176,6 +175,7 @@ namespace TGD.UIV2
                 _windowWrap.style.display = DisplayStyle.None;
             _visible = false;
             _windowActive = false;
+            ChainPopupState.NotifyVisibility(false);
         }
 
         void HandleWindowWrapGeometry(GeometryChangedEvent evt)
@@ -194,7 +194,7 @@ namespace TGD.UIV2
                 : 0f;
 
             if (targetScale <= 0f)
-                targetScale = Mathf.Max(0.1f, defaultScale);
+                targetScale = Mathf.Max(1f, defaultScale);
 
             _documentScale = targetScale;
             _scaleInitialized = true;
@@ -222,7 +222,7 @@ namespace TGD.UIV2
 
         void OnValidate()
         {
-            defaultScale = Mathf.Max(0.1f, defaultScale);
+            defaultScale = Mathf.Max(1f, defaultScale);
 
             if (!Application.isPlaying)
             {
@@ -262,6 +262,7 @@ namespace TGD.UIV2
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
+            ChainPopupState.NotifyVisibility(true);
         }
 
         public void CloseWindow()
@@ -278,6 +279,7 @@ namespace TGD.UIV2
                 _windowWrap.style.display = DisplayStyle.None;
 
             RefreshSelectionVisuals();
+            ChainPopupState.NotifyVisibility(false);
         }
 
         public void UpdateStage(ChainPopupStageData stage)
@@ -341,8 +343,15 @@ namespace TGD.UIV2
                     icon = container.Q<VisualElement>("icon"),
                     name = container.Q<Label>("name"),
                     meta = container.Q<Label>("meta"),
-                    key = null
+                    key = null,
+                    groupHeader = container.Q<VisualElement>("groupHeader"),
+                    groupLabel = container.Q<Label>("groupLabel")
                 };
+
+                if (entry.groupHeader != null)
+                    entry.groupHeader.style.display = DisplayStyle.None;
+                if (entry.groupLabel != null)
+                    entry.groupLabel.style.display = DisplayStyle.None;
 
                 var check = container.Q<VisualElement>("check");
                 if (check != null)
@@ -379,6 +388,27 @@ namespace TGD.UIV2
 
             entry.root.SetEnabled(data.Interactable);
             entry.root.EnableInClassList("disabled", !data.Interactable);
+            entry.root.EnableInClassList("group-start", data.StartsGroup);
+
+            if (entry.groupHeader != null)
+            {
+                bool showHeader = data.StartsGroup;
+                entry.groupHeader.style.display = showHeader ? DisplayStyle.Flex : DisplayStyle.None;
+
+                if (entry.groupLabel != null)
+                {
+                    if (!string.IsNullOrEmpty(data.GroupLabel) && showHeader)
+                    {
+                        entry.groupLabel.text = data.GroupLabel;
+                        entry.groupLabel.style.display = DisplayStyle.Flex;
+                    }
+                    else
+                    {
+                        entry.groupLabel.text = string.Empty;
+                        entry.groupLabel.style.display = DisplayStyle.None;
+                    }
+                }
+            }
 
             string displayName = string.IsNullOrEmpty(data.Name) ? data.Id : data.Name;
             if (entry.name != null)
@@ -486,17 +516,6 @@ namespace TGD.UIV2
 
         public void SetAnchor(Transform anchor)
         {
-            _anchor = anchor;
-            if (anchor != null)
-            {
-                _anchorWorld = anchor.position + worldOffset;
-                _hasAnchorWorld = true;
-            }
-            else
-            {
-                _hasAnchorWorld = false;
-            }
-
             if (_visible)
                 UpdateAnchorPosition();
         }
@@ -537,49 +556,15 @@ namespace TGD.UIV2
 
         void UpdateAnchorPosition()
         {
-            if (_document == null)
+            if (_document == null || _windowWrap == null)
                 return;
 
-            var panel = _document.rootVisualElement?.panel;
-            if (panel == null)
+            var root = _document.rootVisualElement;
+            if (root == null)
                 return;
 
-            if (_windowWrap == null)
-                return;
-
-            var camera = worldCamera != null ? worldCamera : Camera.main;
-            Vector3 worldPos;
-            if (_anchor != null)
-            {
-                worldPos = _anchor.position + worldOffset;
-                _anchorWorld = worldPos;
-                _hasAnchorWorld = true;
-            }
-            else if (_hasAnchorWorld)
-            {
-                worldPos = _anchorWorld;
-            }
-            else
-            {
-                worldPos = worldOffset;
-            }
-
-            Vector3 screenPos;
-            if (camera != null)
-                screenPos = camera.WorldToScreenPoint(worldPos);
-            else
-                screenPos = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 1f);
-
-            if (screenPos.z < 0f)
-            {
-                _windowWrap.style.display = DisplayStyle.None;
-                return;
-            }
-
-            Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(panel, screenPos);
-
-            float panelWidth = _document.rootVisualElement?.worldBound.width ?? Screen.width;
-            float panelHeight = _document.rootVisualElement?.worldBound.height ?? Screen.height;
+            float panelWidth = root.worldBound.width;
+            float panelHeight = root.worldBound.height;
             if (panelWidth <= 0f)
                 panelWidth = Screen.width;
             if (panelHeight <= 0f)
@@ -597,15 +582,18 @@ namespace TGD.UIV2
             if (height <= 0f)
                 height = 240f;
 
-            float panelX = panelPos.x;
-            float panelY = panelHeight - panelPos.y;
+            Vector2 anchor = new(
+                Mathf.Clamp01(screenAnchor.x),
+                Mathf.Clamp01(screenAnchor.y));
 
-            float horizontalPadding = Mathf.Max(0f, anchorPadding.x);
-            float verticalBias = anchorPadding.y;
+            float pivotX = Mathf.Clamp01(windowPivot.x);
+            float pivotY = Mathf.Clamp01(windowPivot.y);
 
-            bool placeLeft = screenPos.x > Screen.width * 0.5f;
-            float left = placeLeft ? panelX - width - horizontalPadding : panelX + horizontalPadding;
-            float top = panelY - (height * 0.5f) + verticalBias;
+            float anchorX = panelWidth * anchor.x;
+            float anchorY = panelHeight * (1f - anchor.y);
+
+            float left = anchorX - width * pivotX + screenOffset.x;
+            float top = anchorY - height * pivotY + screenOffset.y;
 
             float margin = Mathf.Max(0f, edgePadding);
             left = Mathf.Clamp(left, margin, panelWidth - width - margin);
@@ -640,6 +628,7 @@ namespace TGD.UIV2
             }
 
             _runtimePanelSettings = null;
+            ChainPopupState.NotifyVisibility(false);
         }
     }
 }

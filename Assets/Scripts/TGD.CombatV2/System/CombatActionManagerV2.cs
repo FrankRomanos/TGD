@@ -2126,6 +2126,10 @@ namespace TGD.CombatV2
                 return;
 
             _chainPopupOptionBuffer.Clear();
+            if (options != null && options.Count > 1)
+                options.Sort(CompareChainOptions);
+
+            Unit lastOwner = null;
             for (int i = 0; i < options.Count; i++)
             {
                 var option = options[i];
@@ -2133,10 +2137,67 @@ namespace TGD.CombatV2
                 string name = string.IsNullOrEmpty(id) ? "?" : id;
                 string meta = FormatChainOptionMeta(option);
                 var icon = ResolveChainOptionIcon(option.tool);
-                _chainPopupOptionBuffer.Add(new ChainPopupOptionData(id, name, meta, icon, option.key, option.tool != null));
+
+                bool startsGroup = false;
+                string groupLabel = null;
+                var owner = option.owner;
+                if (owner != null)
+                {
+                    if (owner != lastOwner)
+                    {
+                        startsGroup = true;
+                        groupLabel = TurnManagerV2.FormatUnitLabel(owner);
+                    }
+                }
+                else if (lastOwner != null)
+                {
+                    startsGroup = true;
+                }
+
+                lastOwner = owner;
+
+                _chainPopupOptionBuffer.Add(new ChainPopupOptionData(
+                    id,
+                    name,
+                    meta,
+                    icon,
+                    option.key,
+                    option.tool != null,
+                    startsGroup,
+                    groupLabel));
             }
 
             popup.UpdateStage(new ChainPopupStageData(label, _chainPopupOptionBuffer, showSkip));
+        }
+
+        int CompareChainOptions(ChainOption a, ChainOption b)
+        {
+            int orderA = GetChainOwnerOrder(a.owner);
+            int orderB = GetChainOwnerOrder(b.owner);
+            if (orderA != orderB)
+                return orderA.CompareTo(orderB);
+
+            string labelA = a.owner != null ? TurnManagerV2.FormatUnitLabel(a.owner) : string.Empty;
+            string labelB = b.owner != null ? TurnManagerV2.FormatUnitLabel(b.owner) : string.Empty;
+            int labelCompare = string.CompareOrdinal(labelA, labelB);
+            if (labelCompare != 0)
+                return labelCompare;
+
+            int kindCompare = a.kind.CompareTo(b.kind);
+            if (kindCompare != 0)
+                return kindCompare;
+
+            int secsCompare = a.secs.CompareTo(b.secs);
+            if (secsCompare != 0)
+                return secsCompare;
+
+            int energyCompare = a.energy.CompareTo(b.energy);
+            if (energyCompare != 0)
+                return energyCompare;
+
+            string idA = a.tool != null ? a.tool.Id : string.Empty;
+            string idB = b.tool != null ? b.tool.Id : string.Empty;
+            return string.CompareOrdinal(idA, idB);
         }
 
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
