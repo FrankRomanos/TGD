@@ -2,7 +2,6 @@
 .overlay {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
-    background-color: rgba(0, 0, 0, 0.55);
     align-items: center;
     justify-content: center;
     padding: 32px;
@@ -69,11 +68,11 @@
 .window-content {
     position: relative;
     flex-direction: column;
-    gap: 18px;
+    gap: 16px;
     padding-left: 40px;
     padding-right: 40px;
-    padding-top: 64px;
-    padding-bottom: 32px;
+    padding-top: 32px;
+    padding-bottom: 28px;
     min-height: 0;
     z-index: 1;
 }
@@ -84,14 +83,14 @@
     justify-content: space-between;
     padding-left: 8px;
     padding-right: 8px;
-    padding-top: 12px;
-    padding-bottom: 4px;
+    padding-top: 0px;
+    padding-bottom: 2px;
     gap: 16px;
 }
 
 .title-block {
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .phase-label {
@@ -111,7 +110,7 @@
 }
 
 .count-chip {
-    align-self: center;
+    align-self: flex-start;
     align-items: center;
     justify-content: center;
     padding-left: 18px;
