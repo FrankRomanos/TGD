@@ -1,7 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
     <Style src="project://database/Assets/TGDUIV2/ChainPopup.uss?fileID=7433441132597879392&amp;guid=cbecd12ff7f3d08429cf885d99b917ec&amp;type=3#ChainPopup" />
     <ui:VisualElement name="overlay" class="overlay">
-        <ui:VisualElement name="window-wrap" class="window-wrap" style="scale: 0.4 0.4;">
+        <ui:VisualElement name="window-wrap" class="window-wrap">
             <ui:VisualElement name="window" class="window">
                 <ui:VisualElement picking-mode="Ignore" class="window-background" />
                 <ui:VisualElement picking-mode="Ignore" class="window-frame" />
@@ -11,6 +11,7 @@
                             <ui:Label name="phaseLabel" text="Begin T1(1P)" class="phase-label" />
                             <ui:Label name="promptLabel" text="是否进行连锁？" class="prompt-label" />
                         </ui:VisualElement>
+                        <ui:Label name="contextLabel" class="context-label" />
                     </ui:VisualElement>
                     <ui:ScrollView name="list" mode="Vertical" class="list">
                         <ui:VisualElement class="option-root">
@@ -18,7 +19,9 @@
                                 <ui:VisualElement name="optionIconA" class="icon-image" />
                             </ui:VisualElement>
                             <ui:VisualElement class="labels">
-                                <ui:Label name="optionNameA" text="毁灭狂怒" class="opt-name" />
+                                <ui:VisualElement class="name-row">
+                                    <ui:Label name="optionNameA" text="毁灭狂怒" class="opt-name" />
+                                </ui:VisualElement>
                                 <ui:Label name="optionMetaA" text="Free Reaction · 1.2s" class="opt-meta" />
                             </ui:VisualElement>
                             <ui:VisualElement class="check" />
@@ -28,7 +31,9 @@
                                 <ui:VisualElement name="optionIconB" class="icon-image" />
                             </ui:VisualElement>
                             <ui:VisualElement class="labels">
-                                <ui:Label name="optionNameB" text="元素亲和：抗性" class="opt-name" />
+                                <ui:VisualElement class="name-row">
+                                    <ui:Label name="optionNameB" text="元素亲和：抗性" class="opt-name" />
+                                </ui:VisualElement>
                                 <ui:Label name="optionMetaB" text="Chain Skill · 0.6s" class="opt-meta" />
                             </ui:VisualElement>
                             <ui:VisualElement class="check" />
