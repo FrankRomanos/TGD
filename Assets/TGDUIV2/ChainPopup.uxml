@@ -1,34 +1,25 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ui:UXML
-    xmlns:ui="UnityEngine.UIElements"
-    xmlns:uie="UnityEditor.UIElements">
-
-  <ui:Style src="ChainPopup.uss" />
-
-  <ui:VisualElement name="overlay" class="overlay">
-    <ui:VisualElement name="window" class="window">
-      <ui:VisualElement class="top-accent" />
-
-      <ui:VisualElement class="header">
-        <ui:VisualElement class="title-block">
-          <ui:Label name="phaseLabel" class="phase-label" text="Begin T1(1P)" />
-          <ui:Label name="promptLabel" class="prompt-label" text="是否进行自由连锁" />
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/TGDUIV2/ChainPopup.uss?fileID=7433441132597879392&amp;guid=cbecd12ff7f3d08429cf885d99b917ec&amp;type=3#ChainPopup" />
+    <ui:VisualElement name="overlay" class="overlay">
+        <ui:VisualElement name="window" class="window">
+            <ui:VisualElement class="top-accent" />
+            <ui:VisualElement picking-mode="Ignore" class="window-glow" />
+            <ui:VisualElement class="header">
+                <ui:VisualElement class="title-block">
+                    <ui:Label name="phaseLabel" text="Begin T1(1P)" class="phase-label" />
+                    <ui:Label name="promptLabel" text="是否进行自由连锁" class="prompt-label" />
+                </ui:VisualElement>
+                <ui:VisualElement name="countChip" class="count-chip">
+                    <ui:Label name="countLabel" text="count=3" class="count-label" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:Label name="contextLabel" text="free1 · free2 · free3" class="context-label" />
+            <ui:VisualElement class="divider" />
+            <ui:ScrollView name="list" mode="Vertical" class="list" />
+            <ui:VisualElement name="footer" class="footer">
+                <ui:Label name="noneLabel" text="不做反应" class="none-label" />
+                <ui:Toggle name="noneToggle" class="select-dot" />
+            </ui:VisualElement>
         </ui:VisualElement>
-        <ui:VisualElement name="countChip" class="count-chip">
-          <ui:Label name="countLabel" class="count-label" text="count=3" />
-        </ui:VisualElement>
-      </ui:VisualElement>
-
-      <ui:Label name="contextLabel" class="context-label" text="free1 · free2 · free3" />
-      <ui:VisualElement class="divider" />
-
-      <ui:ScrollView name="list" class="list" mode="Vertical" />
-
-      <ui:VisualElement name="footer" class="footer">
-        <ui:Label  name="noneLabel"  class="none-label" text="不做反应" />
-        <ui:Toggle name="noneToggle" class="select-dot" />
-      </ui:VisualElement>
-
     </ui:VisualElement>
-  </ui:VisualElement>
 </ui:UXML>
