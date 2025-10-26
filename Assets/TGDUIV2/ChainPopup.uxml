@@ -1,7 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
     <Style src="project://database/Assets/TGDUIV2/ChainPopup.uss?fileID=7433441132597879392&amp;guid=cbecd12ff7f3d08429cf885d99b917ec&amp;type=3#ChainPopup" />
     <ui:VisualElement name="overlay" class="overlay">
-        <ui:VisualElement name="window-wrap" class="window-wrap">
+        <ui:VisualElement name="window-wrap" class="window-wrap" style="scale: 0.4 0.4;">
             <ui:VisualElement name="window" class="window">
                 <ui:VisualElement picking-mode="Ignore" class="window-background" />
                 <ui:VisualElement picking-mode="Ignore" class="window-frame" />
