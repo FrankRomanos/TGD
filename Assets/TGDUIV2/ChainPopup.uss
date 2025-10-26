@@ -68,45 +68,53 @@
 .window-content {
     position: relative;
     flex-direction: column;
-    gap: 16px;
-    padding-left: 40px;
-    padding-right: 40px;
-    padding-top: 32px;
-    padding-bottom: 28px;
+    gap: 12px;
+    padding-left: 36px;
+    padding-right: 36px;
+    padding-top: 26px;
+    padding-bottom: 24px;
     min-height: 0;
     z-index: 1;
 }
 
 .header {
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    padding-left: 8px;
-    padding-right: 8px;
-    padding-top: 0px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
     padding-bottom: 2px;
-    gap: 16px;
+    gap: 12px;
 }
 
-.title-block {
-    flex-direction: column;
-    gap: 4px;
+.header-main {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .phase-label {
     color: #f8ebcb;
-    font-size: 30px;
+    font-size: 28px;
     unity-font-style-and-weight: bold;
     letter-spacing: 0.6px;
     text-shadow: 0 6px 14px rgba(0, 0, 0, 0.75);
 }
 
 .prompt-label {
-    color: #f2d7d3;
-    font-size: 20px;
+    color: rgba(244, 224, 212, 0.9);
+    font-size: 22px;
     unity-font-style-and-weight: bold;
-    letter-spacing: 0.35px;
-    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.prompt-label:empty {
+    display: none;
+    margin-left: 0;
 }
 
 .count-chip {
@@ -156,22 +164,22 @@
     flex-grow: 1;
     margin-left: 0;
     margin-right: 0;
-    margin-bottom: 8px;
-    padding-left: 14px;
-    padding-right: 14px;
-    padding-top: 16px;
-    padding-bottom: 20px;
+    margin-bottom: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 12px;
+    padding-bottom: 16px;
     border-radius: 18px;
     background-color: rgba(31, 11, 24, 0.78);
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.18);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 80px 120px rgba(84, 24, 42, 0.24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 60px 100px rgba(84, 24, 42, 0.22);
 }
 
 .list > .unity-content-container {
     flex-direction: column;
-    gap: 16px;
-    padding-right: 8px;
+    gap: 12px;
+    padding-right: 4px;
 }
 
 .row {
@@ -217,11 +225,11 @@
 .option-root {
     flex-direction: row;
     align-items: center;
-    gap: 18px;
+    gap: 16px;
     padding-left: 18px;
     padding-right: 18px;
-    padding-top: 14px;
-    padding-bottom: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
     border-radius: 14px;
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.22);
@@ -248,9 +256,10 @@
     border-color: rgba(255, 255, 255, 0.04);
 }
 
+
 .icon-slot {
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
     border-radius: 14px;
     background-color: rgba(20, 9, 13, 0.75);
     border-width: 1px;
@@ -261,12 +270,16 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 40px 42px rgba(121, 46, 64, 0.32), 0 8px 18px rgba(0, 0, 0, 0.5);
 }
 
-.icon-highlight {
-    width: 120%;
-    height: 120%;
-    border-radius: 16px;
-    background-image: linear-gradient(135deg, rgba(240, 205, 154, 0.82), rgba(143, 33, 54, 0.88));
-    box-shadow: inset 0 0 28px rgba(250, 225, 170, 0.65), inset 0 -26px 34px rgba(20, 28, 24, 0.8);
+.icon-image {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    background-color: rgba(240, 205, 154, 0.12);
+    background-image: linear-gradient(135deg, rgba(240, 205, 154, 0.68), rgba(143, 33, 54, 0.78));
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: inset 0 0 18px rgba(250, 225, 170, 0.5), inset 0 -20px 28px rgba(20, 28, 24, 0.75);
 }
 
 .option-root.selected .icon-slot {
@@ -274,35 +287,35 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 40px 42px rgba(102, 174, 134, 0.42), 0 12px 20px rgba(28, 82, 72, 0.6);
 }
 
-.option-root.selected .icon-highlight {
-    background-image: linear-gradient(135deg, rgba(133, 211, 166, 0.9), rgba(53, 122, 88, 0.95));
-    box-shadow: inset 0 0 28px rgba(176, 246, 204, 0.72), inset 0 -24px 32px rgba(24, 43, 36, 0.92);
+.option-root.selected .icon-image {
+    background-image: linear-gradient(135deg, rgba(133, 211, 166, 0.88), rgba(53, 122, 88, 0.92));
+    box-shadow: inset 0 0 20px rgba(176, 246, 204, 0.65), inset 0 -22px 30px rgba(24, 43, 36, 0.9);
 }
 
 .labels {
     flex-grow: 1;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .opt-name {
     color: #f9edd4;
     unity-font-style-and-weight: bold;
     font-size: 19px;
-    letter-spacing: 0.32px;
+    letter-spacing: 0.3px;
     text-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
 }
 
 .opt-meta {
     color: rgba(247, 228, 209, 0.62);
     font-size: 13px;
-    letter-spacing: 0.22px;
+    letter-spacing: 0.2px;
 }
 
 .check {
-    width: 26px;
-    height: 26px;
-    border-radius: 13px;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
     border-width: 2px;
     border-color: rgba(209, 172, 91, 0.82);
     background-color: rgba(22, 10, 18, 0.65);

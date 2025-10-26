@@ -7,7 +7,7 @@
                 <ui:VisualElement picking-mode="Ignore" class="window-frame" />
                 <ui:VisualElement class="window-content">
                     <ui:VisualElement class="header">
-                        <ui:VisualElement class="title-block">
+                        <ui:VisualElement class="header-main">
                             <ui:Label name="phaseLabel" text="Begin T1(1P)" class="phase-label" />
                             <ui:Label name="promptLabel" text="是否进行自由连锁" class="prompt-label" />
                         </ui:VisualElement>
@@ -15,9 +15,28 @@
                             <ui:Label name="countLabel" text="count=3" class="count-label" />
                         </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:Label name="contextLabel" text="free1 · free2 · free3" class="context-label" />
-                    <ui:VisualElement class="divider" />
-                    <ui:ScrollView name="list" mode="Vertical" class="list" />
+                    <ui:ScrollView name="list" mode="Vertical" class="list">
+                        <ui:VisualElement class="option-root">
+                            <ui:VisualElement class="icon-slot">
+                                <ui:VisualElement name="optionIconA" class="icon-image" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="labels">
+                                <ui:Label name="optionNameA" text="毁灭狂怒" class="opt-name" />
+                                <ui:Label name="optionMetaA" text="Free Reaction · 1.2s" class="opt-meta" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="check" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="option-root">
+                            <ui:VisualElement class="icon-slot">
+                                <ui:VisualElement name="optionIconB" class="icon-image" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="labels">
+                                <ui:Label name="optionNameB" text="元素亲和：抗性" class="opt-name" />
+                                <ui:Label name="optionMetaB" text="Chain Skill · 0.6s" class="opt-meta" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="check" />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
                     <ui:VisualElement name="footer" class="footer">
                         <ui:Label name="noneLabel" text="不做反应" class="none-label" />
                         <ui:Toggle name="noneToggle" class="select-dot" />
