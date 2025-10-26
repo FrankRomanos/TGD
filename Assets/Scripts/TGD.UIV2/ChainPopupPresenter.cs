@@ -343,7 +343,7 @@ namespace TGD.UIV2
                     icon = container.Q<VisualElement>("icon"),
                     name = container.Q<Label>("name"),
                     meta = container.Q<Label>("meta"),
-                    key = null,
+                    key = container.Q<Label>("key"),
                     groupHeader = container.Q<VisualElement>("groupHeader"),
                     groupLabel = container.Q<Label>("groupLabel")
                 };
@@ -353,14 +353,8 @@ namespace TGD.UIV2
                 if (entry.groupLabel != null)
                     entry.groupLabel.style.display = DisplayStyle.None;
 
-                var check = container.Q<VisualElement>("check");
-                if (check != null)
-                {
-                    var keyLabel = new Label { name = "key" };
-                    keyLabel.AddToClassList("opt-key");
-                    check.Add(keyLabel);
-                    entry.key = keyLabel;
-                }
+                if (entry.key != null && !entry.key.ClassListContains("opt-key"))
+                    entry.key.AddToClassList("opt-key");
 
                 container.RegisterCallback<ClickEvent>(_ =>
                 {

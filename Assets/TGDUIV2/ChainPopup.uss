@@ -203,6 +203,35 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
+.list .unity-scroller {
+    width: 16px;
+    min-width: 16px;
+    margin-left: 10px;
+    margin-right: 4px;
+    background-color: rgba(18, 6, 12, 0.7);
+    border-radius: 999px;
+    border-width: 0px;
+    padding: 4px;
+    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.list .unity-scroller__low-button,
+.list .unity-scroller__high-button {
+    display: none;
+}
+
+.list .unity-scroller__slider {
+    border-radius: inherit;
+    background-color: rgba(64, 22, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(244, 211, 147, 0.18);
+    padding: 2px;
+}
+
+.list .unity-scroller__slider .unity-slider {
+    border-radius: inherit;
+}
+
 .row {
     flex-direction: column;
     gap: 16px;
@@ -351,6 +380,13 @@
     gap: 2px;
 }
 
+.name-row {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .opt-name {
     color: #f9edd4;
     unity-font-style-and-weight: bold;
@@ -370,6 +406,8 @@
     font-size: 14px;
     letter-spacing: 0.22px;
     text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    margin-top: -1px;
 }
 
 .check {
