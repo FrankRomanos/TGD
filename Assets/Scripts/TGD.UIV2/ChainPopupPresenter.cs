@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using TGD.AudioV2;
 using TGD.CombatV2;
 
 namespace TGD.UIV2
@@ -277,6 +278,7 @@ namespace TGD.UIV2
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
+            BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
         }
 

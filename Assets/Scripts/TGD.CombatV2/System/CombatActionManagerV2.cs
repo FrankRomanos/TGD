@@ -2060,20 +2060,7 @@ namespace TGD.CombatV2
         {
             string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
             string prompt = BuildChainWindowPrompt(basePlan, ActionKind.Derived, isEnemyPhase);
-            string context = BuildDerivedContext(baseTool, basePlan);
-            return new ChainPopupWindowData(header, prompt, isEnemyPhase, context);
-        }
-
-        static string BuildDerivedContext(IActionToolV2 baseTool, ActionPlan basePlan)
-        {
-            string source = baseTool != null ? baseTool.Id : null;
-            if (string.IsNullOrEmpty(source))
-                source = !string.IsNullOrEmpty(basePlan.kind) ? basePlan.kind : null;
-
-            if (string.IsNullOrEmpty(source))
-                return null;
-
-            return $"Previous Action: {source}";
+            return new ChainPopupWindowData(header, prompt, isEnemyPhase);
         }
 
         string BuildChainWindowHeader(Unit unit, ActionPlan basePlan, bool isEnemyPhase)
