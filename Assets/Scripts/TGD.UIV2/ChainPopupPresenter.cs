@@ -15,8 +15,9 @@ namespace TGD.UIV2
 
         [Header("Placement")]
         [SerializeField] Camera worldCamera;
-        [SerializeField] Vector3 worldOffset = new(0f, 2f, 0f);
-        [SerializeField] Vector2 panelOffset = new(24f, -160f);
+        [SerializeField] Vector3 worldOffset = new(0f, 2.4f, 0f);
+        [SerializeField] Vector2 anchorPadding = new(160f, -48f);
+        [SerializeField] float edgePadding = 32f;
 
         [Header("Fallbacks")]
         [SerializeField] Sprite fallbackIcon;
@@ -38,12 +39,14 @@ namespace TGD.UIV2
         bool _skipRequested;
         bool _windowActive;
         bool _visible;
+        bool _listPrepared;
         Transform _anchor;
         Vector3 _anchorWorld;
         bool _hasAnchorWorld;
 
         struct OptionEntry
         {
+            public VisualElement container;
             public VisualElement root;
             public VisualElement icon;
             public Label name;
@@ -65,44 +68,63 @@ namespace TGD.UIV2
 
         void EnsureDocument()
         {
-            if (_document != null)
-                return;
-
-            _document = GetComponent<UIDocument>();
             if (_document == null)
-                _document = gameObject.AddComponent<UIDocument>();
+            {
+                _document = GetComponent<UIDocument>();
+                if (_document == null)
+                    _document = gameObject.AddComponent<UIDocument>();
+            }
 
-            _document.panelSettings = panelSettings;
-            _document.visualTreeAsset = null;
+            if (panelSettings != null)
+                _document.panelSettings = panelSettings;
 
-            var root = _document.rootVisualElement;
-            root.style.flexGrow = 1f;
-            root.style.flexDirection = FlexDirection.Column;
-            root.Clear();
+            if (_overlay == null)
+            {
+                if (_document.visualTreeAsset == null && popupAsset != null)
+                    _document.visualTreeAsset = popupAsset;
 
-            _overlay = popupAsset != null ? popupAsset.CloneTree() : new VisualElement();
-            root.Add(_overlay);
-
-            _windowWrap = _overlay.Q<VisualElement>("window-wrap");
-            _phaseLabel = _overlay.Q<Label>("phaseLabel");
-            _promptLabel = _overlay.Q<Label>("promptLabel");
-            _list = _overlay.Q<ScrollView>("list") ?? new ScrollView();
-            if (_list.parent == null)
-                _overlay.Add(_list);
-            _footer = _overlay.Q<VisualElement>("footer");
-            _noneLabel = _overlay.Q<Label>("noneLabel");
-            _noneToggle = _overlay.Q<Toggle>("noneToggle");
-
-            if (_noneLabel != null)
-                _noneLabel.RegisterCallback<ClickEvent>(_ => RequestSkip());
-            if (_noneToggle != null)
-                _noneToggle.RegisterValueChangedCallback(evt =>
+                var root = _document.rootVisualElement;
+                if (root.childCount == 0)
                 {
-                    if (evt.newValue)
-                        RequestSkip();
-                });
+                    if (popupAsset != null)
+                        popupAsset.CloneTree(root);
+                    else
+                        root.Add(new VisualElement { name = "overlay" });
+                }
 
-            HideImmediate();
+                _overlay = root.Q<VisualElement>("overlay") ?? root.Q<VisualElement>(className: "overlay");
+                if (_overlay == null && popupAsset != null)
+                {
+                    root.Clear();
+                    popupAsset.CloneTree(root);
+                    _overlay = root.Q<VisualElement>("overlay") ?? root.Q<VisualElement>(className: "overlay");
+                }
+
+                _windowWrap = root.Q<VisualElement>("window-wrap");
+                _phaseLabel = root.Q<Label>("phaseLabel");
+                _promptLabel = root.Q<Label>("promptLabel");
+                _list = root.Q<ScrollView>("list");
+                _footer = root.Q<VisualElement>("footer");
+                _noneLabel = root.Q<Label>("noneLabel");
+                _noneToggle = root.Q<Toggle>("noneToggle");
+
+                if (_list != null && !_listPrepared)
+                {
+                    _list.Clear();
+                    _listPrepared = true;
+                }
+
+                if (_noneLabel != null)
+                    _noneLabel.RegisterCallback<ClickEvent>(_ => RequestSkip());
+                if (_noneToggle != null)
+                    _noneToggle.RegisterValueChangedCallback(evt =>
+                    {
+                        if (evt.newValue)
+                            RequestSkip();
+                    });
+
+                HideImmediate();
+            }
         }
 
         void HideImmediate()
@@ -137,6 +159,8 @@ namespace TGD.UIV2
 
             _windowActive = true;
             _visible = true;
+
+            RefreshSelectionVisuals();
         }
 
         public void CloseWindow()
@@ -151,6 +175,8 @@ namespace TGD.UIV2
                 _overlay.style.display = DisplayStyle.None;
             if (_windowWrap != null)
                 _windowWrap.style.display = DisplayStyle.None;
+
+            RefreshSelectionVisuals();
         }
 
         public void UpdateStage(ChainPopupStageData stage)
@@ -172,9 +198,11 @@ namespace TGD.UIV2
             for (int i = _stageOptions.Count; i < _entries.Count; i++)
             {
                 var entry = _entries[i];
-                if (entry.root != null)
-                    entry.root.style.display = DisplayStyle.None;
+                if (entry.container != null)
+                    entry.container.style.display = DisplayStyle.None;
             }
+
+            RefreshSelectionVisuals();
 
             if (_footer != null)
                 _footer.style.display = stage.ShowSkip ? DisplayStyle.Flex : DisplayStyle.None;
@@ -197,17 +225,25 @@ namespace TGD.UIV2
         {
             for (int i = _entries.Count; i < count; i++)
             {
-                var element = optionAsset != null ? optionAsset.CloneTree() : new VisualElement();
+                if (_list == null)
+                    break;
+
+                var container = CreateOptionElement();
+                if (container == null)
+                    break;
+
+                var root = container.Q<VisualElement>("root") ?? container;
                 var entry = new OptionEntry
                 {
-                    root = element,
-                    icon = element.Q<VisualElement>("icon"),
-                    name = element.Q<Label>("name"),
-                    meta = element.Q<Label>("meta"),
+                    container = container,
+                    root = root,
+                    icon = container.Q<VisualElement>("icon"),
+                    name = container.Q<Label>("name"),
+                    meta = container.Q<Label>("meta"),
                     key = null
                 };
 
-                var check = element.Q<VisualElement>("check");
+                var check = container.Q<VisualElement>("check");
                 if (check != null)
                 {
                     var keyLabel = new Label { name = "key" };
@@ -216,15 +252,15 @@ namespace TGD.UIV2
                     entry.key = keyLabel;
                 }
 
-                element.RegisterCallback<ClickEvent>(_ =>
+                container.RegisterCallback<ClickEvent>(_ =>
                 {
                     if (!_windowActive)
                         return;
-                    if (element.userData is int idx)
+                    if (container.userData is int idx)
                         RequestSelection(idx);
                 });
 
-                _list.Add(element);
+                _list.Add(container);
                 _entries.Add(entry);
             }
         }
@@ -234,9 +270,14 @@ namespace TGD.UIV2
             if (entry.root == null)
                 return entry;
 
-            entry.root.style.display = DisplayStyle.Flex;
-            entry.root.userData = index;
+            if (entry.container != null)
+            {
+                entry.container.style.display = DisplayStyle.Flex;
+                entry.container.userData = index;
+            }
+
             entry.root.SetEnabled(data.Interactable);
+            entry.root.EnableInClassList("disabled", !data.Interactable);
 
             string displayName = string.IsNullOrEmpty(data.Name) ? data.Id : data.Name;
             if (entry.name != null)
@@ -279,6 +320,25 @@ namespace TGD.UIV2
             }
 
             return entry;
+        }
+
+        VisualElement CreateOptionElement()
+        {
+            if (optionAsset != null)
+                return optionAsset.CloneTree();
+
+            if (popupAsset != null)
+            {
+                var temp = popupAsset.CloneTree();
+                var candidate = temp.Q<VisualElement>(className: "option-root") ?? temp.Q<VisualElement>("root");
+                if (candidate != null)
+                {
+                    candidate.RemoveFromHierarchy();
+                    return candidate;
+                }
+            }
+
+            return new VisualElement();
         }
 
         static string FormatKeyLabel(KeyCode key)
@@ -335,6 +395,9 @@ namespace TGD.UIV2
             {
                 _hasAnchorWorld = false;
             }
+
+            if (_visible)
+                UpdateAnchorPosition();
         }
 
         void RequestSelection(int index)
@@ -346,6 +409,8 @@ namespace TGD.UIV2
             _skipRequested = false;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
+
+            RefreshSelectionVisuals();
         }
 
         void RequestSkip()
@@ -357,6 +422,8 @@ namespace TGD.UIV2
             _pendingSelection = -1;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(true);
+
+            RefreshSelectionVisuals();
         }
 
         void LateUpdate()
@@ -409,9 +476,53 @@ namespace TGD.UIV2
             }
 
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(panel, screenPos);
-            _windowWrap.style.left = panelPos.x + panelOffset.x;
-            _windowWrap.style.top = panelPos.y + panelOffset.y;
+
+            float panelWidth = _document.rootVisualElement?.worldBound.width ?? Screen.width;
+            float panelHeight = _document.rootVisualElement?.worldBound.height ?? Screen.height;
+            if (panelWidth <= 0f)
+                panelWidth = Screen.width;
+            if (panelHeight <= 0f)
+                panelHeight = Screen.height;
+
+            Rect bounds = _windowWrap.worldBound;
+            float width = bounds.width;
+            float height = bounds.height;
+            if (width <= 0f)
+                width = _windowWrap.resolvedStyle.width;
+            if (height <= 0f)
+                height = _windowWrap.resolvedStyle.height;
+            if (width <= 0f)
+                width = 560f;
+            if (height <= 0f)
+                height = 240f;
+
+            float horizontalPadding = Mathf.Max(0f, anchorPadding.x);
+            float verticalBias = anchorPadding.y;
+
+            bool placeLeft = panelPos.x > panelWidth * 0.5f;
+            float left = placeLeft ? panelPos.x - width - horizontalPadding : panelPos.x + horizontalPadding;
+            float top = panelPos.y - (height * 0.5f) + verticalBias;
+
+            float margin = Mathf.Max(0f, edgePadding);
+            left = Mathf.Clamp(left, margin, panelWidth - width - margin);
+            top = Mathf.Clamp(top, margin, panelHeight - height - margin);
+
+            _windowWrap.style.left = left;
+            _windowWrap.style.top = top;
             _windowWrap.style.display = DisplayStyle.Flex;
+        }
+
+        void RefreshSelectionVisuals()
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (entry.root == null)
+                    continue;
+
+                bool isSelected = _pendingSelection == i;
+                entry.root.EnableInClassList("selected", isSelected);
+            }
         }
     }
 }
