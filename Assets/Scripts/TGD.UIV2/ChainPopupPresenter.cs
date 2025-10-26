@@ -13,6 +13,10 @@ namespace TGD.UIV2
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
 
+        [Header("Display")]
+        [SerializeField, Min(0.1f)] float defaultScale = 0.4f;
+        [SerializeField] bool allowUxmlScale = false;
+
         [Header("Placement")]
         [SerializeField] Camera worldCamera;
         [SerializeField] Vector3 worldOffset = new(0f, 2.4f, 0f);
@@ -23,6 +27,7 @@ namespace TGD.UIV2
         [SerializeField] Sprite fallbackIcon;
 
         UIDocument _document;
+        PanelSettings _runtimePanelSettings;
         VisualElement _overlay;
         VisualElement _windowWrap;
         Label _phaseLabel;
@@ -40,9 +45,11 @@ namespace TGD.UIV2
         bool _windowActive;
         bool _visible;
         bool _listPrepared;
+        bool _scaleInitialized;
         Transform _anchor;
         Vector3 _anchorWorld;
         bool _hasAnchorWorld;
+        float _documentScale = 1f;
 
         struct OptionEntry
         {
@@ -68,6 +75,9 @@ namespace TGD.UIV2
 
         void EnsureDocument()
         {
+            if (!_scaleInitialized)
+                _documentScale = Mathf.Max(0.1f, defaultScale);
+
             if (_document == null)
             {
                 _document = GetComponent<UIDocument>();
@@ -75,8 +85,23 @@ namespace TGD.UIV2
                     _document = gameObject.AddComponent<UIDocument>();
             }
 
-            if (panelSettings != null)
-                _document.panelSettings = panelSettings;
+            if (panelSettings != null && _runtimePanelSettings == null)
+            {
+                _runtimePanelSettings = Instantiate(panelSettings);
+                _runtimePanelSettings.name = panelSettings.name + " (Runtime)";
+                _runtimePanelSettings.hideFlags = HideFlags.DontSave;
+            }
+
+            if (_runtimePanelSettings != null)
+            {
+                _runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+                _document.panelSettings = _runtimePanelSettings;
+            }
+            else if (_document.panelSettings != null)
+            {
+                _runtimePanelSettings = _document.panelSettings;
+                _runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+            }
 
             if (_overlay == null)
             {
@@ -108,6 +133,19 @@ namespace TGD.UIV2
                 _noneLabel = root.Q<Label>("noneLabel");
                 _noneToggle = root.Q<Toggle>("noneToggle");
 
+                if (_windowWrap != null)
+                {
+                    _windowWrap.style.position = Position.Absolute;
+                    _windowWrap.style.left = 0f;
+                    _windowWrap.style.top = 0f;
+                    _windowWrap.style.right = StyleKeyword.Null;
+                    _windowWrap.style.bottom = StyleKeyword.Null;
+                    if (!_scaleInitialized && allowUxmlScale)
+                        _windowWrap.RegisterCallback<GeometryChangedEvent>(HandleWindowWrapGeometry);
+                    else if (!_scaleInitialized)
+                        InitializeWindowScale();
+                }
+
                 if (_list != null && !_listPrepared)
                 {
                     _list.Clear();
@@ -125,6 +163,9 @@ namespace TGD.UIV2
 
                 HideImmediate();
             }
+
+            if (_scaleInitialized)
+                ApplyPanelScale();
         }
 
         void HideImmediate()
@@ -135,6 +176,64 @@ namespace TGD.UIV2
                 _windowWrap.style.display = DisplayStyle.None;
             _visible = false;
             _windowActive = false;
+        }
+
+        void HandleWindowWrapGeometry(GeometryChangedEvent evt)
+        {
+            if (_windowWrap == null)
+                return;
+
+            _windowWrap.UnregisterCallback<GeometryChangedEvent>(HandleWindowWrapGeometry);
+            InitializeWindowScale();
+        }
+
+        void InitializeWindowScale()
+        {
+            float targetScale = allowUxmlScale && _windowWrap != null
+                ? Mathf.Max(0.1f, _windowWrap.resolvedStyle.scale.x)
+                : 0f;
+
+            if (targetScale <= 0f)
+                targetScale = Mathf.Max(0.1f, defaultScale);
+
+            _documentScale = targetScale;
+            _scaleInitialized = true;
+
+            if (_windowWrap != null)
+                _windowWrap.transform.scale = Vector3.one;
+
+            ApplyPanelScale();
+        }
+
+        void ApplyPanelScale()
+        {
+            float scale = Mathf.Max(0.1f, _documentScale);
+
+            var targetSettings = _runtimePanelSettings != null ? _runtimePanelSettings : _document != null ? _document.panelSettings : null;
+            if (targetSettings != null)
+                targetSettings.scale = scale;
+
+            if (_overlay != null)
+                _overlay.transform.scale = Vector3.one;
+
+            if (_windowWrap != null)
+                _windowWrap.transform.scale = Vector3.one;
+        }
+
+        void OnValidate()
+        {
+            defaultScale = Mathf.Max(0.1f, defaultScale);
+
+            if (!Application.isPlaying)
+            {
+                _scaleInitialized = false;
+                _documentScale = defaultScale;
+            }
+            else if (_scaleInitialized && !allowUxmlScale)
+            {
+                _documentScale = defaultScale;
+                ApplyPanelScale();
+            }
         }
 
         public void OpenWindow(ChainPopupWindowData window)
@@ -161,6 +260,8 @@ namespace TGD.UIV2
             _visible = true;
 
             RefreshSelectionVisuals();
+
+            UpdateAnchorPosition();
         }
 
         public void CloseWindow()
@@ -496,12 +597,15 @@ namespace TGD.UIV2
             if (height <= 0f)
                 height = 240f;
 
+            float panelX = panelPos.x;
+            float panelY = panelHeight - panelPos.y;
+
             float horizontalPadding = Mathf.Max(0f, anchorPadding.x);
             float verticalBias = anchorPadding.y;
 
-            bool placeLeft = panelPos.x > panelWidth * 0.5f;
-            float left = placeLeft ? panelPos.x - width - horizontalPadding : panelPos.x + horizontalPadding;
-            float top = panelPos.y - (height * 0.5f) + verticalBias;
+            bool placeLeft = screenPos.x > Screen.width * 0.5f;
+            float left = placeLeft ? panelX - width - horizontalPadding : panelX + horizontalPadding;
+            float top = panelY - (height * 0.5f) + verticalBias;
 
             float margin = Mathf.Max(0f, edgePadding);
             left = Mathf.Clamp(left, margin, panelWidth - width - margin);
@@ -523,6 +627,19 @@ namespace TGD.UIV2
                 bool isSelected = _pendingSelection == i;
                 entry.root.EnableInClassList("selected", isSelected);
             }
+        }
+
+        void OnDestroy()
+        {
+            if (_runtimePanelSettings != null && _runtimePanelSettings != panelSettings)
+            {
+                if (Application.isPlaying)
+                    Destroy(_runtimePanelSettings);
+                else
+                    DestroyImmediate(_runtimePanelSettings);
+            }
+
+            _runtimePanelSettings = null;
         }
     }
 }
