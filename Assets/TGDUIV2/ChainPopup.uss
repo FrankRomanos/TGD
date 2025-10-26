@@ -407,6 +407,15 @@
     letter-spacing: 0.2px;
 }
 
+.opt-key {
+    color: rgba(246, 224, 196, 0.8);
+    font-size: 14px;
+    letter-spacing: 0.22px;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    margin-top: -1px;
+}
+
 .check {
     width: 24px;
     height: 24px;
