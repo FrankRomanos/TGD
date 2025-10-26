@@ -3,8 +3,9 @@ using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
 using TGD.HexBoard;
+using TGD.UIV2;
 
-namespace TGD.Level
+namespace TGD.LevelV2
 {
     [DisallowMultipleComponent]
     public class HexCameraControllerHB : MonoBehaviour
@@ -227,6 +228,9 @@ namespace TGD.Level
         // 滚轮缩放（固定俯角 + 丢焦保护）
         void HandleZoom()
         {
+            if (ChainPopupState.IsVisible)
+                return;
+
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Approximately(wheel, 0f)) return;
 

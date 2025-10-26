@@ -2,25 +2,20 @@
 .overlay {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
-    align-items: center;
-    justify-content: center;
-    padding: 32px;
-}
-
-#window-wrap {
-    transform: scale(var(--window-scale, 0.9));
-    transform-origin: 50% 50%;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 24px;
 }
 
 /* Core window */
 .window {
     position: relative;
-    width: 760px;
+    width: 640px;
     max-width: 95%;
     max-height: 88%;
     flex-direction: column;
-    border-radius: 32px;
-    box-shadow: 0 48px 120px rgba(0, 0, 0, 0.75);
+    border-radius: 28px;
+    box-shadow: 0 36px 96px rgba(0, 0, 0, 0.7);
     overflow: visible;
 }
 
@@ -34,7 +29,7 @@
     background-size: cover;
     background-position: center;
     border-radius: inherit;
-    opacity: 0.95;
+    opacity: 0.9;
 }
 
 .window-frame {
@@ -47,7 +42,7 @@
     background-size: cover;
     background-position: center;
     border-radius: inherit;
-    opacity: 0.96;
+    opacity: 0.94;
 }
 
 .window-crest {
@@ -68,11 +63,11 @@
 .window-content {
     position: relative;
     flex-direction: column;
-    gap: 12px;
-    padding-left: 30px;
-    padding-right: 30px;
-    padding-top: 24px;
-    padding-bottom: 22px;
+    gap: 10px;
+    padding-left: 26px;
+    padding-right: 26px;
+    padding-top: 22px;
+    padding-bottom: 18px;
     min-height: 0;
     z-index: 1;
 }
@@ -85,7 +80,7 @@
     padding-right: 4px;
     padding-top: 6px;
     padding-bottom: 6px;
-    gap: 12px;
+    gap: 10px;
 }
 
 .header-main {
@@ -147,21 +142,94 @@
     margin-left: 0;
     margin-right: 0;
     margin-bottom: 6px;
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-top: 12px;
-    padding-bottom: 16px;
-    border-radius: 18px;
-    background-color: rgba(31, 11, 24, 0.78);
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+    padding-bottom: 14px;
+    border-radius: 20px;
+    background-color: rgba(28, 10, 22, 0.82);
     border-width: 1px;
-    border-color: rgba(244, 211, 147, 0.18);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 60px 100px rgba(84, 24, 42, 0.22);
+    border-color: rgba(244, 211, 147, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 52px 90px rgba(92, 28, 46, 0.24);
 }
 
 .list > .unity-content-container {
     flex-direction: column;
     gap: 12px;
     padding-right: 4px;
+}
+
+.list .unity-vertical-scroller,
+.list .unity-horizontal-scroller {
+    width: 14px;
+    min-width: 14px;
+    margin-left: 8px;
+    margin-right: 2px;
+    background-color: rgba(0, 0, 0, 0.08);
+    border-radius: 999px;
+    border-width: 0px;
+    padding: 3px;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.list .unity-horizontal-scroller {
+    height: 14px;
+    min-height: 14px;
+    margin-top: 8px;
+}
+
+.list .unity-vertical-scroller .unity-slider,
+.list .unity-horizontal-scroller .unity-slider {
+    background-color: rgba(0, 0, 0, 0.28);
+    border-radius: inherit;
+    padding: 2px;
+}
+
+.list .unity-vertical-scroller .unity-slider__tracker,
+.list .unity-horizontal-scroller .unity-slider__tracker {
+    background-color: rgba(78, 27, 40, 0.68);
+    border-width: 1px;
+    border-color: rgba(244, 211, 147, 0.26);
+    border-radius: 999px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.list .unity-vertical-scroller .unity-slider__dragger,
+.list .unity-horizontal-scroller .unity-slider__dragger {
+    background-image: linear-gradient(180deg, rgba(244, 211, 147, 0.95), rgba(198, 142, 80, 0.92));
+    border-radius: 999px;
+    border-width: 1px;
+    border-color: rgba(255, 226, 178, 0.7);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.list .unity-scroller {
+    width: 16px;
+    min-width: 16px;
+    margin-left: 10px;
+    margin-right: 4px;
+    background-color: rgba(18, 6, 12, 0.7);
+    border-radius: 999px;
+    border-width: 0px;
+    padding: 4px;
+    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.list .unity-scroller__low-button,
+.list .unity-scroller__high-button {
+    display: none;
+}
+
+.list .unity-scroller__slider {
+    border-radius: inherit;
+    background-color: rgba(64, 22, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(244, 211, 147, 0.18);
+    padding: 2px;
+}
+
+.list .unity-scroller__slider .unity-slider {
+    border-radius: inherit;
 }
 
 .row {
@@ -204,37 +272,69 @@
     gap: 12px;
 }
 
+.option-container {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.group-header {
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 6px;
+    padding-right: 6px;
+    display: none;
+}
+
+.group-divider {
+    height: 2px;
+    border-radius: 2px;
+    background-image: linear-gradient(90deg, rgba(129, 46, 64, 0), rgba(244, 211, 147, 0.85), rgba(129, 46, 64, 0));
+    box-shadow: 0 1px 6px rgba(240, 202, 138, 0.35);
+}
+
+.group-label {
+    color: rgba(248, 226, 182, 0.88);
+    font-size: 15px;
+    letter-spacing: 0.28px;
+    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+    padding-left: 4px;
+}
+
 .option-root {
     flex-direction: row;
     align-items: center;
     gap: 14px;
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-top: 11px;
-    padding-bottom: 11px;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 10px;
+    padding-bottom: 10px;
     border-radius: 14px;
     border-width: 1px;
-    border-color: rgba(244, 211, 147, 0.22);
-    background-color: rgba(32, 12, 24, 0.9);
+    border-color: rgba(244, 211, 147, 0.18);
+    background-color: rgba(34, 12, 26, 0.9);
     transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 40px 60px rgba(120, 36, 54, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 34px 48px rgba(120, 36, 54, 0.2);
+}
+
+.option-root.group-start {
+    margin-top: 4px;
 }
 
 .option-root:hover {
     border-color: rgba(244, 214, 155, 0.6);
-    background-color: rgba(57, 20, 38, 0.95);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 42px 56px rgba(162, 58, 82, 0.28), 0 12px 22px rgba(0, 0, 0, 0.35);
+    background-color: rgba(55, 20, 36, 0.95);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 40px 56px rgba(162, 58, 82, 0.26), 0 12px 22px rgba(0, 0, 0, 0.32);
 }
 
 .option-root.selected {
     border-color: rgba(119, 214, 166, 0.95);
-    background-color: rgba(38, 78, 58, 0.92);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 48px 68px rgba(92, 164, 122, 0.42), 0 16px 26px rgba(0, 0, 0, 0.45);
+    background-color: rgba(38, 78, 58, 0.9);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 46px 64px rgba(92, 164, 122, 0.4), 0 16px 24px rgba(0, 0, 0, 0.42);
 }
 
 .option-root.disabled {
-    opacity: 0.5;
+    opacity: 0.55;
     border-color: rgba(255, 255, 255, 0.04);
 }
 
@@ -280,6 +380,13 @@
     gap: 2px;
 }
 
+.name-row {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .opt-name {
     color: #f9edd4;
     unity-font-style-and-weight: bold;
@@ -292,6 +399,15 @@
     color: rgba(247, 228, 209, 0.62);
     font-size: 13px;
     letter-spacing: 0.2px;
+}
+
+.opt-key {
+    color: rgba(246, 224, 196, 0.8);
+    font-size: 14px;
+    letter-spacing: 0.22px;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    margin-top: -1px;
 }
 
 .check {
