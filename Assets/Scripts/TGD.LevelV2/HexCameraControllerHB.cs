@@ -54,13 +54,16 @@ namespace TGD.LevelV2
         [SerializeField] Vector2 boundsMaxXZ = new(100f, 100f);
 
         [Header("Auto Focus（回合开始居中）")]
-        [SerializeField] float autoFocusSmooth = 0.25f;
+        [SerializeField, Min(0f)] float autoFocusSmooth = 0.25f;
+        [SerializeField] bool recenterKeyEnabled = true;
+        [SerializeField] KeyCode recenterKey = KeyCode.Space;
 
         bool _rotating;
         Vector3 _lastMousePos;
         Vector3 _focusVel;
         bool _autoFocusActive;
         Vector3 _autoFocusTarget;
+        Vector3 _defaultPivotPosition;
 
         // 边缘滚动状态
         bool _edgeActive;
@@ -76,6 +79,8 @@ namespace TGD.LevelV2
                 go.transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
                 pivot = go.transform;
             }
+
+            _defaultPivotPosition = pivot != null ? pivot.position : Vector3.zero;
         }
 
         void Update()
@@ -85,10 +90,17 @@ namespace TGD.LevelV2
             HandleEdgeScroll();      // 屏幕边缘（有停留时间）
             HandleZoom();            // y/z 联动 + 保护
             HandleAutoFocus();       // 回合开始居中
+            HandleRecenterKey();     // 空格回中心
             if (clampToBounds) ClampToMapBounds();
         }
 
         // ===== Public API =====
+        public float AutoFocusSmooth
+        {
+            get => autoFocusSmooth;
+            set => autoFocusSmooth = Mathf.Max(0f, value);
+        }
+
         public Hex GetFocusCoordinate()
         {
             if (layout == null) return Hex.Zero;
@@ -113,6 +125,22 @@ namespace TGD.LevelV2
         {
             if (layout == null) return;
             AutoFocus(layout.World(h, 0f));
+        }
+
+        public void ResetFocus(bool smooth = true)
+        {
+            if (pivot == null) return;
+
+            if (smooth)
+            {
+                AutoFocus(_defaultPivotPosition);
+            }
+            else
+            {
+                pivot.position = _defaultPivotPosition;
+                _autoFocusActive = false;
+                _focusVel = Vector3.zero;
+            }
         }
 
         // ===== Handlers =====
@@ -268,9 +296,31 @@ namespace TGD.LevelV2
         void HandleAutoFocus()
         {
             if (!_autoFocusActive) return;
+            if (autoFocusSmooth <= 0f)
+            {
+                pivot.position = _autoFocusTarget;
+                _autoFocusActive = false;
+                _focusVel = Vector3.zero;
+                return;
+            }
+
             pivot.position = Vector3.SmoothDamp(pivot.position, _autoFocusTarget, ref _focusVel, autoFocusSmooth);
             if ((pivot.position - _autoFocusTarget).sqrMagnitude < 0.01f)
                 _autoFocusActive = false;
+        }
+
+        void HandleRecenterKey()
+        {
+            if (!recenterKeyEnabled)
+                return;
+
+            if (!Input.GetKeyDown(recenterKey))
+                return;
+
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
+                return;
+
+            ResetFocus(true);
         }
 
         float CurrentCameraHeight()
