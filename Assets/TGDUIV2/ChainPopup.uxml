@@ -9,10 +9,7 @@
                     <ui:VisualElement class="header">
                         <ui:VisualElement class="header-main">
                             <ui:Label name="phaseLabel" text="Begin T1(1P)" class="phase-label" />
-                            <ui:Label name="promptLabel" text="是否进行自由连锁" class="prompt-label" />
-                        </ui:VisualElement>
-                        <ui:VisualElement name="countChip" class="count-chip">
-                            <ui:Label name="countLabel" text="count=3" class="count-label" />
+                            <ui:Label name="promptLabel" text="是否进行连锁？" class="prompt-label" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                     <ui:ScrollView name="list" mode="Vertical" class="list">
