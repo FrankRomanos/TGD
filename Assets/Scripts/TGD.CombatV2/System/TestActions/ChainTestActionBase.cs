@@ -23,6 +23,9 @@ namespace TGD.CombatV2
         [Min(0)] public int timeCostSeconds = 0;
         [Min(0)] public int energyCost = 0;
 
+        [Header("UI")]
+        public Sprite icon;
+
         [Header("Cooldown")]
         [Min(0)] public int cooldownSeconds = 0;
 
@@ -34,6 +37,8 @@ namespace TGD.CombatV2
 
         public string Id => actionId;
         public abstract ActionKind Kind { get; }
+
+        public virtual Sprite Icon => icon;
 
         public virtual string CooldownId => actionId;
         public virtual int CooldownSeconds => Mathf.Max(0, cooldownSeconds);

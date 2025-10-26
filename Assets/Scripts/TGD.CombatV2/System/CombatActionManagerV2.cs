@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using TGD.CombatV2.Targeting;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -54,6 +55,9 @@ namespace TGD.CombatV2
 
         [Header("Chain Keybinds")]
         public List<ChainKeybind> chainKeybinds = new();
+
+        [Header("Chain Popup UI")]
+        public MonoBehaviour chainPopupUiBehaviour;
 
         public bool debugLog = true;
         public bool quietInternalToolLogs = true;
@@ -186,7 +190,10 @@ namespace TGD.CombatV2
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
         readonly List<ChainOption> _derivedBuffer = new();
+        readonly List<ChainPopupOptionData> _chainPopupOptionBuffer = new();
         Unit _currentChainFocus;
+        IChainPopupUI _chainPopupUi;
+        MonoBehaviour _chainPopupUiComponent;
 
         struct BonusTurnState
         {
@@ -333,6 +340,9 @@ namespace TGD.CombatV2
             if (_currentChainFocus == unit)
                 return;
             _currentChainFocus = unit;
+            var popup = ChainPopupUI;
+            if (popup != null)
+                popup.SetAnchor(ResolveChainAnchor(unit));
             ChainFocusChanged?.Invoke(unit);
         }
 
@@ -348,6 +358,71 @@ namespace TGD.CombatV2
                 }
                 return _chainCursor;
             }
+        }
+
+        IChainPopupUI ChainPopupUI
+        {
+            get
+            {
+                if (_chainPopupUi != null)
+                {
+                    if (_chainPopupUiComponent == null || !_chainPopupUiComponent)
+                    {
+                        _chainPopupUi = null;
+                        _chainPopupUiComponent = null;
+                    }
+                }
+
+                if (_chainPopupUi == null)
+                    _chainPopupUi = ResolveChainPopupUI(out _chainPopupUiComponent);
+
+                return _chainPopupUi;
+            }
+        }
+
+        IChainPopupUI ResolveChainPopupUI(out MonoBehaviour component)
+        {
+            component = null;
+
+            if (chainPopupUiBehaviour != null && chainPopupUiBehaviour is IChainPopupUI specified)
+            {
+                component = chainPopupUiBehaviour;
+                return specified;
+            }
+
+            var local = GetComponent<IChainPopupUI>();
+            if (local != null)
+            {
+                component = local as MonoBehaviour;
+                return local;
+            }
+
+            var child = GetComponentInChildren<IChainPopupUI>(true);
+            if (child != null)
+            {
+                component = child as MonoBehaviour;
+                return child;
+            }
+
+#if UNITY_2023_1_OR_NEWER
+            var behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+            var behaviours = FindObjectsOfType<MonoBehaviour>(true);
+#endif
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                var behaviour = behaviours[i];
+                if (behaviour == null)
+                    continue;
+
+                if (behaviour is IChainPopupUI ui)
+                {
+                    component = behaviour;
+                    return ui;
+                }
+            }
+
+            return null;
         }
 
 
@@ -1922,6 +1997,148 @@ namespace TGD.CombatV2
             return message;
         }
 
+        Transform ResolveChainAnchor(Unit unit)
+        {
+            if (unit == null || turnManager == null)
+                return null;
+
+            var context = turnManager.GetContext(unit);
+            return context != null ? context.transform : null;
+        }
+
+        Sprite ResolveChainOptionIcon(IActionToolV2 tool)
+        {
+            if (tool is ChainTestActionBase chainTool && chainTool != null)
+                return chainTool.Icon;
+
+            return null;
+        }
+
+        string FormatChainOptionMeta(ChainOption option)
+        {
+            var parts = new List<string>(3);
+
+            switch (option.kind)
+            {
+                case ActionKind.Reaction:
+                    parts.Add("Reaction");
+                    break;
+                case ActionKind.Free:
+                    parts.Add("Free");
+                    break;
+                case ActionKind.Derived:
+                    parts.Add("Derived");
+                    break;
+                case ActionKind.FullRound:
+                    parts.Add("Full Round");
+                    break;
+                case ActionKind.Sustained:
+                    parts.Add("Sustained");
+                    break;
+                default:
+                    parts.Add(option.kind.ToString());
+                    break;
+            }
+
+            if (option.secs > 0)
+                parts.Add($"{option.secs}s");
+
+            if (option.energy > 0)
+                parts.Add($"Energy {option.energy}");
+
+            return parts.Count > 0 ? string.Join(" · ", parts) : string.Empty;
+        }
+
+        ChainPopupWindowData BuildChainPopupWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
+        {
+            string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
+            string prompt = BuildChainWindowPrompt(basePlan, baseKind, isEnemyPhase);
+            return new ChainPopupWindowData(header, prompt, isEnemyPhase);
+        }
+
+        string BuildChainWindowHeader(Unit unit, ActionPlan basePlan, bool isEnemyPhase)
+        {
+            if (!string.IsNullOrEmpty(basePlan.kind)
+                && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildPhaseStartHeader(unit, isEnemyPhase);
+            }
+
+            if (!string.IsNullOrEmpty(basePlan.kind))
+            {
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                if (!string.IsNullOrEmpty(unitLabel) && unitLabel != "?")
+                    return $"{basePlan.kind} ({unitLabel})";
+                return basePlan.kind;
+            }
+
+            return "Chain";
+        }
+
+        string BuildPhaseStartHeader(Unit unit, bool isEnemyPhase)
+        {
+            if (turnManager == null)
+                return "Begin";
+
+            int phaseIndex = Mathf.Max(1, turnManager.CurrentPhaseIndex);
+            string ownerTag = BuildChainOwnerTag(unit, isEnemyPhase);
+            if (!string.IsNullOrEmpty(ownerTag))
+                return $"Begin T{phaseIndex}({ownerTag})";
+            return $"Begin T{phaseIndex}";
+        }
+
+        string BuildChainOwnerTag(Unit unit, bool isEnemyPhase)
+        {
+            if (turnManager == null || unit == null)
+                return isEnemyPhase ? "Enemy" : "1P";
+
+            bool isPlayer = turnManager.IsPlayerUnit(unit);
+            int order = turnManager.GetTurnOrderIndex(unit, isPlayer);
+            if (order < 0 || order == int.MaxValue)
+                order = 0;
+
+            if (isPlayer)
+                return $"{order + 1}P";
+
+            return $"E{order + 1}";
+        }
+
+        string BuildChainWindowPrompt(ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
+        {
+            if (!string.IsNullOrEmpty(basePlan.kind)
+                && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Use Free Action?";
+            }
+
+            return baseKind switch
+            {
+                ActionKind.Reaction => "Select Reaction",
+                ActionKind.Free => "Select Free Action",
+                ActionKind.Derived => "Select Derived Action",
+                _ => "Select Chain Action"
+            };
+        }
+
+        void UpdateChainPopupStage(IChainPopupUI popup, string label, List<ChainOption> options, bool showSkip)
+        {
+            if (popup == null)
+                return;
+
+            _chainPopupOptionBuffer.Clear();
+            for (int i = 0; i < options.Count; i++)
+            {
+                var option = options[i];
+                string id = option.tool != null ? option.tool.Id : string.Empty;
+                string name = string.IsNullOrEmpty(id) ? "?" : id;
+                string meta = FormatChainOptionMeta(option);
+                var icon = ResolveChainOptionIcon(option.tool);
+                _chainPopupOptionBuffer.Add(new ChainPopupOptionData(id, name, meta, icon, option.key, option.tool != null));
+            }
+
+            popup.UpdateStage(new ChainPopupStageData(label, _chainPopupOptionBuffer, showSkip));
+        }
+
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
             _chainWindowDepth++;
@@ -1944,6 +2161,15 @@ namespace TGD.CombatV2
                         if (entry.tool != null)
                             pendingSet.Add(entry.tool);
                     }
+                }
+
+                var popup = ChainPopupUI;
+                bool popupOpened = false;
+                if (popup != null && keepLooping)
+                {
+                    popup.OpenWindow(BuildChainPopupWindow(unit, basePlan, baseKind, isEnemyPhase));
+                    popup.SetAnchor(ResolveChainAnchor(unit));
+                    popupOpened = true;
                 }
 
                 if (!keepLooping)
@@ -2102,6 +2328,9 @@ namespace TGD.CombatV2
                             }
                         }
 
+                        if (popupOpened)
+                            UpdateChainPopupStage(popup, label, ownerOptions, depth == 0 && !stageHasSelection);
+
                         if (_pendingEndTurn)
                         {
                             string cancelSuffix = ownerMode && activeOwner != null
@@ -2115,38 +2344,10 @@ namespace TGD.CombatV2
                         }
 
                         bool handledInput = false;
+                        bool selectionHandled = false;
 
-                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                        System.Collections.IEnumerator HandleSelection(ChainOption option)
                         {
-                            string cancelSuffix = null;
-                            if (ownerMode && activeOwner != null)
-                                cancelSuffix = $"(owner={TurnManagerV2.FormatUnitLabel(activeOwner)})";
-
-                            if (!string.IsNullOrEmpty(cancelSuffix))
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel", cancelSuffix);
-                            else
-                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
-
-                            if (ownerMode && activeOwner != null && allowOwnerCancel && !stageHasSelection)
-                            {
-                                stageOwnersUsed.Add(activeOwner);
-                                activeOwner = null;
-                                activeOwnerLogged = false;
-                                yield return null;
-                                continue;
-                            }
-
-                            stageActive = false;
-                            stageCancelledByInput = true;
-                            break;
-                        }
-
-                        for (int i = 0; i < ownerOptions.Count; i++)
-                        {
-                            var option = ownerOptions[i];
-                            if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
-                                continue;
-
                             handledInput = true;
 
                             string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
@@ -2170,17 +2371,16 @@ namespace TGD.CombatV2
                                         ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection", cancelSelectionSuffix);
                                     else
                                         ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} CancelSelection");
-
-                                    handledInput = true;
-                                    break;
                                 }
                                 else
                                 {
                                     ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
                                     keepLooping = false;
                                     stageActive = false;
-                                    break;
                                 }
+
+                                selectionHandled = true;
+                                yield break;
                             }
 
                             if (!outcome.queued)
@@ -2188,9 +2388,10 @@ namespace TGD.CombatV2
                                 if (!outcome.cancel)
                                 {
                                     stageSuppressCancel = true;
-                                    handledInput = true;
                                 }
-                                break;
+
+                                selectionHandled = true;
+                                yield break;
                             }
 
                             if (outcome.tool != null)
@@ -2229,7 +2430,77 @@ namespace TGD.CombatV2
                             activeOwnerLogged = false;
                             SetChainFocus(unit);
 
+                            selectionHandled = true;
+                        }
+
+                        if (popupOpened)
+                        {
+                            if (popup.TryConsumeSkip())
+                            {
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Skip");
+                                stageActive = false;
+                                stageHasSelection = false;
+                                keepLooping = false;
+                                handledInput = true;
+                                SetChainFocus(unit);
+                                continue;
+                            }
+
+                            if (popup.TryConsumeSelection(out int selectedIndex))
+                            {
+                                if (selectedIndex >= 0 && selectedIndex < ownerOptions.Count)
+                                {
+                                    selectionHandled = false;
+                                    yield return HandleSelection(ownerOptions[selectedIndex]);
+
+                                    if (!stageActive)
+                                        break;
+
+                                    if (selectionHandled)
+                                        continue;
+                                }
+                            }
+                        }
+
+                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                        {
+                            string cancelSuffix = null;
+                            if (ownerMode && activeOwner != null)
+                                cancelSuffix = $"(owner={TurnManagerV2.FormatUnitLabel(activeOwner)})";
+
+                            if (!string.IsNullOrEmpty(cancelSuffix))
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel", cancelSuffix);
+                            else
+                                ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Cancel");
+
+                            if (ownerMode && activeOwner != null && allowOwnerCancel && !stageHasSelection)
+                            {
+                                stageOwnersUsed.Add(activeOwner);
+                                activeOwner = null;
+                                activeOwnerLogged = false;
+                                yield return null;
+                                continue;
+                            }
+
+                            stageActive = false;
+                            stageCancelledByInput = true;
                             break;
+                        }
+
+                        for (int i = 0; i < ownerOptions.Count; i++)
+                        {
+                            var option = ownerOptions[i];
+                            if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
+                                continue;
+
+                            selectionHandled = false;
+                            yield return HandleSelection(option);
+
+                            if (!stageActive)
+                                break;
+
+                            if (selectionHandled)
+                                break;
                         }
 
                         if (!stageActive)
@@ -2243,7 +2514,6 @@ namespace TGD.CombatV2
 
                         yield return null;
                     }
-
                     if (stageCancelledByInput)
                     {
                         yield return null;
@@ -2274,6 +2544,8 @@ namespace TGD.CombatV2
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
                     _chainWindowDepth--;
+                if (popupOpened && popup != null)
+                    popup.CloseWindow();
                 TryFinalizeEndTurn();
             }
         }
