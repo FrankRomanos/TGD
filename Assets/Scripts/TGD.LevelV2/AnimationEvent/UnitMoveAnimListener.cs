@@ -1,7 +1,8 @@
 ﻿using UnityEngine;
 using TGD.CombatV2;
+using TGD.HexBoard;
 
-namespace TGD.HexBoard
+namespace TGD.LevelV2
 {
     [DisallowMultipleComponent]
     public sealed class UnitMoveAnimListener : MonoBehaviour
