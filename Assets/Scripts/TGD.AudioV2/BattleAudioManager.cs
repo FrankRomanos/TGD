@@ -19,48 +19,75 @@ namespace TGD.AudioV2
         public float Volume => Mathf.Clamp01(_volume);
     }
 
-    [DefaultExecutionOrder(-5000)]                // 让它比大多数系统更早初始化
+    [DefaultExecutionOrder(-5000)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(AudioSource))]
     public sealed class BattleAudioManager : MonoBehaviour
     {
         static BattleAudioManager _instance;
 
-        // ★ 关键：在“子系统注册”阶段重置静态（即使 Domain Reload 关闭也会调用）
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() => _instance = null;
 
         [Header("UI Event Routing")]
-        [SerializeField] AudioSource _uiAudioSource;                   // 可留空，自动抓取/创建
+        [SerializeField] AudioSource _uiAudioSource;
         [SerializeField] List<BattleAudioEventConfig> _uiEventConfigs = new();
 
         [Header("Mixer (optional)")]
-        [SerializeField] AudioMixerGroup _uiMixerGroup;                // 可留空
+        [SerializeField] AudioMixerGroup _uiMixerGroup;
+
+        [Header("Lifecycle")]
+        [SerializeField] bool _persistAcrossScenes = true;
+        [SerializeField] bool _forceIgnoreRaycastLayer = true;
 
         readonly Dictionary<BattleAudioEvent, BattleAudioEventConfig> _eventLookup = new();
 
+        int _originalLayer;
+
         void Awake()
         {
-            // 单例稳态
             if (_instance != null && _instance != this)
             {
-                // 若已经有常驻实例，当前这个直接销毁并退出 —— 避免双实例干扰其它系统
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
 
-            // 放到一个不会拦 UI 射线的层（保险）
-            gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
+            _originalLayer = gameObject.layer;
+            if (_forceIgnoreRaycastLayer)
+            {
+                int targetLayer = LayerMask.NameToLayer("Ignore Raycast");
+                if (targetLayer >= 0)
+                    gameObject.layer = targetLayer;
+            }
 
-            DontDestroyOnLoad(gameObject);
+            if (_persistAcrossScenes)
+            {
+                if (!transform.parent)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+                else
+                {
+                    Debug.LogWarning("[Audio] BattleAudioManager is parented; skipping DontDestroyOnLoad to avoid detaching other UI components. Place it at the scene root or disable persistence.");
+                }
+            }
+
             RebuildCache();
 
-            // AudioSource就绪 & 路由到UI组（如有）
             var src = ResolveAudioSource();
             if (_uiMixerGroup && src.outputAudioMixerGroup != _uiMixerGroup)
                 src.outputAudioMixerGroup = _uiMixerGroup;
+        }
+
+        void OnDestroy()
+        {
+            if (_instance == this)
+                _instance = null;
+
+            if (_forceIgnoreRaycastLayer && gameObject.layer != _originalLayer)
+                gameObject.layer = _originalLayer;
         }
 
         void OnValidate()
@@ -79,8 +106,12 @@ namespace TGD.AudioV2
 
         public static void PlayEvent(BattleAudioEvent evt)
         {
-            // 永不抛异常，最多打一条 Warning，避免把 UI 流程中断
-            if (_instance == null) { Debug.LogWarning($"[Audio] PlayEvent({evt}) called but manager not ready."); return; }
+            if (_instance == null)
+            {
+                Debug.LogWarning($"[Audio] PlayEvent({evt}) called but manager not ready.");
+                return;
+            }
+
             _instance.PlayEventInternal(evt);
         }
 
@@ -102,7 +133,7 @@ namespace TGD.AudioV2
 
             _uiAudioSource.playOnAwake = false;
             _uiAudioSource.loop = false;
-            _uiAudioSource.spatialBlend = 0f;      // UI音效→纯2D
+            _uiAudioSource.spatialBlend = 0f;
             return _uiAudioSource;
         }
     }
