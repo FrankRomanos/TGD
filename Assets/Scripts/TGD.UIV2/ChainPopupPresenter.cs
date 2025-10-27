@@ -280,6 +280,7 @@ namespace TGD.UIV2
             UpdateAnchorPosition();
             BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
+            Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }
 
         public void CloseWindow()
