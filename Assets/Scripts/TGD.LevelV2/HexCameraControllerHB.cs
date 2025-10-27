@@ -1,4 +1,5 @@
 ﻿// File: TGD.Level/HexCameraControllerHB.cs
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
@@ -17,6 +18,10 @@ namespace TGD.LevelV2
         [SerializeField] HexBoardAuthoringLite authoring;
         [SerializeField] HexBoardLayout layout;
         [SerializeField] TurnManagerV2 turnManager;
+        [SerializeField] List<HexBoardTestDriver> driverHints = new();
+
+        [Header("Driver Discovery")]
+        [SerializeField] bool autoDiscoverDrivers = true;
 
         [Header("Rotate — MMB 按住")]
         [SerializeField] float rotateDegPerScreen = 180f;
@@ -68,6 +73,7 @@ namespace TGD.LevelV2
         bool _autoFocusActive;
         Vector3 _autoFocusTarget;
         Vector3 _defaultPivotPosition;
+        readonly List<HexBoardTestDriver> _driverCache = new();
 
         // 边缘滚动状态
         bool _edgeActive;
@@ -97,6 +103,7 @@ namespace TGD.LevelV2
 
             _defaultPivotPosition = pivot != null ? pivot.position : Vector3.zero;
             ApplyDefaultFollowOffset();
+            RefreshDriverCache();
         }
 
         void Update()
@@ -111,6 +118,10 @@ namespace TGD.LevelV2
         }
 
         // ===== Public API =====
+        public HexBoardLayout Layout => layout;
+
+        public float FocusPlaneY => pivot != null ? pivot.position.y : _defaultPivotPosition.y;
+
         public float AutoFocusSmooth
         {
             get => autoFocusSmooth;
@@ -124,15 +135,24 @@ namespace TGD.LevelV2
         }
         public Vector3 GetFocusWorldPosition()
         {
-            return (layout != null) ? layout.World(GetFocusCoordinate(), 0f) : pivot.position;
+            if (layout != null)
+            {
+                var world = layout.World(GetFocusCoordinate(), 0f);
+                world.y = FocusPlaneY;
+                return world;
+            }
+            return pivot.position;
         }
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            pivot.position = layout.World(h, 0f);
+            var world = layout.World(h, 0f);
+            world.y = FocusPlaneY;
+            pivot.position = world;
         }
         public void AutoFocus(Vector3 worldPos)
         {
+            worldPos.y = FocusPlaneY;
             _autoFocusTarget = worldPos;
             _autoFocusActive = true;
             _focusVel = Vector3.zero;
@@ -141,6 +161,114 @@ namespace TGD.LevelV2
         {
             if (layout == null) return;
             AutoFocus(layout.World(h, 0f));
+        }
+
+        public void RegisterDriver(HexBoardTestDriver driver)
+        {
+            if (driver == null)
+                return;
+
+            if (!_driverCache.Contains(driver))
+                _driverCache.Add(driver);
+
+            driver.EnsureInit();
+            if (layout == null && driver.Layout != null)
+                layout = driver.Layout;
+        }
+
+        public bool TryGetUnitFocusPosition(Unit unit, out Vector3 worldPos)
+        {
+            if (unit == null)
+            {
+                worldPos = default;
+                return false;
+            }
+
+            if (TryResolveDriver(unit, out var driver) && driver != null && driver.Layout != null)
+            {
+                var pos = driver.Layout.World(unit.Position, 0f);
+                pos.y = FocusPlaneY;
+                worldPos = pos;
+                return true;
+            }
+
+            if (layout != null)
+            {
+                var pos = layout.World(unit.Position, 0f);
+                pos.y = FocusPlaneY;
+                worldPos = pos;
+                return true;
+            }
+
+            worldPos = default;
+            return false;
+        }
+
+        void RefreshDriverCache()
+        {
+            _driverCache.Clear();
+            foreach (var drv in driverHints)
+                AddDriverToCache(drv);
+
+            if (!autoDiscoverDrivers)
+                return;
+
+            foreach (var drv in FindAllDrivers())
+                AddDriverToCache(drv);
+        }
+
+        void AddDriverToCache(HexBoardTestDriver driver)
+        {
+            if (driver == null)
+                return;
+
+            if (_driverCache.Contains(driver))
+                return;
+
+            _driverCache.Add(driver);
+            driver.EnsureInit();
+            if (layout == null && driver.Layout != null)
+                layout = driver.Layout;
+        }
+
+        bool TryResolveDriver(Unit unit, out HexBoardTestDriver driver)
+        {
+            driver = null;
+            if (unit == null)
+                return false;
+
+            foreach (var drv in _driverCache)
+            {
+                if (drv != null && drv.UnitRef == unit)
+                {
+                    driver = drv;
+                    return true;
+                }
+            }
+
+            if (!autoDiscoverDrivers)
+                return false;
+
+            foreach (var drv in FindAllDrivers())
+            {
+                AddDriverToCache(drv);
+                if (drv != null && drv.UnitRef == unit)
+                {
+                    driver = drv;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static HexBoardTestDriver[] FindAllDrivers()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return Object.FindObjectsByType<HexBoardTestDriver>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+            return Object.FindObjectsOfType<HexBoardTestDriver>();
+#endif
         }
 
         public void ResetFocus(bool smooth = true)
@@ -352,7 +480,10 @@ namespace TGD.LevelV2
 
             if (recenterFocusActiveUnit && turnManager != null && turnManager.ActiveUnit != null)
             {
-                AutoFocus(turnManager.ActiveUnit.Position);
+                if (TryGetUnitFocusPosition(turnManager.ActiveUnit, out var focusPos))
+                    AutoFocus(focusPos);
+                else
+                    AutoFocus(turnManager.ActiveUnit.Position);
             }
             else
             {
