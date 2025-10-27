@@ -1013,6 +1013,12 @@ namespace TGD.CombatV2
             }
 
             var layout = authoring.Layout;
+            var hexSpace = HexSpace.Instance;
+            if (hexSpace == null)
+            {
+                Debug.LogWarning("[AttackControllerV2] HexSpace instance is missing.", this);
+                yield break;
+            }
             var unit = driver.UnitRef;
             Transform view = driver.unitView != null ? driver.unitView : transform;
             var playerBridge = _bridge as PlayerOccupancyBridge;
@@ -1071,8 +1077,8 @@ namespace TGD.CombatV2
 
             if (view != null && executionPath.Count >= 2)
             {
-                var fromW = layout.World(executionPath[0], y);
-                var toW = layout.World(executionPath[^1], y);
+                var fromW = hexSpace.HexToWorld(executionPath[0], y);
+                var toW = hexSpace.HexToWorld(executionPath[^1], y);
                 float keep = attackConfig ? attackConfig.keepDeg : 45f;
                 float turn = attackConfig ? attackConfig.turnDeg : 135f;
                 float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
@@ -1122,8 +1128,8 @@ namespace TGD.CombatV2
 
                     if (attackPlanned && authoring?.Layout != null && driver?.unitView != null)
                     {
-                        var fromW = authoring.Layout.World(startAnchor, y);
-                        var toW = authoring.Layout.World(preview.targetHex, y);
+                        var fromW = hexSpace.HexToWorld(startAnchor, y);
+                        var toW = hexSpace.HexToWorld(preview.targetHex, y);
                         float keep = attackConfig ? attackConfig.keepDeg : 45f;
                         float turn = attackConfig ? attackConfig.turnDeg : 135f;
                         float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
@@ -1208,8 +1214,8 @@ namespace TGD.CombatV2
                         AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
                     }
 
-                    var fromW = layout.World(from, y);
-                    var toW = layout.World(to, y);
+                    var fromW = hexSpace.HexToWorld(from, y);
+                    var toW = hexSpace.HexToWorld(to, y);
                     string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                     float t = 0f;
                     while (t < 1f)

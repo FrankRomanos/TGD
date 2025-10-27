@@ -1,4 +1,4 @@
-﻿// File: TGD.HexBoard/HexAreaUtil.cs
+// File: TGD.HexBoard/HexAreaUtil.cs
 using System.Collections.Generic;
 using UnityEngine; // 为默认阻挡构造器使用到 Physics/LayerMask
 
@@ -175,9 +175,23 @@ namespace TGD.HexBoard
                 if (cell.Equals(origin)) return false; // 起点永不阻挡
                 if (blockByUnits && map != null && !map.IsFree(cell)) return true;
 
-                if (blockByPhysics && obstacleMask.value != 0 && L != null)
+                if (blockByPhysics && obstacleMask.value != 0)
                 {
-                    Vector3 c = L.World(cell, y);
+                    Vector3 c;
+                    var space = HexSpace.Instance;
+                    if (space != null && space.TryHexToWorld(cell, out c, y))
+                    {
+                        // resolved via HexSpace
+                    }
+                    else if (L != null)
+                    {
+                        c = L.World(cell, y);
+                    }
+                    else
+                    {
+                        c = new Vector3(cell.q, y, cell.r);
+                    }
+
                     if (Physics.CheckSphere(c + Vector3.up * 0.5f, rin, obstacleMask, qti)) return true;
                     Vector3 p1 = c + Vector3.up * 0.1f, p2 = c + Vector3.up * physicsProbeHeight;
                     if (Physics.CheckCapsule(p1, p2, rin, obstacleMask, qti)) return true;

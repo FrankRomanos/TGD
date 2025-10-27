@@ -895,11 +895,17 @@ namespace TGD.CombatV2
 
                 string refundTag = refunded > 0 ? "Speed_Adjust" : null;
                 SetExecReport(requiredSec, refunded, energyNet, false, refundTag);
+                var hexSpace = HexSpace.Instance;
+                if (hexSpace == null)
+                {
+                    Debug.LogWarning("[HexClickMover] HexSpace instance is missing.", this);
+                    yield break;
+                }
                 _moving = true;
                 if (driver.unitView != null)
                 {
-                    var fromW = authoring.Layout.World(reached[0], y);
-                    var toW = authoring.Layout.World(reached[^1], y);
+                    var fromW = hexSpace.HexToWorld(reached[0], y);
+                    var toW = hexSpace.HexToWorld(reached[^1], y);
                     float keep = config ? config.keepDeg : 45f;
                     float turn = config ? config.turnDeg : 135f;
                     float speed = config ? config.turnSpeedDegPerSec : 720f;
@@ -950,8 +956,8 @@ namespace TGD.CombatV2
                     HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
 
 
-                    var fromW = layout.World(from, y);
-                    var toW = layout.World(to, y);
+                    var fromW = hexSpace.HexToWorld(from, y);
+                    var toW = hexSpace.HexToWorld(to, y);
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]

@@ -4,7 +4,7 @@ using UnityEngine;
 namespace TGD.HexBoard
 {
     [DisallowMultipleComponent]
-    public sealed class HexBoardTestDriver : MonoBehaviour
+    public sealed class HexBoardTestDriver : MonoBehaviour, IUnitView
     {
         public HexBoardAuthoringLite authoring;
         public Transform unitView;
@@ -23,8 +23,13 @@ namespace TGD.HexBoard
         HexBoardMap<Unit> _map;
         Unit _unit;
         bool _inited;
+        bool _registered;
 
         public bool IsReady => _inited && _layout != null && _unit != null && _map != null;
+
+        public string UnitId => unitId;
+
+        public Transform ViewTransform => unitView != null ? unitView : transform;
 
         public void EnsureInit()
         {
@@ -39,6 +44,13 @@ namespace TGD.HexBoard
 
             _inited = true;
             SyncView();
+            TryRegisterView();
+        }
+
+        void OnEnable()
+        {
+            EnsureInit();
+            TryRegisterView();
         }
 
         void Start() => EnsureInit();
@@ -52,10 +64,25 @@ namespace TGD.HexBoard
                 _unit.Facing = FacingFromYaw4(unitView.eulerAngles.y);
         }
 
+        void OnDisable()
+        {
+            if (_registered)
+            {
+                UnitLocator.Unregister(this);
+                _registered = false;
+            }
+        }
+
         public void SyncView()
         {
             if (!IsReady || unitView == null) return;
-            unitView.position = _layout.World(_unit.Position, y);
+            var space = HexSpace.Instance;
+            if (space == null)
+            {
+                Debug.LogWarning("[HexBoardTestDriver] HexSpace instance is missing; cannot sync view.", this);
+                return;
+            }
+            unitView.position = space.HexToWorld(_unit.Position, y);
         }
 
         public static Facing4 FacingFromYaw4(float yawDegrees)
@@ -69,6 +96,13 @@ namespace TGD.HexBoard
                 case 270: return Facing4.MinusQ;
                 default: return Facing4.MinusR;
             }
+        }
+
+        void TryRegisterView()
+        {
+            if (_registered || !IsReady) return;
+            if (UnitLocator.Register(this))
+                _registered = true;
         }
     }
 }

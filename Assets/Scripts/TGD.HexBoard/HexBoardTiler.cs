@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -79,9 +79,16 @@ namespace TGD.HexBoard
 
             Transform p = parent ? parent : transform;
 
+            var space = HexSpace.Instance;
+            if (space == null)
+            {
+                Debug.LogWarning("[HexBoardTiler] HexSpace instance is missing; aborting tile rebuild.", this);
+                return;
+            }
+
             foreach (var h in L.Coordinates())
             {
-                Vector3 pos = L.World(h, y) + prefabLocalOffset;
+                Vector3 pos = space.HexToWorld(h, y) + prefabLocalOffset;
                 var go = Instantiate(tilePrefab, pos, Quaternion.Euler(prefabLocalEuler), p);
                 go.name = $"Tile [{h.q},{h.r}]";
                 go.transform.localScale = go.transform.localScale * k;

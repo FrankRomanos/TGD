@@ -1,4 +1,4 @@
-﻿// File: TGD.Level/HexCameraControllerHB.cs
+// File: TGD.Level/HexCameraControllerHB.cs
 using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
@@ -104,7 +104,9 @@ namespace TGD.LevelV2
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            var world = layout.World(h, 0f);
+            var space = HexSpace.Instance;
+            if (space == null) return;
+            var world = space.HexToWorld(h, 0f);
             world = AdjustToPivotPlane(world);
             pivot.position = world;
         }
