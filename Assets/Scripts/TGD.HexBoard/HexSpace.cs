@@ -33,16 +33,16 @@ namespace TGD.HexBoard
             {
                 if (_instance == null && !_searched)
                 {
-                    _instance = FindObjectOfType<HexSpace>();
+#if UNITY_2023_1_OR_NEWER
+                    _instance = FindFirstObjectByType<HexSpace>(FindObjectsInactive.Include);
+#else
+            _instance = FindObjectOfType<HexSpace>();
+#endif
                     _searched = true;
                 }
                 return _instance;
             }
-            private set
-            {
-                _instance = value;
-                _searched = value != null;
-            }
+            private set { _instance = value; _searched = (value != null); }
         }
 
         public HexBoardAuthoringLite Authoring
