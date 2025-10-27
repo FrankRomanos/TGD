@@ -190,6 +190,32 @@ namespace TGD.LevelV2
                 return true;
             }
 
+            if (turnManager != null)
+            {
+                var context = turnManager.GetContext(unit);
+                if (context != null)
+                {
+                    var ctxTransform = context.transform;
+                    if (ctxTransform != null)
+                    {
+                        worldPos = AdjustToPivotPlane(ctxTransform.position);
+                        return true;
+                    }
+
+                    var ctxDriver = context.GetComponentInParent<HexBoardTestDriver>();
+                    if (ctxDriver != null)
+                    {
+                        AddDriverToCache(ctxDriver);
+                        var view = ctxDriver.unitView != null ? ctxDriver.unitView : ctxDriver.transform;
+                        if (view != null)
+                        {
+                            worldPos = AdjustToPivotPlane(view.position);
+                            return true;
+                        }
+                    }
+                }
+            }
+
             worldPos = default;
             return false;
         }
@@ -237,7 +263,18 @@ namespace TGD.LevelV2
             }
 
             if (!autoDiscoverDrivers)
+            {
+                if (turnManager != null)
+                {
+                    var ctxDriver = ResolveDriverFromContext(unit);
+                    if (ctxDriver != null)
+                    {
+                        driver = ctxDriver;
+                        return true;
+                    }
+                }
                 return false;
+            }
 
             foreach (var drv in FindAllDrivers())
             {
@@ -249,7 +286,34 @@ namespace TGD.LevelV2
                 }
             }
 
+            if (turnManager != null)
+            {
+                var ctxDriver = ResolveDriverFromContext(unit);
+                if (ctxDriver != null)
+                {
+                    driver = ctxDriver;
+                    return true;
+                }
+            }
+
             return false;
+        }
+
+        HexBoardTestDriver ResolveDriverFromContext(Unit unit)
+        {
+            if (unit == null || turnManager == null)
+                return null;
+
+            var context = turnManager.GetContext(unit);
+            if (context == null)
+                return null;
+
+            var ctxDriver = context.GetComponentInParent<HexBoardTestDriver>();
+            if (ctxDriver == null)
+                return null;
+
+            AddDriverToCache(ctxDriver);
+            return ctxDriver;
         }
 
         static HexBoardTestDriver[] FindAllDrivers()

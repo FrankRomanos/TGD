@@ -155,6 +155,12 @@ namespace TGD.LevelV2
             if (cameraController == null || unit == null)
                 return;
 
+            if (cameraController.TryGetUnitFocusPosition(unit, out var world))
+            {
+                cameraController.AutoFocus(world);
+                return;
+            }
+
             if (TryResolveDriver(unit, out var driver) && driver != null)
             {
                 cameraController.RegisterDriver(driver);
@@ -167,15 +173,26 @@ namespace TGD.LevelV2
                 }
             }
 
-            if (cameraController.TryGetUnitFocusPosition(unit, out var world))
+            var context = turnManager != null ? turnManager.GetContext(unit) : null;
+            if (context != null)
             {
-                cameraController.AutoFocus(world);
-                return;
-            }
+                var ctxDriver = context.GetComponentInParent<HexBoardTestDriver>();
+                if (ctxDriver != null)
+                {
+                    cameraController.RegisterDriver(ctxDriver);
+                    var view = ctxDriver.unitView != null ? ctxDriver.unitView : ctxDriver.transform;
+                    if (view != null)
+                    {
+                        cameraController.AutoFocus(view.position);
+                        return;
+                    }
+                }
 
-            if (cameraController.Layout != null)
-            {
-                cameraController.AutoFocus(unit.Position);
+                var ctxTransform = context.transform;
+                if (ctxTransform != null)
+                {
+                    cameraController.AutoFocus(ctxTransform.position);
+                }
             }
         }
     }
