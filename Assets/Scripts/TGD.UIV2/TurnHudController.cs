@@ -99,6 +99,7 @@ namespace TGD.UI
             if (combatManager != null)
             {
                 combatManager.ChainFocusChanged += OnChainFocusChanged;
+                combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
             }
         }
 
@@ -115,6 +116,7 @@ namespace TGD.UI
             if (combatManager != null)
             {
                 combatManager.ChainFocusChanged -= OnChainFocusChanged;
+                combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
             }
         }
 
@@ -223,6 +225,11 @@ namespace TGD.UI
             }
 
             RefreshDisplayUnit(unit);
+        }
+
+        void OnBonusTurnStateChanged()
+        {
+            RefreshAll();
         }
 
         void RefreshDisplayUnit(Unit unit)

@@ -215,10 +215,17 @@ namespace TGD.CombatV2
 
         BonusTurnState _bonusTurn;
 
+        public event Action BonusTurnStateChanged;
+
         public Unit CurrentBonusTurnUnit => IsBonusTurnActive ? _bonusTurn.unit : null;
         public int CurrentBonusTurnRemaining => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.remaining) : 0;
         public int CurrentBonusTurnCap => IsBonusTurnActive ? Mathf.Max(0, _bonusTurn.cap) : 0;
         public Unit CurrentChainFocus => _currentChainFocus;
+
+        void NotifyBonusTurnStateChanged()
+        {
+            BonusTurnStateChanged?.Invoke();
+        }
 
         IActionRules ResolveRules()
         {
@@ -246,7 +253,13 @@ namespace TGD.CombatV2
             if (secs <= 0)
                 return;
 
-            _bonusTurn.remaining = Mathf.Max(0, _bonusTurn.remaining - secs);
+            int before = _bonusTurn.remaining;
+            int after = Mathf.Max(0, before - secs);
+            if (after != before)
+            {
+                _bonusTurn.remaining = after;
+                NotifyBonusTurnStateChanged();
+            }
             preDeduct.bonusSecs = secs;
         }
 
@@ -263,11 +276,23 @@ namespace TGD.CombatV2
             if (delta < 0)
             {
                 int refund = -delta;
-                _bonusTurn.remaining = Mathf.Min(_bonusTurn.cap, _bonusTurn.remaining + refund);
+                int before = _bonusTurn.remaining;
+                int after = Mathf.Min(_bonusTurn.cap, before + refund);
+                if (after != before)
+                {
+                    _bonusTurn.remaining = after;
+                    NotifyBonusTurnStateChanged();
+                }
             }
             else if (delta > 0)
             {
-                _bonusTurn.remaining = Mathf.Max(0, _bonusTurn.remaining - delta);
+                int before = _bonusTurn.remaining;
+                int after = Mathf.Max(0, before - delta);
+                if (after != before)
+                {
+                    _bonusTurn.remaining = after;
+                    NotifyBonusTurnStateChanged();
+                }
             }
         }
 
@@ -324,6 +349,7 @@ namespace TGD.CombatV2
             _bonusTurn.remaining = Mathf.Max(0, capSeconds);
             _bonusTurn.sourceId = sourceId;
             SetChainFocus(unit);
+            NotifyBonusTurnStateChanged();
         }
 
         void EndBonusTurn(Unit unit)
@@ -332,6 +358,7 @@ namespace TGD.CombatV2
                 return;
 
             _bonusTurn.Reset();
+            NotifyBonusTurnStateChanged();
             SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
         }
 
@@ -864,7 +891,10 @@ namespace TGD.CombatV2
                 _pendingEndTurn = prevPending;
                 _pendingEndTurnUnit = prevPendingUnit;
                 _bonusPlanDepth = prevPlanDepth;
+                bool hadBonus = _bonusTurn.active;
                 _bonusTurn.Reset();
+                if (hadBonus)
+                    NotifyBonusTurnStateChanged();
             }
         }
 
@@ -1189,7 +1219,15 @@ namespace TGD.CombatV2
                 if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
                     budget.RefundTime(basePreDeduct.secs);
                 if (IsBonusTurnFor(unit) && basePreDeduct.valid && basePreDeduct.bonusSecs > 0)
-                    _bonusTurn.remaining = Mathf.Min(_bonusTurn.cap, _bonusTurn.remaining + basePreDeduct.bonusSecs);
+                {
+                    int before = _bonusTurn.remaining;
+                    int after = Mathf.Min(_bonusTurn.cap, before + basePreDeduct.bonusSecs);
+                    if (after != before)
+                    {
+                        _bonusTurn.remaining = after;
+                        NotifyBonusTurnStateChanged();
+                    }
+                }
                 ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
                 NotifyConfirmAbort(tool, unit, "LinkCancelled");
                 CleanupAfterAbort(tool, false);
