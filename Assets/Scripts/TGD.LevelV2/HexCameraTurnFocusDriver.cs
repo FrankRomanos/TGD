@@ -121,9 +121,7 @@ namespace TGD.LevelV2
             {
                 if (drv != null && drv.UnitRef == unit && drv.Layout != null)
                 {
-                    var pos = drv.Layout.World(unit.Position, 0f);
-                    pos.y = cameraController != null ? cameraController.FocusPlaneY : drv.y;
-                    world = pos;
+                    world = drv.Layout.World(unit.Position, drv.y);
                     return true;
                 }
             }
@@ -136,9 +134,7 @@ namespace TGD.LevelV2
                 AddDriverToCache(drv);
                 if (drv != null && drv.UnitRef == unit && drv.Layout != null)
                 {
-                    var pos = drv.Layout.World(unit.Position, 0f);
-                    pos.y = cameraController != null ? cameraController.FocusPlaneY : drv.y;
-                    world = pos;
+                    world = drv.Layout.World(unit.Position, drv.y);
                     return true;
                 }
             }

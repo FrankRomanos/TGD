@@ -136,23 +136,17 @@ namespace TGD.LevelV2
         public Vector3 GetFocusWorldPosition()
         {
             if (layout != null)
-            {
-                var world = layout.World(GetFocusCoordinate(), 0f);
-                world.y = FocusPlaneY;
-                return world;
-            }
+                return layout.World(GetFocusCoordinate(), 0f);
+
             return pivot.position;
         }
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            var world = layout.World(h, 0f);
-            world.y = FocusPlaneY;
-            pivot.position = world;
+            pivot.position = layout.World(h, 0f);
         }
         public void AutoFocus(Vector3 worldPos)
         {
-            worldPos.y = FocusPlaneY;
             _autoFocusTarget = worldPos;
             _autoFocusActive = true;
             _focusVel = Vector3.zero;
@@ -186,8 +180,7 @@ namespace TGD.LevelV2
 
             if (TryResolveDriver(unit, out var driver) && driver != null && driver.Layout != null)
             {
-                var pos = driver.Layout.World(unit.Position, 0f);
-                pos.y = FocusPlaneY;
+                var pos = driver.Layout.World(unit.Position, driver.y);
                 worldPos = pos;
                 return true;
             }
@@ -195,7 +188,6 @@ namespace TGD.LevelV2
             if (layout != null)
             {
                 var pos = layout.World(unit.Position, 0f);
-                pos.y = FocusPlaneY;
                 worldPos = pos;
                 return true;
             }
