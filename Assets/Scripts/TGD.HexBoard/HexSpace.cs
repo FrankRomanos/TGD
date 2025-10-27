@@ -174,27 +174,37 @@ namespace TGD.HexBoard
 
         bool TryGetMouseRay(out Ray ray)
         {
-            if (Application.isPlaying)
+#if UNITY_EDITOR
+            // 1) 如果 SceneView 正被鼠标悬停，则优先使用它的相机与鼠标
+            var over = EditorWindow.mouseOverWindow as SceneView;
+            if (over != null && over.camera != null)
             {
-                var cam = Camera.main ?? Camera.current;
-                if (cam != null)
-                {
-                    ray = cam.ScreenPointToRay(Input.mousePosition);
-                    return true;
-                }
-            }
-
-            var sceneView = SceneView.lastActiveSceneView;
-            if (sceneView != null && sceneView.camera != null)
-            {
-                var cam = sceneView.camera;
+                // SceneView 的 Event 坐标是“GUI 像素坐标”，需要倒置 Y
+                var cam = over.camera;
                 var evt = Event.current;
-                Vector2 mousePos = evt != null ? evt.mousePosition : new Vector2(cam.pixelWidth * 0.5f, cam.pixelHeight * 0.5f);
-                mousePos.y = cam.pixelHeight - mousePos.y;
-                ray = cam.ScreenPointToRay(mousePos);
+                Vector2 mp = (evt != null)
+                    ? evt.mousePosition
+                    : new Vector2(cam.pixelWidth * 0.5f, cam.pixelHeight * 0.5f);
+                mp.y = cam.pixelHeight - mp.y;
+                ray = cam.ScreenPointToRay(mp);
                 return true;
             }
 
+            // 2) 若拿不到 SceneView 射线，再根据当前上下文选 Game/Current 相机
+            var camFallback = Camera.current ?? Camera.main;
+            if (camFallback != null)
+            {
+                ray = camFallback.ScreenPointToRay(Input.mousePosition);
+                return true;
+            }
+#else
+    var cam = Camera.main ?? Camera.current;
+    if (cam != null)
+    {
+        ray = cam.ScreenPointToRay(Input.mousePosition);
+        return true;
+    }
+#endif
             ray = default;
             return false;
         }
@@ -212,6 +222,36 @@ namespace TGD.HexBoard
             hit = default;
             return false;
         }
+        // HexSpace.cs 里增加：
+        public static string Explain(Hex h)
+        {
+            var inst = Instance;
+            if (inst == null || inst.Layout == null) return "[HexSpace] No layout.";
+            var w = inst.Layout.World(h, inst.DefaultY);
+            var back = inst.Layout.HexAt(w);
+            return $"{h} -> {w} -> {back}";
+        }
+
+        [ContextMenu("Self Test (0,0) (8,6) (11,5)")]
+        void SelfTest()
+        {
+            Debug.Log(Explain(new Hex(0, 0)), this);
+            Debug.Log(Explain(new Hex(8, 6)), this);
+            Debug.Log(Explain(new Hex(11, 5)), this);
+        }
+
+        // 可选：对某个 unit 做“变换 vs 逻辑”的对照打印
+        public static void DebugUnit(Unit u)
+        {
+            if (u == null) { Debug.Log("[HexSpace] DebugUnit: null"); return; }
+            var hex = u.Position;
+            var mapped = Instance.HexToWorld(hex);
+            if (UnitLocator.TryGetTransform(u.Id, out var t) && t)
+                Debug.Log($"[Unit] {u.Id} hex={hex}  view={t.position}  map={mapped}");
+            else
+                Debug.Log($"[Unit] {u.Id} hex={hex}  (no view)  map={mapped}");
+        }
+
 #endif
     }
 }
