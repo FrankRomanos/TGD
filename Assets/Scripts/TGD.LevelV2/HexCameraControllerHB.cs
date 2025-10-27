@@ -62,6 +62,9 @@ namespace TGD.LevelV2
         bool _edgeActive;
         float _edgeEnterTime = -1f;
 
+        Quaternion _defaultPivotRotation;
+        Vector3 _defaultFollowOffset;
+
         void Awake()
         {
             if (layout == null && authoring != null) layout = authoring.Layout;
@@ -74,6 +77,7 @@ namespace TGD.LevelV2
             }
 
             _defaultPivotPosition = pivot != null ? pivot.position : Vector3.zero;
+            _defaultPivotRotation = pivot != null ? pivot.rotation : Quaternion.identity;
             ApplyDefaultFollowOffset();
         }
 
@@ -83,6 +87,7 @@ namespace TGD.LevelV2
             HandleKeyPan();          // ↑↓←→ 平移
             HandleEdgeScroll();      // 屏幕边缘（有停留时间）
             HandleZoom();            // y/z 联动 + 保护
+            if (Input.GetKeyDown(KeyCode.Space)) ResetCameraToDefault();
             if (clampToBounds) ClampToMapBounds();
         }
 
@@ -148,7 +153,9 @@ namespace TGD.LevelV2
 
             float normX = delta.x / Mathf.Max(1f, Screen.width);
             float yawDelta = normX * rotateDegPerScreen; // 度
+            Vector3 keepPos = pivot.position;
             pivot.Rotate(0f, yawDelta, 0f, Space.World);
+            pivot.position = keepPos;
         }
 
         // ↑↓←→ 平移（与边缘滚动互斥）
@@ -312,6 +319,7 @@ namespace TGD.LevelV2
                 float tiltRad = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
                 off.z = -height / Mathf.Tan(tiltRad);
                 follow.FollowOffset = off;
+                _defaultFollowOffset = off;
                 return;
             }
 
@@ -319,6 +327,25 @@ namespace TGD.LevelV2
             float tilt = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
             off.z = -height / Mathf.Tan(tilt);
             follow.FollowOffset = off;
+            _defaultFollowOffset = off;
+        }
+
+        void ResetCameraToDefault()
+        {
+            if (pivot != null)
+            {
+                pivot.position = _defaultPivotPosition;
+                pivot.rotation = _defaultPivotRotation;
+            }
+
+            if (cineCam != null)
+            {
+                var follow = cineCam.GetComponent<CinemachineFollow>();
+                if (follow != null)
+                {
+                    follow.FollowOffset = _defaultFollowOffset;
+                }
+            }
         }
 
         bool TryProjectMouseToGround(out Vector3 hit)
