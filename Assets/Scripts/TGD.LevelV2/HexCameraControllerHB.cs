@@ -2,6 +2,7 @@
 using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
+using TGD.CombatV2;
 using TGD.HexBoard;
 using TGD.UIV2;
 
@@ -65,12 +66,24 @@ namespace TGD.LevelV2
         Quaternion _defaultPivotRotation;
         Vector3 _defaultFollowOffset;
 
+        TurnManagerV2 _boundTurnManager;
+        Unit _currentTurnUnit;
+        Vector3 _focusTargetPosition;
+        bool _hasFocusTarget;
+        string _pendingFocusUnitId;
+
         [SerializeField] bool applyDefaultsOnStart = true;
         [SerializeField] bool alignYawToRAxis = true;   // 让 R 轴竖直（FlatTop 下即 yaw=0）
         [SerializeField] bool autoClampToBoard = true;  // 自动按棋盘计算边界
         [SerializeField] float clampMargin = 1.5f;      // 边界外留白
         [SerializeField] bool ctrlForFineStep = true;
         [SerializeField] float fineStepScale = 0.5f;         // 按 Ctrl 时步长倍率
+
+        [Header("Turn Focus")]
+        [SerializeField] TurnManagerV2 turnManager;
+        [SerializeField] bool autoFindTurnManager = true;
+        [SerializeField] float focusMoveSpeed = 12f;
+        [SerializeField] float focusArriveThreshold = 0.05f;
 
         void Start()
         {
@@ -129,15 +142,36 @@ namespace TGD.LevelV2
 
             ApplyDefaultFollowOffset();
             CacheDefaultPivotState();
+            TryAutoBindTurnManager();
+        }
+
+        void OnEnable()
+        {
+            TryAutoBindTurnManager();
+        }
+
+        void OnDisable()
+        {
+            if (_boundTurnManager != null)
+                _boundTurnManager.TurnStarted -= OnTurnStarted;
+            _boundTurnManager = null;
+            _currentTurnUnit = null;
+            _pendingFocusUnitId = null;
+            _hasFocusTarget = false;
         }
 
         void Update()
         {
+            TryAutoBindTurnManager();
+            TryResolvePendingFocus();
+
             HandleMouseRotate();     // 中键按住才旋转
             HandleKeyPan();          // ↑↓←→ 平移
             HandleEdgeScroll();      // 屏幕边缘（有停留时间）
             HandleZoom();            // y/z 联动 + 保护
-            if (Input.GetKeyDown(KeyCode.Space)) ResetCameraToDefault();
+            if (Input.GetKeyDown(KeyCode.Space)) RefocusActiveUnit(true);
+
+            UpdateFocusSmoothing();
             if (clampToBounds) ClampToMapBounds();
         }
 
@@ -160,6 +194,7 @@ namespace TGD.LevelV2
             var world = space.HexToWorld(h, 0f);
             world = AdjustToPivotPlane(world);
             pivot.position = world;
+            ClearFocusTarget();
         }
 
         public void ResetFocus(bool smooth = true)
@@ -169,6 +204,195 @@ namespace TGD.LevelV2
 
             var adjusted = AdjustToPivotPlane(_defaultPivotPosition);
             pivot.position = adjusted;
+            ClearFocusTarget();
+        }
+
+        void TryAutoBindTurnManager()
+        {
+            if (_boundTurnManager != null)
+            {
+                if (turnManager != null && _boundTurnManager != turnManager)
+                    BindTurnManager(turnManager);
+                return;
+            }
+
+            var candidate = turnManager;
+            if (candidate == null && autoFindTurnManager)
+            {
+                candidate = FindObjectOfType<TurnManagerV2>();
+                if (candidate != null)
+                    turnManager = candidate;
+            }
+
+            if (candidate != null)
+                BindTurnManager(candidate);
+        }
+
+        void BindTurnManager(TurnManagerV2 candidate)
+        {
+            if (_boundTurnManager == candidate)
+                return;
+
+            if (_boundTurnManager != null)
+                _boundTurnManager.TurnStarted -= OnTurnStarted;
+
+            _boundTurnManager = candidate;
+
+            if (_boundTurnManager != null)
+            {
+                _boundTurnManager.TurnStarted += OnTurnStarted;
+                var active = _boundTurnManager.ActiveUnit;
+                if (active != null)
+                    FocusOnUnit(active, false);
+            }
+        }
+
+        void OnTurnStarted(Unit unit)
+        {
+            _currentTurnUnit = unit;
+            if (unit == null)
+                return;
+            FocusOnUnit(unit, false);
+        }
+
+        void RefocusActiveUnit(bool resetHeight)
+        {
+            var unit = GetCurrentActiveUnit();
+            if (unit == null)
+                return;
+            FocusOnUnit(unit, resetHeight);
+        }
+
+        Unit GetCurrentActiveUnit()
+        {
+            if (_boundTurnManager != null && _boundTurnManager.ActiveUnit != null)
+                return _boundTurnManager.ActiveUnit;
+            return _currentTurnUnit;
+        }
+
+        void FocusOnUnit(Unit unit, bool resetHeight)
+        {
+            if (unit == null)
+                return;
+
+            _currentTurnUnit = unit;
+
+            if (resetHeight)
+                ApplyDefaultFollowOffset();
+
+            if (!TryGetUnitFocusPosition(unit, out var world))
+            {
+                ClearFocusTarget();
+                _pendingFocusUnitId = unit.Id;
+                return;
+            }
+
+            _pendingFocusUnitId = null;
+            SetFocusTarget(world);
+        }
+
+        void TryResolvePendingFocus()
+        {
+            if (string.IsNullOrEmpty(_pendingFocusUnitId))
+                return;
+            if (!TryGetUnitFocusPosition(_pendingFocusUnitId, out var world))
+                return;
+            _pendingFocusUnitId = null;
+            SetFocusTarget(world);
+        }
+
+        bool TryGetUnitFocusPosition(Unit unit, out Vector3 world)
+        {
+            if (unit == null)
+            {
+                world = default;
+                return false;
+            }
+            return TryGetUnitFocusPosition(unit.Id, out world);
+        }
+
+        bool TryGetUnitFocusPosition(string unitId, out Vector3 world)
+        {
+            world = default;
+            if (string.IsNullOrEmpty(unitId))
+                return false;
+            if (UnitLocator.TryGetTransform(unitId, out var transform) && transform != null)
+            {
+                world = transform.position;
+                return true;
+            }
+            return false;
+        }
+
+        void SetFocusTarget(Vector3 world)
+        {
+            if (pivot == null)
+                return;
+
+            Vector3 target = AdjustToPivotPlane(world);
+            target = ClampTarget(target);
+
+            if (focusMoveSpeed <= 0f)
+            {
+                pivot.position = target;
+                _hasFocusTarget = false;
+                return;
+            }
+
+            _focusTargetPosition = target;
+
+            float threshold = Mathf.Max(0.0001f, focusArriveThreshold);
+            if ((pivot.position - target).sqrMagnitude <= threshold * threshold)
+            {
+                pivot.position = target;
+                _hasFocusTarget = false;
+            }
+            else
+            {
+                _hasFocusTarget = true;
+            }
+        }
+
+        Vector3 ClampTarget(Vector3 target)
+        {
+            if (!clampToBounds)
+                return target;
+            target.x = Mathf.Clamp(target.x, boundsMinXZ.x, boundsMaxXZ.x);
+            target.z = Mathf.Clamp(target.z, boundsMinXZ.y, boundsMaxXZ.y);
+            return target;
+        }
+
+        void UpdateFocusSmoothing()
+        {
+            if (!_hasFocusTarget || pivot == null)
+                return;
+
+            Vector3 target = _focusTargetPosition;
+            target.y = pivot.position.y;
+
+            float speed = Mathf.Max(0f, focusMoveSpeed);
+            if (speed <= 0f)
+            {
+                pivot.position = target;
+                _hasFocusTarget = false;
+                return;
+            }
+
+            Vector3 current = pivot.position;
+            Vector3 next = Vector3.MoveTowards(current, target, speed * Time.deltaTime);
+            pivot.position = next;
+
+            float threshold = Mathf.Max(0.0001f, focusArriveThreshold);
+            if ((next - target).sqrMagnitude <= threshold * threshold)
+            {
+                pivot.position = target;
+                _hasFocusTarget = false;
+            }
+        }
+
+        void ClearFocusTarget()
+        {
+            _hasFocusTarget = false;
         }
 
         // ===== Handlers =====
@@ -238,6 +462,7 @@ namespace TGD.LevelV2
             if (dir.sqrMagnitude > 1f) dir.Normalize();
 
             pivot.position += dir * speed * Time.deltaTime;
+            ClearFocusTarget();
 
             // 键盘平移时禁用边缘滚动
             _edgeActive = false;
@@ -283,6 +508,7 @@ namespace TGD.LevelV2
 
             float intensity = Mathf.Clamp01(move.magnitude);
             pivot.position += worldDir * (speed * intensity) * Time.deltaTime;
+            ClearFocusTarget();
         }
 
         // 滚轮缩放（固定俯角 + 丢焦保护）
@@ -361,6 +587,7 @@ namespace TGD.LevelV2
                         stepVec = stepVec.normalized * maxStep;
 
                     pivot.position += stepVec;
+                    ClearFocusTarget();
                     pivotAdjusted = true;
                 }
             }
@@ -369,6 +596,7 @@ namespace TGD.LevelV2
             if (!pivotAdjusted && hasCenterAnchor && pivot != null)
             {
                 pivot.position = new Vector3(centerAnchor.x, pivot.position.y, centerAnchor.z);
+                ClearFocusTarget();
             }
         }
 
@@ -433,6 +661,7 @@ namespace TGD.LevelV2
             {
                 pivot.position = _defaultPivotPosition;
                 pivot.rotation = _defaultPivotRotation;
+                ClearFocusTarget();
             }
 
             if (cineCam != null)
