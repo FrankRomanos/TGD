@@ -20,6 +20,8 @@ namespace TGD.LevelV2
         [SerializeField] List<HexBoardTestDriver> driverHints = new();
 
         readonly List<HexBoardTestDriver> _driverCache = new();
+        readonly Dictionary<Unit, HexBoardTestDriver> _driverByUnit = new();
+        readonly Dictionary<string, HexBoardTestDriver> _driverById = new();
         static T AutoFind<T>() where T : Object
         {
 #if UNITY_2023_1_OR_NEWER
@@ -87,6 +89,8 @@ namespace TGD.LevelV2
         void RefreshDriverCache()
         {
             _driverCache.Clear();
+            _driverByUnit.Clear();
+            _driverById.Clear();
             foreach (var drv in driverHints)
                 AddDriverToCache(drv);
 
@@ -102,11 +106,26 @@ namespace TGD.LevelV2
             if (driver == null)
                 return;
 
-            if (_driverCache.Contains(driver))
+            driver.EnsureInit();
+            if (!_driverCache.Contains(driver))
+                _driverCache.Add(driver);
+
+            CacheDriverBindings(driver);
+        }
+
+        void CacheDriverBindings(HexBoardTestDriver driver)
+        {
+            if (driver == null)
                 return;
 
-            driver.EnsureInit();
-            _driverCache.Add(driver);
+            var unit = driver.UnitRef;
+            if (unit != null)
+            {
+                _driverByUnit[unit] = driver;
+                if (!string.IsNullOrEmpty(unit.Id))
+                    _driverById[unit.Id] = driver;
+            }
+
             cameraController?.RegisterDriver(driver);
         }
 
@@ -116,11 +135,32 @@ namespace TGD.LevelV2
             if (unit == null)
                 return false;
 
+            if (_driverByUnit.TryGetValue(unit, out driver) && driver != null)
+                return true;
+
+            if (!string.IsNullOrEmpty(unit.Id) && _driverById.TryGetValue(unit.Id, out driver) && driver != null)
+            {
+                _driverByUnit[unit] = driver;
+                return true;
+            }
+
             foreach (var drv in _driverCache)
             {
-                if (drv != null && drv.UnitRef == unit)
+                if (drv == null)
+                    continue;
+
+                if (drv.UnitRef == unit)
                 {
                     driver = drv;
+                    CacheDriverBindings(drv);
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(unit.Id) && drv.UnitRef != null && drv.UnitRef.Id == unit.Id)
+                {
+                    driver = drv;
+                    CacheDriverBindings(drv);
+                    _driverByUnit[unit] = drv;
                     return true;
                 }
             }
@@ -131,9 +171,19 @@ namespace TGD.LevelV2
             foreach (var drv in FindAllDrivers())
             {
                 AddDriverToCache(drv);
-                if (drv != null && drv.UnitRef == unit)
+                if (drv == null)
+                    continue;
+
+                if (drv.UnitRef == unit)
                 {
                     driver = drv;
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(unit.Id) && drv.UnitRef != null && drv.UnitRef.Id == unit.Id)
+                {
+                    driver = drv;
+                    _driverByUnit[unit] = drv;
                     return true;
                 }
             }
@@ -163,7 +213,7 @@ namespace TGD.LevelV2
 
             if (TryResolveDriver(unit, out var driver) && driver != null)
             {
-                cameraController.RegisterDriver(driver);
+                CacheDriverBindings(driver);
 
                 Transform source = driver.unitView != null ? driver.unitView : driver.transform;
                 if (source != null)
@@ -179,7 +229,7 @@ namespace TGD.LevelV2
                 var ctxDriver = context.GetComponentInParent<HexBoardTestDriver>();
                 if (ctxDriver != null)
                 {
-                    cameraController.RegisterDriver(ctxDriver);
+                    AddDriverToCache(ctxDriver);
                     var view = ctxDriver.unitView != null ? ctxDriver.unitView : ctxDriver.transform;
                     if (view != null)
                     {

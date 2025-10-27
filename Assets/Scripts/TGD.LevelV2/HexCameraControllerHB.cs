@@ -74,6 +74,8 @@ namespace TGD.LevelV2
         Vector3 _autoFocusTarget;
         Vector3 _defaultPivotPosition;
         readonly List<HexBoardTestDriver> _driverCache = new();
+        readonly Dictionary<Unit, HexBoardTestDriver> _driverByUnit = new();
+        readonly Dictionary<string, HexBoardTestDriver> _driverById = new();
 
         // 边缘滚动状态
         bool _edgeActive;
@@ -157,22 +159,7 @@ namespace TGD.LevelV2
             AutoFocus(world);
         }
 
-        public void RegisterDriver(HexBoardTestDriver driver)
-        {
-            if (driver == null)
-                return;
-
-            if (!_driverCache.Contains(driver))
-            {
-                _driverCache.Add(driver);
-            }
-
-            driver.EnsureInit();
-            if (layout == null && driver.Layout != null)
-            {
-                layout = driver.Layout;
-            }
-        }
+        public void RegisterDriver(HexBoardTestDriver driver) => AddDriverToCache(driver);
 
         public bool TryGetUnitFocusPosition(Unit unit, out Vector3 worldPos)
         {
@@ -223,6 +210,8 @@ namespace TGD.LevelV2
         void RefreshDriverCache()
         {
             _driverCache.Clear();
+            _driverByUnit.Clear();
+            _driverById.Clear();
             foreach (var drv in driverHints)
                 AddDriverToCache(drv);
 
@@ -238,13 +227,28 @@ namespace TGD.LevelV2
             if (driver == null)
                 return;
 
-            if (_driverCache.Contains(driver))
+            driver.EnsureInit();
+            if (!_driverCache.Contains(driver))
+                _driverCache.Add(driver);
+
+            CacheDriverBindings(driver);
+        }
+
+        void CacheDriverBindings(HexBoardTestDriver driver)
+        {
+            if (driver == null)
                 return;
 
-            _driverCache.Add(driver);
-            driver.EnsureInit();
             if (layout == null && driver.Layout != null)
                 layout = driver.Layout;
+
+            var unit = driver.UnitRef;
+            if (unit != null)
+            {
+                _driverByUnit[unit] = driver;
+                if (!string.IsNullOrEmpty(unit.Id))
+                    _driverById[unit.Id] = driver;
+            }
         }
 
         bool TryResolveDriver(Unit unit, out HexBoardTestDriver driver)
@@ -253,11 +257,32 @@ namespace TGD.LevelV2
             if (unit == null)
                 return false;
 
+            if (_driverByUnit.TryGetValue(unit, out driver) && driver != null)
+                return true;
+
+            if (!string.IsNullOrEmpty(unit.Id) && _driverById.TryGetValue(unit.Id, out driver) && driver != null)
+            {
+                _driverByUnit[unit] = driver;
+                return true;
+            }
+
             foreach (var drv in _driverCache)
             {
-                if (drv != null && drv.UnitRef == unit)
+                if (drv == null)
+                    continue;
+
+                if (drv.UnitRef == unit)
                 {
                     driver = drv;
+                    CacheDriverBindings(drv);
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(unit.Id) && drv.UnitRef != null && drv.UnitRef.Id == unit.Id)
+                {
+                    driver = drv;
+                    CacheDriverBindings(drv);
+                    _driverByUnit[unit] = drv;
                     return true;
                 }
             }
@@ -279,9 +304,19 @@ namespace TGD.LevelV2
             foreach (var drv in FindAllDrivers())
             {
                 AddDriverToCache(drv);
-                if (drv != null && drv.UnitRef == unit)
+                if (drv == null)
+                    continue;
+
+                if (drv.UnitRef == unit)
                 {
                     driver = drv;
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(unit.Id) && drv.UnitRef != null && drv.UnitRef.Id == unit.Id)
+                {
+                    driver = drv;
+                    _driverByUnit[unit] = drv;
                     return true;
                 }
             }
@@ -537,8 +572,6 @@ namespace TGD.LevelV2
             {
                 if (TryGetUnitFocusPosition(turnManager.ActiveUnit, out var focusPos))
                     AutoFocus(focusPos);
-                else if (layout != null)
-                    AutoFocus(turnManager.ActiveUnit.Position);
             }
             else
             {
