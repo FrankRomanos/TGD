@@ -27,7 +27,7 @@ namespace TGD.LevelV2
         [SerializeField] float tiltDeg = 53f;
         [SerializeField] bool zoomTowardMouse = true;
         [SerializeField] float zoomTowardLerp = 0.15f;
-        [SerializeField] float defaultFollowY = 12f;
+        [SerializeField] float defaultFollowY = 10f;
 
         // 🔒 缩放保护（防“丢焦点”）
         [SerializeField] float zoomTowardMaxStep = 2.0f;   // 每次缩放 pivot 最大移动步长
@@ -72,13 +72,12 @@ namespace TGD.LevelV2
             {
                 var go = new GameObject("CameraPivot");
                 go.transform.position = transform.position;
-                go.transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+                go.transform.rotation = transform.rotation;
                 pivot = go.transform;
             }
 
-            _defaultPivotPosition = pivot != null ? pivot.position : Vector3.zero;
-            _defaultPivotRotation = pivot != null ? pivot.rotation : Quaternion.identity;
             ApplyDefaultFollowOffset();
+            CacheDefaultPivotState();
         }
 
         void Update()
@@ -137,7 +136,9 @@ namespace TGD.LevelV2
                 {
                     float yaw = pivot.eulerAngles.y;
                     float snapped = Mathf.Round(yaw / 60f) * 60f;
-                    pivot.rotation = Quaternion.Euler(0f, snapped, 0f);
+                    var current = pivot.eulerAngles;
+                    current.y = snapped;
+                    pivot.rotation = Quaternion.Euler(current);
                 }
                 _rotating = false;
                 _lastMousePos = Input.mousePosition;
@@ -305,29 +306,38 @@ namespace TGD.LevelV2
             if (cineCam == null)
                 return;
 
-            if (defaultFollowY <= 0f)
-                return;
-
             var follow = cineCam.GetComponent<CinemachineFollow>();
             if (follow == null)
                 return;
 
-            float height = Mathf.Clamp(defaultFollowY, minFollowY, maxFollowY);
             var off = follow.FollowOffset;
-            if (Mathf.Approximately(off.y, height))
+
+            if (defaultFollowY > 0f)
             {
-                float tiltRad = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
-                off.z = -height / Mathf.Tan(tiltRad);
+                float height = Mathf.Clamp(defaultFollowY, minFollowY, maxFollowY);
+                if (!Mathf.Approximately(off.y, height))
+                    off.y = height;
+
+                float tilt = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
+                off.z = -height / Mathf.Tan(tilt);
                 follow.FollowOffset = off;
-                _defaultFollowOffset = off;
-                return;
             }
 
-            off.y = height;
-            float tilt = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
-            off.z = -height / Mathf.Tan(tilt);
-            follow.FollowOffset = off;
-            _defaultFollowOffset = off;
+            _defaultFollowOffset = follow.FollowOffset;
+        }
+
+        void CacheDefaultPivotState()
+        {
+            if (pivot != null)
+            {
+                _defaultPivotPosition = pivot.position;
+                _defaultPivotRotation = pivot.rotation;
+            }
+            else
+            {
+                _defaultPivotPosition = Vector3.zero;
+                _defaultPivotRotation = Quaternion.identity;
+            }
         }
 
         void ResetCameraToDefault()
