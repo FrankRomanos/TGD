@@ -67,6 +67,8 @@ namespace TGD.LevelV2
         [SerializeField] KeyCode recenterKey = KeyCode.Space;
         [SerializeField] bool recenterFocusActiveUnit = true;
 
+        const string LogPrefix = "[HexCameraControllerHB]";
+
         bool _rotating;
         Vector3 _lastMousePos;
         Vector3 _focusVel;
@@ -136,25 +138,49 @@ namespace TGD.LevelV2
         public Vector3 GetFocusWorldPosition()
         {
             if (layout != null)
-                return layout.World(GetFocusCoordinate(), 0f);
+            {
+                var world = layout.World(GetFocusCoordinate(), 0f);
+                return SnapToPivotPlane(world);
+            }
 
             return pivot.position;
         }
         public void FocusOn(Hex h)
         {
             if (layout == null) return;
-            pivot.position = layout.World(h, 0f);
+            var world = layout.World(h, 0f);
+            world = SnapToPivotPlane(world);
+            Debug.LogFormat("{0} FocusOn hex={1} -> world={2}", LogPrefix, h, world);
+            pivot.position = world;
+            _autoFocusActive = false;
+            _focusVel = Vector3.zero;
         }
         public void AutoFocus(Vector3 worldPos)
         {
-            _autoFocusTarget = worldPos;
+            var snapped = SnapToPivotPlane(worldPos);
+            Debug.LogFormat("{0} AutoFocus world={1} snapped={2} pivotY={3}", LogPrefix, worldPos, snapped, GetPivotY());
+            _autoFocusTarget = snapped;
             _autoFocusActive = true;
             _focusVel = Vector3.zero;
         }
         public void AutoFocus(Hex h)
         {
             if (layout == null) return;
-            AutoFocus(layout.World(h, 0f));
+            AutoFocusHex(h);
+        }
+
+        public void AutoFocusHex(Hex h)
+        {
+            if (layout == null)
+            {
+                Debug.LogWarningFormat("{0} AutoFocusHex failed, layout missing for hex={1}", LogPrefix, h);
+                return;
+            }
+
+            var world = layout.World(h, 0f);
+            var snapped = SnapToPivotPlane(world);
+            Debug.LogFormat("{0} AutoFocusHex hex={1} rawWorld={2} snapped={3} pivotY={4}", LogPrefix, h, world, snapped, GetPivotY());
+            AutoFocus(snapped);
         }
 
         public void RegisterDriver(HexBoardTestDriver driver)
@@ -163,11 +189,17 @@ namespace TGD.LevelV2
                 return;
 
             if (!_driverCache.Contains(driver))
+            {
                 _driverCache.Add(driver);
+                Debug.LogFormat("{0} RegisterDriver driver={1} unitId={2}", LogPrefix, driver.name, driver.UnitRef != null ? driver.UnitRef.Id : "<null>");
+            }
 
             driver.EnsureInit();
             if (layout == null && driver.Layout != null)
+            {
                 layout = driver.Layout;
+                Debug.LogFormat("{0} RegisterDriver set layout from driver={1}", LogPrefix, driver.name);
+            }
         }
 
         public bool TryGetUnitFocusPosition(Unit unit, out Vector3 worldPos)
@@ -180,19 +212,22 @@ namespace TGD.LevelV2
 
             if (TryResolveDriver(unit, out var driver) && driver != null && driver.Layout != null)
             {
-                var pos = driver.Layout.World(unit.Position, driver.y);
-                worldPos = pos;
+                var pos = driver.Layout.World(unit.Position, 0f);
+                worldPos = SnapToPivotPlane(pos);
+                Debug.LogFormat("{0} TryGetUnitFocusPosition via driver unit={1} driver={2} hex={3} raw={4} snapped={5}", LogPrefix, unit.Id, driver.name, unit.Position, pos, worldPos);
                 return true;
             }
 
             if (layout != null)
             {
                 var pos = layout.World(unit.Position, 0f);
-                worldPos = pos;
+                worldPos = SnapToPivotPlane(pos);
+                Debug.LogFormat("{0} TryGetUnitFocusPosition via controller layout unit={1} hex={2} raw={3} snapped={4}", LogPrefix, unit.Id, unit.Position, pos, worldPos);
                 return true;
             }
 
             worldPos = default;
+            Debug.LogWarningFormat("{0} TryGetUnitFocusPosition failed unit={1} (no layout)", LogPrefix, unit.Id);
             return false;
         }
 
@@ -234,6 +269,7 @@ namespace TGD.LevelV2
                 if (drv != null && drv.UnitRef == unit)
                 {
                     driver = drv;
+                    Debug.LogFormat("{0} TryResolveDriver cached unit={1} driver={2}", LogPrefix, unit.Id, driver.name);
                     return true;
                 }
             }
@@ -247,6 +283,7 @@ namespace TGD.LevelV2
                 if (drv != null && drv.UnitRef == unit)
                 {
                     driver = drv;
+                    Debug.LogFormat("{0} TryResolveDriver discovered unit={1} driver={2}", LogPrefix, unit.Id, driver.name);
                     return true;
                 }
             }
@@ -273,9 +310,11 @@ namespace TGD.LevelV2
             }
             else
             {
-                pivot.position = _defaultPivotPosition;
+                var snapped = SnapToPivotPlane(_defaultPivotPosition);
+                pivot.position = snapped;
                 _autoFocusActive = false;
                 _focusVel = Vector3.zero;
+                Debug.LogFormat("{0} ResetFocus immediate snapped={1}", LogPrefix, snapped);
             }
         }
 
@@ -475,7 +514,7 @@ namespace TGD.LevelV2
                 if (TryGetUnitFocusPosition(turnManager.ActiveUnit, out var focusPos))
                     AutoFocus(focusPos);
                 else
-                    AutoFocus(turnManager.ActiveUnit.Position);
+                    AutoFocusHex(turnManager.ActiveUnit.Position);
             }
             else
             {
@@ -547,6 +586,17 @@ namespace TGD.LevelV2
             }
             hit = default;
             return false;
+        }
+
+        float GetPivotY()
+        {
+            return pivot != null ? pivot.position.y : _defaultPivotPosition.y;
+        }
+
+        Vector3 SnapToPivotPlane(Vector3 world)
+        {
+            world.y = GetPivotY();
+            return world;
         }
     }
 }
