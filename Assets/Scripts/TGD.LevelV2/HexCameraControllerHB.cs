@@ -67,7 +67,9 @@ namespace TGD.LevelV2
         Vector3 _defaultFollowOffset;
 
         TurnManagerV2 _boundTurnManager;
+        CombatActionManagerV2 _boundActionManager;
         Unit _currentTurnUnit;
+        Unit _activeBonusUnit;
         Vector3 _focusTargetPosition;
         bool _hasFocusTarget;
         Vector3 _desiredFocusWorld;
@@ -84,6 +86,8 @@ namespace TGD.LevelV2
         [Header("Turn Focus")]
         [SerializeField] TurnManagerV2 turnManager;
         [SerializeField] bool autoFindTurnManager = true;
+        [SerializeField] CombatActionManagerV2 actionManager;
+        [SerializeField] bool autoFindActionManager = true;
         [SerializeField] float focusMoveSpeed = 12f;
         [SerializeField] float focusArriveThreshold = 0.05f;
 
@@ -145,11 +149,13 @@ namespace TGD.LevelV2
             ApplyDefaultFollowOffset();
             CacheDefaultPivotState();
             TryAutoBindTurnManager();
+            TryAutoBindActionManager();
         }
 
         void OnEnable()
         {
             TryAutoBindTurnManager();
+            TryAutoBindActionManager();
         }
 
         void OnDisable()
@@ -160,11 +166,17 @@ namespace TGD.LevelV2
             _currentTurnUnit = null;
             _pendingFocusUnitId = null;
             _hasFocusTarget = false;
+
+            if (_boundActionManager != null)
+                _boundActionManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
+            _boundActionManager = null;
+            _activeBonusUnit = null;
         }
 
         void Update()
         {
             TryAutoBindTurnManager();
+            TryAutoBindActionManager();
             TryResolvePendingFocus();
 
             HandleMouseRotate();     // 中键按住才旋转
@@ -249,12 +261,80 @@ namespace TGD.LevelV2
             }
         }
 
+        void TryAutoBindActionManager()
+        {
+            if (_boundActionManager != null)
+            {
+                if (actionManager != null && _boundActionManager != actionManager)
+                    BindActionManager(actionManager);
+                return;
+            }
+
+            var candidate = actionManager;
+            if (candidate == null && autoFindActionManager)
+            {
+                candidate = FindFirstObjectByType<CombatActionManagerV2>();
+                if (candidate != null)
+                    actionManager = candidate;
+            }
+
+            if (candidate != null)
+                BindActionManager(candidate);
+        }
+
+        void BindActionManager(CombatActionManagerV2 candidate)
+        {
+            if (_boundActionManager == candidate)
+                return;
+
+            if (_boundActionManager != null)
+                _boundActionManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
+
+            _boundActionManager = candidate;
+
+            if (_boundActionManager != null)
+            {
+                _boundActionManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
+                SyncBonusTurnFocus();
+            }
+            else
+            {
+                _activeBonusUnit = null;
+            }
+        }
+
         void OnTurnStarted(Unit unit)
         {
             _currentTurnUnit = unit;
             if (unit == null)
                 return;
             FocusOnUnit(unit, false);
+        }
+
+        void OnBonusTurnStateChanged()
+        {
+            SyncBonusTurnFocus();
+        }
+
+        void SyncBonusTurnFocus()
+        {
+            Unit bonusUnit = null;
+            if (_boundActionManager != null && _boundActionManager.IsBonusTurnActive)
+                bonusUnit = _boundActionManager.CurrentBonusTurnUnit;
+
+            bool bonusChanged = bonusUnit != _activeBonusUnit;
+            _activeBonusUnit = bonusUnit;
+
+            if (bonusUnit != null)
+            {
+                FocusOnUnit(bonusUnit, false);
+            }
+            else if (bonusChanged)
+            {
+                var fallback = GetCurrentActiveUnit();
+                if (fallback != null)
+                    FocusOnUnit(fallback, false);
+            }
         }
 
         void RefocusActiveUnit(bool resetHeight)
@@ -267,6 +347,8 @@ namespace TGD.LevelV2
 
         Unit GetCurrentActiveUnit()
         {
+            if (_activeBonusUnit != null)
+                return _activeBonusUnit;
             if (_boundTurnManager != null && _boundTurnManager.ActiveUnit != null)
                 return _boundTurnManager.ActiveUnit;
             return _currentTurnUnit;
@@ -371,25 +453,26 @@ namespace TGD.LevelV2
             if (pivot == null)
                 return Vector3.zero;
 
-            float planeY = pivot.position.y;
+            float targetY = _desiredFocusWorld.y;
             Vector3 desired = _desiredFocusWorld;
-            desired.y = planeY;
+            desired.y = targetY;
 
-            if (TryGetCameraGroundPoint(planeY, out var currentCenter))
+            if (TryGetCameraGroundPoint(targetY, out var currentCenter))
             {
-                currentCenter.y = planeY;
+                currentCenter.y = targetY;
                 Vector3 delta = desired - currentCenter;
                 delta.y = 0f;
-                desired = pivot.position + delta;
-                desired.y = planeY;
-            }
-            else
-            {
-                desired = AdjustToPivotPlane(desired);
+                var pivotTarget = pivot.position;
+                pivotTarget.x += delta.x;
+                pivotTarget.z += delta.z;
+                pivotTarget.y = pivot.position.y;
+                return ClampTarget(pivotTarget);
             }
 
-            desired = ClampTarget(desired);
-            return desired;
+            var fallback = pivot.position;
+            fallback.x = desired.x;
+            fallback.z = desired.z;
+            return ClampTarget(fallback);
         }
 
         bool TryGetCameraGroundPoint(float planeY, out Vector3 point)
