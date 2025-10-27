@@ -20,8 +20,6 @@ namespace TGD.LevelV2
         [SerializeField] List<HexBoardTestDriver> driverHints = new();
 
         readonly List<HexBoardTestDriver> _driverCache = new();
-        const string LogPrefix = "[HexCameraTurnFocusDriver]";
-
         static T AutoFind<T>() where T : Object
         {
 #if UNITY_2023_1_OR_NEWER
@@ -109,7 +107,6 @@ namespace TGD.LevelV2
 
             driver.EnsureInit();
             _driverCache.Add(driver);
-            Debug.LogFormat("{0} AddDriverToCache driver={1} unitId={2}", LogPrefix, driver.name, driver.UnitRef != null ? driver.UnitRef.Id : "<null>");
             cameraController?.RegisterDriver(driver);
         }
 
@@ -124,7 +121,6 @@ namespace TGD.LevelV2
                 if (drv != null && drv.UnitRef == unit)
                 {
                     driver = drv;
-                    Debug.LogFormat("{0} TryResolveDriver cached unit={1} driver={2}", LogPrefix, unit.Id, drv.name);
                     return true;
                 }
             }
@@ -138,7 +134,6 @@ namespace TGD.LevelV2
                 if (drv != null && drv.UnitRef == unit)
                 {
                     driver = drv;
-                    Debug.LogFormat("{0} TryResolveDriver discovered unit={1} driver={2}", LogPrefix, unit.Id, drv.name);
                     return true;
                 }
             }
@@ -157,57 +152,31 @@ namespace TGD.LevelV2
 
         void TryFocus(Unit unit)
         {
-            if (cameraController == null)
-            {
-                Debug.LogWarningFormat("{0} TryFocus skipped, cameraController missing", LogPrefix);
+            if (cameraController == null || unit == null)
                 return;
-            }
-
-            if (unit == null)
-            {
-                Debug.LogWarningFormat("{0} TryFocus skipped, unit is null", LogPrefix);
-                return;
-            }
-
-            var unitId = string.IsNullOrEmpty(unit.Id) ? "<unnamed>" : unit.Id;
 
             if (TryResolveDriver(unit, out var driver) && driver != null)
             {
                 cameraController.RegisterDriver(driver);
 
-                if (cameraController.Layout != null)
+                Transform source = driver.unitView != null ? driver.unitView : driver.transform;
+                if (source != null)
                 {
-                    Debug.LogFormat("{0} TryFocus unit={1} via driver layout -> AutoFocusHex", LogPrefix, unitId);
-                    cameraController.AutoFocusHex(unit.Position);
+                    cameraController.AutoFocus(source.position);
                     return;
                 }
-
-                if (driver.Layout != null)
-                {
-                    var raw = driver.Layout.World(unit.Position, 0f);
-                    Debug.LogFormat("{0} TryFocus unit={1} via driver rawWorld={2}", LogPrefix, unitId, raw);
-                    cameraController.AutoFocus(raw);
-                    return;
-                }
-
-                Debug.LogWarningFormat("{0} TryFocus unit={1} driver={2} has no layout", LogPrefix, unitId, driver.name);
             }
 
             if (cameraController.TryGetUnitFocusPosition(unit, out var world))
             {
-                Debug.LogFormat("{0} TryFocus unit={1} via controller.TryGet world={2}", LogPrefix, unitId, world);
                 cameraController.AutoFocus(world);
                 return;
             }
 
             if (cameraController.Layout != null)
             {
-                Debug.LogFormat("{0} TryFocus unit={1} fallback AutoFocusHex via controller layout", LogPrefix, unitId);
-                cameraController.AutoFocusHex(unit.Position);
-                return;
+                cameraController.AutoFocus(unit.Position);
             }
-
-            Debug.LogWarningFormat("{0} TryFocus unit={1} failed (no layout available)", LogPrefix, unitId);
         }
     }
 }
