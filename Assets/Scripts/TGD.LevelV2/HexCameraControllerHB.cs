@@ -65,6 +65,57 @@ namespace TGD.LevelV2
         Quaternion _defaultPivotRotation;
         Vector3 _defaultFollowOffset;
 
+        [SerializeField] bool applyDefaultsOnStart = true;
+        [SerializeField] bool alignYawToRAxis = true;   // 让 R 轴竖直（FlatTop 下即 yaw=0）
+        [SerializeField] bool autoClampToBoard = true;  // 自动按棋盘计算边界
+        [SerializeField] float clampMargin = 1.5f;      // 边界外留白
+        [SerializeField] bool ctrlForFineStep = true;
+        [SerializeField] float fineStepScale = 0.5f;         // 按 Ctrl 时步长倍率
+
+        void Start()
+        {
+            // 运行时再拿一次 Layout，确保 HexSpace/Authoring 已就绪
+            if (layout == null && authoring != null) layout = authoring.Layout;
+
+            if (applyDefaultsOnStart)
+            {
+                if (alignYawToRAxis && pivot != null)
+                {
+                    // FlatTop & PointyTop 下，R 轴都沿世界 +Z；保持 yaw=0 即可
+                    var e = pivot.eulerAngles; e.x = 60f; e.y = 0f; e.z = 0f;
+                    pivot.rotation = Quaternion.Euler(e);
+                }
+
+                ApplyDefaultFollowOffset(); // 用 defaultFollowY 和 tiltDeg 设置初始高度
+                CacheDefaultPivotState();
+            }
+
+            if (autoClampToBoard) ComputeClampFromBoard();
+        }
+
+        void ComputeClampFromBoard()
+        {
+            if (layout == null) return;
+            int q0 = layout.minQ, r0 = layout.minR;
+            int q1 = q0 + layout.width - 1;
+            int r1 = r0 + layout.height - 1;
+
+            // 取四角世界坐标，算出包围盒
+            var p00 = layout.World(new Hex(q0, r0));
+            var p10 = layout.World(new Hex(q1, r0));
+            var p01 = layout.World(new Hex(q0, r1));
+            var p11 = layout.World(new Hex(q1, r1));
+            float minX = Mathf.Min(p00.x, p10.x, p01.x, p11.x) - clampMargin;
+            float maxX = Mathf.Max(p00.x, p10.x, p01.x, p11.x) + clampMargin;
+            float minZ = Mathf.Min(p00.z, p10.z, p01.z, p11.z) - clampMargin;
+            float maxZ = Mathf.Max(p00.z, p10.z, p01.z, p11.z) + clampMargin;
+
+            clampToBounds = true;
+            boundsMinXZ = new Vector2(minX, minZ);
+            boundsMaxXZ = new Vector2(maxX, maxZ);
+        }
+
+
         void Awake()
         {
             if (layout == null && authoring != null) layout = authoring.Layout;
@@ -235,10 +286,15 @@ namespace TGD.LevelV2
         }
 
         // 滚轮缩放（固定俯角 + 丢焦保护）
+        // 这些字段在类里加一下（或你已存在就复用）
+        [SerializeField] bool useZoomSteps = true;   // 固定步进
+        [SerializeField] float zoomStepSize = 5f;    // 每次滚轮改变的“高度”步长（你要 ±5 就填 5）
+        [SerializeField] float zoomRangeHalf = 5f;   // 基准高度 ± 范围（你要“±5”就填 5）
+
         void HandleZoom()
         {
-            if (ChainPopupState.IsVisible)
-                return;
+            // 连锁弹窗可见时，禁止缩放（你原有逻辑保留）
+            if (ChainPopupState.IsVisible) return;
 
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Approximately(wheel, 0f)) return;
@@ -246,18 +302,45 @@ namespace TGD.LevelV2
             var follow = (cineCam != null) ? cineCam.GetComponent<CinemachineFollow>() : null;
             if (follow == null) return;
 
-            Vector3 centerAnchor = Vector3.zero;
-            bool hasCenterAnchor = TryProjectScreenPointToGround(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out centerAnchor);
-            if (hasCenterAnchor && pivot != null)
-                centerAnchor.y = pivot.position.y;
+            // 以“推荐高度” defaultFollowY 为基准，限定缩放范围在 ±zoomRangeHalf
+            float minY = defaultFollowY - zoomRangeHalf;
+            float maxY = defaultFollowY + zoomRangeHalf;
 
             var off = follow.FollowOffset;
-            float newY = Mathf.Clamp(off.y - wheel * zoomSpeed, minFollowY, maxFollowY);
 
+            // —— 计算新的高度（固定步进 or 连续速度）——
+            float newY;
+            if (useZoomSteps)
+            {
+                float step = zoomStepSize;
+                // 需要细调时按住 Ctrl 将步长减半（可删）
+                if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                    step *= 0.5f;
+
+                // Unity 的滚轮通常是 ±1；按符号走一步
+                newY = off.y - Mathf.Sign(wheel) * step;
+            }
+            else
+            {
+                newY = off.y - wheel * zoomSpeed;
+            }
+
+            // 限定到“基准±范围”
+            newY = Mathf.Clamp(newY, minY, maxY);
+
+            // 维持俯角：根据 tiltDeg 计算 Z 偏移（与你原逻辑一致）
             float tiltRad = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
             off.y = newY;
             off.z = -newY / Mathf.Tan(tiltRad);
             follow.FollowOffset = off;
+
+            // —— 朝鼠标缩放（丢焦保护保持不变）——
+            Vector3 centerAnchor = Vector3.zero;
+            bool hasCenterAnchor = TryProjectScreenPointToGround(
+                new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out centerAnchor);
+
+            if (hasCenterAnchor && pivot != null)
+                centerAnchor.y = pivot.position.y;
 
             bool pivotAdjusted = false;
 
@@ -267,26 +350,28 @@ namespace TGD.LevelV2
                 Vector3 delta = hit - pivot.position;
                 float dist = delta.magnitude;
 
-                // 超远目标不采用“朝鼠标缩放”
+                // 超远不朝鼠标
                 if (dist <= zoomTowardMaxDistance)
                 {
                     Vector3 target = Vector3.Lerp(pivot.position, hit, Mathf.Clamp01(zoomTowardLerp));
-                    Vector3 step = target - pivot.position;
+                    Vector3 stepVec = target - pivot.position;
 
                     float maxStep = Mathf.Max(0f, zoomTowardMaxStep);
-                    if (maxStep > 0f && step.magnitude > maxStep)
-                        step = step.normalized * maxStep;
+                    if (maxStep > 0f && stepVec.magnitude > maxStep)
+                        stepVec = stepVec.normalized * maxStep;
 
-                    pivot.position += step;
+                    pivot.position += stepVec;
                     pivotAdjusted = true;
                 }
             }
 
+            // 没对准鼠标则保持对准屏幕中心
             if (!pivotAdjusted && hasCenterAnchor && pivot != null)
             {
                 pivot.position = new Vector3(centerAnchor.x, pivot.position.y, centerAnchor.z);
             }
         }
+
 
         float CurrentCameraHeight()
         {
