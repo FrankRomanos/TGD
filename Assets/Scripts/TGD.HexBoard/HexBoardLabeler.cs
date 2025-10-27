@@ -6,8 +6,7 @@ using UnityEditor;
 namespace TGD.HexBoard
 {
     /// <summary>
-    /// 在 Scene 视图用标签显示每个格子的 (q,r) 与其世界坐标 (x,z) ——便于 Debug。
-    /// 可选绘制格中心小标记。
+    /// Scene view helper for displaying each hex coordinate and its world position.
     /// </summary>
     [ExecuteAlways]
     public sealed class HexBoardLabeler : MonoBehaviour
@@ -22,6 +21,8 @@ namespace TGD.HexBoard
         {
             if (authoring == null || authoring.Layout == null) return;
             var layout = authoring.Layout;
+            var space = HexSpace.Instance;
+            if (space == null) return;
 
 #if UNITY_EDITOR
             var style = new GUIStyle(EditorStyles.miniLabel) { fontSize = fontSize };
@@ -29,7 +30,7 @@ namespace TGD.HexBoard
 #endif
             foreach (var h in layout.Coordinates())
             {
-                var w = layout.World(h, authoring.y + yOffset);
+                var w = space.HexToWorld(h, authoring.y + yOffset);
                 if (showCenters)
                 {
                     Gizmos.color = new Color(0f, 0.8f, 1f, 0.6f);

@@ -6,24 +6,23 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     /// <summary>
-    /// ¸ù¾İ HexClickMover µÄÊµ¼ÊÒÆ¶¯ËÙ¶È£¬×Ô¶¯µ÷½Ú Animator.speed£¬
-    /// ±£Ö¤½Å²½²»¹ı¿ì/¹ıÂı£¨±ÜÃâ¡°»¬²½¡±£©¡£
+    /// Syncs the animator speed with the actual travel speed of HexClickMover.
     /// </summary>
     public sealed class UnitAnimSpeedSync : MonoBehaviour
     {
         [Header("Refs")]
-        public HexClickMover mover;     // Í¬Ò»¸öµ¥Î»ÉÏµÄ mover
-        public Animator animator;       // ¸Ãµ¥Î»µÄ Animator
+        public HexClickMover mover;     // åŒä¸€ä¸–ç•Œç³» mover
+        public Animator animator;       // å¯¹åº”è§’è‰² Animator
 
         [Header("Tuning")]
-        [Tooltip("µ± Animator.speed = 1 Ê±£¬ÅÜ²½¶¯»­ÔÚÊÀ½çÖĞµÄµÈĞ§ËÙ¶È£¨Ã×/Ãë£©¡£×öÒ»´ÎĞÔ±ê¶¨ºó±£³Ö²»±ä¡£")]
+        [Tooltip("Animator.speed = 1 æ—¶å¯¹åº”çš„æœŸæœ›è·‘æ­¥é€Ÿåº¦ï¼ˆç±³/ç§’ï¼‰ã€‚")]
         public float runMetersPerSecond = 3.5f;
 
-        [Tooltip("½« animator.speed ÏŞÖÆÔÚ´Ë·¶Î§£¬±ÜÃâ¹ıÂı»ò¹ı¿ì¡£")]
+        [Tooltip("Animator.speed çš„å¤¹å–èŒƒå›´ã€‚")]
         public float minAnimatorSpeed = 0.5f;
         public float maxAnimatorSpeed = 1.8f;
 
-        [Tooltip("£¨¿ÉÑ¡£©Í¬²½Ğ´Èë Animator µÄÄ³¸ö float ²ÎÁ¿£¬ÀıÈç RunSpeed¡£Áô¿ÕÔò²»Ğ´¡£")]
+        [Tooltip("å¯é€‰ï¼šåŒæ­¥å†™å…¥ Animator æŸä¸ª float å‚æ•°ï¼ˆå¦‚ RunSpeedï¼‰ã€‚")]
         public string animatorSpeedParam;
 
         void Reset()
@@ -49,29 +48,31 @@ namespace TGD.CombatV2
 
         bool IsThisUnit(Unit u)
         {
-            // Óë±¾×é¼şËùÊôµÄ mover/driver µÄ UnitRef ±È½ÏÒıÓÃ
+            // æ¯”è¾ƒ mover/driver çš„ UnitRef æ˜¯å¦ä¸€è‡´
             return mover != null && mover.driver != null && ReferenceEquals(u, mover.driver.UnitRef);
         }
 
         void OnMoveStarted(Unit u, List<Hex> path)
         {
-            if (!IsThisUnit(u) || mover == null || mover.authoring == null || animator == null) return;
-            // Æô¶¯Ê±ÏÈ»Ö¸´Ä¬ÈÏ=1£¬ËæºóÃ¿²½ÓÉ StepSpeedHint Çı¶¯Î¢µ÷
+            if (!IsThisUnit(u) || mover == null || animator == null) return;
+            // å¼€å§‹æ—¶é‡ç½®é€Ÿåº¦ï¼›StepSpeedHint ä¼šç»†è°ƒ
             ResetSpeed();
             if (path == null || path.Count < 2) { ResetSpeed(); return; }
 
-            var L = mover.authoring.Layout;
+            var hexSpace = HexSpace.Instance;
+            if (hexSpace == null) return;
+
             float dist = 0f;
             for (int i = 1; i < path.Count; i++)
             {
-                var p0 = L.World(path[i - 1], mover.y);
-                var p1 = L.World(path[i], mover.y);
+                var p0 = hexSpace.HexToWorld(path[i - 1], mover.y);
+                var p1 = hexSpace.HexToWorld(path[i], mover.y);
                 dist += Vector3.Distance(p0, p1);
             }
 
-            // HexClickMover Ã¿Ò»²½ÓÃ stepSeconds£¬²½Êı= path.Count-1
+            // HexClickMover çš„æ¯ä¸€æ­¥è€—æ—¶å›ºå®š stepSeconds
             float time = Mathf.Max(0.01f, mover.stepSeconds * (path.Count - 1));
-            float v = dist / time; // Êµ¼ÊÊÀ½çËÙ¶È£¨Ã×/Ãë£©
+            float v = dist / time; // å®é™…ä½ç§»é€Ÿåº¦ï¼ˆç±³/ç§’ï¼‰
 
             float baseMps = Mathf.Max(0.01f, runMetersPerSecond);
             float sp = Mathf.Clamp(v / baseMps, minAnimatorSpeed, maxAnimatorSpeed);
@@ -97,7 +98,7 @@ namespace TGD.CombatV2
         void OnStepSpeedHint(Unit u, float effMR, float baseMR)
         {
             if (!IsThisUnit(u) || animator == null) return;
-            // ÒÔ MoveRate ±ÈÖµÇı¶¯¶¯»­ËÙ¶È£¨ºÍÊÀ½çÎ»ÒÆ½âñî£©
+            // æ ¹æ® MoveRate å·®å¼‚å¾®è°ƒé€Ÿåº¦
             float ratio = (baseMR <= 0f) ? 1f : Mathf.Max(0.01f, effMR / baseMR);
             float sp = Mathf.Clamp(ratio, minAnimatorSpeed, maxAnimatorSpeed);
             animator.speed = sp;

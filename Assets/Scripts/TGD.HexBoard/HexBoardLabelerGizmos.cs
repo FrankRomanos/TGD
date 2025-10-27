@@ -6,18 +6,20 @@ using UnityEditor;
 
 namespace TGD.HexBoard
 {
-    /// 在 Scene 视图里绘制 (q,r)；不生成任何对象，性能安全。
+    /// <summary>
+    /// Scene gizmos that show (q,r) at runtime or in the editor.
+    /// </summary>
     [ExecuteAlways]
     public sealed class HexBoardLabelerGizmos : MonoBehaviour
     {
         public HexBoardAuthoringLite authoring;
 
         [Header("Draw Options")]
-        public bool onlyWhenSelected = true;   // 只在选中时画，避免干扰
-        public bool drawInPlayMode = true;     // 运行时也画
-        [Range(1, 8)] public int step = 1;     // 每 step 个格子画一次
-        public float y = 0.02f;                // 文本抬高
-        public float maxDistance = 80f;        // 超远不画，减负
+        public bool onlyWhenSelected = true;   // Only draw when selected.
+        public bool drawInPlayMode = true;
+        [Range(1, 8)] public int step = 1;
+        public float y = 0.02f;
+        public float maxDistance = 80f;
 
         [Header("Style")]
         public Color color = new Color(1f, 0.95f, 0.4f, 1f);
@@ -39,14 +41,19 @@ namespace TGD.HexBoard
             if (authoring == null || authoring.Layout == null) return;
             if (Application.isPlaying && !drawInPlayMode) return;
 
-            var L = authoring.Layout;
+            var layout = authoring.Layout;
+            var space = HexSpace.Instance;
+            if (space == null) return;
+
             var cam = SceneView.lastActiveSceneView ? SceneView.lastActiveSceneView.camera : Camera.current;
 
-            var style = new GUIStyle(EditorStyles.miniBoldLabel);
-            style.fontSize = Mathf.Max(8, fontSize);
+            var style = new GUIStyle(EditorStyles.miniBoldLabel)
+            {
+                fontSize = Mathf.Max(8, fontSize)
+            };
             style.normal.textColor = color;
 
-            int q0 = L.minQ, r0 = L.minR, W = authoring.width, H = authoring.height;
+            int q0 = layout.minQ, r0 = layout.minR, W = authoring.width, H = authoring.height;
             int s = Mathf.Max(1, step);
             float maxDist2 = maxDistance * maxDistance;
 
@@ -54,7 +61,7 @@ namespace TGD.HexBoard
                 for (int r = r0; r < r0 + H; r += s)
                 {
                     var h = new Hex(q, r);
-                    var p = L.World(h, y);
+                    var p = space.HexToWorld(h, y);
                     if (cam != null && (cam.transform.position - p).sqrMagnitude > maxDist2) continue;
                     Handles.Label(p, $"({q},{r})", style);
                 }
