@@ -19,45 +19,45 @@ namespace TGD.AudioV2
         public float Volume => Mathf.Clamp01(_volume);
     }
 
-    [DefaultExecutionOrder(-5000)]                // ÈÃËü±È´ó¶àÊıÏµÍ³¸üÔç³õÊ¼»¯
+    [DefaultExecutionOrder(-5000)]                // è®©å®ƒæ¯”å¤§å¤šæ•°ç³»ç»Ÿæ›´æ—©åˆå§‹åŒ–
     [DisallowMultipleComponent]
     [RequireComponent(typeof(AudioSource))]
     public sealed class BattleAudioManager : MonoBehaviour
     {
         static BattleAudioManager _instance;
 
-        // ¡ï ¹Ø¼ü£ºÔÚ¡°×ÓÏµÍ³×¢²á¡±½×¶ÎÖØÖÃ¾²Ì¬£¨¼´Ê¹ Domain Reload ¹Ø±ÕÒ²»áµ÷ÓÃ£©
+        // â˜… å…³é”®ï¼šåœ¨â€œå­ç³»ç»Ÿæ³¨å†Œâ€é˜¶æ®µé‡ç½®é™æ€ï¼ˆå³ä½¿ Domain Reload å…³é—­ä¹Ÿä¼šè°ƒç”¨ï¼‰
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() => _instance = null;
 
         [Header("UI Event Routing")]
-        [SerializeField] AudioSource _uiAudioSource;                   // ¿ÉÁô¿Õ£¬×Ô¶¯×¥È¡/´´½¨
+        [SerializeField] AudioSource _uiAudioSource;                   // å¯ç•™ç©ºï¼Œè‡ªåŠ¨æŠ“å–/åˆ›å»º
         [SerializeField] List<BattleAudioEventConfig> _uiEventConfigs = new();
 
         [Header("Mixer (optional)")]
-        [SerializeField] AudioMixerGroup _uiMixerGroup;                // ¿ÉÁô¿Õ
+        [SerializeField] AudioMixerGroup _uiMixerGroup;                // å¯ç•™ç©º
 
         readonly Dictionary<BattleAudioEvent, BattleAudioEventConfig> _eventLookup = new();
 
         void Awake()
         {
-            // µ¥ÀıÎÈÌ¬
+            // å•ä¾‹ç¨³æ€
             if (_instance != null && _instance != this)
             {
-                // ÈôÒÑ¾­ÓĞ³£×¤ÊµÀı£¬µ±Ç°Õâ¸öÖ±½ÓÏú»Ù²¢ÍË³ö ¡ª¡ª ±ÜÃâË«ÊµÀı¸ÉÈÅÆäËüÏµÍ³
+                // è‹¥å·²ç»æœ‰å¸¸é©»å®ä¾‹ï¼Œå½“å‰è¿™ä¸ªç›´æ¥é”€æ¯å¹¶é€€å‡º â€”â€” é¿å…åŒå®ä¾‹å¹²æ‰°å…¶å®ƒç³»ç»Ÿ
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
 
-            // ·Åµ½Ò»¸ö²»»áÀ¹ UI ÉäÏßµÄ²ã£¨±£ÏÕ£©
+            // æ”¾åˆ°ä¸€ä¸ªä¸ä¼šæ‹¦ UI å°„çº¿çš„å±‚ï¼ˆä¿é™©ï¼‰
             gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
 
             DontDestroyOnLoad(gameObject);
             RebuildCache();
 
-            // AudioSource¾ÍĞ÷ & Â·ÓÉµ½UI×é£¨ÈçÓĞ£©
+            // AudioSourceå°±ç»ª & è·¯ç”±åˆ°UIç»„ï¼ˆå¦‚æœ‰ï¼‰
             var src = ResolveAudioSource();
             if (_uiMixerGroup && src.outputAudioMixerGroup != _uiMixerGroup)
                 src.outputAudioMixerGroup = _uiMixerGroup;
@@ -79,7 +79,7 @@ namespace TGD.AudioV2
 
         public static void PlayEvent(BattleAudioEvent evt)
         {
-            // ÓÀ²»Å×Òì³££¬×î¶à´òÒ»Ìõ Warning£¬±ÜÃâ°Ñ UI Á÷³ÌÖĞ¶Ï
+            // æ°¸ä¸æŠ›å¼‚å¸¸ï¼Œæœ€å¤šæ‰“ä¸€æ¡ Warningï¼Œé¿å…æŠŠ UI æµç¨‹ä¸­æ–­
             if (_instance == null) { Debug.LogWarning($"[Audio] PlayEvent({evt}) called but manager not ready."); return; }
             _instance.PlayEventInternal(evt);
         }
@@ -102,7 +102,7 @@ namespace TGD.AudioV2
 
             _uiAudioSource.playOnAwake = false;
             _uiAudioSource.loop = false;
-            _uiAudioSource.spatialBlend = 0f;      // UIÒôĞ§¡ú´¿2D
+            _uiAudioSource.spatialBlend = 0f;      // UIéŸ³æ•ˆâ†’çº¯2D
             return _uiAudioSource;
         }
     }
