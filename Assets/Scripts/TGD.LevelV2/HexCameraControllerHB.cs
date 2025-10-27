@@ -70,6 +70,8 @@ namespace TGD.LevelV2
         Unit _currentTurnUnit;
         Vector3 _focusTargetPosition;
         bool _hasFocusTarget;
+        Vector3 _desiredFocusWorld;
+        bool _hasDesiredFocusWorld;
         string _pendingFocusUnitId;
 
         [SerializeField] bool applyDefaultsOnStart = true;
@@ -219,7 +221,7 @@ namespace TGD.LevelV2
             var candidate = turnManager;
             if (candidate == null && autoFindTurnManager)
             {
-                candidate = FindObjectOfType<TurnManagerV2>();
+                candidate = FindFirstObjectByType<TurnManagerV2>();
                 if (candidate != null)
                     turnManager = candidate;
             }
@@ -329,13 +331,23 @@ namespace TGD.LevelV2
             if (pivot == null)
                 return;
 
-            Vector3 target = AdjustToPivotPlane(world);
-            target = ClampTarget(target);
+            _desiredFocusWorld = world;
+            _hasDesiredFocusWorld = true;
+            RecomputeFocusTarget();
+        }
+
+        void RecomputeFocusTarget()
+        {
+            if (!_hasDesiredFocusWorld || pivot == null)
+                return;
+
+            Vector3 target = CalculatePivotTarget();
 
             if (focusMoveSpeed <= 0f)
             {
                 pivot.position = target;
                 _hasFocusTarget = false;
+                _hasDesiredFocusWorld = false;
                 return;
             }
 
@@ -346,11 +358,67 @@ namespace TGD.LevelV2
             {
                 pivot.position = target;
                 _hasFocusTarget = false;
+                _hasDesiredFocusWorld = false;
             }
             else
             {
                 _hasFocusTarget = true;
             }
+        }
+
+        Vector3 CalculatePivotTarget()
+        {
+            if (pivot == null)
+                return Vector3.zero;
+
+            float planeY = pivot.position.y;
+            Vector3 desired = _desiredFocusWorld;
+            desired.y = planeY;
+
+            if (TryGetCameraGroundPoint(planeY, out var currentCenter))
+            {
+                currentCenter.y = planeY;
+                Vector3 delta = desired - currentCenter;
+                delta.y = 0f;
+                desired = pivot.position + delta;
+                desired.y = planeY;
+            }
+            else
+            {
+                desired = AdjustToPivotPlane(desired);
+            }
+
+            desired = ClampTarget(desired);
+            return desired;
+        }
+
+        bool TryGetCameraGroundPoint(float planeY, out Vector3 point)
+        {
+            point = default;
+
+            Transform camTransform = null;
+            if (Camera.main != null)
+                camTransform = Camera.main.transform;
+
+            if (camTransform == null && cineCam != null)
+                camTransform = cineCam.transform;
+
+            if (camTransform == null)
+                return false;
+
+            Vector3 origin = camTransform.position;
+            Vector3 direction = camTransform.forward;
+
+            float denom = direction.y;
+            if (Mathf.Abs(denom) < 1e-5f)
+                return false;
+
+            float t = (planeY - origin.y) / denom;
+            if (t < 0f)
+                return false;
+
+            point = origin + direction * t;
+            return true;
         }
 
         Vector3 ClampTarget(Vector3 target)
@@ -364,7 +432,12 @@ namespace TGD.LevelV2
 
         void UpdateFocusSmoothing()
         {
-            if (!_hasFocusTarget || pivot == null)
+            if (!_hasDesiredFocusWorld || pivot == null)
+                return;
+
+            RecomputeFocusTarget();
+
+            if (!_hasFocusTarget)
                 return;
 
             Vector3 target = _focusTargetPosition;
@@ -387,12 +460,14 @@ namespace TGD.LevelV2
             {
                 pivot.position = target;
                 _hasFocusTarget = false;
+                _hasDesiredFocusWorld = false;
             }
         }
 
         void ClearFocusTarget()
         {
             _hasFocusTarget = false;
+            _hasDesiredFocusWorld = false;
         }
 
         // ===== Handlers =====
