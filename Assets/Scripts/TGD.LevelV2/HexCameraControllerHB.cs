@@ -2,6 +2,7 @@
 using UnityEngine;
 using Unity.Cinemachine;
 using UnityEngine.EventSystems;
+using TGD.CombatV2;
 using TGD.HexBoard;
 using TGD.UIV2;
 
@@ -15,6 +16,7 @@ namespace TGD.LevelV2
         [SerializeField] Transform pivot;
         [SerializeField] HexBoardAuthoringLite authoring;
         [SerializeField] HexBoardLayout layout;
+        [SerializeField] TurnManagerV2 turnManager;
 
         [Header("Rotate — MMB 按住")]
         [SerializeField] float rotateDegPerScreen = 180f;
@@ -27,6 +29,7 @@ namespace TGD.LevelV2
         [SerializeField] float tiltDeg = 53f;
         [SerializeField] bool zoomTowardMouse = true;
         [SerializeField] float zoomTowardLerp = 0.15f;
+        [SerializeField] float defaultFollowY = 18f;
 
         // 🔒 缩放保护（防“丢焦点”）
         [SerializeField] float zoomTowardMaxStep = 2.0f;   // 每次缩放 pivot 最大移动步长
@@ -57,6 +60,7 @@ namespace TGD.LevelV2
         [SerializeField, Min(0f)] float autoFocusSmooth = 0.25f;
         [SerializeField] bool recenterKeyEnabled = true;
         [SerializeField] KeyCode recenterKey = KeyCode.Space;
+        [SerializeField] bool recenterFocusActiveUnit = true;
 
         bool _rotating;
         Vector3 _lastMousePos;
@@ -69,9 +73,20 @@ namespace TGD.LevelV2
         bool _edgeActive;
         float _edgeEnterTime = -1f;
 
+        static T AutoFind<T>() where T : Object
+        {
+#if UNITY_2023_1_OR_NEWER
+            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
+#else
+            return Object.FindObjectOfType<T>();
+#endif
+        }
+
         void Awake()
         {
             if (layout == null && authoring != null) layout = authoring.Layout;
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
             if (pivot == null)
             {
                 var go = new GameObject("CameraPivot");
@@ -81,6 +96,7 @@ namespace TGD.LevelV2
             }
 
             _defaultPivotPosition = pivot != null ? pivot.position : Vector3.zero;
+            ApplyDefaultFollowOffset();
         }
 
         void Update()
@@ -265,6 +281,11 @@ namespace TGD.LevelV2
             var follow = (cineCam != null) ? cineCam.GetComponent<CinemachineFollow>() : null;
             if (follow == null) return;
 
+            Vector3 centerAnchor = Vector3.zero;
+            bool hasCenterAnchor = TryProjectScreenPointToGround(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out centerAnchor);
+            if (hasCenterAnchor && pivot != null)
+                centerAnchor.y = pivot.position.y;
+
             var off = follow.FollowOffset;
             float newY = Mathf.Clamp(off.y - wheel * zoomSpeed, minFollowY, maxFollowY);
 
@@ -273,23 +294,32 @@ namespace TGD.LevelV2
             off.z = -newY / Mathf.Tan(tiltRad);
             follow.FollowOffset = off;
 
-            if (zoomTowardMouse && TryProjectMouseToGround(out var hit))
+            bool pivotAdjusted = false;
+
+            if (pivot != null && zoomTowardMouse && TryProjectMouseToGround(out var hit))
             {
+                hit.y = pivot.position.y;
                 Vector3 delta = hit - pivot.position;
                 float dist = delta.magnitude;
 
                 // 超远目标不采用“朝鼠标缩放”
                 if (dist <= zoomTowardMaxDistance)
                 {
-                    // 原来的 Lerp 再加步长上限（更稳）
-                    Vector3 target = Vector3.Lerp(pivot.position, hit, zoomTowardLerp);
+                    Vector3 target = Vector3.Lerp(pivot.position, hit, Mathf.Clamp01(zoomTowardLerp));
                     Vector3 step = target - pivot.position;
 
-                    if (step.magnitude > zoomTowardMaxStep)
-                        step = step.normalized * zoomTowardMaxStep;
+                    float maxStep = Mathf.Max(0f, zoomTowardMaxStep);
+                    if (maxStep > 0f && step.magnitude > maxStep)
+                        step = step.normalized * maxStep;
 
                     pivot.position += step;
+                    pivotAdjusted = true;
                 }
+            }
+
+            if (!pivotAdjusted && hasCenterAnchor && pivot != null)
+            {
+                pivot.position = new Vector3(centerAnchor.x, pivot.position.y, centerAnchor.z);
             }
         }
 
@@ -320,7 +350,14 @@ namespace TGD.LevelV2
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
                 return;
 
-            ResetFocus(true);
+            if (recenterFocusActiveUnit && turnManager != null && turnManager.ActiveUnit != null)
+            {
+                AutoFocus(turnManager.ActiveUnit.Position);
+            }
+            else
+            {
+                ResetFocus(true);
+            }
         }
 
         float CurrentCameraHeight()
@@ -338,14 +375,48 @@ namespace TGD.LevelV2
             pivot.position = pos;
         }
 
+        void ApplyDefaultFollowOffset()
+        {
+            if (cineCam == null)
+                return;
+
+            if (defaultFollowY <= 0f)
+                return;
+
+            var follow = cineCam.GetComponent<CinemachineFollow>();
+            if (follow == null)
+                return;
+
+            float height = Mathf.Clamp(defaultFollowY, minFollowY, maxFollowY);
+            var off = follow.FollowOffset;
+            if (Mathf.Approximately(off.y, height))
+            {
+                float tiltRad = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
+                off.z = -height / Mathf.Tan(tiltRad);
+                follow.FollowOffset = off;
+                return;
+            }
+
+            off.y = height;
+            float tilt = Mathf.Deg2Rad * Mathf.Clamp(tiltDeg, 1f, 89f);
+            off.z = -height / Mathf.Tan(tilt);
+            follow.FollowOffset = off;
+        }
+
         bool TryProjectMouseToGround(out Vector3 hit)
+        {
+            return TryProjectScreenPointToGround(Input.mousePosition, out hit);
+        }
+
+        bool TryProjectScreenPointToGround(Vector2 screenPoint, out Vector3 hit)
         {
             var cam = Camera.main != null ? Camera.main : GetComponent<Camera>();
             if (cam == null) { hit = default; return false; }
 
-            var ray = cam.ScreenPointToRay(Input.mousePosition);
+            var ray = cam.ScreenPointToRay(screenPoint);
             // 用经过 pivot 的水平面；如果你的地形有高度，以后可以换 Physics.Raycast + 地面层
-            var plane = new Plane(Vector3.up, new Vector3(0f, pivot.position.y, 0f));
+            var pivotPos = pivot != null ? pivot.position : transform.position;
+            var plane = new Plane(Vector3.up, new Vector3(0f, pivotPos.y, 0f));
             if (plane.Raycast(ray, out float enter))
             {
                 hit = ray.GetPoint(enter);

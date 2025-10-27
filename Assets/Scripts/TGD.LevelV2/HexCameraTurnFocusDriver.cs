@@ -16,8 +16,6 @@ namespace TGD.LevelV2
         [SerializeField] CombatActionManagerV2 combatManager;
         [SerializeField] bool focusOnNullChainFallbackToActive = true;
 
-        Unit _lastFocusedUnit;
-
         static T AutoFind<T>() where T : Object
         {
 #if UNITY_2023_1_OR_NEWER
@@ -85,11 +83,7 @@ namespace TGD.LevelV2
             if (cameraController == null || unit == null)
                 return;
 
-            if (_lastFocusedUnit == unit && cameraController.GetFocusCoordinate().Equals(unit.Position))
-                return;
-
             cameraController.AutoFocus(unit.Position);
-            _lastFocusedUnit = unit;
         }
     }
 }
