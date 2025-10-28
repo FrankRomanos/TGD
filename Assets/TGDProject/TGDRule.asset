@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bda5aa07954711438566c776bf42fa0, type: 3}
+  m_Name: TGDRule
+  m_EditorClassIdentifier: 
+  allowStandardAtIdle: 1
+  allowReactionAtIdle: 1
+  allowFullRoundAtIdle: 1
+  allowSustainedAtIdle: 1
+  allowFreeAtIdle: 0
+  allowDerivedAtIdle: 0
+  phaseStartAllowFree: 1
+  reactionWithinBaseTime: 1
+  allowFriendlyInsertions: 0
+  firstLayerMatrix:
+  - baseKind: 0
+    allowReaction: 1
+    allowFree: 1
+    allowDerived: 1
+  - baseKind: 1
+    allowReaction: 0
+    allowFree: 1
+    allowDerived: 1
+  - baseKind: 3
+    allowReaction: 1
+    allowFree: 1
+    allowDerived: 0
+  - baseKind: 4
+    allowReaction: 1
+    allowFree: 1
+    allowDerived: 0
+  - baseKind: 5
+    allowReaction: 1
+    allowFree: 1
+    allowDerived: 0
+  - baseKind: 2
+    allowReaction: 0
+    allowFree: 0
+    allowDerived: 1
+  recursionMatrix:
+  - chosenKind: 1
+    allowReactionNext: 0
+    allowFreeNext: 1
+    allowDerivedNext: 0
+  - chosenKind: 2
+    allowReactionNext: 1
+    allowFreeNext: 1
+    allowDerivedNext: 0
+  - chosenKind: 5
+    allowReactionNext: 0
+    allowFreeNext: 1
+    allowDerivedNext: 0
+  derivedRules: []
