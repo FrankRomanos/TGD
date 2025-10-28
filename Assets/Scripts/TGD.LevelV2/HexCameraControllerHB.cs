@@ -102,7 +102,7 @@ namespace TGD.LevelV2
                 if (alignYawToRAxis && pivot != null)
                 {
                     // FlatTop & PointyTop 下，R 轴都沿世界 +Z；保持 yaw=0 即可
-                    var e = pivot.eulerAngles; e.x = 60f; e.y = 0f; e.z = 0f;
+                    var e = pivot.eulerAngles; e.x = 60f; e.y = 2.373f; e.z = 0f;
                     pivot.rotation = Quaternion.Euler(e);
                 }
 
