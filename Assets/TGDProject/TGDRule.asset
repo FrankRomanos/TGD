@@ -50,13 +50,19 @@ MonoBehaviour:
   - chosenKind: 1
     allowReactionNext: 0
     allowFreeNext: 1
-    allowDerivedNext: 0
+    allowDerivedNext: 1
   - chosenKind: 2
-    allowReactionNext: 1
-    allowFreeNext: 1
-    allowDerivedNext: 0
+    allowReactionNext: 0
+    allowFreeNext: 0
+    allowDerivedNext: 1
   - chosenKind: 5
     allowReactionNext: 0
     allowFreeNext: 1
     allowDerivedNext: 0
-  derivedRules: []
+  derivedRules:
+  - sourceId: Attack
+    derivedIds:
+    - DerivedAfterAttack
+  - sourceId: DerivedAfterAttack
+    derivedIds:
+    - DerivedAfterDerived
