@@ -170,7 +170,9 @@ namespace TGD.UIV2
         void OnTurnStarted(Unit unit)
         {
             bool isPlayer = turnManager != null && turnManager.IsPlayerUnit(unit);
-            AddOrRefreshSlot(unit, isPlayer, true);
+
+            if (!TryUpdateSlotEntry(unit, isPlayer, true))
+                AddOrRefreshSlot(unit, isPlayer, true);
         }
 
         void OnTurnEnded(Unit unit)
@@ -190,6 +192,36 @@ namespace TGD.UIV2
 
             if (refreshImmediately)
                 RefreshSlots();
+        }
+
+        bool TryUpdateSlotEntry(Unit unit, bool isPlayer, bool refreshImmediately)
+        {
+            if (unit == null || _slotEntries.Length == 0)
+                return false;
+
+            string unitId = unit.Id;
+            for (int i = 0; i < _slotEntries.Length; i++)
+            {
+                if (!_slotEntries[i].hasValue)
+                    continue;
+
+                if (_slotEntries[i].unit == unit || (!string.IsNullOrEmpty(unitId) && _slotEntries[i].unitId == unitId))
+                {
+                    var entry = _slotEntries[i];
+                    entry.unit = unit;
+                    entry.unitId = unitId;
+                    entry.isPlayer = isPlayer;
+                    entry.avatar = ResolveAvatar(unit);
+                    _slotEntries[i] = entry;
+
+                    if (refreshImmediately)
+                        RefreshSlots();
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         void PushTurnEntry(TurnEntry entry)
@@ -343,8 +375,8 @@ namespace TGD.UIV2
                 if (label)
                     label.text = string.Empty;
 
-                if (root)
-                    root.SetActive(false);
+                if (root && !root.activeSelf)
+                    root.SetActive(true);
             }
         }
 
@@ -387,8 +419,8 @@ namespace TGD.UIV2
                 if (overlay != null)
                     overlay.Detach();
 
-                if (root)
-                    root.SetActive(false);
+                if (root && !root.activeSelf)
+                    root.SetActive(true);
             }
         }
 
