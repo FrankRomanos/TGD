@@ -1,68 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
-    <Style src="project://database/Assets/TGDUIV2/Timeline/TurnTimeline.uss" />
-    <ui:VisualElement name="turnTimeline" class="timeline-root">
-        <ui:VisualElement name="timelinePanel" class="timeline-panel">
-            <ui:VisualElement picking-mode="Ignore" class="timeline-background" />
-            <ui:VisualElement picking-mode="Ignore" class="timeline-frame" />
-            <ui:VisualElement name="timelineScroll" class="timeline-scroll">
-                <ui:VisualElement name="timelineContent" class="timeline-content">
-                    <ui:VisualElement name="currentTurn" class="turn-group">
-                        <ui:Label name="currentTurnLabel" class="turn-label" text="Turn(Player) 1" />
-                        <ui:VisualElement class="avatar-column">
-                            <ui:VisualElement name="currentAvatarSlot0" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="currentAvatarImage0" class="avatar-image" />
+    <Style src="project://database/Assets/TGDUIV2/Timeline/TurnTimeline.uss?fileID=7433441132597879392&amp;guid=7893b9503be0462abec1b877986f6085&amp;type=3#TurnTimeline" />
+    <ui:VisualElement name="timelineOverlay" class="timeline-overlay">
+        <ui:VisualElement name="timelineWrap" class="timeline-wrap">
+            <ui:VisualElement name="timelinePanel" class="timeline-panel">
+                <ui:VisualElement picking-mode="Ignore" class="timeline-background" />
+                <ui:VisualElement picking-mode="Ignore" class="timeline-frame" />
+                <ui:VisualElement name="timelineContentMask" class="timeline-content-mask">
+                    <ui:VisualElement name="timelineContent" class="timeline-content">
+                        <ui:VisualElement name="currentTurn" class="turn-entry current-turn">
+                            <ui:Label name="currentTurnLabel" class="turn-label" text="Turn(Player) 1" />
+                            <ui:VisualElement class="avatar-column">
+                                <ui:VisualElement name="currentAvatarSlot0" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="currentAvatarImage0" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="currentAvatarSlot1" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="currentAvatarImage1" class="avatar-image" />
+                                <ui:VisualElement name="currentAvatarSlot1" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="currentAvatarImage1" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="currentAvatarSlot2" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="currentAvatarImage2" class="avatar-image" />
+                                <ui:VisualElement name="currentAvatarSlot2" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="currentAvatarImage2" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="currentAvatarSlot3" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="currentAvatarImage3" class="avatar-image" />
+                                <ui:VisualElement name="currentAvatarSlot3" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="currentAvatarImage3" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                             </ui:VisualElement>
                         </ui:VisualElement>
-                    </ui:VisualElement>
-                    <ui:VisualElement picking-mode="Ignore" class="turn-divider" />
-                    <ui:VisualElement name="nextTurn" class="turn-group">
-                        <ui:Label name="nextTurnLabel" class="turn-label" text="Turn(Enemy) 2" />
-                        <ui:VisualElement class="avatar-column">
-                            <ui:VisualElement name="nextAvatarSlot0" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="nextAvatarImage0" class="avatar-image" />
+                        <ui:VisualElement picking-mode="Ignore" class="turn-divider" />
+                        <ui:VisualElement name="nextTurn" class="turn-entry next-turn">
+                            <ui:Label name="nextTurnLabel" class="turn-label" text="Turn(Enemy) 2" />
+                            <ui:VisualElement class="avatar-column">
+                                <ui:VisualElement name="nextAvatarSlot0" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="nextAvatarImage0" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="nextAvatarSlot1" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="nextAvatarImage1" class="avatar-image" />
+                                <ui:VisualElement name="nextAvatarSlot1" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="nextAvatarImage1" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="nextAvatarSlot2" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="nextAvatarImage2" class="avatar-image" />
+                                <ui:VisualElement name="nextAvatarSlot2" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="nextAvatarImage2" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="nextAvatarSlot3" class="avatar-frame">
-                                <ui:VisualElement class="avatar-fill">
-                                    <ui:VisualElement name="nextAvatarImage3" class="avatar-image" />
+                                <ui:VisualElement name="nextAvatarSlot3" class="avatar-slot">
+                                    <ui:VisualElement class="avatar-skin">
+                                        <ui:VisualElement name="nextAvatarImage3" class="avatar-image" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                                 </ui:VisualElement>
-                                <ui:VisualElement picking-mode="Ignore" class="avatar-frame-overlay" />
                             </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
