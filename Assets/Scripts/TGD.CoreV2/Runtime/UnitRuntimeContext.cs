@@ -1,29 +1,29 @@
-// File: TGD.CoreV2/UnitRuntimeContext.cs
+ï»¿// File: TGD.CoreV2/UnitRuntimeContext.cs
 using UnityEngine;
 
 namespace TGD.CoreV2
 {
-    /// µ¥Î»ÔËÐÐÊ±ÉÏÏÂÎÄ£ºÍ³Ò»³ÐÔØ Stats/Cooldown µÈ£¬²¢Ìá¹©±ã½ÝÖ»¶Á·ÃÎÊ
+    /// å•ä½è¿è¡Œæ—¶ä¸Šä¸‹æ–‡ï¼šç»Ÿä¸€æ‰¿è½½ Stats/Cooldown ç­‰ï¼Œå¹¶æä¾›ä¾¿æ·åªè¯»è®¿é—®
     [DisallowMultipleComponent]
     public sealed class UnitRuntimeContext : MonoBehaviour
     {
         [Header("Core Refs")]
-        [Tooltip("¸Ãµ¥Î»µÄËùÓÐÕ½¶·ÊýÖµ£¨ÐòÁÐ»¯ÈÝÆ÷£©")]
+        [Tooltip("è¯¥å•ä½çš„æ‰€æœ‰æˆ˜æ–—æ•°å€¼ï¼ˆåºåˆ—åŒ–å®¹å™¨ï¼‰")]
         public StatsV2 stats = new StatsV2();
         public CooldownHubV2 cooldownHub;
 
         [Header("Fallbacks (for tests)")]
-        [Tooltip("µ± stats Îª¿ÕÊ±ÓÃÓÚ²âÊÔµÄÄ¬ÈÏ MoveRate")]
+        [Tooltip("å½“ stats ä¸ºç©ºæ—¶ç”¨äºŽæµ‹è¯•çš„é»˜è®¤ MoveRate")]
         public float fallbackMoveRate = 5f;
         // File: TGD.CoreV2/UnitRuntimeContext.cs
-        // ÔÚÀàÀïÆäËü±ã½ÝÊôÐÔÅÔ±ßÐÂÔö£º
-        public bool Entangled => stats != null && stats.IsEntangled; // ¡ï ÐÂÔö£º¶ÔÍâÖ»¶Á£¬²»±©Â¶ StatsV2
+        // åœ¨ç±»é‡Œå…¶å®ƒä¾¿æ·å±žæ€§æ—è¾¹æ–°å¢žï¼š
+        public bool Entangled => stats != null && stats.IsEntangled; // â˜… æ–°å¢žï¼šå¯¹å¤–åªè¯»ï¼Œä¸æš´éœ² StatsV2
 
 
-        // ========= ±ã½ÝÖ»¶Á·ÃÎÊ£¨Í³Ò»Èë¿Ú£»Íâ²¿ÏµÍ³Ö»¶ÁÕâÐ©£© =========
-        // ¡ª¡ª ÒÆ¶¯ ¡ª¡ª 
+        // ========= ä¾¿æ·åªè¯»è®¿é—®ï¼ˆç»Ÿä¸€å…¥å£ï¼›å¤–éƒ¨ç³»ç»Ÿåªè¯»è¿™äº›ï¼‰ =========
+        // â€”â€” ç§»åŠ¨ â€”â€” 
         public int MoveRate => (stats != null) ? stats.MoveRate : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
-        // ¡ï ÐÂÔö£º»ù´¡ÒÆËÙ£¨¿ÉÐ´£¬Ð´»Ø Stats »ò fallback£©
+        // â˜… æ–°å¢žï¼šåŸºç¡€ç§»é€Ÿï¼ˆå¯å†™ï¼Œå†™å›ž Stats æˆ– fallbackï¼‰
         public int BaseMoveRate
         {
             get => stats != null ? Mathf.Max(1, stats.MoveRate)
@@ -51,19 +51,19 @@ namespace TGD.CoreV2
         public int MoveRateFlatAdd => stats != null ? stats.MoveRateFlatAdd : 0;
         //speed
         public int Speed => (stats != null) ? stats.Speed : 0;
-        // ¡ª¡ª ÄÜÁ¿ ¡ª¡ª 
+        // â€”â€” èƒ½é‡ â€”â€” 
         public int Energy => stats != null ? stats.Energy : 0;
         public int MaxEnergy => stats != null ? stats.MaxEnergy : 0;
 
-        // ¡ª¡ª ¹¥»÷/Ö÷ÊôÐÔ/±©»÷£¨°´ StatsV2 µÄ¶¨ÒåÖ±Í¨±©Â¶£¬²»Ôì¶îÍâ¹«Ê½£© ¡ª¡ª 
+        // â€”â€” æ”»å‡»/ä¸»å±žæ€§/æš´å‡»ï¼ˆæŒ‰ StatsV2 çš„å®šä¹‰ç›´é€šæš´éœ²ï¼Œä¸é€ é¢å¤–å…¬å¼ï¼‰ â€”â€” 
         public int Attack => stats != null ? stats.Attack : 0;
-        public float PrimaryP => stats != null ? stats.PrimaryP : 0f;          // Ö÷ÊôÐÔ»»ËãºóµÄ°Ù·Ö±È£¨Ð¡Êý£©
-        public float CritChance => stats != null ? stats.CritChance : 0f;        // [0,1] ÒÑ×öÉÏÏÞ
-        public float CritOverflow => stats != null ? stats.CritOverflow : 0f;      // ³¬Ã±²¿·Ö£¨Ð¡Êý£¬¿É>0£©
-        public float CritMult => stats != null ? stats.CritMult : 2f;          // ÀýÈç 2.0 = 200%
-        public float Mastery => stats != null ? stats.Mastery : 0f;           // ¿É>1 µÄ¾«Í¨
+        public float PrimaryP => stats != null ? stats.PrimaryP : 0f;          // ä¸»å±žæ€§æ¢ç®—åŽçš„ç™¾åˆ†æ¯”ï¼ˆå°æ•°ï¼‰
+        public float CritChance => stats != null ? stats.CritChance : 0f;        // [0,1] å·²åšä¸Šé™
+        public float CritOverflow => stats != null ? stats.CritOverflow : 0f;      // è¶…å¸½éƒ¨åˆ†ï¼ˆå°æ•°ï¼Œå¯>0ï¼‰
+        public float CritMult => stats != null ? stats.CritMult : 2f;          // ä¾‹å¦‚ 2.0 = 200%
+        public float Mastery => stats != null ? stats.Mastery : 0f;           // å¯>1 çš„ç²¾é€š
 
-        // ¡ª¡ª ÆäËü³£ÓÃÍ°/¼õÉËÖ±Í¨£¨ÐèÒª¾ÍÓÃ£¬Ã»ÓÃ¿ÉÒÔºöÂÔ£© ¡ª¡ª 
+        // â€”â€” å…¶å®ƒå¸¸ç”¨æ¡¶/å‡ä¼¤ç›´é€šï¼ˆéœ€è¦å°±ç”¨ï¼Œæ²¡ç”¨å¯ä»¥å¿½ç•¥ï¼‰ â€”â€” 
         public float DmgBonusA_P => stats != null ? stats.DmgBonusA_P : 0f;
         public float DmgBonusB_P => stats != null ? stats.DmgBonusB_P : 0f;
         public float DmgBonusC_P => stats != null ? stats.DmgBonusC_P : 0f;
@@ -71,7 +71,7 @@ namespace TGD.CoreV2
         public float ReduceB_P => stats != null ? stats.ReduceB_P : 0f;
         public float ReduceC_P => stats != null ? stats.ReduceC_P : 0f;
 
-        // ========= µ÷ÊÔ =========
+        // ========= è°ƒè¯• =========
         [Header("Debug")]
         public bool debugLog = true;
 

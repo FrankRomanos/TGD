@@ -1,10 +1,10 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// <summary> Öá×ø±ê£¨q,r£©£»Á¢·½×ø±ê s = -q-r Òşº¬¡£</summary>
+    /// <summary> è½´åæ ‡ï¼ˆq,rï¼‰ï¼›ç«‹æ–¹åæ ‡ s = -q-r éšå«ã€‚</summary>
     [Serializable]
     public struct Hex : IEquatable<Hex>
     {
@@ -21,7 +21,7 @@ namespace TGD.HexBoard
         public override int GetHashCode() => (q * 397) ^ r;
         public override string ToString() => $"({q},{r})";
 
-        // ÁùÁÚ·½Ïò£¨±ê×¼Öá£ºE, NE, N, W, SW, S£©
+        // å…­é‚»æ–¹å‘ï¼ˆæ ‡å‡†è½´ï¼šE, NE, N, W, SW, Sï¼‰
         public static readonly Hex[] Directions = new Hex[6]
         {
             new Hex(+1, 0),   // 0: +Q (East)
@@ -40,7 +40,7 @@ namespace TGD.HexBoard
             return (Mathf.Abs(dq) + Mathf.Abs(dr) + Mathf.Abs(ds)) / 2;
         }
 
-        /// <summary> Ö±Ïß£¨°üº¬ÆğµãÓëÖÕµã£©¡£</summary>
+        /// <summary> ç›´çº¿ï¼ˆåŒ…å«èµ·ç‚¹ä¸ç»ˆç‚¹ï¼‰ã€‚</summary>
         public static IEnumerable<Hex> Line(Hex a, Hex b)
         {
             int N = Distance(a, b);
@@ -54,7 +54,7 @@ namespace TGD.HexBoard
 
         static Vector3 Lerp(Hex a, Hex b, float t)
         {
-            // Á¢·½×ø±ê²åÖµ
+            // ç«‹æ–¹åæ ‡æ’å€¼
             float aq = a.q, ar = a.r, as_ = -a.q - a.r;
             float bq = b.q, br = b.r, bs_ = -b.q - b.r;
             float q = Mathf.Lerp(aq, bq, t);
@@ -76,11 +76,11 @@ namespace TGD.HexBoard
             return new Hex(rq, rr);
         }
 
-        /// <summary> È¡»·£¨Ç¡ºÃ¾àÀë = radius£©¡£</summary>
+        /// <summary> å–ç¯ï¼ˆæ°å¥½è·ç¦» = radiusï¼‰ã€‚</summary>
         public static IEnumerable<Hex> Ring(Hex center, int radius)
         {
             if (radius == 0) { yield return center; yield break; }
-            var c = center + Directions[4] * radius; // ÈÎÈ¡Æğµã
+            var c = center + Directions[4] * radius; // ä»»å–èµ·ç‚¹
             for (int side = 0; side < 6; side++)
             {
                 for (int i = 0; i < radius; i++)
@@ -91,7 +91,7 @@ namespace TGD.HexBoard
             }
         }
 
-        /// <summary> È¡ÁâĞÎ·¶Î§£¨<= radius£©¡£</summary>
+        /// <summary> å–è±å½¢èŒƒå›´ï¼ˆ<= radiusï¼‰ã€‚</summary>
         public static IEnumerable<Hex> Range(Hex center, int radius)
         {
             for (int dq = -radius; dq <= radius; dq++)

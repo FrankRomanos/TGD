@@ -1,4 +1,4 @@
-using System;
+Ôªøusing System;
 using UnityEngine;
 
 namespace TGD.CoreV2
@@ -8,19 +8,19 @@ namespace TGD.CoreV2
     [Serializable]
     public sealed class StatsV2
     {
-        // °™°™ ª˘¥° °™°™ 
+        // ‚Äî‚Äî Âü∫Á°Ä ‚Äî‚Äî 
         public int Level;
         public int Attack;
         public int Stamina;
         public int Armor;
 
-        // °™°™  ±º‰ & “∆∂Ø °™°™ 
-        public int Speed;                  // +√Î/ªÿ∫œ
-        public int MoveRate = 1;           // ∏Ò/√Î£®µ◊◊˘£©
-        // “∆ÀŸ∏ƒ∂Ø£®”…–ßπ˚µ˛º”£©
-        public int MoveRateFlatAdd = 0;  // ∆ΩÃπº”ºı
-        public float MoveRatePctAdd = 0f; // ∞Ÿ∑÷±»º”◊‹£®-0.5 = -50%£©
-        public bool IsEntangled = false; // ÷ª”–À¸ƒ‹∞—ÀŸ∂»±‰≥… 0
+        // ‚Äî‚Äî Êó∂Èó¥ & ÁßªÂä® ‚Äî‚Äî 
+        public int Speed;                  // +Áßí/ÂõûÂêà
+        public int MoveRate = 1;           // Ê†º/ÁßíÔºàÂ∫ïÂ∫ßÔºâ
+        // ÁßªÈÄüÊîπÂä®ÔºàÁî±ÊïàÊûúÂè†Âä†Ôºâ
+        public int MoveRateFlatAdd = 0;  // Âπ≥Âù¶Âä†Âáè
+        public float MoveRatePctAdd = 0f; // ÁôæÂàÜÊØîÂä†ÊÄªÔºà-0.5 = -50%Ôºâ
+        public bool IsEntangled = false; // Âè™ÊúâÂÆÉËÉΩÊääÈÄüÂ∫¶ÂèòÊàê 0
 
         public int EffectiveMoveRate
         {
@@ -34,57 +34,57 @@ namespace TGD.CoreV2
             }
         }
 
-        // °™°™ π´π≤◊ ‘¥ °™°™ 
+        // ‚Äî‚Äî ÂÖ¨ÂÖ±ËµÑÊ∫ê ‚Äî‚Äî 
         public int MaxHP = 100, HP = 100;
         public int MaxEnergy = 100, Energy = 0;
         public int EnergyRegenPer2s = 0;
 
-        // °™°™ ÷˜ Ù–‘£®¡ΩÃı∂º¥Ê£¨µ´÷∞“µ÷ª”√∆‰“ª£© °™°™ 
+        // ‚Äî‚Äî ‰∏ªÂ±ûÊÄßÔºà‰∏§Êù°ÈÉΩÂ≠òÔºå‰ΩÜËÅå‰∏öÂè™Áî®ÂÖ∂‰∏ÄÔºâ ‚Äî‚Äî 
         public int Strength = 0;
         public int Agility = 0;
         public PrimaryAttrV2 PrimaryAttr = PrimaryAttrV2.Strength;
-        public float PrimaryAddPct = 0f;   // ∂ÓÕ‚∞Ÿ∑÷±»£®–° ˝£©
+        public float PrimaryAddPct = 0f;   // È¢ùÂ§ñÁôæÂàÜÊØîÔºàÂ∞èÊï∞Ôºâ
         public float PrimaryP
         {
             get
             {
                 int rating = (PrimaryAttr == PrimaryAttrV2.Strength) ? Strength : Agility;
-                return rating / 1500f + Mathf.Max(0f, PrimaryAddPct); // 15µ„=1%=0.01
+                return rating / 1500f + Mathf.Max(0f, PrimaryAddPct); // 15ÁÇπ=1%=0.01
             }
         }
 
-        // °™°™ ±©ª˜ °™°™ 
+        // ‚Äî‚Äî Êö¥Âáª ‚Äî‚Äî 
         public float BaseCrit = 0f;
         public int CritRating = 0;        // 30=1%
-        public float CritAddPct = 0f;       // ∂ÓÕ‚∞Ÿ∑÷±»£®–° ˝£©
-        public int CritDamagePct = 200;   // 200% => 2.0°¡
+        public float CritAddPct = 0f;       // È¢ùÂ§ñÁôæÂàÜÊØîÔºàÂ∞èÊï∞Ôºâ
+        public int CritDamagePct = 200;   // 200% => 2.0√ó
         public float CritChanceRaw => StatsMathV2.CritChanceRaw(BaseCrit, CritRating, CritAddPct, 30f);
         public float CritChance => StatsMathV2.CritChanceCapped(CritChanceRaw);
         public float CritOverflow => StatsMathV2.CritOverflow(CritChanceRaw);
         public float CritMult => StatsMathV2.CritMultiplier(CritDamagePct);
 
-        // °™°™ æ´Õ®£®ø… >1£© °™°™ 
+        // ‚Äî‚Äî Á≤æÈÄöÔºàÂèØ >1Ôºâ ‚Äî‚Äî 
         public float BaseMasteryP = 0f;
         public int MasteryRating = 0;
         public float MasteryAddPct = 0f;
         public float MasteryClassCoeff = 1f;
         public float Mastery => StatsMathV2.MasteryValue(BaseMasteryP, MasteryRating, MasteryAddPct, 20f, MasteryClassCoeff);
 
-        // °™°™ ∂¿¡¢‘ˆ…ÀÕ∞£®≥À∑®œ‡≥À£¨Õ∞ƒ⁄º”∑®£© °™°™ 
+        // ‚Äî‚Äî Áã¨Á´ãÂ¢û‰º§Ê°∂Ôºà‰πòÊ≥ïÁõ∏‰πòÔºåÊ°∂ÂÜÖÂä†Ê≥ïÔºâ ‚Äî‚Äî 
         public float DmgBonusA_P = 0f;
         public float DmgBonusB_P = 0f;
         public float DmgBonusC_P = 0f;
 
-        // °™°™ ∂¿¡¢ºı…À£®º”∑®£© °™°™ 
+        // ‚Äî‚Äî Áã¨Á´ãÂáè‰º§ÔºàÂä†Ê≥ïÔºâ ‚Äî‚Äî 
         public float ReduceA_P = 0f;
         public float ReduceB_P = 0f;
         public float ReduceC_P = 0f;
 
-        // °™°™ Õ˛–≤/œ˜»Õ‘ˆ«ø£®º”∑®∞Ÿ∑÷±»£© °™°™ 
+        // ‚Äî‚Äî Â®ÅËÉÅ/ÂâäÈüßÂ¢ûÂº∫ÔºàÂä†Ê≥ïÁôæÂàÜÊØîÔºâ ‚Äî‚Äî 
         public float ThreatAddPct = 0f;
         public float ShredAddPct = 0f;
 
-        // °™°™ ≈……˙ °™°™ 
+        // ‚Äî‚Äî Ê¥æÁîü ‚Äî‚Äî 
         public int TurnTime => StatsMathV2.TurnTime(Speed);
 
         public void Clamp()
@@ -95,9 +95,9 @@ namespace TGD.CoreV2
             Energy = Mathf.Clamp(Energy, 0, MaxEnergy);
 
             MoveRate = Mathf.Max(1, MoveRate);
-            // ‘ –Ì MoveRatePctAdd < -1£¨µ´◊Ó÷’ EffectiveMoveRate ÷¡…ŸŒ™1£®∑«∂®…Ì£©
+            // ÂÖÅËÆ∏ MoveRatePctAdd < -1Ôºå‰ΩÜÊúÄÁªà EffectiveMoveRate Ëá≥Â∞ë‰∏∫1ÔºàÈùûÂÆöË∫´Ôºâ
 
-            // ∑«∏∫±£’œ
+            // ÈùûË¥ü‰øùÈöú
             PrimaryAddPct = Mathf.Max(0f, PrimaryAddPct);
             BaseCrit = Mathf.Max(0f, BaseCrit);
             CritAddPct = Mathf.Max(0f, CritAddPct);

@@ -1,13 +1,13 @@
 namespace TGD.HexBoard
 {
-    /// <summary> ÃæÏò = ËÄÏòÖ®Ò»£¨¡ÀQ¡¢¡ÀR£©¡£</summary>
+    /// <summary> é¢å‘ = å››å‘ä¹‹ä¸€ï¼ˆÂ±Qã€Â±Rï¼‰ã€‚</summary>
     public enum Facing4 { PlusQ, MinusQ, PlusR, MinusR }
 
     public sealed class Unit
     {
         public string Id;
-        public Hex Position;    // ×ÜÊÇÕûÊı¸ñ
-        public Facing4 Facing;  // Ç°Ïò½öÈ¡ ¡ÀQ/¡ÀR
+        public Hex Position;    // æ€»æ˜¯æ•´æ•°æ ¼
+        public Facing4 Facing;  // å‰å‘ä»…å– Â±Q/Â±R
 
         public Unit(string id, Hex pos, Facing4 facing)
         {

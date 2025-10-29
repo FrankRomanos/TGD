@@ -1,4 +1,4 @@
-namespace TGD.CombatV2
+﻿namespace TGD.CombatV2
 {
     public interface ITurnBudget
     {
