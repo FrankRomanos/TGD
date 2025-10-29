@@ -1,6 +1,6 @@
 ﻿// File: TGD.HexBoard/HexBoardTestDriver.cs
 using UnityEngine;
-using TGD.UI;
+using TGD.UIV2;
 
 namespace TGD.HexBoard
 {
