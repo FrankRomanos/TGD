@@ -392,14 +392,14 @@ namespace TGD.UIV2
             }
         }
 
-        struct TurnEntry
+        public struct TurnEntry
         {
             public bool hasValue;
             public bool isPlayer;
             public int phaseIndex;
         }
 
-        struct SlotEntry
+        public struct SlotEntry
         {
             public bool hasValue;
             public Unit unit;
