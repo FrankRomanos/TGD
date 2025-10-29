@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace TGD.UI
+namespace TGD.UIV2
 {
     /// <summary>
     /// Handles the hourglass presentation for the Turn HUD: idle sway, consume bounce and refund flash.
