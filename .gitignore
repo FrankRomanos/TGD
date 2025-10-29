@@ -11,7 +11,6 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.log
-*.png
 *.prefab
 *.meta
 
@@ -118,3 +117,9 @@ crashlytics-build.properties
 Assets/Settings/DefaultVolumeProfile.asset
 /Assets/Settings
 *.anim
+Assets/PolygonPrototype/Textures/PolygonPrototype_Texture_01.png
+/Assets/PolygonPrototype
+/Assets/Sprite
+/Assets/TGD.VFX
+/Assets/Textures
+/Assets/TGD Model
