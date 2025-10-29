@@ -1,5 +1,6 @@
 ﻿// File: TGD.HexBoard/HexBoardTestDriver.cs
 using UnityEngine;
+using TGD.UIV2;
 
 namespace TGD.HexBoard
 {
@@ -9,6 +10,8 @@ namespace TGD.HexBoard
         public HexBoardAuthoringLite authoring;
         public Transform unitView;
         public string unitId = "P1";                 // ★ 新增：每个驱动唯一 Id
+        [Tooltip("Optional temporary portrait for UI previews (timeline, etc.)")]
+        public Sprite temporaryAvatar;
         public int startQ = 9, startR = 7;
         public Facing4 startFacing = Facing4.PlusQ;
         public float y = 0.01f;
@@ -45,12 +48,21 @@ namespace TGD.HexBoard
             _inited = true;
             SyncView();
             TryRegisterView();
+            RegisterAvatar();
         }
 
         void OnEnable()
         {
             EnsureInit();
             TryRegisterView();
+            RegisterAvatar();
+        }
+
+
+        void OnValidate()
+        {
+            if (!Application.isPlaying)
+                RegisterAvatar();
         }
 
         void Start() => EnsureInit();
@@ -66,6 +78,7 @@ namespace TGD.HexBoard
 
         void OnDisable()
         {
+            UnregisterAvatar();
             if (_registered)
             {
                 UnitLocator.Unregister(this);
@@ -103,6 +116,19 @@ namespace TGD.HexBoard
             if (_registered || !IsReady) return;
             if (UnitLocator.Register(this))
                 _registered = true;
+        }
+        void RegisterAvatar()
+        {
+            if (_unit == null || string.IsNullOrEmpty(unitId))
+                return;
+            TurnTimelineAvatarRegistry.SetAvatar(unitId, temporaryAvatar);
+        }
+
+        void UnregisterAvatar()
+        {
+            if (string.IsNullOrEmpty(unitId))
+                return;
+            TurnTimelineAvatarRegistry.RemoveAvatar(unitId, temporaryAvatar);
         }
     }
 }
