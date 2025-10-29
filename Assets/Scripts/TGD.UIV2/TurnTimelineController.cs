@@ -6,7 +6,7 @@ using TGD.HexBoard;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace TGD.UI
+namespace TGD.UIV2
 {
     /// <summary>
     /// Controls the scrolling turn timeline HUD driven by TurnManagerV2.

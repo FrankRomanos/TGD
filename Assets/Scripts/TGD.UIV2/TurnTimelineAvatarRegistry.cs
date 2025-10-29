@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TGD.UI
+namespace TGD.UIV2
 {
     /// <summary>
     /// Centralized registry that maps unit identifiers to portrait sprites for the turn timeline UI.
