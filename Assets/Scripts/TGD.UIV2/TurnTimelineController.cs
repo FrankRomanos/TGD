@@ -418,10 +418,14 @@ namespace TGD.UIV2
 
         void ApplySlotVisuals(TimelineEntryView entry)
         {
-            if (entry.slot == null)
+            if (entry == null)
                 return;
 
-            var card = entry.slot.card;
+            var slot = entry.slot;
+            if (slot.root == null)
+                return;
+
+            var card = slot.card;
             if (card != null)
             {
                 card.RemoveFromClassList("player-turn");
@@ -434,7 +438,7 @@ namespace TGD.UIV2
                 card.RemoveFromClassList("slot-active");
             }
 
-            var icon = entry.slot.icon;
+            var icon = slot.icon;
             if (icon != null)
             {
                 var sprite = ResolveAvatar(entry.unit);
@@ -536,7 +540,7 @@ namespace TGD.UIV2
 
         static void ToggleSlotActive(TimelineEntryView entry, bool active)
         {
-            var card = entry?.slot?.card;
+            var card = entry != null ? entry.slot.card : null;
             card?.EnableInClassList("slot-active", active);
         }
 
