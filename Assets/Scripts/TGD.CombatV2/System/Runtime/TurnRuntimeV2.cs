@@ -18,6 +18,9 @@ namespace TGD.CombatV2
         public int RemainingTime { get; private set; }
         public bool HasSpentTimeThisTurn { get; private set; }
         public bool HasReachedIdle { get; private set; }
+        public bool HasReorderedThisTurn { get; private set; }
+        public bool DeferredFromIdle { get; private set; }
+        public int DeferredIdlePhaseIndex { get; private set; }
         public int ActivePhaseIndex { get; private set; }
 
         public int BaseTimeForNext => _baseTimeForNext;
@@ -98,6 +101,9 @@ namespace TGD.CombatV2
             PrepaidTime = 0;
             HasSpentTimeThisTurn = false;
             HasReachedIdle = false;
+            HasReorderedThisTurn = false;
+            DeferredFromIdle = false;
+            DeferredIdlePhaseIndex = 0;
 
             return new BeginSnapshot(basePrev, baseNew, remainPrev, remainAfterRebase, prepaid, remainAfterPrepaid);
         }
@@ -142,6 +148,20 @@ namespace TGD.CombatV2
         public void MarkIdleReached()
         {
             HasReachedIdle = true;
+        }
+
+        public void MarkReorderedFromIdle(int phaseIndex)
+        {
+            HasReorderedThisTurn = true;
+            DeferredFromIdle = true;
+            DeferredIdlePhaseIndex = Mathf.Max(0, phaseIndex);
+            HasReachedIdle = false;
+        }
+
+        public void ClearDeferredIdle()
+        {
+            DeferredFromIdle = false;
+            DeferredIdlePhaseIndex = 0;
         }
     }
 }

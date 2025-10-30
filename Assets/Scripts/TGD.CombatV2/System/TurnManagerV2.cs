@@ -44,6 +44,7 @@ namespace TGD.CombatV2
         public event Action<Unit> TurnEnded;
         public event Action<Unit> UnitRuntimeChanged;
         public event Action<Unit> UnitTurnTimeDepleted;
+        public event Action<bool> TurnOrderChanged;
 
         readonly List<Unit> _playerUnits = new();
         readonly List<Unit> _enemyUnits = new();
@@ -78,6 +79,9 @@ namespace TGD.CombatV2
         int _phaseIndex;
         int _currentPhaseIndex;
         bool _currentPhaseIsPlayer;
+        List<Unit> _activePhaseUnits;
+        int _activePhaseUnitIndex;
+        int _activePhaseOverrideIndex = -1;
 
         sealed class TurnBudgetHandle : ITurnBudget
         {
@@ -535,15 +539,48 @@ namespace TGD.CombatV2
             float delay = Mathf.Max(1f, Mathf.Max(0f, phaseStartDelaySeconds));
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
-            foreach (var unit in units)
+
+            _activePhaseUnits = units;
+            _activePhaseUnitIndex = 0;
+            _activePhaseOverrideIndex = -1;
+
+            while (_activePhaseUnits != null && _activePhaseUnitIndex < _activePhaseUnits.Count)
             {
-                if (unit == null) continue;
+                var unit = _activePhaseUnits[_activePhaseUnitIndex];
+                if (unit == null)
+                {
+                    _activePhaseUnitIndex++;
+                    continue;
+                }
+
                 var runtime = EnsureRuntime(unit, isPlayer);
-                if (runtime == null) continue;
+                if (runtime == null)
+                {
+                    _activePhaseUnitIndex++;
+                    continue;
+                }
 
                 BeginTurn(runtime);
                 yield return new WaitUntil(() => !_waitingForEnd || _activeUnit != unit);
+
+                if (_activePhaseOverrideIndex >= 0)
+                {
+                    if (_activePhaseUnits != null && _activePhaseUnits.Count > 0)
+                        _activePhaseUnitIndex = Mathf.Clamp(_activePhaseOverrideIndex, 0, _activePhaseUnits.Count - 1);
+                    else
+                        _activePhaseUnitIndex = 0;
+                    _activePhaseOverrideIndex = -1;
+                }
+                else
+                {
+                    _activePhaseUnitIndex++;
+                }
             }
+
+            _activePhaseUnits = null;
+            _activePhaseUnitIndex = 0;
+            _activePhaseOverrideIndex = -1;
+
             if (isPlayer)
                 OnPlayerSideEnd();
             else
@@ -552,6 +589,15 @@ namespace TGD.CombatV2
 
         void BeginTurn(TurnRuntimeV2 runtime)
         {
+            if (runtime == null)
+                return;
+
+            if (runtime.DeferredFromIdle)
+            {
+                ResumeDeferredTurn(runtime);
+                return;
+            }
+
             var snapshot = runtime.BeginTurn();
             int turnTime = snapshot.BaseNew;
             runtime.SetActivePhaseIndex(_currentPhaseIndex);
@@ -570,6 +616,105 @@ namespace TGD.CombatV2
                 if (!runtime.IsPlayer)
                     StartCoroutine(AutoFinishEnemyTurn(runtime));
             }
+        }
+
+        void ResumeDeferredTurn(TurnRuntimeV2 runtime)
+        {
+            runtime.SetActivePhaseIndex(_currentPhaseIndex);
+            _activeUnit = runtime.Unit;
+            _waitingForEnd = true;
+            TurnStarted?.Invoke(runtime.Unit);
+            EnsureIdleLogged(runtime, _currentPhaseIndex);
+            runtime.ClearDeferredIdle();
+            RaiseUnitRuntimeChanged(runtime.Unit);
+        }
+
+        void RequestActivePhaseIteratorRestart(int index)
+        {
+            if (_activePhaseUnits == null || _activePhaseUnits.Count == 0)
+                return;
+
+            _activePhaseOverrideIndex = Mathf.Clamp(index, 0, _activePhaseUnits.Count - 1);
+        }
+
+        public bool CanDeferActiveUnit(Unit unit)
+        {
+            if (unit == null)
+                return false;
+
+            if (!_currentPhaseIsPlayer)
+                return false;
+
+            if (_activeUnit != unit)
+                return false;
+
+            var runtime = EnsureRuntime(unit, true);
+            if (runtime == null || !runtime.IsPlayer)
+                return false;
+
+            if (!runtime.HasReachedIdle || runtime.HasSpentTimeThisTurn || runtime.HasReorderedThisTurn)
+                return false;
+
+            if (!_waitingForEnd)
+                return false;
+
+            return true;
+        }
+
+        public bool TryDeferActivePlayerUnit(Unit insertAfter)
+        {
+            var unit = _activeUnit;
+            if (!CanDeferActiveUnit(unit))
+                return false;
+
+            if (_activePhaseUnits == null || !ReferenceEquals(_activePhaseUnits, _playerUnits))
+                return false;
+
+            if (insertAfter == null)
+                return false;
+
+            if (ReferenceEquals(unit, insertAfter))
+                return false;
+
+            int originalIndex = _playerUnits.IndexOf(unit);
+            if (originalIndex < 0)
+                return false;
+
+            int afterIndex = _playerUnits.IndexOf(insertAfter);
+            if (afterIndex <= originalIndex)
+                return false;
+
+            var runtime = EnsureRuntime(unit, true);
+            if (runtime == null)
+                return false;
+
+            _playerUnits.RemoveAt(originalIndex);
+            afterIndex = _playerUnits.IndexOf(insertAfter);
+            if (afterIndex < 0)
+            {
+                _playerUnits.Insert(originalIndex, unit);
+                return false;
+            }
+
+            int targetIndex = Mathf.Clamp(afterIndex + 1, 0, _playerUnits.Count);
+            _playerUnits.Insert(targetIndex, unit);
+
+            runtime.MarkReorderedFromIdle(_currentPhaseIndex);
+            runtime.SetActivePhaseIndex(_currentPhaseIndex);
+
+            string unitLabel = FormatUnitLabel(unit);
+            string targetLabel = FormatUnitLabel(insertAfter);
+            Debug.Log($"[Turn] Reorder T{_currentPhaseIndex}(P1) {unitLabel} -> after {targetLabel}", this);
+
+            TurnOrderChanged?.Invoke(true);
+            RaiseUnitRuntimeChanged(unit);
+
+            RequestActivePhaseIteratorRestart(Mathf.Min(originalIndex, _playerUnits.Count - 1));
+
+            _activeUnit = null;
+            _waitingForEnd = false;
+
+            return true;
         }
 
         IEnumerator RunTurnStartSequence(TurnRuntimeV2 runtime, int phaseIndex)

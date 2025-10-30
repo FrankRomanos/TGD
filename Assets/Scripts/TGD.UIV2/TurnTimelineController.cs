@@ -22,11 +22,17 @@ namespace TGD.UIV2
         [Min(1)] public int maxVisibleSlots = 4;
 
         readonly HashSet<Unit> _completedThisPhase = new();
+        readonly List<SlotEntryVisual> _slotEntries = new();
 
         VisualElement _contentRoot;
         Unit _activeUnit;
         bool _activePhaseIsPlayer = true;
         int _activePhaseIndex = 1;
+        SlotEntryVisual _activeDrag;
+        SlotEntryVisual _currentDropTarget;
+        int _activeDragPointerId = PointerId.invalidPointerId;
+        Vector2 _dragStartPosition;
+        int _activeDragOrderIndex = int.MaxValue;
 
         enum EntryKind
         {
@@ -41,6 +47,8 @@ namespace TGD.UIV2
             public Unit unit;
             public bool isPlayer;
             public bool isActive;
+            public bool isActivePhase;
+            public int turnOrderIndex;
         }
 
         static T AutoFind<T>() where T : Object
@@ -100,6 +108,7 @@ namespace TGD.UIV2
                 turnManager.PhaseBegan += OnPhaseBegan;
                 turnManager.TurnStarted += OnTurnStarted;
                 turnManager.TurnEnded += OnTurnEnded;
+                turnManager.TurnOrderChanged += OnTurnOrderChanged;
             }
 
             if (combatManager != null)
@@ -113,6 +122,7 @@ namespace TGD.UIV2
                 turnManager.PhaseBegan -= OnPhaseBegan;
                 turnManager.TurnStarted -= OnTurnStarted;
                 turnManager.TurnEnded -= OnTurnEnded;
+                turnManager.TurnOrderChanged -= OnTurnOrderChanged;
             }
 
             if (combatManager != null)
@@ -121,6 +131,8 @@ namespace TGD.UIV2
 
         void ClearAll()
         {
+            ClearDragState();
+            _slotEntries.Clear();
             _completedThisPhase.Clear();
             _activeUnit = null;
 
@@ -180,10 +192,19 @@ namespace TGD.UIV2
             RebuildTimeline();
         }
 
+        void OnTurnOrderChanged(bool isPlayerSide)
+        {
+            if (isPlayerSide)
+                RebuildTimeline();
+        }
+
         void RebuildTimeline()
         {
             if (_contentRoot == null)
                 return;
+
+            ClearDragState();
+            _slotEntries.Clear();
 
             List<DisplayEntry> entries = combatManager != null && combatManager.IsBonusTurnActive
                 ? BuildBonusEntries()
@@ -210,9 +231,231 @@ namespace TGD.UIV2
                     {
                         ApplySlotVisuals(slot, entry);
                         _contentRoot.Add(slot.root);
+                        RegisterSlotInteractions(slot, entry);
                     }
                 }
             }
+        }
+
+        void ClearDragState()
+        {
+            if (_activeDragPointerId != PointerId.invalidPointerId && _activeDrag?.visuals.root != null && _activeDrag.visuals.root.HasPointerCapture(_activeDragPointerId))
+                _activeDrag.visuals.root.ReleasePointer(_activeDragPointerId);
+
+            if (_activeDrag?.visuals.row != null)
+                _activeDrag.visuals.row.style.translate = StyleKeyword.Null;
+
+            if (_activeDrag?.visuals.root != null)
+                _activeDrag.visuals.root.RemoveFromClassList("slot-dragging");
+
+            if (_currentDropTarget?.visuals.insertMarker != null)
+                _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
+
+            _activeDrag = null;
+            _currentDropTarget = null;
+            _activeDragPointerId = PointerId.invalidPointerId;
+            _dragStartPosition = default;
+            _activeDragOrderIndex = int.MaxValue;
+        }
+
+        void RegisterSlotInteractions(SlotVisuals visuals, DisplayEntry entry)
+        {
+            var slot = new SlotEntryVisual
+            {
+                entry = entry,
+                visuals = visuals
+            };
+
+            _slotEntries.Add(slot);
+
+            if (visuals.root == null)
+                return;
+
+            visuals.root.RegisterCallback<PointerDownEvent>(evt => OnSlotPointerDown(evt, slot));
+            visuals.root.RegisterCallback<PointerMoveEvent>(evt => OnSlotPointerMove(evt, slot));
+            visuals.root.RegisterCallback<PointerUpEvent>(evt => OnSlotPointerUp(evt, slot));
+            visuals.root.RegisterCallback<PointerLeaveEvent>(evt => OnSlotPointerLeave(evt, slot));
+            visuals.root.RegisterCallback<PointerCancelEvent>(evt => OnSlotPointerCancel(evt, slot));
+        }
+
+        void OnSlotPointerDown(PointerDownEvent evt, SlotEntryVisual slot)
+        {
+            if (evt.button != 0)
+                return;
+
+            if (!CanStartDrag(slot))
+                return;
+
+            evt.StopPropagation();
+            BeginSlotDrag(evt, slot);
+        }
+
+        void OnSlotPointerMove(PointerMoveEvent evt, SlotEntryVisual slot)
+        {
+            if (_activeDrag == null || evt.pointerId != _activeDragPointerId)
+                return;
+
+            evt.StopPropagation();
+            float deltaX = Mathf.Clamp(evt.position.x - _dragStartPosition.x, 0f, 160f);
+            if (_activeDrag.visuals.row != null)
+                _activeDrag.visuals.row.style.translate = new Translate(new Length(deltaX, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel));
+
+            UpdateDropTarget(evt.position);
+        }
+
+        void OnSlotPointerUp(PointerUpEvent evt, SlotEntryVisual slot)
+        {
+            if (_activeDrag == null || evt.pointerId != _activeDragPointerId)
+                return;
+
+            evt.StopPropagation();
+            FinishSlotDrag(applyDrop: true);
+        }
+
+        void OnSlotPointerLeave(PointerLeaveEvent evt, SlotEntryVisual slot)
+        {
+            if (_activeDrag == null || evt.pointerId != _activeDragPointerId)
+                return;
+
+            UpdateDropTarget(evt.position);
+        }
+
+        void OnSlotPointerCancel(PointerCancelEvent evt, SlotEntryVisual slot)
+        {
+            if (_activeDrag == null || evt.pointerId != _activeDragPointerId)
+                return;
+
+            evt.StopPropagation();
+            FinishSlotDrag(applyDrop: false);
+        }
+
+        bool CanStartDrag(SlotEntryVisual slot)
+        {
+            if (slot == null || turnManager == null)
+                return false;
+
+            if (slot.entry.unit == null)
+                return false;
+
+            if (!slot.entry.isPlayer || !slot.entry.isActivePhase)
+                return false;
+
+            if (_activeUnit == null || slot.entry.unit != _activeUnit)
+                return false;
+
+            if (combatManager != null && combatManager.IsBonusTurnActive)
+                return false;
+
+            return turnManager.CanDeferActiveUnit(slot.entry.unit);
+        }
+
+        void BeginSlotDrag(PointerDownEvent evt, SlotEntryVisual slot)
+        {
+            ClearDragState();
+
+            _activeDrag = slot;
+            _activeDragPointerId = evt.pointerId;
+            _dragStartPosition = evt.position;
+            _activeDragOrderIndex = slot.entry.turnOrderIndex >= 0 ? slot.entry.turnOrderIndex : turnManager.GetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
+
+            if (_activeDrag.visuals.root != null)
+            {
+                _activeDrag.visuals.root.BringToFront();
+                _activeDrag.visuals.root.CapturePointer(evt.pointerId);
+                _activeDrag.visuals.root.AddToClassList("slot-dragging");
+            }
+
+            UpdateDropTarget(evt.position);
+        }
+
+        void FinishSlotDrag(bool applyDrop)
+        {
+            bool applied = false;
+
+            if (applyDrop && _activeDrag != null && _currentDropTarget != null && turnManager != null)
+            {
+                if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
+                {
+                    applied = true;
+                }
+            }
+
+            ClearDragState();
+
+            if (applied)
+                RebuildTimeline();
+        }
+
+        void UpdateDropTarget(Vector2 pointerPosition)
+        {
+            if (_contentRoot == null)
+                return;
+
+            var bounds = _contentRoot.worldBound;
+            if (!bounds.Contains(pointerPosition))
+            {
+                ShowDropTarget(null);
+                return;
+            }
+
+            SlotEntryVisual candidate = null;
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < _slotEntries.Count; i++)
+            {
+                var slot = _slotEntries[i];
+                if (!IsValidDropTarget(slot))
+                    continue;
+
+                var root = slot.visuals.root;
+                if (root == null)
+                    continue;
+
+                Rect world = root.worldBound;
+                float distance = Mathf.Abs(pointerPosition.y - world.center.y);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    candidate = slot;
+                }
+            }
+
+            ShowDropTarget(candidate);
+        }
+
+        bool IsValidDropTarget(SlotEntryVisual slot)
+        {
+            if (_activeDrag == null || slot == null)
+                return false;
+
+            if (!slot.entry.isPlayer || !slot.entry.isActivePhase)
+                return false;
+
+            if (slot.entry.unit == null || slot.entry.unit == _activeDrag.entry.unit)
+                return false;
+
+            if (turnManager == null)
+                return false;
+
+            int candidateIndex = slot.entry.turnOrderIndex >= 0 ? slot.entry.turnOrderIndex : turnManager.GetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
+            if (_activeDragOrderIndex == int.MaxValue)
+                _activeDragOrderIndex = turnManager.GetTurnOrderIndex(_activeDrag.entry.unit, _activeDrag.entry.isPlayer);
+
+            return candidateIndex > _activeDragOrderIndex;
+        }
+
+        void ShowDropTarget(SlotEntryVisual slot)
+        {
+            if (!ReferenceEquals(_currentDropTarget, slot))
+            {
+                if (_currentDropTarget?.visuals.insertMarker != null)
+                    _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
+
+                _currentDropTarget = slot;
+            }
+
+            if (_currentDropTarget?.visuals.insertMarker != null)
+                _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.Flex;
         }
 
         List<DisplayEntry> BuildBonusEntries()
@@ -247,7 +490,9 @@ namespace TGD.UIV2
                     kind = EntryKind.Slot,
                     unit = unit,
                     isPlayer = isPlayerBonus,
-                    isActive = unit == bonusUnit
+                    isActive = unit == bonusUnit,
+                    isActivePhase = false,
+                    turnOrderIndex = turnManager != null ? turnManager.GetTurnOrderIndex(unit, isPlayerBonus) : -1
                 });
             }
 
@@ -293,7 +538,9 @@ namespace TGD.UIV2
                         kind = EntryKind.Slot,
                         unit = unit,
                         isPlayer = _activePhaseIsPlayer,
-                        isActive = unit == activeHighlight
+                        isActive = unit == activeHighlight,
+                        isActivePhase = true,
+                        turnOrderIndex = turnManager != null ? turnManager.GetTurnOrderIndex(unit, _activePhaseIsPlayer) : -1
                     });
                 }
             }
@@ -356,7 +603,9 @@ namespace TGD.UIV2
                         kind = EntryKind.Slot,
                         unit = phase.units[j],
                         isPlayer = phase.isPlayer,
-                        isActive = false
+                        isActive = false,
+                        isActivePhase = false,
+                        turnOrderIndex = -1
                     });
                 }
             }
@@ -447,6 +696,12 @@ namespace TGD.UIV2
 
             if (visuals.label != null)
                 visuals.label.style.display = DisplayStyle.None;
+
+            if (visuals.insertMarker != null)
+                visuals.insertMarker.style.display = DisplayStyle.None;
+
+            if (visuals.row != null)
+                visuals.row.style.translate = StyleKeyword.Null;
         }
 
         Sprite ResolveAvatar(Unit unit)
@@ -518,9 +773,12 @@ namespace TGD.UIV2
             return new SlotVisuals
             {
                 root = root,
+                row = row,
+                dragHandle = dragHandle,
                 card = card,
                 icon = icon,
-                label = label
+                label = label,
+                insertMarker = insertMarker
             };
         }
 
@@ -530,12 +788,21 @@ namespace TGD.UIV2
             public Label label;
         }
 
+        sealed class SlotEntryVisual
+        {
+            public DisplayEntry entry;
+            public SlotVisuals visuals;
+        }
+
         struct SlotVisuals
         {
             public VisualElement root;
+            public VisualElement row;
+            public VisualElement dragHandle;
             public VisualElement card;
             public VisualElement icon;
             public Label label;
+            public VisualElement insertMarker;
         }
     }
 }
