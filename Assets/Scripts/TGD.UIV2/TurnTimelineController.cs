@@ -298,7 +298,13 @@ namespace TGD.UIV2
             evt.StopPropagation();
             float deltaX = Mathf.Clamp(evt.position.x - _dragStartPosition.x, 0f, 160f);
             if (_activeDrag.visuals.row != null)
-                _activeDrag.visuals.row.style.translate = new Translate(new Length(deltaX, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel));
+            {
+                _activeDrag.visuals.row.style.translate = new Translate(
+                    new Length(deltaX, LengthUnit.Pixel),   // X: 往右拖多少
+                    new Length(0f, LengthUnit.Pixel),       // Y: 不动
+                    0f                                      // Z: 不用，给float
+                );
+            }
 
             UpdateDropTarget(evt.position);
         }
