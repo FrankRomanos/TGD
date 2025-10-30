@@ -309,7 +309,54 @@
 - **T5 连锁取消**：W2 弹窗按 ESC/右键取消 → 仅执行已确认动作；无后续窗；日志吻合。  
 - **T6 解耦回归**：模糊移动→精准移动路径可达，A 点不被错误标记为障碍；两通道事件互不干扰。  
 - **T7 派生后置触发**：普攻命中 → `DerivedPromptOpen`；回卷/未命中 → 不出现。派生成本与预算以 W4 结算后的数值为准，日志顺序**先前置后派生**。
+# TurnTimeline UI 规范 (Unity 6 / UI Toolkit)
+作者：小肥
 
+## 绝对禁止事项
+1. 不要手写 `<Style src="... guid=... fileID=...>` 那一行。
+   - 这个引用由 Unity UI Builder 自动生成。
+   - 手写/复制别的GUID会导致 "Broken text PPtr GUID ... invalid" 并且整个 UXML 无法导入，UI Builder 直接打不开。
+   - 正确流程：
+     - UXML 里先不要 `<Style .../>`
+     - 在 UI Builder Inspector 里，把需要的 .uss 手动拖到 StyleSheet
+     - 让 Unity 自动写回 `<Style src="...">`，我们绝不人工伪造 GUID。
+
+2. 不要把时间轴HUD当成全屏弹窗来写。
+   - 时间轴是一个固定在屏幕角落的小竖条 HUD，不是覆盖全屏的 overlay 窗口。
+   - 禁止使用以下这种结构当成最终版本：
+     ```xml
+     overlay -> windowWrap -> timelineWindow -> timeline-background/frame
+     ```
+   - 这种结构适用于“连锁弹窗 (ChainPopup)”，不是时间轴HUD。
+
+## 正确结构（必须遵守的层级）
+时间轴的基本层级是：
+
+```xml
+<VisualElement name="timelineOverlay" class="timeline-overlay">
+    <VisualElement name="ViewPoint" class="timeline-viewport">
+        <VisualElement name="Content" class="timeline-content">
+
+            <!-- 一个回合分隔头 (玩家/敌人回合标签) -->
+            <VisualElement name="TurnSeparator" class="turn-separator">
+                <Label name="turnLabel" class="turn-label" text="Turn(Player) 1" />
+            </VisualElement>
+
+            <!-- TurnSeparator 下面紧跟的头像slot -->
+            <VisualElement name="Slot0" class="slot-root">
+                <VisualElement name="Slot0Frame" class="slot-frame player-turn">
+                    <VisualElement name="Slot0Icon" class="slot-icon" />
+                </VisualElement>
+            </VisualElement>
+
+            <!-- 其他slot -->
+            <VisualElement name="Slot1" class="slot-root"> ... </VisualElement>
+            <VisualElement name="Slot2" class="slot-root"> ... </VisualElement>
+            <VisualElement name="Slot3" class="slot-root"> ... </VisualElement>
+
+        </VisualElement>
+    </VisualElement>
+</VisualElement>
 ---
 
 > **本 README 版本：V2.4（严格时点 + 派生后置版）**  

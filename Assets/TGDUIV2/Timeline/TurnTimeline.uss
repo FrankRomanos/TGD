@@ -1,0 +1,229 @@
+﻿.timeline-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    pointer-events: none;
+}
+
+.timeline-viewport {
+    position: relative;
+    width: 120px;
+    min-width: 120px;
+    max-width: 120px;
+    height: 60%;
+    max-height: 60%;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: rgb(0, 0, 0);
+    pointer-events: none;
+}
+
+.viewport-frame {
+    display: none;
+}
+
+.viewport-bg {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    background-color: transparent;
+    background-image: none;
+    pointer-events: none;
+}
+
+.timeline-content {
+    position: relative;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 8px;
+    flex-grow: 1;
+    min-height: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.turn-separator {
+    position: relative;
+
+    width: 100%;
+    min-width: 100%;
+    min-height: 44px;
+    height: 44px;
+    max-height: 44px;
+
+    /* 卡片造型 */
+    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png?fileID=2800000&guid=d73a620491870c54485bf72be0c9979f&type=3#tgd_chain_bg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    border-width: 3px;
+    border-color: rgba(255, 215, 120, 0.95);
+    border-radius: 10px;
+
+    /* 关键：我们不再给左右 padding
+       让 label 有机会自己占满整块区域 */
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+
+    /* 把这一块当成一个简单容器，别用复杂对齐 */
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-start;
+
+    margin-bottom: 8px;
+}
+
+
+.turn-label {
+    /* 占满 turn-separator 整个区域 */
+    width: 100%;
+    height: 100%;
+
+    /* 把文字在自身范围内放中间（UI Toolkit专用属性） */
+    -unity-text-align: middle-center;
+
+    /* 视觉样式 */
+    color: rgba(251, 231, 197, 0.98);
+    font-size: 13px;
+    unity-font-style-and-weight: bold;
+    letter-spacing: 0.4px;
+    text-shadow: 0 0 10px rgba(255, 215, 120, .35);
+
+    /* 防止多行挤压 */
+    white-space: nowrap;
+
+    /* 不要让它因为flex挤压自己尺寸 */
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+}
+
+
+
+
+.slot-root {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    pointer-events: none;
+    background-image: none;
+}
+
+.slot-row {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+}
+
+.slot-drag-handle {
+    display: none;
+}
+
+.slot-card {
+    position: relative;
+    width: 100%;
+    min-width: 100%;
+    height: 88px;
+    min-height: 88px;
+    max-height: 88px;
+    border-radius: 10px;
+    overflow: hidden;
+    pointer-events: none;
+    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png?fileID=2800000&guid=d73a620491870c54485bf72be0c9979f&type=3#tgd_chain_bg");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    border-width: 3px;
+    border-color: rgba(255, 215, 120, 0.95);
+    border-radius: 10px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.8), 0 0 8px rgba(255, 215, 120, 0.5);
+}
+
+.slot-skin {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    background-color: transparent;
+    background-image: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.slot-icon {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    background-image: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.slot-ornate-frame {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_card_frame_thick.png?fileID=21300000&guid=352774de375d8354bb460b9e3988acc2&type=3#tgd_card_frame_thick");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 1;
+    display: none;
+}
+
+.slot-meta-label {
+    display: none;
+}
+
+.insert-marker {
+    height: 2px;
+    min-height: 2px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    border-radius: 1px;
+    background-image: linear-gradient(90deg, rgba(255, 229, 160, 0) 0%, rgba(255, 229, 160, 0.9) 40%, rgba(255, 229, 160, 0.9) 60%, rgba(255, 229, 160, 0) 100%);
+}
+
+.player-turn {
+    border-width: 2px;
+    border-color: rgba(80, 255, 170, 0.9);
+    border-radius: 10px;
+}
+
+.enemy-turn {
+    border-width: 2px;
+    border-color: rgba(255, 80, 80, 0.9);
+    border-radius: 10px;
+}

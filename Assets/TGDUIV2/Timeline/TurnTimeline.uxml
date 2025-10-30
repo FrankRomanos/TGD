@@ -1,0 +1,66 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/TGDUIV2/Timeline/TurnTimeline.uss?fileID=7433441132597879392&amp;guid=a14e2a05979ec1444909effbca3ffdb4&amp;type=3#TurnTimeline" />
+    <ui:VisualElement name="timelineOverlay" class="timeline-overlay">
+        <ui:VisualElement name="ViewPoint" class="timeline-viewport">
+            <ui:VisualElement name="viewportBg" class="viewport-bg" />
+            <ui:VisualElement name="viewportFrame" class="viewport-frame" />
+            <ui:VisualElement name="Content" class="timeline-content">
+                <ui:VisualElement name="TurnSeparator" class="turn-separator" style="justify-content: flex-start; align-self: auto;">
+                    <ui:Label name="turnLabel" text="Turn 12" selectable="false" class="turn-label" style="justify-content: flex-start; align-items: stretch; align-self: auto; align-content: auto;" />
+                </ui:VisualElement>
+                <ui:VisualElement name="Slot0" class="slot-root">
+                    <ui:VisualElement class="slot-row">
+                        <ui:VisualElement name="Slot0Drag" class="slot-drag-handle" />
+                        <ui:VisualElement name="Slot0Card" class="slot-card player-turn">
+                            <ui:VisualElement class="slot-skin">
+                                <ui:VisualElement name="Slot0Icon" class="slot-icon" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="slot-ornate-frame" />
+                        </ui:VisualElement>
+                        <ui:Label name="Slot0Text" class="slot-meta-label" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="Slot0Insert" class="insert-marker" />
+                </ui:VisualElement>
+                <ui:VisualElement name="Slot1" class="slot-root">
+                    <ui:VisualElement class="slot-row">
+                        <ui:VisualElement name="Slot1Drag" class="slot-drag-handle" />
+                        <ui:VisualElement name="Slot1Card" class="slot-card">
+                            <ui:VisualElement class="slot-skin">
+                                <ui:VisualElement name="Slot1Icon" class="slot-icon" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="slot-ornate-frame" />
+                        </ui:VisualElement>
+                        <ui:Label name="Slot1Text" class="slot-meta-label" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="Slot1Insert" class="insert-marker" />
+                </ui:VisualElement>
+                <ui:VisualElement name="Slot2" class="slot-root">
+                    <ui:VisualElement class="slot-row">
+                        <ui:VisualElement name="Slot2Drag" class="slot-drag-handle" />
+                        <ui:VisualElement name="Slot2Card" class="slot-card">
+                            <ui:VisualElement class="slot-skin">
+                                <ui:VisualElement name="Slot2Icon" class="slot-icon" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="slot-ornate-frame" />
+                        </ui:VisualElement>
+                        <ui:Label name="Slot2Text" class="slot-meta-label" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="Slot2Insert" class="insert-marker" />
+                </ui:VisualElement>
+                <ui:VisualElement name="Slot3" class="slot-root">
+                    <ui:VisualElement class="slot-row">
+                        <ui:VisualElement name="Slot3Drag" class="slot-drag-handle" />
+                        <ui:VisualElement name="Slot3Card" class="slot-card">
+                            <ui:VisualElement class="slot-skin">
+                                <ui:VisualElement name="Slot3Icon" class="slot-icon" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="slot-ornate-frame" />
+                        </ui:VisualElement>
+                        <ui:Label name="Slot3Text" class="slot-meta-label" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="Slot3Insert" class="insert-marker" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
