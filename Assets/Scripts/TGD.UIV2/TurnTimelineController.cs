@@ -541,6 +541,26 @@ namespace TGD.UIV2
             return total;
         }
 
+        PhaseGroup GetActivePhaseGroup(out int index)
+        {
+            index = -1;
+            for (int i = _groups.Count - 1; i >= 0; i--)
+            {
+                var group = _groups[i];
+                if (group == null || group.pendingRemoval)
+                    continue;
+                if (group.isBonus)
+                    continue;
+                if (group.isProjected)
+                    continue;
+
+                index = i;
+                return group;
+            }
+
+            return null;
+        }
+
         List<SlotDemand> ComputeDesiredSlotCounts()
         {
             List<SlotDemand> demands = new();
@@ -557,6 +577,8 @@ namespace TGD.UIV2
                     if (remaining > 0)
                     {
                         int desired = Mathf.Min(remaining, capacity);
+                        int visible = CountVisibleSlots(bonus);
+                        desired = Mathf.Max(desired, Mathf.Min(visible, capacity));
                         desired = Mathf.Max(1, desired);
                         demands.Add(new SlotDemand { group = bonus, desiredCount = desired });
                     }
@@ -565,59 +587,91 @@ namespace TGD.UIV2
                 return demands;
             }
 
-            List<PhaseGroup> ordered = new();
-            for (int i = _groups.Count - 1; i >= 0; i--)
+            int activeIndex;
+            var activeGroup = GetActivePhaseGroup(out activeIndex);
+            int activeDesired = 0;
+            bool hasActiveDemand = false;
+            SlotDemand activeDemand = default;
+
+            List<SlotDemand> previewDemands = new();
+
+            if (activeGroup != null)
             {
-                var group = _groups[i];
-                if (group == null || group.pendingRemoval)
-                    continue;
-
-                int remaining = CountRemainingUnits(group);
-                if (remaining <= 0)
-                    continue;
-
-                ordered.Add(group);
-            }
-
-            if (ordered.Count == 0)
-                return demands;
-
-            int[] allocations = new int[ordered.Count];
-            int remainingCapacity = capacity;
-
-            for (int i = 0; i < ordered.Count && remainingCapacity > 0; i++)
-            {
-                allocations[i] = 1;
-                remainingCapacity--;
-            }
-
-            if (remainingCapacity > 0)
-            {
-                for (int i = 0; i < ordered.Count && remainingCapacity > 0; i++)
+                int remaining = CountRemainingUnits(activeGroup);
+                if (remaining > 0)
                 {
-                    int remainingUnits = CountRemainingUnits(ordered[i]);
-                    int canAdd = Mathf.Max(0, remainingUnits - allocations[i]);
-                    if (canAdd <= 0)
-                        continue;
+                    activeDesired = Mathf.Min(remaining, capacity);
+                    int visible = CountVisibleSlots(activeGroup);
+                    if (visible > activeDesired)
+                        activeDesired = Mathf.Min(visible, capacity);
+                }
 
-                    int grant = Mathf.Min(canAdd, remainingCapacity);
-                    allocations[i] += grant;
-                    remainingCapacity -= grant;
+                activeDemand = new SlotDemand
+                {
+                    group = activeGroup,
+                    desiredCount = activeDesired
+                };
+                hasActiveDemand = true;
+            }
+
+            int previewBudget = 0;
+            if (capacity > 0)
+            {
+                if (activeGroup != null)
+                {
+                    if (activeDesired > 0)
+                        previewBudget = Mathf.Max(0, capacity - activeDesired + 1);
+                    else
+                        previewBudget = capacity;
+                }
+                else
+                {
+                    previewBudget = capacity;
                 }
             }
 
-            for (int i = ordered.Count - 1; i >= 0; i--)
+            if (previewBudget > 0)
             {
-                int desired = allocations[i];
-                if (desired <= 0)
+                if (activeIndex < 0)
+                    activeIndex = _groups.Count;
+
+                for (int i = activeIndex - 1; i >= 0 && previewBudget > 0; i--)
+                {
+                    var group = _groups[i];
+                    if (group == null || group.pendingRemoval)
+                        continue;
+                    if (group.isBonus)
+                        continue;
+
+                    int remaining = CountRemainingUnits(group);
+                    if (remaining <= 0)
+                        continue;
+
+                    int desired = Mathf.Min(remaining, previewBudget);
+                    if (desired <= 0)
+                        continue;
+
+                    previewDemands.Add(new SlotDemand
+                    {
+                        group = group,
+                        desiredCount = desired
+                    });
+
+                    previewBudget -= desired;
+                }
+            }
+
+            for (int i = previewDemands.Count - 1; i >= 0; i--)
+            {
+                var demand = previewDemands[i];
+                if (demand.group == null)
                     continue;
 
-                demands.Add(new SlotDemand
-                {
-                    group = ordered[i],
-                    desiredCount = desired
-                });
+                demands.Add(demand);
             }
+
+            if (hasActiveDemand && activeDemand.group != null)
+                demands.Add(activeDemand);
 
             return demands;
         }
