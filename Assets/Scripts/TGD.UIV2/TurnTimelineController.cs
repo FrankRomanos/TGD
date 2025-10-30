@@ -36,6 +36,7 @@ namespace TGD.UIV2
         Coroutine _scrollAnimation;
         bool _bonusTurnDisplayed;
         int _phaseCounter;
+        bool _nextPhaseIsPlayer;
 
         static T AutoFind<T>() where T : UnityEngine.Object
         {
@@ -128,7 +129,7 @@ namespace TGD.UIV2
                 var bonusUnits = turnManager != null ? turnManager.GetSideUnits(isPlayerBonus) : null;
                 if (bonusUnits != null && bonusUnits.Count > 0)
                 {
-                    var bonusGroup = CreatePhaseGroup("Bonus Turn", isPlayerBonus, true, bonusUnits);
+                    var bonusGroup = CreatePhaseGroup(-1, "Bonus Turn", isPlayerBonus, true, bonusUnits, false);
                     if (bonusGroup != null)
                     {
                         InsertGroupAtTop(bonusGroup, false);
@@ -148,13 +149,16 @@ namespace TGD.UIV2
                 var units = turnManager.GetSideUnits(isPlayer);
                 if (units != null && units.Count > 0)
                 {
-                    var group = CreatePhaseGroup(FormatTurnLabel(currentPhase), isPlayer, false, units);
+                    var group = CreatePhaseGroup(currentPhase, FormatTurnLabel(currentPhase), isPlayer, false, units, false);
                     if (group != null)
                         InsertGroupAtTop(group, false);
                 }
 
                 _phaseCounter = currentPhase;
-                FillSlots(false);
+                _nextPhaseIsPlayer = !isPlayer;
+                EnsureFutureProjections();
+                var desiredCounts = ComputeDesiredSlotCounts();
+                FillSlots(desiredCounts, false);
                 HighlightActiveSlot(turnManager.ActiveUnit);
             }
         }
@@ -183,14 +187,24 @@ namespace TGD.UIV2
                 return;
 
             int phaseIndex = turnManager != null ? Mathf.Max(1, turnManager.CurrentPhaseIndex) : ++_phaseCounter;
-            if (turnManager == null)
-                _phaseCounter = phaseIndex;
+            _phaseCounter = Math.Max(_phaseCounter, phaseIndex);
 
-            var group = CreatePhaseGroup(FormatTurnLabel(phaseIndex), isPlayerPhase, false, units);
-            if (group == null)
-                return;
+            var existing = FindPhaseGroup(phaseIndex, isPlayerPhase);
+            if (existing != null)
+            {
+                RefreshGroupUnits(existing, units);
+                PromoteGroup(existing, true);
+            }
+            else
+            {
+                var group = CreatePhaseGroup(phaseIndex, FormatTurnLabel(phaseIndex), isPlayerPhase, false, units, false);
+                if (group == null)
+                    return;
+                InsertGroupAtTop(group, true);
+            }
 
-            InsertGroupAtTop(group, true);
+            _nextPhaseIsPlayer = !isPlayerPhase;
+            EnsureFutureProjections();
             ProcessTimelineUpdates();
         }
 
@@ -214,31 +228,48 @@ namespace TGD.UIV2
                 return;
 
             bool active = combatManager.IsBonusTurnActive;
-            if (active && !_bonusTurnDisplayed)
+            if (active)
             {
                 var bonusUnit = combatManager.CurrentBonusTurnUnit;
                 bool isPlayerBonus = turnManager != null && turnManager.IsPlayerUnit(bonusUnit);
                 var units = turnManager != null ? turnManager.GetSideUnits(isPlayerBonus) : null;
-                if (units != null && units.Count > 0)
+                if (units == null || units.Count == 0)
+                    return;
+
+                const string label = "Bonus Turn";
+                var existing = FindBonusGroup(isPlayerBonus);
+                if (existing != null)
                 {
-                    var group = CreatePhaseGroup("Bonus Turn", isPlayerBonus, true, units);
-                    if (group != null)
-                    {
-                        InsertGroupAtTop(group, true);
-                        _bonusTurnDisplayed = true;
-                        ProcessTimelineUpdates();
-                    }
+                    existing.phaseIndex = -1;
+                    RefreshGroupUnits(existing, units, label, false);
+                    PromoteGroup(existing, true);
                 }
+                else
+                {
+                    var group = CreatePhaseGroup(-1, label, isPlayerBonus, true, units, false);
+                    if (group != null)
+                        InsertGroupAtTop(group, true);
+                }
+
+                _bonusTurnDisplayed = true;
+                ProcessTimelineUpdates();
             }
-            else if (!active)
+            else
             {
+                RemoveBonusGroups();
                 _bonusTurnDisplayed = false;
+                ProcessTimelineUpdates();
             }
         }
 
         void ProcessTimelineUpdates()
         {
-            FillSlots();
+            EnsureFutureProjections();
+
+            var desiredCounts = ComputeDesiredSlotCounts();
+            TrimExcessSlots(desiredCounts);
+            FillSlots(desiredCounts);
+
             if (HasAnimationWork())
                 StartScrollAnimation();
             else
@@ -255,9 +286,6 @@ namespace TGD.UIV2
 
             group.pendingRemoval = false;
 
-            if (group.pendingUnits.Count > 0 && maxVisibleSlots > 0)
-                EnsureSlotBudget(1);
-
             var header = group.headerEntry;
             header.isNewlyAdded = animate;
             header.root.style.opacity = 1f;
@@ -268,18 +296,387 @@ namespace TGD.UIV2
             _contentRoot.Insert(0, header.root);
         }
 
-        void EnsureSlotBudget(int requiredSlots)
+        void InsertGroupAtEnd(PhaseGroup group, bool animate)
         {
-            if (requiredSlots <= 0)
+            if (group == null || group.headerEntry == null || _contentRoot == null)
                 return;
 
-            int available = maxVisibleSlots - GetActiveSlotCount();
-            int needed = requiredSlots - Mathf.Max(0, available);
-            while (needed > 0)
+            group.pendingRemoval = false;
+
+            var header = group.headerEntry;
+            header.isNewlyAdded = animate;
+            header.root.style.opacity = 1f;
+            header.root.style.translate = default;
+
+            _groups.Add(group);
+            _entries.Add(header);
+            _contentRoot.Add(header.root);
+        }
+
+        PhaseGroup FindPhaseGroup(int phaseIndex, bool isPlayer)
+        {
+            for (int i = 0; i < _groups.Count; i++)
             {
-                if (!MarkBottomSlotForRemoval())
+                var group = _groups[i];
+                if (group == null || group.isBonus)
+                    continue;
+                if (group.phaseIndex == phaseIndex && group.isPlayer == isPlayer)
+                    return group;
+            }
+
+            return null;
+        }
+
+        PhaseGroup FindBonusGroup(bool? isPlayer = null)
+        {
+            for (int i = 0; i < _groups.Count; i++)
+            {
+                var group = _groups[i];
+                if (group == null || !group.isBonus)
+                    continue;
+                if (!isPlayer.HasValue || group.isPlayer == isPlayer.Value)
+                    return group;
+            }
+
+            return null;
+        }
+
+        void PromoteGroup(PhaseGroup group, bool animate)
+        {
+            if (group == null || group.headerEntry == null || _contentRoot == null)
+                return;
+
+            group.pendingRemoval = false;
+            group.isProjected = false;
+
+            int currentIndex = _groups.IndexOf(group);
+            if (currentIndex > 0)
+            {
+                _groups.RemoveAt(currentIndex);
+                _groups.Insert(0, group);
+            }
+            else if (currentIndex < 0)
+            {
+                _groups.Insert(0, group);
+            }
+
+            var entries = CollectGroupEntries(group);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var entry = entries[i];
+                int entryIndex = _entries.IndexOf(entry);
+                if (entryIndex >= 0)
+                    _entries.RemoveAt(entryIndex);
+            }
+
+            int insertIndex = 0;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var entry = entries[i];
+                if (entry.root != null)
+                    entry.root.RemoveFromHierarchy();
+
+                if (i == 0 && animate)
+                    entry.isNewlyAdded = true;
+
+                _entries.Insert(insertIndex, entry);
+                _contentRoot.Insert(insertIndex, entry.root);
+                insertIndex++;
+            }
+        }
+
+        List<TimelineEntryView> CollectGroupEntries(PhaseGroup group)
+        {
+            List<TimelineEntryView> list = new();
+            if (group == null)
+                return list;
+
+            if (group.headerEntry != null)
+                list.Add(group.headerEntry);
+
+            if (group.visibleSlots != null)
+            {
+                for (int i = 0; i < group.visibleSlots.Count; i++)
+                {
+                    var slot = group.visibleSlots[i];
+                    if (slot != null)
+                        list.Add(slot);
+                }
+            }
+
+            return list;
+        }
+
+        void RefreshGroupUnits(PhaseGroup group, IReadOnlyList<Unit> units, string label = null, bool projected = false)
+        {
+            if (group == null)
+                return;
+
+            if (!string.IsNullOrEmpty(label) && group.headerEntry != null && group.headerEntry.header.label != null)
+                group.headerEntry.header.label.text = label;
+
+            if (!string.IsNullOrEmpty(label))
+                group.label = label;
+
+            group.isProjected = projected;
+            group.pendingRemoval = false;
+
+            group.pendingUnits = BuildUnitQueue(units);
+
+            if (group.visibleSlots != null)
+            {
+                for (int i = group.visibleSlots.Count - 1; i >= 0; i--)
+                {
+                    var entry = group.visibleSlots[i];
+                    if (entry == null)
+                        continue;
+                    RemoveSlotEntry(entry, false);
+                }
+
+                group.visibleSlots.Clear();
+            }
+        }
+
+        Queue<Unit> BuildUnitQueue(IReadOnlyList<Unit> units)
+        {
+            var queue = new Queue<Unit>();
+            if (units == null)
+                return queue;
+
+            for (int i = units.Count - 1; i >= 0; i--)
+            {
+                var unit = units[i];
+                if (unit != null)
+                    queue.Enqueue(unit);
+            }
+
+            return queue;
+        }
+
+        void EnsureFutureProjections()
+        {
+            if (turnManager == null)
+                return;
+
+            int targetSlots = Mathf.Max(maxVisibleSlots + 4, 4);
+            int guard = 0;
+            bool nextIsPlayer = _nextPhaseIsPlayer;
+            int knownSlots = CountTotalKnownSlots();
+
+            while (knownSlots < targetSlots && guard++ < 8)
+            {
+                int nextPhaseIndex = Mathf.Max(1, _phaseCounter + 1);
+                var units = turnManager.GetSideUnits(nextIsPlayer);
+                if (units == null || units.Count == 0)
                     break;
-                needed--;
+
+                var existing = FindPhaseGroup(nextPhaseIndex, nextIsPlayer);
+                if (existing != null)
+                {
+                    RefreshGroupUnits(existing, units, FormatTurnLabel(nextPhaseIndex), true);
+                }
+                else
+                {
+                    var projected = CreatePhaseGroup(nextPhaseIndex, FormatTurnLabel(nextPhaseIndex), nextIsPlayer, false, units, true);
+                    if (projected != null)
+                        InsertGroupAtEnd(projected, false);
+                }
+
+                _phaseCounter = Math.Max(_phaseCounter, nextPhaseIndex);
+                knownSlots = CountTotalKnownSlots();
+                nextIsPlayer = !nextIsPlayer;
+            }
+
+            _nextPhaseIsPlayer = nextIsPlayer;
+        }
+
+        int CountTotalKnownSlots()
+        {
+            int total = 0;
+            for (int i = 0; i < _groups.Count; i++)
+            {
+                var group = _groups[i];
+                total += CountRemainingUnits(group);
+            }
+
+            return total;
+        }
+
+        List<SlotDemand> ComputeDesiredSlotCounts()
+        {
+            List<SlotDemand> demands = new();
+            int baseline = Mathf.Max(maxVisibleSlots, 1);
+            int remainingBaseline = baseline;
+
+            for (int i = 0; i < _groups.Count; i++)
+            {
+                var group = _groups[i];
+                if (group == null || group.pendingRemoval)
+                    continue;
+
+                int remaining = CountRemainingUnits(group);
+                if (remaining <= 0)
+                    continue;
+
+                int desired = 0;
+                if (remainingBaseline > 0)
+                {
+                    desired = Mathf.Min(remaining, remainingBaseline);
+                    remainingBaseline -= desired;
+                }
+
+                int minimum = Mathf.Min(1, remaining);
+                if (desired < minimum)
+                    desired = minimum;
+
+                demands.Add(new SlotDemand
+                {
+                    group = group,
+                    desiredCount = desired
+                });
+            }
+
+            return demands;
+        }
+
+        void TrimExcessSlots(List<SlotDemand> demands)
+        {
+            if (demands == null)
+                return;
+
+            var touched = new HashSet<PhaseGroup>();
+            for (int i = 0; i < demands.Count; i++)
+            {
+                var demand = demands[i];
+                if (demand.group == null)
+                    continue;
+                touched.Add(demand.group);
+                ReduceGroupVisibleSlots(demand.group, demand.desiredCount, true);
+            }
+
+            for (int i = 0; i < _groups.Count; i++)
+            {
+                var group = _groups[i];
+                if (group == null)
+                    continue;
+                if (touched.Contains(group))
+                    continue;
+
+                ReduceGroupVisibleSlots(group, 0, false);
+            }
+        }
+
+        void ReduceGroupVisibleSlots(PhaseGroup group, int desiredCount, bool requeue)
+        {
+            if (group == null)
+                return;
+
+            int visible = CountVisibleSlots(group);
+            if (visible <= desiredCount)
+                return;
+
+            for (int i = group.visibleSlots.Count - 1; i >= 0 && visible > desiredCount; i--)
+            {
+                var entry = group.visibleSlots[i];
+                if (entry == null || entry.isPendingRemoval)
+                    continue;
+
+                RemoveSlotEntry(entry, requeue);
+                visible--;
+            }
+        }
+
+        int CountVisibleSlots(PhaseGroup group)
+        {
+            if (group == null || group.visibleSlots == null)
+                return 0;
+
+            int count = 0;
+            for (int i = 0; i < group.visibleSlots.Count; i++)
+            {
+                var entry = group.visibleSlots[i];
+                if (entry == null || entry.isPendingRemoval)
+                    continue;
+                count++;
+            }
+
+            return count;
+        }
+
+        int CountRemainingUnits(PhaseGroup group)
+        {
+            if (group == null || group.pendingRemoval)
+                return 0;
+
+            int pending = group.pendingUnits != null ? group.pendingUnits.Count : 0;
+            int visible = CountVisibleSlots(group);
+            return pending + visible;
+        }
+
+        void RemoveBonusGroups()
+        {
+            for (int i = _groups.Count - 1; i >= 0; i--)
+            {
+                var group = _groups[i];
+                if (group == null || !group.isBonus)
+                    continue;
+
+                if (group.visibleSlots != null)
+                {
+                    for (int j = group.visibleSlots.Count - 1; j >= 0; j--)
+                    {
+                        var entry = group.visibleSlots[j];
+                        RemoveSlotEntry(entry, false);
+                    }
+
+                    group.visibleSlots.Clear();
+                }
+
+                MarkGroupForRemoval(group);
+            }
+        }
+
+        void PrependPendingUnit(PhaseGroup group, Unit unit)
+        {
+            if (group == null || unit == null)
+                return;
+
+            var existing = group.pendingUnits != null ? group.pendingUnits.ToArray() : Array.Empty<Unit>();
+            var queue = new Queue<Unit>();
+            queue.Enqueue(unit);
+            for (int i = 0; i < existing.Length; i++)
+            {
+                var u = existing[i];
+                if (u != null)
+                    queue.Enqueue(u);
+            }
+
+            group.pendingUnits = queue;
+        }
+
+        void RemoveSlotEntry(TimelineEntryView entry, bool requeueUnit)
+        {
+            if (entry == null)
+                return;
+
+            var group = entry.group;
+
+            if (requeueUnit && group != null && entry.unit != null)
+                PrependPendingUnit(group, entry.unit);
+
+            entry.isPendingRemoval = true;
+
+            if (group != null)
+            {
+                group.visibleSlots.Remove(entry);
+                if (CountRemainingUnits(group) == 0)
+                    MarkGroupForRemoval(group);
+            }
+
+            if (_activeSlotEntry == entry)
+            {
+                ToggleSlotActive(_activeSlotEntry, false);
+                _activeSlotEntry = null;
             }
         }
 
@@ -291,27 +688,14 @@ namespace TGD.UIV2
                 if (entry.kind != TimelineEntryKind.Slot || entry.isPendingRemoval)
                     continue;
 
-                entry.isPendingRemoval = true;
-                if (entry.group != null)
-                {
-                    entry.group.visibleSlots.Remove(entry);
-                    if (entry.group.visibleSlots.Count == 0 && entry.group.pendingUnits.Count == 0)
-                        MarkGroupForRemoval(entry.group);
-                }
-
-                if (_activeSlotEntry == entry)
-                {
-                    ToggleSlotActive(_activeSlotEntry, false);
-                    _activeSlotEntry = null;
-                }
-
+                RemoveSlotEntry(entry, true);
                 return true;
             }
 
             return false;
         }
 
-        PhaseGroup CreatePhaseGroup(string label, bool isPlayer, bool isBonus, IReadOnlyList<Unit> units)
+        PhaseGroup CreatePhaseGroup(int phaseIndex, string label, bool isPlayer, bool isBonus, IReadOnlyList<Unit> units, bool projected)
         {
             if (string.IsNullOrEmpty(label) || units == null || units.Count == 0)
                 return null;
@@ -327,17 +711,15 @@ namespace TGD.UIV2
                 isBonus = isBonus
             };
 
-            var queue = new Queue<Unit>();
-            for (int i = units.Count - 1; i >= 0; i--)
-                queue.Enqueue(units[i]);
-
             var group = new PhaseGroup
             {
                 label = label,
                 isPlayer = isPlayer,
                 isBonus = isBonus,
+                isProjected = projected,
+                phaseIndex = phaseIndex,
                 headerEntry = headerEntry,
-                pendingUnits = queue,
+                pendingUnits = BuildUnitQueue(units),
                 visibleSlots = new List<TimelineEntryView>()
             };
 
@@ -345,30 +727,45 @@ namespace TGD.UIV2
             return group;
         }
 
-        bool FillSlots(bool animate = true)
+        bool FillSlots(List<SlotDemand> demands, bool animate = true)
         {
-            if (_contentRoot == null)
+            if (_contentRoot == null || demands == null || demands.Count == 0)
                 return false;
 
             bool added = false;
-            while (GetActiveSlotCount() < maxVisibleSlots)
+            bool progress = true;
+
+            while (progress)
             {
-                var group = FindNextGroupWithPendingUnits();
-                if (group == null)
-                    break;
+                progress = false;
 
-                if (group.pendingUnits.Count == 0)
-                    break;
+                for (int i = 0; i < demands.Count; i++)
+                {
+                    var demand = demands[i];
+                    var group = demand.group;
+                    if (group == null || group.pendingRemoval)
+                        continue;
 
-                var unit = group.pendingUnits.Dequeue();
-                var entry = CreateSlotEntry(unit, group);
-                entry.isNewlyAdded = animate;
+                    int desired = Mathf.Max(0, demand.desiredCount);
+                    int visible = CountVisibleSlots(group);
+                    if (visible >= desired)
+                        continue;
 
-                int insertIndex = GetSlotInsertIndex(group);
-                _entries.Insert(insertIndex, entry);
-                _contentRoot.Insert(insertIndex, entry.root);
-                group.visibleSlots.Add(entry);
-                added = true;
+                    while (visible < desired && group.pendingUnits.Count > 0)
+                    {
+                        var unit = group.pendingUnits.Dequeue();
+                        var entry = CreateSlotEntry(unit, group);
+                        entry.isNewlyAdded = animate;
+
+                        int insertIndex = GetSlotInsertIndex(group);
+                        _entries.Insert(insertIndex, entry);
+                        _contentRoot.Insert(insertIndex, entry.root);
+                        group.visibleSlots.Add(entry);
+                        visible++;
+                        added = true;
+                        progress = true;
+                    }
+                }
             }
 
             return added;
@@ -380,20 +777,6 @@ namespace TGD.UIV2
             if (headerIndex < 0)
                 return _entries.Count;
             return headerIndex + 1 + group.visibleSlots.Count;
-        }
-
-        PhaseGroup FindNextGroupWithPendingUnits()
-        {
-            for (int i = 0; i < _groups.Count; i++)
-            {
-                var group = _groups[i];
-                if (group == null || group.pendingRemoval)
-                    continue;
-                if (group.pendingUnits.Count > 0)
-                    return group;
-            }
-
-            return null;
         }
 
         TimelineEntryView CreateSlotEntry(Unit unit, PhaseGroup group)
@@ -464,19 +847,7 @@ namespace TGD.UIV2
             if (entry == null)
                 return;
 
-            entry.isPendingRemoval = true;
-            if (entry.group != null)
-            {
-                entry.group.visibleSlots.Remove(entry);
-                if (entry.group.visibleSlots.Count == 0 && entry.group.pendingUnits.Count == 0)
-                    MarkGroupForRemoval(entry.group);
-            }
-
-            if (_activeSlotEntry == entry)
-            {
-                ToggleSlotActive(_activeSlotEntry, false);
-                _activeSlotEntry = null;
-            }
+            RemoveSlotEntry(entry, false);
         }
 
         void MarkGroupForRemoval(PhaseGroup group)
@@ -485,7 +856,7 @@ namespace TGD.UIV2
                 return;
 
             group.pendingRemoval = true;
-            group.pendingUnits.Clear();
+            group.pendingUnits?.Clear();
             if (group.headerEntry != null)
                 group.headerEntry.isPendingRemoval = true;
         }
@@ -732,18 +1103,6 @@ namespace TGD.UIV2
             return shift;
         }
 
-        int GetActiveSlotCount()
-        {
-            int count = 0;
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].kind == TimelineEntryKind.Slot && !_entries[i].isPendingRemoval)
-                    count++;
-            }
-
-            return count;
-        }
-
         static string FormatTurnLabel(int phaseIndex)
         {
             return $"Turn {Mathf.Max(1, phaseIndex)}";
@@ -811,6 +1170,12 @@ namespace TGD.UIV2
             };
         }
 
+        struct SlotDemand
+        {
+            public PhaseGroup group;
+            public int desiredCount;
+        }
+
         enum TimelineEntryKind
         {
             Header,
@@ -837,6 +1202,8 @@ namespace TGD.UIV2
             public string label;
             public bool isPlayer;
             public bool isBonus;
+            public bool isProjected;
+            public int phaseIndex = -1;
             public TimelineEntryView headerEntry;
             public Queue<Unit> pendingUnits = new();
             public List<TimelineEntryView> visibleSlots = new();
