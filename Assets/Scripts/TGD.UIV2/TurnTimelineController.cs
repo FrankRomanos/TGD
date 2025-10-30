@@ -727,6 +727,12 @@ namespace TGD.UIV2
             return group;
         }
 
+        bool FillSlots(bool animate = true)
+        {
+            var demands = ComputeDesiredSlotCounts();
+            return FillSlots(demands, animate);
+        }
+
         bool FillSlots(List<SlotDemand> demands, bool animate = true)
         {
             if (_contentRoot == null || demands == null || demands.Count == 0)
