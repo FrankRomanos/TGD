@@ -1,60 +1,64 @@
 using System;
-using TMPro;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.UIElements;
 using TGD.CombatV2;
 using TGD.HexBoard;
 
 namespace TGD.UIV2
 {
     /// <summary>
-    /// Drives the prototype turn timeline HUD that pairs TurnManagerV2 phases with slot portraits.
+    /// Drives the UI Toolkit based turn timeline HUD and animates the live queue of turn groups.
     /// </summary>
+    [RequireComponent(typeof(UIDocument))]
     public sealed class TurnTimelineController : MonoBehaviour
     {
-        [Header("Runtime Refs")]
+        const float HeaderHeightFallback = 44f;
+        const float SlotHeightFallback = 88f;
+        const float ContentGap = 8f;
+
+        [Header("Runtime")]
         public TurnManagerV2 turnManager;
-
-        [Header("Turn Messages")]
-        public TurnTimelineTurnWidget[] turnWidgets = Array.Empty<TurnTimelineTurnWidget>();
-
-        [Header("Unit Slots")]
-        public TurnTimelineSlotWidget[] slotWidgets = Array.Empty<TurnTimelineSlotWidget>();
+        public CombatActionManagerV2 combatManager;
+        public UIDocument document;
 
         [Header("Look")]
-        public Color friendlyColor = new(0.2f, 0.85f, 0.2f);
-        public Color enemyColor = new(0.85f, 0.25f, 0.2f);
         public Sprite fallbackAvatar;
+        [Min(1)] public int maxVisibleSlots = 4;
+        [Min(0f)] public float scrollAnimationDuration = 0.25f;
 
+        readonly List<TimelineEntryView> _entries = new();
+        readonly List<PhaseGroup> _groups = new();
+
+        VisualElement _contentRoot;
+        TimelineEntryView _activeSlotEntry;
+        Coroutine _scrollAnimation;
+        bool _bonusTurnDisplayed;
         int _phaseCounter;
-        TurnEntry[] _turnEntries = Array.Empty<TurnEntry>();
-        SlotEntry[] _slotEntries = Array.Empty<SlotEntry>();
 
         static T AutoFind<T>() where T : UnityEngine.Object
         {
-#if UNITY_2023_1_OR_NEWER
+    #if UNITY_2023_1_OR_NEWER
             return UnityEngine.Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
-#else
+    #else
             return UnityEngine.Object.FindObjectOfType<T>();
-#endif
+    #endif
         }
-
-        void Reset() => EnsureDataCapacity();
 
         void Awake()
         {
+            if (!document)
+                document = GetComponent<UIDocument>();
+            if (!document)
+                document = AutoFind<UIDocument>();
+
             if (!turnManager)
                 turnManager = AutoFind<TurnManagerV2>();
+            if (!combatManager)
+                combatManager = AutoFind<CombatActionManagerV2>();
 
-            EnsureDataCapacity();
-            ClearAll();
-        }
-
-        void OnValidate()
-        {
-            EnsureDataCapacity();
-            RefreshTurns();
-            RefreshSlots();
+            InitializeRoot();
         }
 
         void OnEnable()
@@ -69,223 +73,378 @@ namespace TGD.UIV2
             ClearAll();
         }
 
-        void Subscribe()
+        void InitializeRoot()
         {
-            if (!turnManager)
+            if (!document)
                 return;
 
-            turnManager.PhaseBegan += OnPhaseBegan;
-            turnManager.TurnStarted += OnTurnStarted;
-            turnManager.TurnEnded += OnTurnEnded;
+            var root = document.rootVisualElement;
+            if (root == null)
+                return;
+
+            _contentRoot = root.Q<VisualElement>("Content");
+            if (_contentRoot != null)
+                _contentRoot.Clear();
+        }
+
+        void Subscribe()
+        {
+            if (turnManager != null)
+            {
+                turnManager.PhaseBegan += OnPhaseBegan;
+                turnManager.TurnStarted += OnTurnStarted;
+                turnManager.TurnEnded += OnTurnEnded;
+            }
+
+            if (combatManager != null)
+                combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
         }
 
         void Unsubscribe()
         {
-            if (!turnManager)
-                return;
+            if (turnManager != null)
+            {
+                turnManager.PhaseBegan -= OnPhaseBegan;
+                turnManager.TurnStarted -= OnTurnStarted;
+                turnManager.TurnEnded -= OnTurnEnded;
+            }
 
-            turnManager.PhaseBegan -= OnPhaseBegan;
-            turnManager.TurnStarted -= OnTurnStarted;
-            turnManager.TurnEnded -= OnTurnEnded;
+            if (combatManager != null)
+                combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
         }
 
         void RebuildInitialState()
         {
             ClearAll();
 
-            if (!turnManager)
+            if (_contentRoot == null)
                 return;
 
-            bool isPlayer = turnManager.IsPlayerPhase;
-            int currentPhase = Mathf.Max(1, turnManager.CurrentPhaseIndex);
-
-            if (currentPhase > 0 && _turnEntries.Length > 0)
+            bool bonusActive = combatManager != null && combatManager.IsBonusTurnActive;
+            if (bonusActive)
             {
-                var entry = new TurnEntry
+                var bonusUnit = combatManager.CurrentBonusTurnUnit;
+                bool isPlayerBonus = turnManager != null && turnManager.IsPlayerUnit(bonusUnit);
+                var bonusUnits = turnManager != null ? turnManager.GetSideUnits(isPlayerBonus) : null;
+                if (bonusUnits != null && bonusUnits.Count > 0)
                 {
-                    hasValue = true,
-                    isPlayer = isPlayer,
-                    phaseIndex = currentPhase
-                };
-                _turnEntries[0] = entry;
+                    var bonusGroup = CreatePhaseGroup("Bonus Turn", isPlayerBonus, true, bonusUnits);
+                    if (bonusGroup != null)
+                    {
+                        InsertGroupAtTop(bonusGroup, false);
+                        _bonusTurnDisplayed = true;
+                    }
+                }
             }
-
-            RefreshTurns();
-
-            var units = turnManager.GetSideUnits(isPlayer);
-            if (units != null)
+            else
             {
-                for (int i = 0; i < units.Count; i++)
-                    AddOrRefreshSlot(units[i], isPlayer, false);
-                RefreshSlots();
+                _bonusTurnDisplayed = false;
             }
 
-            _phaseCounter = currentPhase;
+            if (turnManager != null)
+            {
+                bool isPlayer = turnManager.IsPlayerPhase;
+                int currentPhase = Mathf.Max(1, turnManager.CurrentPhaseIndex);
+                var units = turnManager.GetSideUnits(isPlayer);
+                if (units != null && units.Count > 0)
+                {
+                    var group = CreatePhaseGroup(FormatTurnLabel(currentPhase), isPlayer, false, units);
+                    if (group != null)
+                        InsertGroupAtTop(group, false);
+                }
+
+                _phaseCounter = currentPhase;
+                FillSlots(false);
+                HighlightActiveSlot(turnManager.ActiveUnit);
+            }
         }
 
         void ClearAll()
         {
-            ClearTurns();
-            ClearSlots();
-        }
+            if (_scrollAnimation != null)
+            {
+                StopCoroutine(_scrollAnimation);
+                _scrollAnimation = null;
+            }
 
-        void ClearTurns()
-        {
-            for (int i = 0; i < _turnEntries.Length; i++)
-                _turnEntries[i] = default;
-            RefreshTurns();
-        }
+            _entries.Clear();
+            _groups.Clear();
+            _activeSlotEntry = null;
+            _bonusTurnDisplayed = false;
 
-        void ClearSlots()
-        {
-            for (int i = 0; i < _slotEntries.Length; i++)
-                _slotEntries[i] = default;
-            RefreshSlots();
+            if (_contentRoot != null)
+                _contentRoot.Clear();
         }
 
         void OnPhaseBegan(bool isPlayerPhase)
         {
-            int phaseIndex = turnManager ? turnManager.CurrentPhaseIndex : ++_phaseCounter;
-            if (!turnManager)
+            var units = turnManager != null ? turnManager.GetSideUnits(isPlayerPhase) : null;
+            if (units == null || units.Count == 0)
+                return;
+
+            int phaseIndex = turnManager != null ? Mathf.Max(1, turnManager.CurrentPhaseIndex) : ++_phaseCounter;
+            if (turnManager == null)
                 _phaseCounter = phaseIndex;
 
-            var entry = new TurnEntry
-            {
-                hasValue = true,
-                isPlayer = isPlayerPhase,
-                phaseIndex = Mathf.Max(1, phaseIndex)
-            };
+            var group = CreatePhaseGroup(FormatTurnLabel(phaseIndex), isPlayerPhase, false, units);
+            if (group == null)
+                return;
 
-            PushTurnEntry(entry);
-
-            var units = turnManager != null ? turnManager.GetSideUnits(isPlayerPhase) : null;
-            if (units != null)
-            {
-                for (int i = 0; i < units.Count; i++)
-                    AddOrRefreshSlot(units[i], isPlayerPhase, false);
-                RefreshSlots();
-            }
+            InsertGroupAtTop(group, true);
+            ProcessTimelineUpdates();
         }
 
         void OnTurnStarted(Unit unit)
         {
-            bool isPlayer = turnManager != null && turnManager.IsPlayerUnit(unit);
-
-            if (!TryUpdateSlotEntry(unit, isPlayer, true))
-                AddOrRefreshSlot(unit, isPlayer, true);
+            HighlightActiveSlot(unit);
         }
 
         void OnTurnEnded(Unit unit)
         {
-            RemoveSlotEntry(unit);
-        }
-
-        void AddOrRefreshSlot(Unit unit, bool isPlayer, bool refreshImmediately)
-        {
-            if (unit == null || _slotEntries.Length == 0)
+            if (unit == null)
                 return;
 
-            RemoveSlotEntry(unit, false);
-
-            var entry = CreateSlotEntry(unit, isPlayer);
-            PushSlotEntry(entry);
-
-            if (refreshImmediately)
-                RefreshSlots();
+            RemoveSlotForUnit(unit);
+            ProcessTimelineUpdates();
         }
 
-        bool TryUpdateSlotEntry(Unit unit, bool isPlayer, bool refreshImmediately)
+        void OnBonusTurnStateChanged()
         {
-            if (unit == null || _slotEntries.Length == 0)
-                return false;
+            if (combatManager == null)
+                return;
 
-            string unitId = unit.Id;
-            for (int i = 0; i < _slotEntries.Length; i++)
+            bool active = combatManager.IsBonusTurnActive;
+            if (active && !_bonusTurnDisplayed)
             {
-                if (!_slotEntries[i].hasValue)
+                var bonusUnit = combatManager.CurrentBonusTurnUnit;
+                bool isPlayerBonus = turnManager != null && turnManager.IsPlayerUnit(bonusUnit);
+                var units = turnManager != null ? turnManager.GetSideUnits(isPlayerBonus) : null;
+                if (units != null && units.Count > 0)
+                {
+                    var group = CreatePhaseGroup("Bonus Turn", isPlayerBonus, true, units);
+                    if (group != null)
+                    {
+                        InsertGroupAtTop(group, true);
+                        _bonusTurnDisplayed = true;
+                        ProcessTimelineUpdates();
+                    }
+                }
+            }
+            else if (!active)
+            {
+                _bonusTurnDisplayed = false;
+            }
+        }
+
+        void ProcessTimelineUpdates()
+        {
+            FillSlots();
+            if (HasAnimationWork())
+                StartScrollAnimation();
+            else
+                FinalizeAnimationState();
+
+            if (turnManager != null)
+                HighlightActiveSlot(turnManager.ActiveUnit);
+        }
+
+        void InsertGroupAtTop(PhaseGroup group, bool animate)
+        {
+            if (group == null || group.headerEntry == null || _contentRoot == null)
+                return;
+
+            group.pendingRemoval = false;
+
+            if (group.pendingUnits.Count > 0 && maxVisibleSlots > 0)
+                EnsureSlotBudget(1);
+
+            var header = group.headerEntry;
+            header.isNewlyAdded = animate;
+            header.root.style.opacity = 1f;
+            header.root.style.translate = default;
+
+            _groups.Insert(0, group);
+            _entries.Insert(0, header);
+            _contentRoot.Insert(0, header.root);
+        }
+
+        void EnsureSlotBudget(int requiredSlots)
+        {
+            if (requiredSlots <= 0)
+                return;
+
+            int available = maxVisibleSlots - GetActiveSlotCount();
+            int needed = requiredSlots - Mathf.Max(0, available);
+            while (needed > 0)
+            {
+                if (!MarkBottomSlotForRemoval())
+                    break;
+                needed--;
+            }
+        }
+
+        bool MarkBottomSlotForRemoval()
+        {
+            for (int i = _entries.Count - 1; i >= 0; i--)
+            {
+                var entry = _entries[i];
+                if (entry.kind != TimelineEntryKind.Slot || entry.isPendingRemoval)
                     continue;
 
-                if (_slotEntries[i].unit == unit || (!string.IsNullOrEmpty(unitId) && _slotEntries[i].unitId == unitId))
+                entry.isPendingRemoval = true;
+                if (entry.group != null)
                 {
-                    var entry = _slotEntries[i];
-                    entry.unit = unit;
-                    entry.unitId = unitId;
-                    entry.isPlayer = isPlayer;
-                    entry.avatar = ResolveAvatar(unit);
-                    _slotEntries[i] = entry;
-
-                    if (refreshImmediately)
-                        RefreshSlots();
-
-                    return true;
+                    entry.group.visibleSlots.Remove(entry);
+                    if (entry.group.visibleSlots.Count == 0 && entry.group.pendingUnits.Count == 0)
+                        MarkGroupForRemoval(entry.group);
                 }
+
+                if (_activeSlotEntry == entry)
+                {
+                    ToggleSlotActive(_activeSlotEntry, false);
+                    _activeSlotEntry = null;
+                }
+
+                return true;
             }
 
             return false;
         }
 
-        void PushTurnEntry(TurnEntry entry)
+        PhaseGroup CreatePhaseGroup(string label, bool isPlayer, bool isBonus, IReadOnlyList<Unit> units)
         {
-            if (_turnEntries.Length == 0)
-                return;
+            if (string.IsNullOrEmpty(label) || units == null || units.Count == 0)
+                return null;
 
-            for (int i = _turnEntries.Length - 1; i > 0; i--)
-                _turnEntries[i] = _turnEntries[i - 1];
+            var headerVisuals = CreateHeaderVisuals();
+            headerVisuals.label.text = label;
 
-            _turnEntries[0] = entry;
-            RefreshTurns();
+            var headerEntry = new TimelineEntryView
+            {
+                kind = TimelineEntryKind.Header,
+                root = headerVisuals.root,
+                header = headerVisuals,
+                isBonus = isBonus
+            };
+
+            var queue = new Queue<Unit>();
+            for (int i = units.Count - 1; i >= 0; i--)
+                queue.Enqueue(units[i]);
+
+            var group = new PhaseGroup
+            {
+                label = label,
+                isPlayer = isPlayer,
+                isBonus = isBonus,
+                headerEntry = headerEntry,
+                pendingUnits = queue,
+                visibleSlots = new List<TimelineEntryView>()
+            };
+
+            headerEntry.group = group;
+            return group;
         }
 
-        void PushSlotEntry(SlotEntry entry)
+        bool FillSlots(bool animate = true)
         {
-            for (int i = _slotEntries.Length - 1; i > 0; i--)
-                _slotEntries[i] = _slotEntries[i - 1];
+            if (_contentRoot == null)
+                return false;
 
-            if (_slotEntries.Length > 0)
-                _slotEntries[0] = entry;
-        }
-
-        void RemoveSlotEntry(Unit unit, bool refresh = true)
-        {
-            if (unit == null || _slotEntries.Length == 0)
+            bool added = false;
+            while (GetActiveSlotCount() < maxVisibleSlots)
             {
-                if (refresh)
-                    RefreshSlots();
-                return;
-            }
-
-            string unitId = unit.Id;
-            for (int i = 0; i < _slotEntries.Length; i++)
-            {
-                if (!_slotEntries[i].hasValue)
-                    continue;
-
-                if (_slotEntries[i].unit == unit || (!string.IsNullOrEmpty(unitId) && _slotEntries[i].unitId == unitId))
-                {
-                    for (int j = i; j < _slotEntries.Length - 1; j++)
-                        _slotEntries[j] = _slotEntries[j + 1];
-
-                    if (_slotEntries.Length > 0)
-                        _slotEntries[_slotEntries.Length - 1] = default;
+                var group = FindNextGroupWithPendingUnits();
+                if (group == null)
                     break;
-                }
+
+                if (group.pendingUnits.Count == 0)
+                    break;
+
+                var unit = group.pendingUnits.Dequeue();
+                var entry = CreateSlotEntry(unit, group);
+                entry.isNewlyAdded = animate;
+
+                int insertIndex = GetSlotInsertIndex(group);
+                _entries.Insert(insertIndex, entry);
+                _contentRoot.Insert(insertIndex, entry.root);
+                group.visibleSlots.Add(entry);
+                added = true;
             }
 
-            if (refresh)
-                RefreshSlots();
+            return added;
         }
 
-        SlotEntry CreateSlotEntry(Unit unit, bool isPlayer)
+        int GetSlotInsertIndex(PhaseGroup group)
         {
-            var entry = new SlotEntry
+            int headerIndex = _entries.IndexOf(group.headerEntry);
+            if (headerIndex < 0)
+                return _entries.Count;
+            return headerIndex + 1 + group.visibleSlots.Count;
+        }
+
+        PhaseGroup FindNextGroupWithPendingUnits()
+        {
+            for (int i = 0; i < _groups.Count; i++)
             {
-                hasValue = unit != null,
+                var group = _groups[i];
+                if (group == null || group.pendingRemoval)
+                    continue;
+                if (group.pendingUnits.Count > 0)
+                    return group;
+            }
+
+            return null;
+        }
+
+        TimelineEntryView CreateSlotEntry(Unit unit, PhaseGroup group)
+        {
+            var visuals = CreateSlotVisuals();
+            visuals.label.style.display = DisplayStyle.None;
+
+            var entry = new TimelineEntryView
+            {
+                kind = TimelineEntryKind.Slot,
+                root = visuals.root,
+                slot = visuals,
+                group = group,
                 unit = unit,
                 unitId = unit != null ? unit.Id : string.Empty,
-                isPlayer = isPlayer,
-                avatar = ResolveAvatar(unit)
+                isPlayer = group != null && group.isPlayer
             };
+
+            ApplySlotVisuals(entry);
             return entry;
+        }
+
+        void ApplySlotVisuals(TimelineEntryView entry)
+        {
+            if (entry.slot == null)
+                return;
+
+            var card = entry.slot.card;
+            if (card != null)
+            {
+                card.RemoveFromClassList("player-turn");
+                card.RemoveFromClassList("enemy-turn");
+                if (entry.isPlayer)
+                    card.AddToClassList("player-turn");
+                else
+                    card.AddToClassList("enemy-turn");
+
+                card.RemoveFromClassList("slot-active");
+            }
+
+            var icon = entry.slot.icon;
+            if (icon != null)
+            {
+                var sprite = ResolveAvatar(entry.unit);
+                if (sprite != null)
+                    icon.style.backgroundImage = new StyleBackground(sprite);
+                else if (fallbackAvatar != null)
+                    icon.style.backgroundImage = new StyleBackground(fallbackAvatar);
+                else
+                    icon.style.backgroundImage = StyleKeyword.Null;
+            }
         }
 
         Sprite ResolveAvatar(Unit unit)
@@ -295,150 +454,403 @@ namespace TGD.UIV2
             return fallbackAvatar;
         }
 
-        void RefreshTurns()
+        void RemoveSlotForUnit(Unit unit)
         {
-            int count = Mathf.Min(turnWidgets.Length, _turnEntries.Length);
-            for (int i = 0; i < count; i++)
+            var entry = FindSlotEntry(unit);
+            if (entry == null)
+                return;
+
+            entry.isPendingRemoval = true;
+            if (entry.group != null)
             {
-                var widget = turnWidgets[i];
-                if (widget == null)
+                entry.group.visibleSlots.Remove(entry);
+                if (entry.group.visibleSlots.Count == 0 && entry.group.pendingUnits.Count == 0)
+                    MarkGroupForRemoval(entry.group);
+            }
+
+            if (_activeSlotEntry == entry)
+            {
+                ToggleSlotActive(_activeSlotEntry, false);
+                _activeSlotEntry = null;
+            }
+        }
+
+        void MarkGroupForRemoval(PhaseGroup group)
+        {
+            if (group == null || group.pendingRemoval)
+                return;
+
+            group.pendingRemoval = true;
+            group.pendingUnits.Clear();
+            if (group.headerEntry != null)
+                group.headerEntry.isPendingRemoval = true;
+        }
+
+        TimelineEntryView FindSlotEntry(Unit unit)
+        {
+            if (unit == null)
+                return null;
+
+            string id = unit.Id;
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (entry.kind != TimelineEntryKind.Slot)
+                    continue;
+                if (entry.isPendingRemoval)
+                    continue;
+                if (entry.unit == unit)
+                    return entry;
+                if (!string.IsNullOrEmpty(id) && string.Equals(entry.unitId, id, StringComparison.Ordinal))
+                    return entry;
+            }
+
+            return null;
+        }
+
+        void HighlightActiveSlot(Unit unit)
+        {
+            if (unit == null)
+            {
+                SetActiveSlot(null);
+                return;
+            }
+
+            var entry = FindSlotEntry(unit);
+            SetActiveSlot(entry);
+        }
+
+        void SetActiveSlot(TimelineEntryView entry)
+        {
+            if (_activeSlotEntry == entry)
+                return;
+
+            if (_activeSlotEntry != null)
+                ToggleSlotActive(_activeSlotEntry, false);
+
+            _activeSlotEntry = entry;
+
+            if (_activeSlotEntry != null)
+                ToggleSlotActive(_activeSlotEntry, true);
+        }
+
+        static void ToggleSlotActive(TimelineEntryView entry, bool active)
+        {
+            var card = entry?.slot?.card;
+            card?.EnableInClassList("slot-active", active);
+        }
+
+        bool HasAnimationWork()
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (_entries[i].isNewlyAdded || _entries[i].isPendingRemoval)
+                    return true;
+            }
+
+            return false;
+        }
+
+        void StartScrollAnimation()
+        {
+            if (scrollAnimationDuration <= 0f)
+            {
+                FinalizeAnimationState();
+                FillSlots();
+                return;
+            }
+
+            if (_scrollAnimation != null)
+            {
+                StopCoroutine(_scrollAnimation);
+                _scrollAnimation = null;
+                FinalizeAnimationState();
+                FillSlots();
+            }
+
+            if (!HasAnimationWork())
+                return;
+
+            _scrollAnimation = StartCoroutine(RunShiftAnimation());
+        }
+
+        IEnumerator RunShiftAnimation()
+        {
+            yield return null;
+
+            float shift = CalculateShiftHeight();
+            if (shift <= 0f)
+            {
+                FinalizeAnimationState();
+                FillSlots();
+                _scrollAnimation = null;
+                yield break;
+            }
+
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (entry.isNewlyAdded)
+                {
+                    entry.root.style.translate = new Translate(0f, -shift);
+                    entry.root.style.opacity = 1f;
+                }
+                else if (entry.isPendingRemoval)
+                {
+                    entry.root.style.translate = new Translate(0f, 0f);
+                    entry.root.style.opacity = 1f;
+                }
+                else
+                {
+                    entry.root.style.translate = new Translate(0f, 0f);
+                    entry.root.style.opacity = 1f;
+                }
+            }
+
+            float elapsed = 0f;
+            while (elapsed < scrollAnimationDuration)
+            {
+                float t = scrollAnimationDuration > 0f ? Mathf.Clamp01(elapsed / scrollAnimationDuration) : 1f;
+                for (int i = 0; i < _entries.Count; i++)
+                {
+                    var entry = _entries[i];
+                    if (entry.isNewlyAdded)
+                    {
+                        float offset = Mathf.Lerp(-shift, 0f, t);
+                        entry.root.style.translate = new Translate(0f, offset);
+                    }
+                    else if (entry.isPendingRemoval)
+                    {
+                        float offset = Mathf.Lerp(0f, shift, t);
+                        entry.root.style.translate = new Translate(0f, offset);
+                        entry.root.style.opacity = Mathf.Lerp(1f, 0f, t);
+                    }
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                entry.root.style.translate = new Translate(0f, 0f);
+                entry.root.style.opacity = entry.isPendingRemoval ? 0f : 1f;
+            }
+
+            RemovePendingEntries();
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                _entries[i].isNewlyAdded = false;
+                _entries[i].isPendingRemoval = false;
+                _entries[i].root.style.opacity = 1f;
+            }
+
+            _scrollAnimation = null;
+            FillSlots();
+            if (HasAnimationWork())
+                StartScrollAnimation();
+        }
+
+        void FinalizeAnimationState()
+        {
+            RemovePendingEntries();
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                entry.isNewlyAdded = false;
+                entry.isPendingRemoval = false;
+                entry.root.style.translate = new Translate(0f, 0f);
+                entry.root.style.opacity = 1f;
+            }
+        }
+
+        void RemovePendingEntries()
+        {
+            for (int i = _entries.Count - 1; i >= 0; i--)
+            {
+                var entry = _entries[i];
+                if (!entry.isPendingRemoval)
                     continue;
 
-                var entry = _turnEntries[i];
-                if (entry.hasValue)
-                    widget.Apply(entry, FormatTurnLabel(entry), entry.isPlayer ? friendlyColor : enemyColor);
-                else
-                    widget.Clear();
-            }
+                if (entry.kind == TimelineEntryKind.Slot && entry.group != null)
+                    entry.group.visibleSlots.Remove(entry);
 
-            for (int i = count; i < turnWidgets.Length; i++)
-                turnWidgets[i]?.Clear();
-        }
+                if (entry.root.hierarchy.parent != null)
+                    entry.root.RemoveFromHierarchy();
 
-        void RefreshSlots()
-        {
-            int count = Mathf.Min(slotWidgets.Length, _slotEntries.Length);
-            for (int i = 0; i < count; i++)
-            {
-                var widget = slotWidgets[i];
-                if (widget == null)
-                    continue;
+                var group = entry.group;
+                _entries.RemoveAt(i);
 
-                var entry = _slotEntries[i];
-                if (entry.hasValue)
-                    widget.Apply(entry, fallbackAvatar);
-                else
-                    widget.Clear();
-            }
-
-            for (int i = count; i < slotWidgets.Length; i++)
-                slotWidgets[i]?.Clear();
-        }
-
-        static string FormatTurnLabel(in TurnEntry entry)
-        {
-            string side = entry.isPlayer ? "Player" : "Enemy";
-            return $"Turn({side}) {Mathf.Max(1, entry.phaseIndex)}";
-        }
-
-        void EnsureDataCapacity()
-        {
-            int turnLength = turnWidgets != null ? turnWidgets.Length : 0;
-            if (_turnEntries == null || _turnEntries.Length != turnLength)
-                _turnEntries = new TurnEntry[Mathf.Max(0, turnLength)];
-
-            int slotLength = slotWidgets != null ? slotWidgets.Length : 0;
-            if (_slotEntries == null || _slotEntries.Length != slotLength)
-                _slotEntries = new SlotEntry[Mathf.Max(0, slotLength)];
-        }
-
-        [Serializable]
-        public sealed class TurnTimelineTurnWidget
-        {
-            public GameObject root;
-            public TMP_Text label;
-
-            public void Apply(in TurnEntry entry, string text, Color color)
-            {
-                if (root)
-                    root.SetActive(true);
-
-                if (label)
+                if (entry.kind == TimelineEntryKind.Header && group != null)
                 {
-                    label.text = text;
-                    label.color = color;
+                    _groups.Remove(group);
+                    if (_activeSlotEntry != null && _activeSlotEntry.group == group)
+                        _activeSlotEntry = null;
+                }
+
+                if (_activeSlotEntry == entry)
+                    _activeSlotEntry = null;
+            }
+        }
+
+        float CalculateShiftHeight()
+        {
+            float shift = 0f;
+            int newCount = 0;
+            bool hasExisting = false;
+
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (entry.isNewlyAdded)
+                {
+                    float height = entry.root.resolvedStyle.height;
+                    if (height <= 0f)
+                        height = entry.kind == TimelineEntryKind.Header ? HeaderHeightFallback : SlotHeightFallback;
+                    shift += height;
+                    newCount++;
+                }
+                else if (!entry.isPendingRemoval)
+                {
+                    hasExisting = true;
                 }
             }
 
-            public void Clear()
+            if (newCount > 0)
             {
-                if (label)
-                    label.text = string.Empty;
-
-                if (root && !root.activeSelf)
-                    root.SetActive(true);
+                int gapCount = Math.Max(0, newCount - 1);
+                if (hasExisting)
+                    gapCount += 1;
+                shift += gapCount * ContentGap;
             }
+
+            return shift;
         }
 
-        [Serializable]
-        public sealed class TurnTimelineSlotWidget
+        int GetActiveSlotCount()
         {
-            public GameObject root;
-            public Image avatarImage;
-            public TurnTimelineOverlayBinding overlay;
-
-            public void Apply(in SlotEntry entry, Sprite fallback)
+            int count = 0;
+            for (int i = 0; i < _entries.Count; i++)
             {
-                if (root)
-                    root.SetActive(true);
-
-                if (avatarImage)
-                {
-                    var sprite = entry.avatar != null ? entry.avatar : fallback;
-                    avatarImage.sprite = sprite;
-                    avatarImage.enabled = sprite != null;
-                }
-
-                if (overlay != null)
-                {
-                    var target = avatarImage ? avatarImage.rectTransform : null;
-                    overlay.AttachTo(target);
-                    overlay.SetText(string.Empty);
-                    overlay.HideImmediate();
-                }
+                if (_entries[i].kind == TimelineEntryKind.Slot && !_entries[i].isPendingRemoval)
+                    count++;
             }
 
-            public void Clear()
-            {
-                if (avatarImage)
-                {
-                    avatarImage.sprite = null;
-                    avatarImage.enabled = false;
-                }
-
-                if (overlay != null)
-                    overlay.Detach();
-
-                if (root && !root.activeSelf)
-                    root.SetActive(true);
-            }
+            return count;
         }
 
-        public struct TurnEntry
+        static string FormatTurnLabel(int phaseIndex)
         {
-            public bool hasValue;
+            return $"Turn {Mathf.Max(1, phaseIndex)}";
+        }
+
+        HeaderVisuals CreateHeaderVisuals()
+        {
+            var root = new VisualElement();
+            root.AddToClassList("turn-separator");
+
+            var label = new Label();
+            label.AddToClassList("turn-label");
+            root.Add(label);
+
+            return new HeaderVisuals
+            {
+                root = root,
+                label = label
+            };
+        }
+
+        SlotVisuals CreateSlotVisuals()
+        {
+            var root = new VisualElement();
+            root.AddToClassList("slot-root");
+
+            var row = new VisualElement();
+            row.AddToClassList("slot-row");
+            root.Add(row);
+
+            var dragHandle = new VisualElement();
+            dragHandle.AddToClassList("slot-drag-handle");
+            row.Add(dragHandle);
+
+            var card = new VisualElement();
+            card.AddToClassList("slot-card");
+            row.Add(card);
+
+            var skin = new VisualElement();
+            skin.AddToClassList("slot-skin");
+            card.Add(skin);
+
+            var icon = new VisualElement();
+            icon.AddToClassList("slot-icon");
+            skin.Add(icon);
+
+            var frame = new VisualElement();
+            frame.AddToClassList("slot-ornate-frame");
+            card.Add(frame);
+
+            var label = new Label();
+            label.AddToClassList("slot-meta-label");
+            row.Add(label);
+
+            var insertMarker = new VisualElement();
+            insertMarker.AddToClassList("insert-marker");
+            root.Add(insertMarker);
+
+            return new SlotVisuals
+            {
+                root = root,
+                card = card,
+                icon = icon,
+                label = label
+            };
+        }
+
+        enum TimelineEntryKind
+        {
+            Header,
+            Slot
+        }
+
+        sealed class TimelineEntryView
+        {
+            public TimelineEntryKind kind;
+            public VisualElement root;
+            public PhaseGroup group;
+            public bool isNewlyAdded;
+            public bool isPendingRemoval;
             public bool isPlayer;
-            public int phaseIndex;
-        }
-
-        public struct SlotEntry
-        {
-            public bool hasValue;
+            public bool isBonus;
             public Unit unit;
             public string unitId;
+            public HeaderVisuals header;
+            public SlotVisuals slot;
+        }
+
+        sealed class PhaseGroup
+        {
+            public string label;
             public bool isPlayer;
-            public Sprite avatar;
+            public bool isBonus;
+            public TimelineEntryView headerEntry;
+            public Queue<Unit> pendingUnits = new();
+            public List<TimelineEntryView> visibleSlots = new();
+            public bool pendingRemoval;
+        }
+
+        struct HeaderVisuals
+        {
+            public VisualElement root;
+            public Label label;
+        }
+
+        struct SlotVisuals
+        {
+            public VisualElement root;
+            public VisualElement card;
+            public VisualElement icon;
+            public Label label;
         }
     }
 }
-
