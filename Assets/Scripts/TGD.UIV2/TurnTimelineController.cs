@@ -25,6 +25,7 @@ namespace TGD.UIV2
         readonly List<SlotEntryVisual> _slotEntries = new();
 
         VisualElement _contentRoot;
+        VisualElement _viewportRoot;
         Unit _activeUnit;
         bool _activePhaseIsPlayer = true;
         int _activePhaseIndex = 1;
@@ -97,7 +98,10 @@ namespace TGD.UIV2
             if (root == null)
                 return;
 
+            _viewportRoot = root.Q<VisualElement>("ViewPoint");
             _contentRoot = root.Q<VisualElement>("Content");
+            if (_viewportRoot != null)
+                _viewportRoot.style.overflow = Overflow.Hidden;
             _contentRoot?.Clear();
         }
 
@@ -195,7 +199,11 @@ namespace TGD.UIV2
         void OnTurnOrderChanged(bool isPlayerSide)
         {
             if (isPlayerSide)
+            {
+                if (turnManager != null)
+                    _activeUnit = turnManager.ActiveUnit;
                 RebuildTimeline();
+            }
         }
 
         void RebuildTimeline()
@@ -251,11 +259,17 @@ namespace TGD.UIV2
             if (_currentDropTarget?.visuals.insertMarker != null)
                 _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
 
+            if (_currentDropTarget?.visuals.root != null)
+                _currentDropTarget.visuals.root.RemoveFromClassList("slot-drop-target");
+
             _activeDrag = null;
             _currentDropTarget = null;
             _activeDragPointerId = PointerId.invalidPointerId;
             _dragStartPosition = default;
             _activeDragOrderIndex = int.MaxValue;
+
+            if (_viewportRoot != null)
+                _viewportRoot.style.overflow = Overflow.Hidden;
         }
 
         void RegisterSlotInteractions(SlotVisuals visuals, DisplayEntry entry)
@@ -300,9 +314,9 @@ namespace TGD.UIV2
             if (_activeDrag.visuals.row != null)
             {
                 _activeDrag.visuals.row.style.translate = new Translate(
-                    new Length(deltaX, LengthUnit.Pixel),   // X: 往右拖多少
-                    new Length(0f, LengthUnit.Pixel),       // Y: 不动
-                    0f                                      // Z: 不用，给float
+                    new Length(deltaX, LengthUnit.Pixel),   // X: 寰�鍙虫嫋澶氬皯
+                    new Length(0f, LengthUnit.Pixel),       // Y: 涓嶅姩
+                    0f                                      // Z: 涓嶇敤锛岀粰float
                 );
             }
 
@@ -371,6 +385,9 @@ namespace TGD.UIV2
                 _activeDrag.visuals.root.AddToClassList("slot-dragging");
             }
 
+            if (_viewportRoot != null)
+                _viewportRoot.style.overflow = Overflow.Visible;
+
             UpdateDropTarget(evt.position);
         }
 
@@ -404,8 +421,13 @@ namespace TGD.UIV2
                 return;
             }
 
+            if (_activeDrag != null && pointerPosition.y <= _dragStartPosition.y + 12f)
+            {
+                ShowDropTarget(null);
+                return;
+            }
+
             SlotEntryVisual candidate = null;
-            float bestDistance = float.MaxValue;
 
             for (int i = 0; i < _slotEntries.Count; i++)
             {
@@ -418,11 +440,10 @@ namespace TGD.UIV2
                     continue;
 
                 Rect world = root.worldBound;
-                float distance = Mathf.Abs(pointerPosition.y - world.center.y);
-                if (distance < bestDistance)
+                if (world.Contains(pointerPosition))
                 {
-                    bestDistance = distance;
                     candidate = slot;
+                    break;
                 }
             }
 
@@ -457,11 +478,17 @@ namespace TGD.UIV2
                 if (_currentDropTarget?.visuals.insertMarker != null)
                     _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
 
+                if (_currentDropTarget?.visuals.root != null)
+                    _currentDropTarget.visuals.root.RemoveFromClassList("slot-drop-target");
+
                 _currentDropTarget = slot;
             }
 
             if (_currentDropTarget?.visuals.insertMarker != null)
                 _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.Flex;
+
+            if (_currentDropTarget?.visuals.root != null)
+                _currentDropTarget.visuals.root.AddToClassList("slot-drop-target");
         }
 
         List<DisplayEntry> BuildBonusEntries()
