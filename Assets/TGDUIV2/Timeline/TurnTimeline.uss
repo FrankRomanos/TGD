@@ -14,9 +14,9 @@
 
 .timeline-viewport {
     position: relative;
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
+    width: 240px;
+    min-width: 240px;
+    max-width: 240px;
     height: 60%;
     max-height: 60%;
     padding-left: 6px;
@@ -51,11 +51,40 @@
     flex-direction: column;
     justify-content: center;
     align-items: stretch;
-    gap: 8px;
+    gap: 0;
     flex-grow: 1;
     min-height: 100%;
     height: 100%;
     z-index: 1;
+    pointer-events: none;
+}
+
+.timeline-columns {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    pointer-events: none;
+}
+
+.timeline-column {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 120px;
+    min-width: 120px;
+    pointer-events: none;
+}
+
+.event-column {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 8px;
+    flex-grow: 1;
+    min-width: 88px;
     pointer-events: none;
 }
 
@@ -111,6 +140,82 @@
     align-items: stretch;
     justify-content: flex-start;
     gap: 0;
+}
+
+.event-root {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    pointer-events: none;
+}
+
+.event-header-spacer {
+    min-height: 44px;
+    height: 44px;
+    margin-bottom: 8px;
+    pointer-events: none;
+}
+
+.event-slot-anchor {
+    position: relative;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: 88px;
+    width: 100%;
+    pointer-events: none;
+}
+
+.event-slot-anchor > .event-root {
+    margin-top: 4px;
+}
+
+.event-card {
+    position: relative;
+    width: 72px;
+    min-width: 72px;
+    height: 56px;
+    min-height: 56px;
+    border-radius: 8px;
+    overflow: hidden;
+    pointer-events: none;
+    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png?fileID=2800000&guid=d73a620491870c54485bf72be0c9979f&type=3#tgd_chain_bg");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    border-width: 2px;
+    border-color: rgba(255, 215, 120, 0.9);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.75), 0 0 6px rgba(255, 215, 120, 0.35);
+}
+
+.event-icon {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 6px;
+    background-color: transparent;
+    background-image: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.event-text {
+    flex-grow: 1;
+    color: rgba(251, 231, 197, 0.92);
+    font-size: 11px;
+    unity-font-style-and-weight: semi-bold;
+    letter-spacing: 0.3px;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.65);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 4px;
+    pointer-events: none;
 }
 
 .slot-drag-handle {

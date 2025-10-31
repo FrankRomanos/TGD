@@ -25,7 +25,8 @@ namespace TGD.UIV2
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
 
-        VisualElement _contentRoot;
+        VisualElement _timelineColumn;
+        VisualElement _eventColumn;
         VisualElement _dragOverlay;
         VisualElement _dragGhost;
         Unit _activeUnit;
@@ -40,7 +41,8 @@ namespace TGD.UIV2
         enum EntryKind
         {
             Header,
-            Slot
+            Slot,
+            Event
         }
 
         struct DisplayEntry
@@ -52,6 +54,7 @@ namespace TGD.UIV2
             public bool isActive;
             public bool isActivePhase;
             public int turnOrderIndex;
+            public string auxText;
         }
 
         static T AutoFind<T>() where T : Object
@@ -100,8 +103,10 @@ namespace TGD.UIV2
             if (root == null)
                 return;
 
-            _contentRoot = root.Q<VisualElement>("Content");
-            _contentRoot?.Clear();
+            _timelineColumn = root.Q<VisualElement>("TimelineColumn");
+            _eventColumn = root.Q<VisualElement>("EventColumn");
+
+            ClearColumns();
 
             _dragOverlay = root.Q<VisualElement>("DragOverlay");
             if (_dragOverlay == null)
@@ -136,6 +141,7 @@ namespace TGD.UIV2
                 turnManager.PhaseBegan += OnPhaseBegan;
                 turnManager.TurnStarted += OnTurnStarted;
                 turnManager.TurnEnded += OnTurnEnded;
+                turnManager.UnitRuntimeChanged += OnUnitRuntimeChanged;
                 turnManager.TurnOrderChanged += OnTurnOrderChanged;
             }
 
@@ -150,6 +156,7 @@ namespace TGD.UIV2
                 turnManager.PhaseBegan -= OnPhaseBegan;
                 turnManager.TurnStarted -= OnTurnStarted;
                 turnManager.TurnEnded -= OnTurnEnded;
+                turnManager.UnitRuntimeChanged -= OnUnitRuntimeChanged;
                 turnManager.TurnOrderChanged -= OnTurnOrderChanged;
             }
 
@@ -164,11 +171,16 @@ namespace TGD.UIV2
             _completedThisPhase.Clear();
             _activeUnit = null;
 
-            if (_contentRoot != null)
-                _contentRoot.Clear();
+            ClearColumns();
 
             if (_dragOverlay != null)
                 _dragOverlay.Clear();
+        }
+
+        void ClearColumns()
+        {
+            _timelineColumn?.Clear();
+            _eventColumn?.Clear();
         }
 
         void SyncPhaseState()
@@ -223,6 +235,17 @@ namespace TGD.UIV2
             RebuildTimeline();
         }
 
+        void OnUnitRuntimeChanged(Unit unit)
+        {
+            if (unit == null)
+                return;
+
+            if (_activeDrag != null)
+                return;
+
+            RebuildTimeline();
+        }
+
         void OnTurnOrderChanged(bool isPlayerSide)
         {
             if (isPlayerSide)
@@ -231,7 +254,7 @@ namespace TGD.UIV2
 
         void RebuildTimeline()
         {
-            if (_contentRoot == null)
+            if (_timelineColumn == null || _eventColumn == null)
                 return;
 
             ClearDragState();
@@ -241,28 +264,67 @@ namespace TGD.UIV2
                 ? BuildBonusEntries()
                 : BuildPhaseEntries();
 
-            _contentRoot.Clear();
+            ClearColumns();
 
+            VisualElement lastEventAnchor = null;
             for (int i = 0; i < entries.Count; i++)
             {
                 var entry = entries[i];
-                if (entry.kind == EntryKind.Header)
+                switch (entry.kind)
                 {
-                    var header = CreateHeaderVisuals();
-                    if (header.root != null)
+                    case EntryKind.Header:
                     {
-                        header.label.text = entry.label;
-                        _contentRoot.Add(header.root);
+                        var header = CreateHeaderVisuals();
+                        if (header.root != null)
+                        {
+                            header.label.text = entry.label;
+                            _timelineColumn.Add(header.root);
+                            var spacer = CreateEventHeaderSpacer();
+                            if (spacer != null)
+                                _eventColumn.Add(spacer);
+                        }
+                        lastEventAnchor = null;
+                        break;
                     }
-                }
-                else
-                {
-                    var slot = CreateSlotVisuals();
-                    if (slot.root != null)
+                    case EntryKind.Slot:
                     {
-                        ApplySlotVisuals(slot, entry);
-                        _contentRoot.Add(slot.root);
-                        RegisterSlotInteractions(slot, entry);
+                        var slot = CreateSlotVisuals();
+                        if (slot.root != null)
+                        {
+                            ApplySlotVisuals(slot, entry);
+                            _timelineColumn.Add(slot.root);
+                            var anchor = CreateEventSlotAnchor();
+                            if (anchor != null)
+                            {
+                                _eventColumn.Add(anchor);
+                                lastEventAnchor = anchor;
+                            }
+                            else
+                            {
+                                lastEventAnchor = null;
+                            }
+                            RegisterSlotInteractions(slot, entry);
+                        }
+                        break;
+                    }
+                    case EntryKind.Event:
+                    {
+                        var visuals = CreateEventVisuals();
+                        if (visuals.root != null)
+                        {
+                            ApplyEventVisuals(visuals, entry);
+                            if (lastEventAnchor != null)
+                            {
+                                lastEventAnchor.Clear();
+                                lastEventAnchor.Add(visuals.root);
+                                lastEventAnchor = null;
+                            }
+                            else
+                            {
+                                _eventColumn.Add(visuals.root);
+                            }
+                        }
+                        break;
                     }
                 }
             }
@@ -452,10 +514,10 @@ namespace TGD.UIV2
 
         void UpdateDropTarget(Vector2 pointerPosition)
         {
-            if (_contentRoot == null)
+            if (_timelineColumn == null)
                 return;
 
-            var bounds = _contentRoot.worldBound;
+            var bounds = _timelineColumn.worldBound;
             if (!bounds.Contains(pointerPosition))
             {
                 ShowDropTarget(null);
@@ -628,19 +690,21 @@ namespace TGD.UIV2
                 isPlayer = isPlayerBonus
             });
 
-            for (int i = 0; i < ordered.Count; i++)
-            {
-                var unit = ordered[i];
-                entries.Add(new DisplayEntry
+                for (int i = 0; i < ordered.Count; i++)
                 {
-                    kind = EntryKind.Slot,
-                    unit = unit,
-                    isPlayer = isPlayerBonus,
-                    isActive = unit == bonusUnit,
-                    isActivePhase = false,
-                    turnOrderIndex = turnManager != null ? turnManager.GetTurnOrderIndex(unit, isPlayerBonus) : -1
-                });
-            }
+                    var unit = ordered[i];
+                    var slotEntry = new DisplayEntry
+                    {
+                        kind = EntryKind.Slot,
+                        unit = unit,
+                        isPlayer = isPlayerBonus,
+                        isActive = unit == bonusUnit,
+                        isActivePhase = false,
+                        turnOrderIndex = turnManager != null ? turnManager.GetTurnOrderIndex(unit, isPlayerBonus) : -1
+                    };
+                    entries.Add(slotEntry);
+                    AppendEventEntryIfNeeded(entries, slotEntry);
+                }
 
             return entries;
         }
@@ -679,7 +743,7 @@ namespace TGD.UIV2
                 for (int i = 0; i < activeDisplay.Count; i++)
                 {
                     var unit = activeDisplay[i];
-                    entries.Add(new DisplayEntry
+                    var slotEntry = new DisplayEntry
                     {
                         kind = EntryKind.Slot,
                         unit = unit,
@@ -687,7 +751,9 @@ namespace TGD.UIV2
                         isActive = unit == activeHighlight,
                         isActivePhase = true,
                         turnOrderIndex = turnManager != null ? turnManager.GetTurnOrderIndex(unit, _activePhaseIsPlayer) : -1
-                    });
+                    };
+                    entries.Add(slotEntry);
+                    AppendEventEntryIfNeeded(entries, slotEntry);
                 }
             }
             else
@@ -744,7 +810,7 @@ namespace TGD.UIV2
 
                 for (int j = 0; j < phase.units.Count; j++)
                 {
-                    entries.Add(new DisplayEntry
+                    var slotEntry = new DisplayEntry
                     {
                         kind = EntryKind.Slot,
                         unit = phase.units[j],
@@ -752,7 +818,9 @@ namespace TGD.UIV2
                         isActive = false,
                         isActivePhase = false,
                         turnOrderIndex = -1
-                    });
+                    };
+                    entries.Add(slotEntry);
+                    AppendEventEntryIfNeeded(entries, slotEntry);
                 }
             }
 
@@ -850,6 +918,28 @@ namespace TGD.UIV2
                 visuals.row.style.translate = StyleKeyword.Null;
         }
 
+        void ApplyEventVisuals(EventVisuals visuals, DisplayEntry entry)
+        {
+            if (visuals.card != null)
+            {
+                visuals.card.RemoveFromClassList("player-turn");
+                visuals.card.RemoveFromClassList("enemy-turn");
+                visuals.card.AddToClassList(entry.isPlayer ? "player-turn" : "enemy-turn");
+            }
+
+            if (visuals.icon != null)
+            {
+                var sprite = ResolveAvatar(entry.unit);
+                if (sprite != null)
+                    visuals.icon.style.backgroundImage = new StyleBackground(sprite);
+                else
+                    visuals.icon.style.backgroundImage = StyleKeyword.Null;
+            }
+
+            if (visuals.text != null)
+                visuals.text.text = entry.auxText ?? string.Empty;
+        }
+
         Sprite ResolveAvatar(Unit unit)
         {
             if (unit != null && UnitAvatarRegistry.TryGetAvatar(unit, out var sprite) && sprite != null)
@@ -928,6 +1018,48 @@ namespace TGD.UIV2
             };
         }
 
+        EventVisuals CreateEventVisuals()
+        {
+            var root = new VisualElement();
+            root.AddToClassList("event-root");
+
+            var card = new VisualElement();
+            card.AddToClassList("event-card");
+            root.Add(card);
+
+            var icon = new VisualElement();
+            icon.AddToClassList("event-icon");
+            card.Add(icon);
+
+            var text = new Label();
+            text.AddToClassList("event-text");
+            root.Add(text);
+
+            return new EventVisuals
+            {
+                root = root,
+                card = card,
+                icon = icon,
+                text = text
+            };
+        }
+
+        VisualElement CreateEventHeaderSpacer()
+        {
+            var spacer = new VisualElement();
+            spacer.AddToClassList("event-header-spacer");
+            spacer.pickingMode = PickingMode.Ignore;
+            return spacer;
+        }
+
+        VisualElement CreateEventSlotAnchor()
+        {
+            var anchor = new VisualElement();
+            anchor.AddToClassList("event-slot-anchor");
+            anchor.pickingMode = PickingMode.Ignore;
+            return anchor;
+        }
+
         struct HeaderVisuals
         {
             public VisualElement root;
@@ -949,6 +1081,57 @@ namespace TGD.UIV2
             public VisualElement icon;
             public Label label;
             public VisualElement insertMarker;
+        }
+        struct EventVisuals
+        {
+            public VisualElement root;
+            public VisualElement card;
+            public VisualElement icon;
+            public Label text;
+        }
+
+        void AppendEventEntryIfNeeded(List<DisplayEntry> entries, DisplayEntry slotEntry)
+        {
+            if (slotEntry.unit == null)
+                return;
+
+            if (slotEntry.isActivePhase && turnManager != null && turnManager.HasReachedIdle(slotEntry.unit))
+                return;
+
+            string eventText = GetPendingFullRoundText(slotEntry.unit);
+            if (string.IsNullOrEmpty(eventText))
+                return;
+
+            entries.Add(new DisplayEntry
+            {
+                kind = EntryKind.Event,
+                unit = slotEntry.unit,
+                isPlayer = slotEntry.isPlayer,
+                isActive = false,
+                isActivePhase = slotEntry.isActivePhase,
+                turnOrderIndex = -1,
+                auxText = eventText
+            });
+        }
+
+        string GetPendingFullRoundText(Unit unit)
+        {
+            if (unit == null || turnManager == null)
+                return string.Empty;
+
+            if (turnManager.TryGetFullRoundInfo(unit, out int roundsRemaining, out int totalRounds, out _))
+            {
+                int rounds = Mathf.Max(0, roundsRemaining);
+                if (rounds > 0)
+                    return $"FullRound:{rounds}";
+
+                if (totalRounds > 0)
+                    return $"FullRound:{totalRounds}";
+
+                return "FullRound";
+            }
+
+            return string.Empty;
         }
         int SafeGetTurnOrderIndex(Unit unit, bool isPlayerSide)
         {
