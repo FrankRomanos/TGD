@@ -17,6 +17,7 @@ namespace TGD.UIV2
         [Header("Runtime")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 combatManager;
+        public BattleAudioManager audioManager;
         public UIDocument document;
 
         [Header("Look")]
@@ -38,6 +39,7 @@ namespace TGD.UIV2
         Vector2 _dragStartPosition;
         int _activeDragOrderIndex = int.MaxValue;
         Coroutine _pendingFullRoundRefresh;
+        bool _isInitialized;
 
         enum EntryKind
         {
@@ -74,26 +76,34 @@ namespace TGD.UIV2
             if (!document)
                 document = AutoFind<UIDocument>();
 
-            if (!turnManager)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (!combatManager)
-                combatManager = AutoFind<CombatActionManagerV2>();
-
             InitializeRoot();
         }
 
         void OnEnable()
         {
-            Subscribe();
+            if (!_isInitialized)
+                return;
+
             SyncPhaseState();
             RebuildTimeline();
         }
 
         void OnDisable()
         {
-            Unsubscribe();
             CancelPendingFullRoundRefresh();
             ClearAll();
+        }
+
+        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        {
+            this.turnManager = turnManager;
+            this.combatManager = combatManager;
+            this.audioManager = audioManager;
+            _isInitialized = true;
+
+            InitializeRoot();
+            SyncPhaseState();
+            RebuildTimeline();
         }
 
         void InitializeRoot()
@@ -134,34 +144,6 @@ namespace TGD.UIV2
             _dragOverlay?.BringToFront();
         }
 
-        void Subscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.PhaseBegan += OnPhaseBegan;
-                turnManager.TurnStarted += OnTurnStarted;
-                turnManager.TurnEnded += OnTurnEnded;
-                turnManager.TurnOrderChanged += OnTurnOrderChanged;
-            }
-
-            if (combatManager != null)
-                combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
-        }
-
-        void Unsubscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.PhaseBegan -= OnPhaseBegan;
-                turnManager.TurnStarted -= OnTurnStarted;
-                turnManager.TurnEnded -= OnTurnEnded;
-                turnManager.TurnOrderChanged -= OnTurnOrderChanged;
-            }
-
-            if (combatManager != null)
-                combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
-        }
-
         void ClearAll()
         {
             ClearDragState();
@@ -193,8 +175,11 @@ namespace TGD.UIV2
             _completedThisPhase.Clear();
         }
 
-        void OnPhaseBegan(bool isPlayerPhase)
+        public void NotifyPhaseBeganExternal(bool isPlayerPhase)
         {
+            if (!_isInitialized || !isActiveAndEnabled)
+                return;
+
             _activePhaseIsPlayer = isPlayerPhase;
             _activePhaseIndex = turnManager != null ? Mathf.Max(1, turnManager.CurrentPhaseIndex) : 1;
             _completedThisPhase.Clear();
@@ -202,8 +187,11 @@ namespace TGD.UIV2
             RebuildTimeline();
         }
 
-        void OnTurnStarted(Unit unit)
+        public void NotifyTurnStartedExternal(Unit unit)
         {
+            if (!_isInitialized || !isActiveAndEnabled)
+                return;
+
             if (unit == null)
                 return;
 
@@ -214,8 +202,11 @@ namespace TGD.UIV2
                 _pendingFullRoundRefresh = StartCoroutine(RefreshTimelineAfterFullRound(unit));
         }
 
-        void OnTurnEnded(Unit unit)
+        public void NotifyTurnEndedExternal(Unit unit)
         {
+            if (!_isInitialized || !isActiveAndEnabled)
+                return;
+
             if (unit == null)
                 return;
 
@@ -226,13 +217,19 @@ namespace TGD.UIV2
             RebuildTimeline();
         }
 
-        void OnBonusTurnStateChanged()
+        public void NotifyBonusTurnStateChangedExternal()
         {
+            if (!_isInitialized || !isActiveAndEnabled)
+                return;
+
             RebuildTimeline();
         }
 
-        void OnTurnOrderChanged(bool isPlayerSide)
+        public void NotifyTurnOrderChangedExternal(bool isPlayerSide)
         {
+            if (!_isInitialized || !isActiveAndEnabled)
+                return;
+
             if (isPlayerSide)
                 RebuildTimeline();
         }
