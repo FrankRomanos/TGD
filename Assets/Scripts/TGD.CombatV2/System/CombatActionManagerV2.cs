@@ -2445,7 +2445,7 @@ namespace TGD.CombatV2
                         }
 
                         if (popupOpened)
-                            UpdateChainPopupStage(popup, label, ownerOptions, depth == 0 && !stageHasSelection);
+                            UpdateChainPopupStage(popup, label, ownerOptions, true);
 
                         if (_pendingEndTurn)
                         {

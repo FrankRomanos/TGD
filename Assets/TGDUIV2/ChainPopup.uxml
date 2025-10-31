@@ -40,7 +40,7 @@
                         </ui:VisualElement>
                     </ui:ScrollView>
                     <ui:VisualElement name="footer" class="footer">
-                        <ui:Label name="noneLabel" text="不做反应" class="none-label" />
+                        <ui:Label name="noneLabel" text="No Reaction" class="none-label" />
                         <ui:Toggle name="noneToggle" class="select-dot" />
                     </ui:VisualElement>
                 </ui:VisualElement>
