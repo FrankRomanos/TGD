@@ -13,10 +13,6 @@ namespace TGD.UIV2.Battle
     /// </summary>
     public sealed class TurnHudController : MonoBehaviour
     {
-        [Header("Runtime Refs")]
-        public TurnManagerV2 turnManager;
-        public CombatActionManagerV2 combatManager;
-
         [Header("Root")]
         public CanvasGroup rootGroup;
         public TMP_Text unitLabel;
@@ -43,6 +39,9 @@ namespace TGD.UIV2.Battle
         public float visibleAlpha = 1f;
         public float hiddenAlpha = 0f;
 
+        TurnManagerV2 _turnManager;
+        CombatActionManagerV2 _combatManager;
+        bool _isInitialized;
         Unit _displayUnit;
         readonly List<Image> _hourglassPool = new();
         readonly List<bool> _hourglassConsumedState = new();
@@ -50,74 +49,60 @@ namespace TGD.UIV2.Battle
         bool _hourglassStateInitialized;
         bool _forceInstantStats;
 
-        static T AutoFind<T>() where T : Object
-        {
-#if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<T>(FindObjectsInactive.Include);
-#else
-            return FindObjectOfType<T>();
-#endif
-        }
-
         void Awake()
         {
-            if (!turnManager)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (!combatManager)
-                combatManager = AutoFind<CombatActionManagerV2>();
-
+            // 把沙漏池子建好、记住初始大小等
             CacheInitialHourglasses();
 
-            if (!healthGauge && healthFill)
+            // 容错：如果 Inspector 没手动绑 gauge，那就顺藤摸瓜找一遍
+            if (healthGauge == null && healthFill != null)
                 healthGauge = healthFill.GetComponentInParent<TurnHudStatGauge>();
-            if (!energyGauge && energyFill)
+            if (energyGauge == null && energyFill != null)
                 energyGauge = energyFill.GetComponentInParent<TurnHudStatGauge>();
+
+            // 初始状态：没有激活角色，HUD 应该是干净/隐藏的
+            _displayUnit = null;
+            _forceInstantStats = true;
+            RefreshAll(); // 这会把血条归零/隐藏自己等
         }
 
-        void OnEnable()
+
+        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
-            Subscribe();
-            RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : null);
+            _turnManager = turnManager;
+            _combatManager = combatManager;
+
+            // 必须两个核心管理器都注入才算真正上线
+            _isInitialized = (_turnManager != null && _combatManager != null);
+
+            // 敌方回合标记，用于决定HUD要不要显示
+            _enemyPhaseActive = _turnManager != null && !_turnManager.IsPlayerPhase;
+
+            // 第一帧刷新的数值别做渐变，直接瞬移到位
+            _forceInstantStats = true;
+
+            // 选中当前激活单位（玩家那边）作为展示对象
+            RefreshDisplayUnit(_turnManager != null ? _turnManager.ActiveUnit : null);
+
+            // 刷整套UI
             RefreshAll();
         }
 
-        void OnDisable()
+        public void Shutdown()
         {
-            Unsubscribe();
-        }
+            _turnManager = null;
+            _combatManager = null;
+            _isInitialized = false;
 
-        void Subscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.TurnStarted += OnTurnStarted;
-                turnManager.TurnEnded += OnTurnEnded;
-                turnManager.UnitRuntimeChanged += OnUnitRuntimeChanged;
-                turnManager.PhaseBegan += OnPhaseBegan;
-            }
+            _displayUnit = null;
+            _enemyPhaseActive = false;
+            _hourglassStateInitialized = false;
 
-            if (combatManager != null)
-            {
-                combatManager.ChainFocusChanged += OnChainFocusChanged;
-                combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
-            }
-        }
+            // 下一次如果再被 Initialize，我们希望数值直接瞬移到正确值
+            _forceInstantStats = true;
 
-        void Unsubscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.TurnStarted -= OnTurnStarted;
-                turnManager.TurnEnded -= OnTurnEnded;
-                turnManager.UnitRuntimeChanged -= OnUnitRuntimeChanged;
-                turnManager.PhaseBegan -= OnPhaseBegan;
-            }
-
-            if (combatManager != null)
-            {
-                combatManager.ChainFocusChanged -= OnChainFocusChanged;
-                combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
-            }
+            // 刷一遍，把血条清零、自己淡出
+            RefreshAll();
         }
 
         void CacheInitialHourglasses()
@@ -142,8 +127,11 @@ namespace TGD.UIV2.Battle
             EnsureHourglassStateCapacity(_hourglassPool.Count);
         }
 
-        void OnTurnStarted(Unit unit)
+        public void HandleTurnStarted(Unit unit)
         {
+            if (!_isInitialized)
+                return;
+
             if (!IsPlayerUnit(unit) && _enemyPhaseActive)
             {
                 RefreshAll();
@@ -153,24 +141,33 @@ namespace TGD.UIV2.Battle
             RefreshDisplayUnit(unit);
         }
 
-        void OnTurnEnded(Unit unit)
+        public void HandleTurnEnded(Unit unit)
         {
+            if (!_isInitialized)
+                return;
+
             if (unit == _displayUnit)
                 RefreshAll();
         }
 
-        void OnUnitRuntimeChanged(Unit unit)
+        public void HandleUnitRuntimeChanged(Unit unit)
         {
+            if (!_isInitialized)
+                return;
+
             if (unit == _displayUnit)
                 RefreshStats();
         }
 
-        void OnPhaseBegan(bool isPlayerPhase)
+        public void HandlePhaseBegan(bool isPlayerPhase)
         {
+            if (!_isInitialized)
+                return;
+
             _enemyPhaseActive = !isPlayerPhase;
             if (isPlayerPhase)
             {
-                RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+                RefreshDisplayUnit(_turnManager != null ? _turnManager.ActiveUnit : _displayUnit);
             }
             else
             {
@@ -190,8 +187,11 @@ namespace TGD.UIV2.Battle
             }
         }
 
-        void OnChainFocusChanged(Unit unit)
+        public void HandleChainFocusChanged(Unit unit)
         {
+            if (!_isInitialized)
+                return;
+
             if (unit == null)
             {
                 if (_enemyPhaseActive)
@@ -203,7 +203,7 @@ namespace TGD.UIV2.Battle
                 }
                 else
                 {
-                    RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+                    RefreshDisplayUnit(_turnManager != null ? _turnManager.ActiveUnit : _displayUnit);
                 }
                 return;
             }
@@ -227,8 +227,11 @@ namespace TGD.UIV2.Battle
             RefreshDisplayUnit(unit);
         }
 
-        void OnBonusTurnStateChanged()
+        public void HandleBonusTurnStateChanged()
         {
+            if (!_isInitialized)
+                return;
+
             RefreshAll();
         }
 
@@ -268,10 +271,10 @@ namespace TGD.UIV2.Battle
                 return;
             }
 
-            string label = turnManager != null ? TurnManagerV2.FormatUnitLabel(_displayUnit) : _displayUnit.Id;
+            string label = _turnManager != null ? TurnManagerV2.FormatUnitLabel(_displayUnit) : _displayUnit.Id;
             SetUnitLabel(label);
 
-            var context = turnManager != null ? turnManager.GetContext(_displayUnit) : null;
+            var context = _turnManager != null ? _turnManager.GetContext(_displayUnit) : null;
             var stats = context != null ? context.stats : null;
 
             int hp = stats != null ? Mathf.Max(0, stats.HP) : 0;
@@ -285,7 +288,7 @@ namespace TGD.UIV2.Battle
 
             int baseTime = 0;
             int remaining = 0;
-            if (turnManager != null && turnManager.TryGetRuntimeSnapshot(_displayUnit, out var snapshot))
+            if (_turnManager != null && _turnManager.TryGetRuntimeSnapshot(_displayUnit, out var snapshot))
             {
                 baseTime = snapshot.baseTime > 0 ? snapshot.baseTime : snapshot.turnTime;
                 baseTime = Mathf.Max(0, baseTime);
@@ -293,12 +296,12 @@ namespace TGD.UIV2.Battle
                 remaining = baseTime > 0 ? Mathf.Min(runtimeRemaining, baseTime) : runtimeRemaining;
             }
 
-            if (combatManager != null && combatManager.IsBonusTurnFor(_displayUnit))
+            if (_combatManager != null && _combatManager.IsBonusTurnFor(_displayUnit))
             {
-                int cap = combatManager.CurrentBonusTurnCap;
+                int cap = _combatManager.CurrentBonusTurnCap;
                 if (cap > 0)
                     baseTime = baseTime > 0 ? Mathf.Min(baseTime, cap) : cap;
-                int bonusRemain = Mathf.Clamp(combatManager.CurrentBonusTurnRemaining, 0, cap > 0 ? cap : int.MaxValue);
+                int bonusRemain = Mathf.Clamp(_combatManager.CurrentBonusTurnRemaining, 0, cap > 0 ? cap : int.MaxValue);
                 remaining = baseTime > 0 ? Mathf.Min(bonusRemain, baseTime) : bonusRemain;
             }
 
@@ -488,21 +491,24 @@ namespace TGD.UIV2.Battle
 
         bool ShouldBeVisible()
         {
+            if (!_isInitialized)
+                return false;
+
             if (_displayUnit == null)
                 return false;
 
-            bool isPlayerUnit = turnManager != null && turnManager.IsPlayerUnit(_displayUnit);
+            bool isPlayerUnit = _turnManager != null && _turnManager.IsPlayerUnit(_displayUnit);
             if (!isPlayerUnit)
                 return false;
 
             if (_enemyPhaseActive)
                 return true;
 
-            bool playerPhase = turnManager != null && turnManager.IsPlayerPhase;
+            bool playerPhase = _turnManager != null && _turnManager.IsPlayerPhase;
             if (playerPhase)
                 return true;
 
-            bool hasBonus = combatManager != null && combatManager.IsBonusTurnFor(_displayUnit);
+            bool hasBonus = _combatManager != null && _combatManager.IsBonusTurnFor(_displayUnit);
             return hasBonus;
         }
 
@@ -542,10 +548,10 @@ namespace TGD.UIV2.Battle
 
         Unit ResolveFirstPlayerUnit()
         {
-            if (!turnManager)
+            if (_turnManager == null)
                 return null;
 
-            var list = turnManager.GetSideUnits(true);
+            var list = _turnManager.GetSideUnits(true);
             if (list == null)
                 return null;
 
@@ -561,12 +567,12 @@ namespace TGD.UIV2.Battle
 
         Unit GetCurrentChainFocus()
         {
-            return combatManager != null ? combatManager.CurrentChainFocus : null;
+            return _combatManager != null ? _combatManager.CurrentChainFocus : null;
         }
 
         bool IsPlayerUnit(Unit unit)
         {
-            return unit != null && turnManager != null && turnManager.IsPlayerUnit(unit);
+            return unit != null && _turnManager != null && _turnManager.IsPlayerUnit(unit);
         }
     }
 }
