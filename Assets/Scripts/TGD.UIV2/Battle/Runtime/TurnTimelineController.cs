@@ -40,6 +40,36 @@ namespace TGD.UIV2.Battle
         int _activeDragOrderIndex = int.MaxValue;
         Coroutine _pendingFullRoundRefresh;
         bool _isInitialized;
+        bool _isVisible;
+
+        public void HideImmediate()
+        {
+            // 把整棵 UXML 隐藏掉
+            if (document != null && document.rootVisualElement != null)
+            {
+                document.rootVisualElement.style.display = DisplayStyle.None;
+            }
+
+            _isVisible = false;
+        }
+
+        public void ShowImmediate()
+        {
+            // 注意：此时 BattleUIService 已经先调用过 timeline.Initialize(...)
+            // 所以 turnManager / combatManager / _contentRoot 都已经准备好了
+
+            if (document != null && document.rootVisualElement != null)
+            {
+                document.rootVisualElement.style.display = DisplayStyle.Flex;
+            }
+
+            _isVisible = true;
+
+            // 为了保险，让它重画一下（可留可不留，留了更稳）
+            SyncPhaseState();
+            RebuildTimeline();
+        }
+
 
         enum EntryKind
         {
@@ -64,6 +94,7 @@ namespace TGD.UIV2.Battle
         {
             if (!document)
                 document = GetComponent<UIDocument>();
+            HideImmediate();
         }
 
         void OnEnable()
@@ -74,6 +105,7 @@ namespace TGD.UIV2.Battle
         void OnDisable()
         {
             Shutdown();
+            HideImmediate();
         }
 
         public void Initialize(

@@ -76,6 +76,7 @@ namespace TGD.UIV2.Battle
                 // UI -> Service 的回调：先防止重复，再订阅
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
+                timeline.ShowImmediate();
             }
 
             if (turnHud != null)
@@ -112,7 +113,10 @@ namespace TGD.UIV2.Battle
 
             // 3. 让每个UI控制器把自己复位并断开对manager的引用
             if (timeline != null)
+            {
                 timeline.Shutdown();     // <- 需要把原来的 Deinitialize 重命名成 Shutdown
+                timeline.HideImmediate();
+            }    
 
             if (chainPopup != null)
                 chainPopup.Shutdown();   // <- 同理，ChainPopupPresenter 里的 Deinitialize 改成 Shutdown
