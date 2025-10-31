@@ -64,6 +64,7 @@ namespace TGD.UIV2.Battle
         {
             if (!document)
                 document = GetComponent<UIDocument>();
+            InitializeRoot();
         }
 
         void OnEnable()
@@ -96,7 +97,14 @@ namespace TGD.UIV2.Battle
             _isInitialized = true;
             RebuildTimeline();    // 立刻先画一版（可能还是空队伍）
         }
+        public void RefreshNow()
+        {
+            if (!_isInitialized)
+                return;
 
+            SyncPhaseState();   // 你已经有这个方法
+            RebuildTimeline();  // 你已经有这个方法
+        }
         public void Shutdown()
         {
             CancelPendingFullRoundRefresh();

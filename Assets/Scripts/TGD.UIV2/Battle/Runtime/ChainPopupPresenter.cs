@@ -54,7 +54,10 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
-
+        // ====== 热插拔恢复需要的快照 ======
+        ChainPopupWindowData _cachedWindow;
+        ChainPopupStageData _cachedStage;
+        bool _snapshotValid;
         public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
             _turnManager = turnManager;
@@ -64,13 +67,99 @@ namespace TGD.UIV2.Battle
             if (!_isInitialized)
                 HideImmediate();
         }
+        public void RefreshNow()
+        {
+            // 如果 UI 根本还没 Initialize，就别画
+            if (!_isInitialized)
+                return;
+
+            EnsureDocument();
+
+            // 如果之前没有一个“正在进行的弹窗选择阶段”（比如战斗当前没有在等反应）
+            // 那我们就保持隐藏状态
+            if (!_snapshotValid)
+            {
+                HideImmediate();
+                return;
+            }
+
+            // 有快照，说明我们在被关掉前窗口是开的，所以要把它恢复
+            if (_overlay == null)
+                return;
+
+            // ==== 1. 恢复窗口壳（标题、提示、上下文） ====
+
+            _overlay.style.display = DisplayStyle.Flex;
+            if (_windowWrap != null)
+                _windowWrap.style.display = DisplayStyle.Flex;
+
+            if (_phaseLabel != null)
+                _phaseLabel.text = _cachedWindow.Header ?? string.Empty;
+
+            if (_promptLabel != null)
+                _promptLabel.text = _cachedWindow.Prompt ?? string.Empty;
+
+            if (_contextLabel != null)
+            {
+                string context = _cachedWindow.Context ?? string.Empty;
+                _contextLabel.text = context;
+                _contextLabel.style.display = string.IsNullOrEmpty(context)
+                    ? DisplayStyle.None
+                    : DisplayStyle.Flex;
+            }
+
+            _windowActive = true;
+            _visible = true;
+
+            // 保守一点：恢复时我们不强行记住之前点了哪个选项
+            //（如果你想保留 pendingSelection，可以不清理它）
+            if (_noneToggle != null)
+                _noneToggle.SetValueWithoutNotify(false);
+
+            // ==== 2. 恢复选项列表 ====
+
+            CopyOptions(_cachedStage.Options);          // _cachedStage 是 struct，所以总是有值
+            EnsureEntryCount(_stageOptions.Count);
+
+            for (int i = 0; i < _stageOptions.Count; i++)
+            {
+                var entry = _entries[i];
+                entry = UpdateEntry(entry, _stageOptions[i], i);
+                _entries[i] = entry;
+            }
+
+            for (int i = _stageOptions.Count; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (entry.container != null)
+                    entry.container.style.display = DisplayStyle.None;
+            }
+
+            if (_footer != null)
+                _footer.style.display = _cachedStage.ShowSkip ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (!_cachedStage.ShowSkip && _noneToggle != null)
+                _noneToggle.SetValueWithoutNotify(false);
+
+            // ==== 3. 恢复高亮 & 位置 ====
+
+            RefreshSelectionVisuals();
+            UpdateAnchorPosition();
+
+            // 重新告诉全局“弹窗是开的”，但不要再次播音效
+            ChainPopupState.NotifyVisibility(true);
+        }
+
 
         public void Shutdown()
         {
-            _turnManager = null;
-            _combatManager = null;
+            _windowActive = false;
+            _visible = false;
+            _pendingSelection = -1;
+            _skipRequested = false;
+
+            HideImmediate();    // 你自己已经有的，把 overlay/窗口隐藏
             _isInitialized = false;
-            HideImmediate();
         }
 
         struct OptionEntry
@@ -269,6 +358,10 @@ namespace TGD.UIV2.Battle
 
         public void OpenWindow(ChainPopupWindowData window)
         {
+            // 先缓存，表示“有一个还没结束的连锁窗口”
+            _cachedWindow = window;
+            _snapshotValid = true;
+
             EnsureDocument();
             if (_overlay == null)
                 return;
@@ -302,9 +395,11 @@ namespace TGD.UIV2.Battle
 
             UpdateAnchorPosition();
             ChainPopupState.NotifyVisibility(true);
+
             ChainPopupOpened?.Invoke();
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }
+
 
         public void CloseWindow()
         {
@@ -326,10 +421,14 @@ namespace TGD.UIV2.Battle
 
             RefreshSelectionVisuals();
             ChainPopupState.NotifyVisibility(false);
+            // 关键：交互彻底结束后，快照失效
+            _snapshotValid = false;
         }
 
         public void UpdateStage(ChainPopupStageData stage)
         {
+            _cachedStage = stage;
+            _snapshotValid = true;
             EnsureDocument();
             if (_list == null)
                 return;

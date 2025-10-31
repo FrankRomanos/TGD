@@ -55,32 +55,27 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
-            // --- 懒加载依赖（防御）
-            if (turnManager == null)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (combatManager == null)
-                combatManager = AutoFind<CombatActionManagerV2>();
-            if (audioManager == null)
-                audioManager = AutoFind<BattleAudioManager>();
-            if (timeline == null)
-                timeline = AutoFind<TurnTimelineController>();
-            if (chainPopup == null)
-                chainPopup = AutoFind<ChainPopupPresenter>();
-            if (turnHud == null)
-                turnHud = AutoFind<TurnHudController>();
+            // 1. Autofind（你已经有了那段 AutoFind，如果不为 null 就别动）
+            if (turnManager == null) turnManager = AutoFind<TurnManagerV2>();
+            if (combatManager == null) combatManager = AutoFind<CombatActionManagerV2>();
+            if (audioManager == null) audioManager = AutoFind<BattleAudioManager>();
+            if (timeline == null) timeline = AutoFind<TurnTimelineController>();
+            if (chainPopup == null) chainPopup = AutoFind<ChainPopupPresenter>();
+            if (turnHud == null) turnHud = AutoFind<TurnHudController>();
 
-            // --- 初始化每个UI控制器并把 manager 注入
+            // 2. 初始化 + 事件桥接
             if (timeline != null)
             {
                 timeline.Initialize(turnManager, combatManager);
-                // UI -> Service 的回调：先防止重复，再订阅
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
+                timeline.RefreshNow(); // ★ 新增
             }
 
             if (turnHud != null)
             {
                 turnHud.Initialize(turnManager, combatManager);
+                // turnHud 没有 RefreshNow，用 DispatchInitialState() 来喂
             }
 
             if (chainPopup != null)
@@ -88,37 +83,40 @@ namespace TGD.UIV2.Battle
                 chainPopup.Initialize(turnManager, combatManager);
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
+                chainPopup.RefreshNow(); // ★ 新增
             }
 
-            // --- 游戏层事件 -> UI
+            // 3. 订阅 TurnManager/CombatManager 的事件
             Subscribe();
 
-            // --- 第一次把当前战斗状态推给UI（血条/沙漏/当前激活角色等）
+            // 4. 给 HUD 补一次当前状态
             DispatchInitialState();
         }
 
 
+
         void OnDisable()
         {
-            // 1. 取消 gameplay -> UI 的订阅
+            // 1. 退订全局事件
             Unsubscribe();
 
-            // 2. 取消 UI -> Service 的回调订阅
+            // 2. 拆掉 service->view 的事件线
             if (timeline != null)
+            {
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
+                timeline.Shutdown(); // ★ 用统一 Shutdown
+            }
 
             if (chainPopup != null)
+            {
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
-
-            // 3. 让每个UI控制器把自己复位并断开对manager的引用
-            if (timeline != null)
-                timeline.Shutdown();     // <- 需要把原来的 Deinitialize 重命名成 Shutdown
-
-            if (chainPopup != null)
-                chainPopup.Shutdown();   // <- 同理，ChainPopupPresenter 里的 Deinitialize 改成 Shutdown
+                chainPopup.Shutdown(); // ★ 用统一 Shutdown
+            }
 
             if (turnHud != null)
-                turnHud.Shutdown();
+            {
+                turnHud.Shutdown(); // 已经有
+            }
         }
 
 
