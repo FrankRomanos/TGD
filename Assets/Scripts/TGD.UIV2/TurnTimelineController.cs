@@ -508,16 +508,22 @@ namespace TGD.UIV2
 
         void ShowDropTarget(SlotEntryVisual slot)
         {
-            if (!ReferenceEquals(_currentDropTarget, slot))
-            {
-                if (_currentDropTarget?.visuals.insertMarker != null)
-                    _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
+            if (ReferenceEquals(_currentDropTarget, slot))
+                return;
 
-                _currentDropTarget = slot;
-            }
+            if (_currentDropTarget?.visuals.card != null)
+                _currentDropTarget.visuals.card.RemoveFromClassList("slot-drop-target");
 
             if (_currentDropTarget?.visuals.insertMarker != null)
-                _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.Flex;
+                _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
+
+            _currentDropTarget = slot;
+
+            if (_currentDropTarget?.visuals.card != null)
+                _currentDropTarget.visuals.card.AddToClassList("slot-drop-target");
+
+            if (_currentDropTarget?.visuals.insertMarker != null)
+                _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
         }
 
         void CreateDragGhost()
