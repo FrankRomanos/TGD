@@ -2,6 +2,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
+using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.AudioV2;
 using TGD.HexBoard;
