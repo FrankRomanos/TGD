@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 using TGD.AudioV2;
 using TGD.CombatV2;
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     [DisallowMultipleComponent]
     public sealed class ChainPopupPresenter : MonoBehaviour, IChainPopupUI

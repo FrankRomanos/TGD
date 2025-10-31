@@ -4,7 +4,7 @@ using Unity.Cinemachine;
 using UnityEngine.EventSystems;
 using TGD.CombatV2;
 using TGD.HexBoard;
-using TGD.UIV2;
+using TGD.UIV2.Battle;
 
 namespace TGD.LevelV2
 {

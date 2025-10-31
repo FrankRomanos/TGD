@@ -6,7 +6,7 @@ using TGD.CombatV2;
 using TGD.AudioV2;
 using TGD.HexBoard;
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     /// <summary>
     /// Drives the UI Toolkit based turn timeline HUD and animates the live queue of turn groups.

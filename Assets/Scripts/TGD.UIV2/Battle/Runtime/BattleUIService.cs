@@ -2,7 +2,6 @@ using UnityEngine;
 using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
-using TGD.UIV2;
 
 namespace TGD.UIV2.Battle
 {
