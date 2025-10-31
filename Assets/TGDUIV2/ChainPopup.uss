@@ -16,7 +16,7 @@
     flex-direction: column;
     border-radius: 28px;
     box-shadow: 0 36px 96px rgba(0, 0, 0, 0.7);
-    overflow: visible;
+    overflow: visible; /* 要留成 visible，这样外凸的小角标不会被裁 */
 }
 
 .window-background {
@@ -25,24 +25,40 @@
     right: 0;
     top: 0;
     bottom: 0;
+
     background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png");
     background-size: cover;
     background-position: center;
+    background-repeat: no-repeat;
+
     border-radius: inherit;
     opacity: 0.9;
+    pointer-events: none;
 }
-
 .window-frame {
     position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
+
+    /* 让金框撑满整块弹窗 */
+    left: -2px;
+    right: -2px;
+    top: -2px;
+    bottom: -2px;
+
+    /* 你的金色花边框图 */
     background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_frame.png");
-    background-size: cover;
+
+    /* 关键点：我们不用 cover / contain，用100%填充父矩形 */
+    background-size: 100% 100%;
     background-position: center;
-    border-radius: inherit;
+    background-repeat: no-repeat;
+
+    /* 圆角保持跟窗口一致 */
+    border-radius: 28px;
+
     opacity: 0.94;
+
+    /* 这一层只是视觉，别挡点击/滚动 */
+    pointer-events: none;
 }
 
 .window-crest {
