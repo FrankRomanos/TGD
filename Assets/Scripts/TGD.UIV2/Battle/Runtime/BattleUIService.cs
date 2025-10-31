@@ -17,6 +17,7 @@ namespace TGD.UIV2.Battle
         public ChainPopupPresenter chainPopup;
         public TurnHudController turnHud;
         public ActionHudMessageListenerTMP actionHudMessageListener;
+        public TurnBannerController turnBanner;
 
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
@@ -51,6 +52,9 @@ namespace TGD.UIV2.Battle
             if (turnHud == null)
                 turnHud = AutoFind<TurnHudController>();
 
+            if (turnBanner == null)
+                turnBanner = AutoFind<TurnBannerController>();
+
         }
 
         void OnEnable()
@@ -68,6 +72,8 @@ namespace TGD.UIV2.Battle
                 chainPopup = AutoFind<ChainPopupPresenter>();
             if (turnHud == null)
                 turnHud = AutoFind<TurnHudController>();
+            if (turnBanner == null)
+                turnBanner = AutoFind<TurnBannerController>();
 
             // --- 初始化每个UI控制器并把 manager 注入
             if (timeline != null)
@@ -123,6 +129,9 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.Shutdown();
+
+            if (turnBanner != null)
+                turnBanner.HideImmediate();
         }
 
 
@@ -137,6 +146,9 @@ namespace TGD.UIV2.Battle
 
             if (chainPopup != null)
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
+
+            if (turnBanner != null)
+                turnBanner.HideImmediate();
         }
 
 
@@ -189,10 +201,7 @@ namespace TGD.UIV2.Battle
 
         void DispatchInitialState()
         {
-            if (turnHud == null)
-                return;
-
-            if (turnManager != null)
+            if (turnHud != null && turnManager != null)
             {
                 turnHud.HandlePhaseBegan(turnManager.IsPlayerPhase);
                 var activeUnit = turnManager.ActiveUnit;
@@ -203,10 +212,19 @@ namespace TGD.UIV2.Battle
                 }
             }
 
-            if (combatManager != null)
+            if (turnHud != null && combatManager != null)
             {
                 turnHud.HandleChainFocusChanged(combatManager.CurrentChainFocus);
                 turnHud.HandleBonusTurnStateChanged();
+            }
+
+            if (turnBanner != null && turnManager != null)
+            {
+                turnBanner.ShowPhaseBegan(turnManager.IsPlayerPhase);
+
+                var activeUnit = turnManager.ActiveUnit;
+                if (activeUnit != null)
+                    turnBanner.ShowTurnStarted(activeUnit, turnManager.IsPlayerUnit(activeUnit));
             }
         }
 
@@ -217,6 +235,9 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandlePhaseBegan(isPlayerPhase);
+
+            if (turnBanner != null)
+                turnBanner.ShowPhaseBegan(isPlayerPhase);
         }
 
         void HandleTurnStarted(Unit unit)
@@ -226,6 +247,9 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandleTurnStarted(unit);
+
+            if (turnBanner != null && turnManager != null)
+                turnBanner.ShowTurnStarted(unit, turnManager.IsPlayerUnit(unit));
         }
 
         void HandleTurnEnded(Unit unit)
