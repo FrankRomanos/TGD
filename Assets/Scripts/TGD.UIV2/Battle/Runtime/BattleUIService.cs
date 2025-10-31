@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections.Generic;
 using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
@@ -22,6 +23,9 @@ namespace TGD.UIV2.Battle
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
+        bool _turnLogSubscribed;
+        readonly HashSet<string> _playerLabels = new();
+        readonly HashSet<string> _enemyLabels = new();
 
         static T AutoFind<T>() where T : Object
         {
@@ -98,8 +102,13 @@ namespace TGD.UIV2.Battle
             }
             if (turnBanner != null)
                 turnBanner.ForceHideImmediate();
+
+            _playerLabels.Clear();
+            _enemyLabels.Clear();
             // --- 游戏层事件 -> UI
             Subscribe();
+
+            BeginTurnLogForwarding();
 
             // --- 第一次把当前战斗状态推给UI（血条/沙漏/当前激活角色等）
             DispatchInitialState();
@@ -110,6 +119,7 @@ namespace TGD.UIV2.Battle
         {
             // 1. 取消 gameplay -> UI 的订阅
             Unsubscribe();
+            EndTurnLogForwarding();
 
             // 2. 取消 UI -> Service 的回调订阅
             if (timeline != null)
@@ -140,6 +150,7 @@ namespace TGD.UIV2.Battle
             // 理论上 OnDisable 已经清了所有事件。
             // 这里只是再防御一次，防止 Unity 某些极端销毁顺序下 OnDisable 没被调用。
             Unsubscribe();
+            EndTurnLogForwarding();
 
             if (timeline != null)
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
@@ -221,18 +232,14 @@ namespace TGD.UIV2.Battle
 
         void HandlePhaseBegan(bool isPlayerPhase)
         {
+            if (turnManager != null)
+                RegisterSide(turnManager.GetSideUnits(isPlayerPhase), isPlayerPhase);
+
             if (timeline != null)
                 timeline.NotifyPhaseBeganExternal(isPlayerPhase);
 
             if (turnHud != null)
                 turnHud.HandlePhaseBegan(isPlayerPhase);
-
-            if (turnBanner != null)
-            {
-                string msg = isPlayerPhase ? "Begin Turn(Player)" : "Begin Turn(Enemy)";
-                // isPlayerPhase = true 说明是我方行动轮，我们就用友方色
-                turnBanner.ShowBanner(msg, isPlayerPhase /*isPlayerSide*/);
-            }
         }
 
         void HandleTurnStarted(Unit unit)
@@ -242,17 +249,8 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandleTurnStarted(unit);
-            // 新增：Banner (按单位来播一句更细的提示)
-            if (turnBanner != null && turnManager != null && unit != null)
-            {
-                // 你之前的格式是类似 “Begin T1(1P)” 和 “敌方某某”
-                // 这边我用中文，保持信息密度高也清晰
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit); // 你现成的格式化方法
-                bool isPlayerSide = turnManager.IsPlayerUnit(unit);
-                string msg = $"{unitLabel} 的回合开始";
 
-                turnBanner.ShowBanner(msg, isPlayerSide);
-            }
+            RegisterUnit(unit);
         }
 
         void HandleTurnEnded(Unit unit)
@@ -268,12 +266,16 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyTurnOrderChangedExternal(isPlayerSide);
+
+            RefreshTurnBannerCaches();
         }
 
         void HandleUnitRuntimeChanged(Unit unit)
         {
             if (turnHud != null)
                 turnHud.HandleUnitRuntimeChanged(unit);
+
+            RegisterUnit(unit);
         }
 
         void HandleChainFocusChanged(Unit unit)
@@ -301,6 +303,171 @@ namespace TGD.UIV2.Battle
         {
             if (audioManager != null)
                 audioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
+        }
+
+        void BeginTurnLogForwarding()
+        {
+            if (turnBanner == null || _turnLogSubscribed)
+                return;
+
+            Application.logMessageReceived += HandleTurnLogMessage;
+            _turnLogSubscribed = true;
+            RefreshTurnBannerCaches();
+        }
+
+        void EndTurnLogForwarding()
+        {
+            if (!_turnLogSubscribed)
+                return;
+
+            Application.logMessageReceived -= HandleTurnLogMessage;
+            _turnLogSubscribed = false;
+            _playerLabels.Clear();
+            _enemyLabels.Clear();
+        }
+
+        void RefreshTurnBannerCaches()
+        {
+            _playerLabels.Clear();
+            _enemyLabels.Clear();
+
+            if (turnManager == null)
+                return;
+
+            RegisterSide(turnManager.GetSideUnits(true), true);
+            RegisterSide(turnManager.GetSideUnits(false), false);
+
+            var active = turnManager.ActiveUnit;
+            if (active != null)
+                RegisterUnit(active);
+        }
+
+        void HandleTurnLogMessage(string condition, string stackTrace, LogType type)
+        {
+            if (turnBanner == null || type == LogType.Exception || string.IsNullOrEmpty(condition))
+                return;
+
+            if (!condition.StartsWith("[Turn]"))
+                return;
+
+            TurnBannerTone tone = ResolveTone(condition);
+            string display = FormatDisplayMessage(condition);
+            turnBanner.EnqueueMessage(display, tone);
+        }
+
+        TurnBannerTone ResolveTone(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return TurnBannerTone.Friendly;
+
+            if (message.Contains("BonusT"))
+                return TurnBannerTone.Bonus;
+
+            string label = ExtractLabel(message);
+            if (!string.IsNullOrEmpty(label))
+            {
+                if (!_playerLabels.Contains(label) && !_enemyLabels.Contains(label))
+                    RegisterUnit(ResolveUnitByLabel(label));
+
+                if (_playerLabels.Contains(label))
+                    return TurnBannerTone.Friendly;
+                if (_enemyLabels.Contains(label))
+                    return TurnBannerTone.Enemy;
+            }
+
+            if (message.Contains("(Enemy)"))
+                return TurnBannerTone.Enemy;
+            if (message.Contains("(Player)"))
+                return TurnBannerTone.Friendly;
+
+            return TurnBannerTone.Friendly;
+        }
+
+        string FormatDisplayMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return string.Empty;
+
+            if (!message.StartsWith("[Turn]"))
+                return message;
+
+            int extraIndex = message.IndexOf(" TT=");
+            if (extraIndex > 0)
+                return message.Substring(0, extraIndex).TrimEnd();
+
+            return message;
+        }
+
+        string ExtractLabel(string message)
+        {
+            int open = message.IndexOf('(');
+            int close = message.IndexOf(')', open + 1);
+            if (open >= 0 && close > open)
+                return message.Substring(open + 1, close - open - 1);
+            return null;
+        }
+
+        void RegisterSide(IReadOnlyList<Unit> units, bool isPlayerSide)
+        {
+            if (units == null)
+                return;
+
+            for (int i = 0; i < units.Count; i++)
+                RegisterUnit(units[i], isPlayerSide);
+        }
+
+        void RegisterUnit(Unit unit, bool? forceSide = null)
+        {
+            if (unit == null)
+                return;
+
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            if (string.IsNullOrEmpty(label))
+                return;
+
+            bool isPlayer = forceSide ?? (turnManager != null && turnManager.IsPlayerUnit(unit));
+            bool isEnemy = forceSide.HasValue ? !forceSide.Value : (turnManager != null && turnManager.IsEnemyUnit(unit));
+
+            if (isPlayer)
+            {
+                _playerLabels.Add(label);
+                _enemyLabels.Remove(label);
+            }
+            else if (isEnemy)
+            {
+                _enemyLabels.Add(label);
+                _playerLabels.Remove(label);
+            }
+        }
+
+        Unit ResolveUnitByLabel(string label)
+        {
+            if (turnManager == null || string.IsNullOrEmpty(label))
+                return null;
+
+            var playerUnits = turnManager.GetSideUnits(true);
+            if (playerUnits != null)
+            {
+                for (int i = 0; i < playerUnits.Count; i++)
+                {
+                    var unit = playerUnits[i];
+                    if (unit != null && TurnManagerV2.FormatUnitLabel(unit) == label)
+                        return unit;
+                }
+            }
+
+            var enemyUnits = turnManager.GetSideUnits(false);
+            if (enemyUnits != null)
+            {
+                for (int i = 0; i < enemyUnits.Count; i++)
+                {
+                    var unit = enemyUnits[i];
+                    if (unit != null && TurnManagerV2.FormatUnitLabel(unit) == label)
+                        return unit;
+                }
+            }
+
+            return null;
         }
     }
 }
