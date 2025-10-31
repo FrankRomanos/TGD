@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
@@ -55,27 +55,32 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
-            // 1. Autofind£¨ÄãÒÑ¾­ÓĞÁËÄÇ¶Î AutoFind£¬Èç¹û²»Îª null ¾Í±ğ¶¯£©
-            if (turnManager == null) turnManager = AutoFind<TurnManagerV2>();
-            if (combatManager == null) combatManager = AutoFind<CombatActionManagerV2>();
-            if (audioManager == null) audioManager = AutoFind<BattleAudioManager>();
-            if (timeline == null) timeline = AutoFind<TurnTimelineController>();
-            if (chainPopup == null) chainPopup = AutoFind<ChainPopupPresenter>();
-            if (turnHud == null) turnHud = AutoFind<TurnHudController>();
+            // --- æ‡’åŠ è½½ä¾èµ–ï¼ˆé˜²å¾¡ï¼‰
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
+            if (timeline == null)
+                timeline = AutoFind<TurnTimelineController>();
+            if (chainPopup == null)
+                chainPopup = AutoFind<ChainPopupPresenter>();
+            if (turnHud == null)
+                turnHud = AutoFind<TurnHudController>();
 
-            // 2. ³õÊ¼»¯ + ÊÂ¼şÇÅ½Ó
+            // --- åˆå§‹åŒ–æ¯ä¸ªUIæ§åˆ¶å™¨å¹¶æŠŠ manager æ³¨å…¥
             if (timeline != null)
             {
                 timeline.Initialize(turnManager, combatManager);
+                // UI -> Service çš„å›è°ƒï¼šå…ˆé˜²æ­¢é‡å¤ï¼Œå†è®¢é˜…
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
-                timeline.RefreshNow(); // ¡ï ĞÂÔö
             }
 
             if (turnHud != null)
             {
                 turnHud.Initialize(turnManager, combatManager);
-                // turnHud Ã»ÓĞ RefreshNow£¬ÓÃ DispatchInitialState() À´Î¹
             }
 
             if (chainPopup != null)
@@ -83,47 +88,44 @@ namespace TGD.UIV2.Battle
                 chainPopup.Initialize(turnManager, combatManager);
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
-                chainPopup.RefreshNow(); // ¡ï ĞÂÔö
             }
 
-            // 3. ¶©ÔÄ TurnManager/CombatManager µÄÊÂ¼ş
+            // --- æ¸¸æˆå±‚äº‹ä»¶ -> UI
             Subscribe();
 
-            // 4. ¸ø HUD ²¹Ò»´Îµ±Ç°×´Ì¬
+            // --- ç¬¬ä¸€æ¬¡æŠŠå½“å‰æˆ˜æ–—çŠ¶æ€æ¨ç»™UIï¼ˆè¡€æ¡/æ²™æ¼/å½“å‰æ¿€æ´»è§’è‰²ç­‰ï¼‰
             DispatchInitialState();
         }
 
 
-
         void OnDisable()
         {
-            // 1. ÍË¶©È«¾ÖÊÂ¼ş
+            // 1. å–æ¶ˆ gameplay -> UI çš„è®¢é˜…
             Unsubscribe();
 
-            // 2. ²ğµô service->view µÄÊÂ¼şÏß
+            // 2. å–æ¶ˆ UI -> Service çš„å›è°ƒè®¢é˜…
             if (timeline != null)
-            {
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
-                timeline.Shutdown(); // ¡ï ÓÃÍ³Ò» Shutdown
-            }
 
             if (chainPopup != null)
-            {
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
-                chainPopup.Shutdown(); // ¡ï ÓÃÍ³Ò» Shutdown
-            }
+
+            // 3. è®©æ¯ä¸ªUIæ§åˆ¶å™¨æŠŠè‡ªå·±å¤ä½å¹¶æ–­å¼€å¯¹managerçš„å¼•ç”¨
+            if (timeline != null)
+                timeline.Shutdown();     // <- éœ€è¦æŠŠåŸæ¥çš„ Deinitialize é‡å‘½åæˆ Shutdown
+
+            if (chainPopup != null)
+                chainPopup.Shutdown();   // <- åŒç†ï¼ŒChainPopupPresenter é‡Œçš„ Deinitialize æ”¹æˆ Shutdown
 
             if (turnHud != null)
-            {
-                turnHud.Shutdown(); // ÒÑ¾­ÓĞ
-            }
+                turnHud.Shutdown();
         }
 
 
         void OnDestroy()
         {
-            // ÀíÂÛÉÏ OnDisable ÒÑ¾­ÇåÁËËùÓĞÊÂ¼ş¡£
-            // ÕâÀïÖ»ÊÇÔÙ·ÀÓùÒ»´Î£¬·ÀÖ¹ Unity Ä³Ğ©¼«¶ËÏú»ÙË³ĞòÏÂ OnDisable Ã»±»µ÷ÓÃ¡£
+            // ç†è®ºä¸Š OnDisable å·²ç»æ¸…äº†æ‰€æœ‰äº‹ä»¶ã€‚
+            // è¿™é‡Œåªæ˜¯å†é˜²å¾¡ä¸€æ¬¡ï¼Œé˜²æ­¢ Unity æŸäº›æç«¯é”€æ¯é¡ºåºä¸‹ OnDisable æ²¡è¢«è°ƒç”¨ã€‚
             Unsubscribe();
 
             if (timeline != null)
