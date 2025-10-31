@@ -21,6 +21,7 @@ namespace TGD.UIV2.Battle
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
+        bool _chainPopupSubscribed;
 
         static T AutoFind<T>() where T : Object
         {
@@ -45,6 +46,12 @@ namespace TGD.UIV2.Battle
             if (timeline == null)
                 timeline = AutoFind<TurnTimelineController>();
 
+            if (chainPopup == null)
+                chainPopup = AutoFind<ChainPopupPresenter>();
+
+            if (turnHud == null)
+                turnHud = AutoFind<TurnHudController>();
+
         }
 
         void OnEnable()
@@ -61,11 +68,27 @@ namespace TGD.UIV2.Battle
             if (timeline == null)
                 timeline = AutoFind<TurnTimelineController>();
 
+            if (chainPopup == null)
+                chainPopup = AutoFind<ChainPopupPresenter>();
+
+            if (turnHud == null)
+                turnHud = AutoFind<TurnHudController>();
+
             if (timeline != null)
             {
                 timeline.Initialize(turnManager, combatManager);
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
             }
+
+            if (chainPopup != null)
+            {
+                chainPopup.Initialize(combatManager, audioManager);
+                chainPopup.ChainPopupOpened += OnChainPopupOpened;
+                _chainPopupSubscribed = true;
+            }
+
+            if (turnHud != null)
+                turnHud.Initialize(turnManager, combatManager);
 
             Subscribe();
         }
@@ -79,12 +102,25 @@ namespace TGD.UIV2.Battle
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.Deinitialize();
             }
+
+            if (chainPopup != null && _chainPopupSubscribed)
+            {
+                chainPopup.ChainPopupOpened -= OnChainPopupOpened;
+                _chainPopupSubscribed = false;
+            }
         }
 
         void OnDestroy()
         {
             if (timeline != null)
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
+
+            if (chainPopup != null && _chainPopupSubscribed)
+            {
+                chainPopup.ChainPopupOpened -= OnChainPopupOpened;
+                _chainPopupSubscribed = false;
+            }
+
             Unsubscribe();
         }
 
@@ -95,6 +131,7 @@ namespace TGD.UIV2.Battle
                 turnManager.PhaseBegan += HandlePhaseBegan;
                 turnManager.TurnStarted += HandleTurnStarted;
                 turnManager.TurnEnded += HandleTurnEnded;
+                turnManager.UnitRuntimeChanged += HandleUnitRuntimeChanged;
                 turnManager.TurnOrderChanged += HandleTurnOrderChanged;
                 _turnManagerSubscribed = true;
             }
@@ -102,6 +139,7 @@ namespace TGD.UIV2.Battle
             if (combatManager != null && !_combatManagerSubscribed)
             {
                 combatManager.BonusTurnStateChanged += HandleBonusTurnStateChanged;
+                combatManager.ChainFocusChanged += HandleChainFocusChanged;
                 _combatManagerSubscribed = true;
             }
 
@@ -118,6 +156,7 @@ namespace TGD.UIV2.Battle
                 turnManager.PhaseBegan -= HandlePhaseBegan;
                 turnManager.TurnStarted -= HandleTurnStarted;
                 turnManager.TurnEnded -= HandleTurnEnded;
+                turnManager.UnitRuntimeChanged -= HandleUnitRuntimeChanged;
                 turnManager.TurnOrderChanged -= HandleTurnOrderChanged;
                 _turnManagerSubscribed = false;
             }
@@ -125,6 +164,7 @@ namespace TGD.UIV2.Battle
             if (combatManager != null && _combatManagerSubscribed)
             {
                 combatManager.BonusTurnStateChanged -= HandleBonusTurnStateChanged;
+                combatManager.ChainFocusChanged -= HandleChainFocusChanged;
                 _combatManagerSubscribed = false;
             }
 
@@ -135,18 +175,27 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyPhaseBeganExternal(isPlayerPhase);
+
+            if (turnHud != null)
+                turnHud.HandlePhaseBegan(isPlayerPhase);
         }
 
         void HandleTurnStarted(Unit unit)
         {
             if (timeline != null)
                 timeline.NotifyTurnStartedExternal(unit);
+
+            if (turnHud != null)
+                turnHud.HandleTurnStarted(unit);
         }
 
         void HandleTurnEnded(Unit unit)
         {
             if (timeline != null)
                 timeline.NotifyTurnEndedExternal(unit);
+
+            if (turnHud != null)
+                turnHud.HandleTurnEnded(unit);
         }
 
         void HandleTurnOrderChanged(bool isPlayerSide)
@@ -165,6 +214,27 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyBonusTurnStateChangedExternal();
+
+            if (turnHud != null)
+                turnHud.HandleBonusTurnStateChanged();
+        }
+
+        void HandleUnitRuntimeChanged(Unit unit)
+        {
+            if (turnHud != null)
+                turnHud.HandleUnitRuntimeChanged(unit);
+        }
+
+        void HandleChainFocusChanged(Unit unit)
+        {
+            if (turnHud != null)
+                turnHud.HandleChainFocusChanged(unit);
+        }
+
+        void OnChainPopupOpened()
+        {
+            if (audioManager != null)
+                audioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
         }
     }
 }

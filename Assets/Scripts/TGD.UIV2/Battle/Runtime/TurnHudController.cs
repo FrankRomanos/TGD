@@ -50,22 +50,8 @@ namespace TGD.UIV2.Battle
         bool _hourglassStateInitialized;
         bool _forceInstantStats;
 
-        static T AutoFind<T>() where T : Object
-        {
-#if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<T>(FindObjectsInactive.Include);
-#else
-            return FindObjectOfType<T>();
-#endif
-        }
-
         void Awake()
         {
-            if (!turnManager)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (!combatManager)
-                combatManager = AutoFind<CombatActionManagerV2>();
-
             CacheInitialHourglasses();
 
             if (!healthGauge && healthFill)
@@ -74,50 +60,14 @@ namespace TGD.UIV2.Battle
                 energyGauge = energyFill.GetComponentInParent<TurnHudStatGauge>();
         }
 
-        void OnEnable()
+        public void Initialize(TurnManagerV2 turnMgr, CombatActionManagerV2 combatMgr)
         {
-            Subscribe();
-            RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : null);
-            RefreshAll();
-        }
+            turnManager = turnMgr;
+            combatManager = combatMgr;
+            _enemyPhaseActive = turnManager != null && !turnManager.IsPlayerPhase;
 
-        void OnDisable()
-        {
-            Unsubscribe();
-        }
-
-        void Subscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.TurnStarted += OnTurnStarted;
-                turnManager.TurnEnded += OnTurnEnded;
-                turnManager.UnitRuntimeChanged += OnUnitRuntimeChanged;
-                turnManager.PhaseBegan += OnPhaseBegan;
-            }
-
-            if (combatManager != null)
-            {
-                combatManager.ChainFocusChanged += OnChainFocusChanged;
-                combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
-            }
-        }
-
-        void Unsubscribe()
-        {
-            if (turnManager != null)
-            {
-                turnManager.TurnStarted -= OnTurnStarted;
-                turnManager.TurnEnded -= OnTurnEnded;
-                turnManager.UnitRuntimeChanged -= OnUnitRuntimeChanged;
-                turnManager.PhaseBegan -= OnPhaseBegan;
-            }
-
-            if (combatManager != null)
-            {
-                combatManager.ChainFocusChanged -= OnChainFocusChanged;
-                combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
-            }
+            var activeUnit = turnManager != null ? turnManager.ActiveUnit : null;
+            RefreshDisplayUnit(activeUnit);
         }
 
         void CacheInitialHourglasses()
@@ -142,7 +92,7 @@ namespace TGD.UIV2.Battle
             EnsureHourglassStateCapacity(_hourglassPool.Count);
         }
 
-        void OnTurnStarted(Unit unit)
+        public void HandleTurnStarted(Unit unit)
         {
             if (!IsPlayerUnit(unit) && _enemyPhaseActive)
             {
@@ -153,19 +103,19 @@ namespace TGD.UIV2.Battle
             RefreshDisplayUnit(unit);
         }
 
-        void OnTurnEnded(Unit unit)
+        public void HandleTurnEnded(Unit unit)
         {
             if (unit == _displayUnit)
                 RefreshAll();
         }
 
-        void OnUnitRuntimeChanged(Unit unit)
+        public void HandleUnitRuntimeChanged(Unit unit)
         {
             if (unit == _displayUnit)
                 RefreshStats();
         }
 
-        void OnPhaseBegan(bool isPlayerPhase)
+        public void HandlePhaseBegan(bool isPlayerPhase)
         {
             _enemyPhaseActive = !isPlayerPhase;
             if (isPlayerPhase)
@@ -190,7 +140,7 @@ namespace TGD.UIV2.Battle
             }
         }
 
-        void OnChainFocusChanged(Unit unit)
+        public void HandleChainFocusChanged(Unit unit)
         {
             if (unit == null)
             {
@@ -227,7 +177,7 @@ namespace TGD.UIV2.Battle
             RefreshDisplayUnit(unit);
         }
 
-        void OnBonusTurnStateChanged()
+        public void HandleBonusTurnStateChanged()
         {
             RefreshAll();
         }
