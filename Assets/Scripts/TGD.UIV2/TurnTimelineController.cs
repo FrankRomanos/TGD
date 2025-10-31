@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
@@ -36,6 +37,7 @@ namespace TGD.UIV2
         int _activeDragPointerId = PointerId.invalidPointerId;
         Vector2 _dragStartPosition;
         int _activeDragOrderIndex = int.MaxValue;
+        Coroutine _pendingFullRoundRefresh;
 
         enum EntryKind
         {
@@ -90,6 +92,7 @@ namespace TGD.UIV2
         void OnDisable()
         {
             Unsubscribe();
+            CancelPendingFullRoundRefresh();
             ClearAll();
         }
 
@@ -206,6 +209,9 @@ namespace TGD.UIV2
 
             _activeUnit = unit;
             RebuildTimeline();
+            CancelPendingFullRoundRefresh();
+            if (turnManager != null && turnManager.HasActiveFullRound(unit))
+                _pendingFullRoundRefresh = StartCoroutine(RefreshTimelineAfterFullRound(unit));
         }
 
         void OnTurnEnded(Unit unit)
@@ -326,6 +332,28 @@ namespace TGD.UIV2
             _activeDragPointerId = PointerId.invalidPointerId;
             _dragStartPosition = default;
             _activeDragOrderIndex = int.MaxValue;
+        }
+
+        void CancelPendingFullRoundRefresh()
+        {
+            if (_pendingFullRoundRefresh != null)
+            {
+                StopCoroutine(_pendingFullRoundRefresh);
+                _pendingFullRoundRefresh = null;
+            }
+        }
+
+        IEnumerator RefreshTimelineAfterFullRound(Unit unit)
+        {
+            yield return null;
+            _pendingFullRoundRefresh = null;
+            if (this == null)
+                yield break;
+            if (!isActiveAndEnabled)
+                yield break;
+            if (unit == null)
+                yield break;
+            RebuildTimeline();
         }
 
         void RegisterSlotInteractions(SlotVisuals visuals, DisplayEntry entry)
@@ -978,9 +1006,13 @@ namespace TGD.UIV2
             var root = new VisualElement();
             root.AddToClassList("event-root");
 
+            var row = new VisualElement();
+            row.AddToClassList("event-row");
+            root.Add(row);
+
             var card = new VisualElement();
             card.AddToClassList("event-card");
-            root.Add(card);
+            row.Add(card);
 
             var icon = new VisualElement();
             icon.AddToClassList("event-icon");
@@ -988,11 +1020,12 @@ namespace TGD.UIV2
 
             var text = new Label();
             text.AddToClassList("event-text");
-            root.Add(text);
+            row.Add(text);
 
             return new EventVisuals
             {
                 root = root,
+                row = row,
                 card = card,
                 icon = icon,
                 text = text
@@ -1024,6 +1057,7 @@ namespace TGD.UIV2
         struct EventVisuals
         {
             public VisualElement root;
+            public VisualElement row;
             public VisualElement card;
             public VisualElement icon;
             public Label text;
