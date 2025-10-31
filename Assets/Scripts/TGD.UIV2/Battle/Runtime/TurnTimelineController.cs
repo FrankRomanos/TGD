@@ -3,7 +3,6 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
-using TGD.AudioV2;
 using TGD.HexBoard;
 
 namespace TGD.UIV2.Battle
@@ -17,7 +16,6 @@ namespace TGD.UIV2.Battle
         [Header("Runtime")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 combatManager;
-        public BattleAudioManager audioManager;
         public UIDocument document;
 
         [Header("Look")]
@@ -42,6 +40,7 @@ namespace TGD.UIV2.Battle
         int _activeDragOrderIndex = int.MaxValue;
         Coroutine _pendingFullRoundRefresh;
         bool _isInitialized;
+        bool _postInitRefreshScheduled;
 
         enum EntryKind
         {
@@ -97,16 +96,24 @@ namespace TGD.UIV2.Battle
             ClearAll();
         }
 
-        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Initialize(
+            TurnManagerV2 turnManager,
+            CombatActionManagerV2 combatManager
+        )
         {
             this.turnManager = turnManager;
             this.combatManager = combatManager;
-            this.audioManager = audioManager;
-            _isInitialized = true;
 
-            InitializeRoot();
-            SyncPhaseState();
-            RebuildTimeline();
+            _isInitialized = (turnManager != null && combatManager != null);
+
+            InitializeRoot();   // 确保 _contentRoot / _dragOverlay
+            SyncPhaseState();   // 根据 turnManager 当前状态刷新 _activePhaseIsPlayer / _activeUnit 等
+            RebuildTimeline();  // 立刻先画一版（可能还是空队伍）
+
+            // 👇 VERY IMPORTANT:
+            // 安排一帧之后再刷新一次，这样即使 BattleUIService 不在，
+            // 等 TurnManagerV2 把所有 Unit 注册好，我们也能自己重画头像列表
+            SchedulePostInitRefresh();
         }
 
         void InitializeRoot()
@@ -1131,22 +1138,53 @@ namespace TGD.UIV2.Battle
         }
         void EnsureInitialized()
         {
-            // 如果已经走过 Initialize()，就别重复
+            // 如果已经初始化过（比如 BattleUIService 调过 Initialize），直接走人
             if (_isInitialized)
                 return;
 
-            // 兜底：如果 service 没给我塞引用，我自己去找
+            // 没有 service 的情况下，自己找 manager
             if (turnManager == null)
                 turnManager = AutoFind<TurnManagerV2>();
             if (combatManager == null)
                 combatManager = AutoFind<CombatActionManagerV2>();
-            if (audioManager == null)
-                audioManager = AutoFind<BattleAudioManager>();
 
-            // 现在把这些引用喂给现有的 Initialize(...)
-            Initialize(turnManager, combatManager, audioManager);
-
-            // Initialize() 里面应该会把 _isInitialized = true; （他之前已经这么做了）
+            // 如果两个关键依赖都找到了，就走正常 Initialize 流程
+            if (turnManager != null && combatManager != null)
+            {
+                Initialize(turnManager, combatManager);
+                // Initialize() 里面会把 _isInitialized 设为 true
+                // 也会做第一次 RebuildTimeline()
+            }
+            // 如果还没都找到，就保持 _isInitialized == false
+            // 这样 OnEnable() 里的 if (!_isInitialized) return; 会乖乖停止，
+            // 避免乱刷半成品 UI。
         }
+        void SchedulePostInitRefresh()
+        {
+            if (_postInitRefreshScheduled)
+                return;
+
+            _postInitRefreshScheduled = true;
+            StartCoroutine(DoPostInitRefresh());
+        }
+
+        IEnumerator DoPostInitRefresh()
+        {
+            // 等一帧，给 TurnManagerV2 / HexBoardTestDriver 这种系统时间
+            // 去把玩家单位和敌方单位注册到队列里
+            yield return null;
+
+            // 如果这时候对象被关了/销毁了就不用刷
+            if (!this || !isActiveAndEnabled)
+                yield break;
+
+            if (!_isInitialized)
+                yield break;
+
+            // 再拉一次状态、再画一次
+            SyncPhaseState();
+            RebuildTimeline();
+        }
+
     }
 }

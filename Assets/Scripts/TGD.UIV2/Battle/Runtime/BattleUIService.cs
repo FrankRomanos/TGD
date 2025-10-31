@@ -53,7 +53,7 @@ namespace TGD.UIV2.Battle
         void Start()
         {
             if (timeline != null)
-                timeline.Initialize(turnManager, combatManager, audioManager);
+                timeline.Initialize(turnManager, combatManager);
 
             _didStart = true;
             Subscribe();
