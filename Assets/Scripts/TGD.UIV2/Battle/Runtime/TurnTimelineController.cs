@@ -3,7 +3,6 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
-using TGD.AudioV2;
 using TGD.HexBoard;
 
 namespace TGD.UIV2.Battle
@@ -17,7 +16,6 @@ namespace TGD.UIV2.Battle
         [Header("Runtime")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 combatManager;
-        public BattleAudioManager audioManager;
         public UIDocument document;
 
         [Header("Look")]
@@ -83,15 +81,22 @@ namespace TGD.UIV2.Battle
             ClearAll();
         }
 
-        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
             this.turnManager = turnManager;
             this.combatManager = combatManager;
-            this.audioManager = audioManager;
             _isInitialized = true;
 
             InitializeRoot();
             SyncPhaseState();
+            RebuildTimeline();
+        }
+
+        public void ForceRebuildNow()
+        {
+            if (!_isInitialized)
+                return;
+
             RebuildTimeline();
         }
 

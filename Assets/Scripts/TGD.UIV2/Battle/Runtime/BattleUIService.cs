@@ -16,7 +16,6 @@ namespace TGD.UIV2.Battle
         public TurnTimelineController timeline;
         public ChainPopupPresenter chainPopup;
         public TurnHudController turnHud;
-        public ActionHudMessageListenerTMP actionHudMessageListener;
 
         bool _didStart;
         bool _subscriptionsActive;
@@ -48,7 +47,10 @@ namespace TGD.UIV2.Battle
         void OnEnable()
         {
             if (_didStart)
+            {
                 Subscribe();
+                RegisterChainPopupBehaviour();
+            }
         }
 
         void Update()
@@ -58,15 +60,23 @@ namespace TGD.UIV2.Battle
 
             if (!_subscriptionsActive && (turnManager != null || combatManager != null))
                 Subscribe();
+
+            if (combatManager != null && chainPopup != null &&
+                !ReferenceEquals(combatManager.chainPopupUiBehaviour, chainPopup))
+            {
+                RegisterChainPopupBehaviour();
+            }
         }
 
         void OnDisable()
         {
+            UnregisterChainPopupBehaviour();
             Unsubscribe();
         }
 
         void OnDestroy()
         {
+            UnregisterChainPopupBehaviour();
             Unsubscribe();
         }
 
@@ -88,24 +98,36 @@ namespace TGD.UIV2.Battle
                 chainPopup = GetComponentInChildren<ChainPopupPresenter>(true);
             if (!turnHud)
                 turnHud = GetComponentInChildren<TurnHudController>(true);
-            if (!actionHudMessageListener)
-                actionHudMessageListener = GetComponentInChildren<ActionHudMessageListenerTMP>(true);
         }
 
         void InitializeViews()
         {
             if (timeline != null)
-                timeline.Init(turnManager, combatManager, audioManager);
+            {
+                timeline.Init(turnManager, combatManager);
+                timeline.ForceRebuildNow();
+            }
 
             if (turnHud != null)
-                turnHud.Init(turnManager, combatManager, audioManager);
+                turnHud.Init(turnManager, combatManager);
 
             if (chainPopup != null)
             {
-                chainPopup.Init(turnManager, combatManager, audioManager);
-                if (combatManager != null)
-                    combatManager.chainPopupUiBehaviour = chainPopup;
+                chainPopup.Init(combatManager, audioManager);
+                RegisterChainPopupBehaviour();
             }
+        }
+
+        void RegisterChainPopupBehaviour()
+        {
+            if (combatManager != null && chainPopup != null)
+                combatManager.chainPopupUiBehaviour = chainPopup;
+        }
+
+        void UnregisterChainPopupBehaviour()
+        {
+            if (combatManager != null && ReferenceEquals(combatManager.chainPopupUiBehaviour, chainPopup))
+                combatManager.chainPopupUiBehaviour = null;
         }
 
         void Subscribe()

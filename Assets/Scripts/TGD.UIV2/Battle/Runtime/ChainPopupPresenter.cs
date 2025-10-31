@@ -50,7 +50,6 @@ namespace TGD.UIV2.Battle
         bool _scaleInitialized;
         float _documentScale = 1f;
 
-        TurnManagerV2 _turnManager;
         CombatActionManagerV2 _combatManager;
         BattleAudioManager _audioManager;
 
@@ -248,9 +247,8 @@ namespace TGD.UIV2.Battle
             }
         }
 
-        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Init(CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
         {
-            _turnManager = turnManager;
             _combatManager = combatManager;
             _audioManager = audioManager;
         }

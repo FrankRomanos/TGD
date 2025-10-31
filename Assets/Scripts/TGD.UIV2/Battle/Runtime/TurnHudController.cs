@@ -2,7 +2,6 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
 
@@ -82,7 +81,7 @@ namespace TGD.UIV2.Battle
             Unsubscribe();
         }
 
-        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
             if (_subscriptionsActive)
                 Unsubscribe();
