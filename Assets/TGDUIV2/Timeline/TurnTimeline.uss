@@ -195,8 +195,8 @@
 }
 
 .player-turn {
-    border-width: 2px;
-    border-color: rgba(80, 255, 170, 0.9);
+    border-width: 3px;
+    border-color: rgba(255, 215, 120, 0.95);
     border-radius: 10px;
 }
 
@@ -209,4 +209,24 @@
 .slot-card.slot-active {
     border-color: rgba(120, 255, 255, 0.95);
     box-shadow: 0 0 18px rgba(120, 255, 255, 0.6), 0 0 6px rgba(120, 255, 255, 0.35);
+}
+
+.drag-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.drag-ghost {
+    position: absolute;
+    pointer-events: none;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 214, 140, 0.4);
+}
+
+.slot-drag-origin {
+    opacity: 0.4;
 }

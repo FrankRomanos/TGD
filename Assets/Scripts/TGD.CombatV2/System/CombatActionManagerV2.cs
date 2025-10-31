@@ -2134,6 +2134,13 @@ namespace TGD.CombatV2
 
         string BuildChainOwnerTag(Unit unit, bool isEnemyPhase)
         {
+            if (unit != null)
+            {
+                string label = TurnManagerV2.FormatUnitLabel(unit);
+                if (!string.IsNullOrEmpty(label) && label != "?")
+                    return label;
+            }
+
             if (turnManager == null || unit == null)
                 return isEnemyPhase ? "Enemy" : "1P";
 

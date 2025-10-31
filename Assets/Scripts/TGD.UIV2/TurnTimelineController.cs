@@ -25,6 +25,8 @@ namespace TGD.UIV2
         readonly List<SlotEntryVisual> _slotEntries = new();
 
         VisualElement _contentRoot;
+        VisualElement _dragOverlay;
+        VisualElement _dragGhost;
         Unit _activeUnit;
         bool _activePhaseIsPlayer = true;
         int _activePhaseIndex = 1;
@@ -99,6 +101,23 @@ namespace TGD.UIV2
 
             _contentRoot = root.Q<VisualElement>("Content");
             _contentRoot?.Clear();
+
+            _dragOverlay = root.Q<VisualElement>("DragOverlay");
+            if (_dragOverlay == null)
+            {
+                _dragOverlay = new VisualElement
+                {
+                    name = "DragOverlay"
+                };
+                _dragOverlay.AddToClassList("drag-overlay");
+                root.Add(_dragOverlay);
+            }
+            else
+            {
+                _dragOverlay.Clear();
+            }
+
+            _dragOverlay?.BringToFront();
         }
 
         void Subscribe()
@@ -138,6 +157,9 @@ namespace TGD.UIV2
 
             if (_contentRoot != null)
                 _contentRoot.Clear();
+
+            if (_dragOverlay != null)
+                _dragOverlay.Clear();
         }
 
         void SyncPhaseState()
@@ -248,8 +270,17 @@ namespace TGD.UIV2
             if (_activeDrag?.visuals.root != null)
                 _activeDrag.visuals.root.RemoveFromClassList("slot-dragging");
 
+            if (_activeDrag?.visuals.card != null)
+                _activeDrag.visuals.card.RemoveFromClassList("slot-drag-origin");
+
             if (_currentDropTarget?.visuals.insertMarker != null)
                 _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
+
+            if (_dragGhost != null)
+            {
+                _dragGhost.RemoveFromHierarchy();
+                _dragGhost = null;
+            }
 
             _activeDrag = null;
             _currentDropTarget = null;
@@ -296,14 +327,10 @@ namespace TGD.UIV2
                 return;
 
             evt.StopPropagation();
-            float deltaX = Mathf.Clamp(evt.position.x - _dragStartPosition.x, 0f, 160f);
-            if (_activeDrag.visuals.row != null)
+            if (_dragGhost != null)
             {
-                _activeDrag.visuals.row.style.translate = new Translate(
-                    new Length(deltaX, LengthUnit.Pixel),   // X: 往右拖多少
-                    new Length(0f, LengthUnit.Pixel),       // Y: 不动
-                    0f                                      // Z: 不用，给float
-                );
+                _dragGhost.style.left = evt.position.x;
+                _dragGhost.style.top = evt.position.y;
             }
 
             UpdateDropTarget(evt.position);
@@ -370,6 +397,11 @@ namespace TGD.UIV2
                 _activeDrag.visuals.root.CapturePointer(evt.pointerId);
                 _activeDrag.visuals.root.AddToClassList("slot-dragging");
             }
+
+            if (_activeDrag.visuals.card != null)
+                _activeDrag.visuals.card.AddToClassList("slot-drag-origin");
+
+            CreateDragGhost();
 
             UpdateDropTarget(evt.position);
         }
@@ -462,6 +494,61 @@ namespace TGD.UIV2
 
             if (_currentDropTarget?.visuals.insertMarker != null)
                 _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.Flex;
+        }
+
+        void CreateDragGhost()
+        {
+            if (_dragOverlay == null || _activeDrag?.visuals.card == null)
+                return;
+
+            var card = _activeDrag.visuals.card;
+            var icon = _activeDrag.visuals.icon;
+
+            _dragGhost = new VisualElement();
+            _dragGhost.AddToClassList("drag-ghost");
+            _dragGhost.style.position = Position.Absolute;
+            _dragGhost.style.left = _dragStartPosition.x;
+            _dragGhost.style.top = _dragStartPosition.y;
+
+            var ghostCard = new VisualElement();
+            ghostCard.AddToClassList("slot-card");
+
+            float width = card.worldBound.width;
+            if (width <= 0f)
+                width = card.resolvedStyle.width;
+            float height = card.worldBound.height;
+            if (height <= 0f)
+                height = card.resolvedStyle.height;
+
+            if (width > 0f)
+                ghostCard.style.width = width;
+            if (height > 0f)
+                ghostCard.style.height = height;
+
+            if (_activeDrag.entry.isPlayer)
+                ghostCard.AddToClassList("player-turn");
+            else
+                ghostCard.AddToClassList("enemy-turn");
+
+            if (_activeDrag.entry.isActive)
+                ghostCard.AddToClassList("slot-active");
+
+            var ghostSkin = new VisualElement();
+            ghostSkin.AddToClassList("slot-skin");
+            ghostCard.Add(ghostSkin);
+
+            var ghostIcon = new VisualElement();
+            ghostIcon.AddToClassList("slot-icon");
+            if (icon != null)
+                ghostIcon.style.backgroundImage = icon.style.backgroundImage;
+            ghostSkin.Add(ghostIcon);
+
+            var ghostFrame = new VisualElement();
+            ghostFrame.AddToClassList("slot-ornate-frame");
+            ghostCard.Add(ghostFrame);
+
+            _dragGhost.Add(ghostCard);
+            _dragOverlay.Add(_dragGhost);
         }
 
         List<DisplayEntry> BuildBonusEntries()
