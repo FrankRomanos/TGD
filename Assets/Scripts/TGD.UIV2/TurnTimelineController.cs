@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
 
@@ -439,6 +440,7 @@ namespace TGD.UIV2
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
+                    BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
                 }
             }
 
