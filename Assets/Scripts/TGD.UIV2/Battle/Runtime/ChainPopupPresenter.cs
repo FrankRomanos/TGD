@@ -193,7 +193,7 @@ namespace TGD.UIV2.Battle
                 ApplyPanelScale();
         }
 
-        void HideImmediate()
+        public void HideImmediate()
         {
             if (_overlay != null)
                 _overlay.style.display = DisplayStyle.None;

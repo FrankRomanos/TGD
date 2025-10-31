@@ -33,41 +33,14 @@ namespace TGD.UIV2.Battle
 
         void Awake()
         {
-            if (turnManager == null)
-                turnManager = AutoFind<TurnManagerV2>();
-
-            if (combatManager == null)
-                combatManager = AutoFind<CombatActionManagerV2>();
-
-            if (audioManager == null)
-                audioManager = AutoFind<BattleAudioManager>();
-
-            if (timeline == null)
-                timeline = AutoFind<TurnTimelineController>();
-
-            if (chainPopup == null)
-                chainPopup = AutoFind<ChainPopupPresenter>();
-
-            if (turnHud == null)
-                turnHud = AutoFind<TurnHudController>();
-
+            CacheChildViews();
+            EnsureManagers();
         }
 
         void OnEnable()
         {
-            // --- 懒加载依赖（防御）
-            if (turnManager == null)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (combatManager == null)
-                combatManager = AutoFind<CombatActionManagerV2>();
-            if (audioManager == null)
-                audioManager = AutoFind<BattleAudioManager>();
-            if (timeline == null)
-                timeline = AutoFind<TurnTimelineController>();
-            if (chainPopup == null)
-                chainPopup = AutoFind<ChainPopupPresenter>();
-            if (turnHud == null)
-                turnHud = AutoFind<TurnHudController>();
+            CacheChildViews();
+            EnsureManagers();
 
             // --- 初始化每个UI控制器并把 manager 注入
             if (timeline != null)
@@ -88,6 +61,7 @@ namespace TGD.UIV2.Battle
                 chainPopup.Initialize(turnManager, combatManager);
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
+                chainPopup.HideImmediate();
             }
 
             // --- 游戏层事件 -> UI
@@ -112,10 +86,10 @@ namespace TGD.UIV2.Battle
 
             // 3. 让每个UI控制器把自己复位并断开对manager的引用
             if (timeline != null)
-                timeline.Shutdown();     // <- 需要把原来的 Deinitialize 重命名成 Shutdown
+                timeline.Shutdown();
 
             if (chainPopup != null)
-                chainPopup.Shutdown();   // <- 同理，ChainPopupPresenter 里的 Deinitialize 改成 Shutdown
+                chainPopup.Shutdown();
 
             if (turnHud != null)
                 turnHud.Shutdown();
@@ -185,25 +159,62 @@ namespace TGD.UIV2.Battle
 
         void DispatchInitialState()
         {
-            if (turnHud == null)
-                return;
-
             if (turnManager != null)
             {
-                turnHud.HandlePhaseBegan(turnManager.IsPlayerPhase);
-                var activeUnit = turnManager.ActiveUnit;
-                if (activeUnit != null)
+                if (turnHud != null)
                 {
-                    turnHud.HandleTurnStarted(activeUnit);
-                    turnHud.HandleUnitRuntimeChanged(activeUnit);
+                    turnHud.HandlePhaseBegan(turnManager.IsPlayerPhase);
+                    var activeUnit = turnManager.ActiveUnit;
+                    if (activeUnit != null)
+                    {
+                        turnHud.HandleTurnStarted(activeUnit);
+                        turnHud.HandleUnitRuntimeChanged(activeUnit);
+                    }
+                }
+
+                if (timeline != null)
+                {
+                    timeline.NotifyPhaseBeganExternal(turnManager.IsPlayerPhase);
+                    var activeUnit = turnManager.ActiveUnit;
+                    if (activeUnit != null)
+                        timeline.NotifyTurnStartedExternal(activeUnit);
+                    timeline.NotifyTurnOrderChangedExternal(true);
                 }
             }
 
             if (combatManager != null)
             {
-                turnHud.HandleChainFocusChanged(combatManager.CurrentChainFocus);
-                turnHud.HandleBonusTurnStateChanged();
+                if (turnHud != null)
+                {
+                    turnHud.HandleChainFocusChanged(combatManager.CurrentChainFocus);
+                    turnHud.HandleBonusTurnStateChanged();
+                }
+
+                if (timeline != null && combatManager.IsBonusTurnActive)
+                    timeline.NotifyBonusTurnStateChangedExternal();
             }
+        }
+
+        void CacheChildViews()
+        {
+            if (timeline == null)
+                timeline = GetComponentInChildren<TurnTimelineController>(true);
+            if (chainPopup == null)
+                chainPopup = GetComponentInChildren<ChainPopupPresenter>(true);
+            if (turnHud == null)
+                turnHud = GetComponentInChildren<TurnHudController>(true);
+            if (actionHudMessageListener == null)
+                actionHudMessageListener = GetComponentInChildren<ActionHudMessageListenerTMP>(true);
+        }
+
+        void EnsureManagers()
+        {
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
         }
 
         void HandlePhaseBegan(bool isPlayerPhase)
