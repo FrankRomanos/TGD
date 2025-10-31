@@ -51,34 +51,57 @@ namespace TGD.UIV2.Battle
 
         void Awake()
         {
+            // 把沙漏池子建好、记住初始大小等
             CacheInitialHourglasses();
 
-            if (!healthGauge && healthFill)
+            // 容错：如果 Inspector 没手动绑 gauge，那就顺藤摸瓜找一遍
+            if (healthGauge == null && healthFill != null)
                 healthGauge = healthFill.GetComponentInParent<TurnHudStatGauge>();
-            if (!energyGauge && energyFill)
+            if (energyGauge == null && energyFill != null)
                 energyGauge = energyFill.GetComponentInParent<TurnHudStatGauge>();
+
+            // 初始状态：没有激活角色，HUD 应该是干净/隐藏的
+            _displayUnit = null;
+            _forceInstantStats = true;
+            RefreshAll(); // 这会把血条归零/隐藏自己等
         }
+
 
         public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
             _turnManager = turnManager;
             _combatManager = combatManager;
-            _isInitialized = _turnManager != null || _combatManager != null;
+
+            // 必须两个核心管理器都注入才算真正上线
+            _isInitialized = (_turnManager != null && _combatManager != null);
+
+            // 敌方回合标记，用于决定HUD要不要显示
             _enemyPhaseActive = _turnManager != null && !_turnManager.IsPlayerPhase;
 
+            // 第一帧刷新的数值别做渐变，直接瞬移到位
+            _forceInstantStats = true;
+
+            // 选中当前激活单位（玩家那边）作为展示对象
             RefreshDisplayUnit(_turnManager != null ? _turnManager.ActiveUnit : null);
+
+            // 刷整套UI
             RefreshAll();
         }
 
-        public void Deinitialize()
+        public void Shutdown()
         {
             _turnManager = null;
             _combatManager = null;
             _isInitialized = false;
+
             _displayUnit = null;
             _enemyPhaseActive = false;
             _hourglassStateInitialized = false;
+
+            // 下一次如果再被 Initialize，我们希望数值直接瞬移到正确值
             _forceInstantStats = true;
+
+            // 刷一遍，把血条清零、自己淡出
             RefreshAll();
         }
 

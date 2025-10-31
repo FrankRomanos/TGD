@@ -65,7 +65,7 @@ namespace TGD.UIV2.Battle
                 HideImmediate();
         }
 
-        public void Deinitialize()
+        public void Shutdown()
         {
             _turnManager = null;
             _combatManager = null;

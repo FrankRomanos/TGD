@@ -55,33 +55,33 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            // --- 懒加载依赖（防御）
             if (turnManager == null)
                 turnManager = AutoFind<TurnManagerV2>();
-
             if (combatManager == null)
                 combatManager = AutoFind<CombatActionManagerV2>();
-
             if (audioManager == null)
                 audioManager = AutoFind<BattleAudioManager>();
-
             if (timeline == null)
                 timeline = AutoFind<TurnTimelineController>();
-
             if (chainPopup == null)
                 chainPopup = AutoFind<ChainPopupPresenter>();
-
             if (turnHud == null)
                 turnHud = AutoFind<TurnHudController>();
 
+            // --- 初始化每个UI控制器并把 manager 注入
             if (timeline != null)
             {
                 timeline.Initialize(turnManager, combatManager);
+                // UI -> Service 的回调：先防止重复，再订阅
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
             }
 
             if (turnHud != null)
+            {
                 turnHud.Initialize(turnManager, combatManager);
+            }
 
             if (chainPopup != null)
             {
@@ -90,38 +90,51 @@ namespace TGD.UIV2.Battle
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
             }
 
+            // --- 游戏层事件 -> UI
             Subscribe();
+
+            // --- 第一次把当前战斗状态推给UI（血条/沙漏/当前激活角色等）
             DispatchInitialState();
         }
 
+
         void OnDisable()
         {
+            // 1. 取消 gameplay -> UI 的订阅
             Unsubscribe();
 
+            // 2. 取消 UI -> Service 的回调订阅
             if (timeline != null)
-            {
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
-                timeline.Deinitialize();
-            }
 
             if (chainPopup != null)
-            {
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
-                chainPopup.Deinitialize();
-            }
+
+            // 3. 让每个UI控制器把自己复位并断开对manager的引用
+            if (timeline != null)
+                timeline.Shutdown();     // <- 需要把原来的 Deinitialize 重命名成 Shutdown
+
+            if (chainPopup != null)
+                chainPopup.Shutdown();   // <- 同理，ChainPopupPresenter 里的 Deinitialize 改成 Shutdown
 
             if (turnHud != null)
-                turnHud.Deinitialize();
+                turnHud.Shutdown();
         }
+
 
         void OnDestroy()
         {
+            // 理论上 OnDisable 已经清了所有事件。
+            // 这里只是再防御一次，防止 Unity 某些极端销毁顺序下 OnDisable 没被调用。
+            Unsubscribe();
+
             if (timeline != null)
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
+
             if (chainPopup != null)
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
-            Unsubscribe();
         }
+
 
         void Subscribe()
         {

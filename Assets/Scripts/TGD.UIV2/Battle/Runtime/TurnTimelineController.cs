@@ -73,7 +73,7 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
-            Deinitialize();
+            Shutdown();
         }
 
         public void Initialize(
@@ -97,7 +97,7 @@ namespace TGD.UIV2.Battle
             RebuildTimeline();    // 立刻先画一版（可能还是空队伍）
         }
 
-        public void Deinitialize()
+        public void Shutdown()
         {
             CancelPendingFullRoundRefresh();
             ClearAll();
