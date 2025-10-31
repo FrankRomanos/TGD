@@ -71,11 +71,6 @@ namespace TGD.UIV2.Battle
             // BattleUIService is now responsible for initializing and driving the timeline.
         }
 
-        void OnDisable()
-        {
-            Shutdown();
-        }
-
         public void Initialize(
             TurnManagerV2 turnManager,
             CombatActionManagerV2 combatManager
