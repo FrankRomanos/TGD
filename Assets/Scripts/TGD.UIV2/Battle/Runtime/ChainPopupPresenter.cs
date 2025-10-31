@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -13,8 +14,6 @@ namespace TGD.UIV2.Battle
         [SerializeField] PanelSettings panelSettings;
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
-        public BattleAudioManager audioManager; // <-- 新增：实例引用，不再用静态
-
         CombatActionManagerV2 _combat;
         bool _isOpen;
 
@@ -53,7 +52,10 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
-        // 让 BattleUIService 来注入依赖，而不是自己乱找
+
+        public event Action ChainPopupOpened;
+
+            _ = audioMgr;
         public void Initialize(CombatActionManagerV2 combatMgr, BattleAudioManager audioMgr)
         {
             _combat = combatMgr;
@@ -288,8 +290,7 @@ namespace TGD.UIV2.Battle
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
-            if (audioManager != null)
-                audioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
+            ChainPopupOpened?.Invoke();
             ChainPopupState.NotifyVisibility(true);
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }
