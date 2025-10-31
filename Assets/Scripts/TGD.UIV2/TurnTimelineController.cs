@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
@@ -116,7 +116,15 @@ namespace TGD.UIV2
             {
                 _dragOverlay.Clear();
             }
+            // ✅ 关键补丁：让 overlay 覆盖整张UI并且不吃鼠标
+            _dragOverlay.style.position = Position.Absolute;
+            _dragOverlay.style.left = 0;
+            _dragOverlay.style.top = 0;
+            _dragOverlay.style.right = 0;
+            _dragOverlay.style.bottom = 0;
 
+            // UI Toolkit里，这个等价“pointer-events:none”
+            _dragOverlay.pickingMode = PickingMode.Ignore;
             _dragOverlay?.BringToFront();
         }
 
@@ -261,21 +269,34 @@ namespace TGD.UIV2
 
         void ClearDragState()
         {
-            if (_activeDragPointerId != PointerId.invalidPointerId && _activeDrag?.visuals.root != null && _activeDrag.visuals.root.HasPointerCapture(_activeDragPointerId))
+            if (_activeDragPointerId != PointerId.invalidPointerId &&
+                _activeDrag?.visuals.root != null &&
+                _activeDrag.visuals.root.HasPointerCapture(_activeDragPointerId))
+            {
                 _activeDrag.visuals.root.ReleasePointer(_activeDragPointerId);
+            }
 
+            // 把原slot恢复
             if (_activeDrag?.visuals.row != null)
                 _activeDrag.visuals.row.style.translate = StyleKeyword.Null;
+
+            if (_activeDrag?.visuals.card != null)
+            {
+                _activeDrag.visuals.card.RemoveFromClassList("slot-drag-origin");
+                _activeDrag.visuals.card.style.opacity = StyleKeyword.Null; // 恢复显示
+            }
 
             if (_activeDrag?.visuals.root != null)
                 _activeDrag.visuals.root.RemoveFromClassList("slot-dragging");
 
-            if (_activeDrag?.visuals.card != null)
-                _activeDrag.visuals.card.RemoveFromClassList("slot-drag-origin");
+            // 清掉上一次高亮的插入目标
+            if (_currentDropTarget?.visuals.card != null)
+                _currentDropTarget.visuals.card.RemoveFromClassList("slot-drop-target");
 
             if (_currentDropTarget?.visuals.insertMarker != null)
                 _currentDropTarget.visuals.insertMarker.style.display = DisplayStyle.None;
 
+            // 清掉ghost
             if (_dragGhost != null)
             {
                 _dragGhost.RemoveFromHierarchy();
@@ -399,7 +420,10 @@ namespace TGD.UIV2
             }
 
             if (_activeDrag.visuals.card != null)
+            {
                 _activeDrag.visuals.card.AddToClassList("slot-drag-origin");
+                _activeDrag.visuals.card.style.opacity = 0f; // 完全透明
+            }
 
             CreateDragGhost();
 
