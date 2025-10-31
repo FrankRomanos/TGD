@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     /// <summary>
     /// Animates a HUD bar (health/energy) with numeric interpolation, change pulses, and delta readouts.

@@ -6,7 +6,7 @@ using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
 using UnityEngine.ResourceManagement.AsyncOperations;  // AsyncOperationHandle<T>
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     public class LocalizationTestWithoutIsReady : MonoBehaviour
     {
@@ -16,10 +16,10 @@ namespace TGD.UIV2
 
         private IEnumerator Start()
         {
-            // 1) µÈ´ı±¾µØ»¯ÏµÍ³³õÊ¼»¯
+            // 1) ç­‰å¾…æœ¬åœ°åŒ–ç³»ç»Ÿåˆå§‹åŒ–
             yield return LocalizationSettings.InitializationOperation;
 
-            // 2) Òì²½È¡±í£¨¸üÎÈ£¬²»»áÄÃµ½ null£©
+            // 2) å¼‚æ­¥å–è¡¨ï¼ˆæ›´ç¨³ï¼Œä¸ä¼šæ‹¿åˆ° nullï¼‰
             AsyncOperationHandle<StringTable> tableHandle =
                 LocalizationSettings.StringDatabase.GetTableAsync(tableReference);
             yield return tableHandle;
@@ -27,22 +27,22 @@ namespace TGD.UIV2
             var table = tableHandle.Result;
             if (table == null)
             {
-                Debug.LogError($"ÕÒ²»µ½ Localization Table£º{tableReference}");
+                Debug.LogError($"æ‰¾ä¸åˆ° Localization Tableï¼š{tableReference}");
                 yield break;
             }
 
-            // 3) È¡ Entry ²¢ÏÔÊ¾
+            // 3) å– Entry å¹¶æ˜¾ç¤º
             var entry = table.GetEntry(entryReference);
             if (entry != null)
             {
-                // ½¨ÒéÖ±½ÓÓÃ LocalizedValue£¨ÒÑ°´µ±Ç° Locale ´¦Àí£©
+                // å»ºè®®ç›´æ¥ç”¨ LocalizedValueï¼ˆå·²æŒ‰å½“å‰ Locale å¤„ç†ï¼‰
                 string content = entry.LocalizedValue;
-                Debug.Log($"¡¾ÄÚÈİ¡¿£º{content}");
+                Debug.Log($"ã€å†…å®¹ã€‘ï¼š{content}");
                 if (displayText) displayText.text = content;
             }
             else
             {
-                Debug.LogError($"Î´ÕÒµ½ Entry£º{entryReference}£¨±í£º{tableReference}£©");
+                Debug.LogError($"æœªæ‰¾åˆ° Entryï¼š{entryReference}ï¼ˆè¡¨ï¼š{tableReference}ï¼‰");
             }
         }
     }

@@ -6,7 +6,7 @@ using TGD.CombatV2;
 using TGD.HexBoard;
 
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     /// <summary>
     /// Displays the active unit HUD for TurnManagerV2 driven encounters.

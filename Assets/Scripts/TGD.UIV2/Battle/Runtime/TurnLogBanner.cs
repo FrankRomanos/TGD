@@ -5,7 +5,7 @@ using UnityEngine;
 using TGD.CombatV2;
 using TGD.HexBoard;
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     /// <summary>
     /// Displays the most recent turn log messages with faction aware coloring.

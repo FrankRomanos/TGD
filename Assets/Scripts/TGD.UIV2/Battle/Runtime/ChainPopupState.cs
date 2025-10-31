@@ -1,6 +1,6 @@
 using System;
 
-namespace TGD.UIV2
+namespace TGD.UIV2.Battle
 {
     public static class ChainPopupState
     {
