@@ -50,6 +50,9 @@ namespace TGD.UIV2.Battle
         bool _scaleInitialized;
         float _documentScale = 1f;
 
+        CombatActionManagerV2 _combatManager;
+        BattleAudioManager _audioManager;
+
         struct OptionEntry
         {
             public VisualElement container;
@@ -244,6 +247,12 @@ namespace TGD.UIV2.Battle
             }
         }
 
+        public void Init(CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        {
+            _combatManager = combatManager;
+            _audioManager = audioManager;
+        }
+
         public void OpenWindow(ChainPopupWindowData window)
         {
             EnsureDocument();
@@ -278,7 +287,8 @@ namespace TGD.UIV2.Battle
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
-            BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
+            if (_audioManager != null)
+                BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }

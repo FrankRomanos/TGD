@@ -90,6 +90,22 @@ namespace TGD.UIV2.Battle
             ResetPulse();
         }
 
+        public void Init()
+        {
+            if (!pulseTarget && fillImage)
+                pulseTarget = fillImage.rectTransform;
+
+            if (pulseTarget)
+                _basePulseScale = pulseTarget.localScale;
+
+            if (deltaLabel)
+                deltaLabel.alpha = 0f;
+
+            _initialized = false;
+            HideDelta();
+            ResetPulse();
+        }
+
         void Update()
         {
             UpdateValueAnimation();

@@ -1,9 +1,9 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
-using TGD.AudioV2;
 using TGD.HexBoard;
 
 namespace TGD.UIV2.Battle
@@ -17,12 +17,13 @@ namespace TGD.UIV2.Battle
         [Header("Runtime")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 combatManager;
-        public BattleAudioManager audioManager;
         public UIDocument document;
 
         [Header("Look")]
         public Sprite fallbackAvatar;
         [Min(1)] public int maxVisibleSlots = 4;
+
+        public event Action<Unit> ActiveUnitDeferred;
 
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
@@ -60,21 +61,10 @@ namespace TGD.UIV2.Battle
             public string auxText;
         }
 
-        static T AutoFind<T>() where T : Object
-        {
-    #if UNITY_2023_1_OR_NEWER
-            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
-    #else
-            return Object.FindObjectOfType<T>();
-    #endif
-        }
-
         void Awake()
         {
             if (!document)
                 document = GetComponent<UIDocument>();
-            if (!document)
-                document = AutoFind<UIDocument>();
 
             InitializeRoot();
         }
@@ -94,15 +84,22 @@ namespace TGD.UIV2.Battle
             ClearAll();
         }
 
-        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
             this.turnManager = turnManager;
             this.combatManager = combatManager;
-            this.audioManager = audioManager;
             _isInitialized = true;
 
             InitializeRoot();
             SyncPhaseState();
+            RebuildTimeline();
+        }
+
+        public void ForceRebuildNow()
+        {
+            if (!_isInitialized)
+                return;
+
             RebuildTimeline();
         }
 
@@ -482,7 +479,7 @@ namespace TGD.UIV2.Battle
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
-                    BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
+                    ActiveUnitDeferred?.Invoke(_activeDrag.entry.unit);
                 }
             }
 

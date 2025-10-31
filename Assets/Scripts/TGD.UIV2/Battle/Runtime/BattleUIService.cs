@@ -16,18 +16,30 @@ namespace TGD.UIV2.Battle
         public TurnTimelineController timeline;
         public ChainPopupPresenter chainPopup;
         public TurnHudController turnHud;
-        public ActionHudMessageListenerTMP actionHudMessageListener;
 
         bool _didStart;
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
 
+        static T AutoFind<T>() where T : Object
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<T>(FindObjectsInactive.Include);
+#else
+            return FindObjectOfType<T>();
+#endif
+        }
+
+        void Awake()
+        {
+            AutoAssignSources();
+            AutoAssignViews();
+            InitializeViews();
+        }
+
         void Start()
         {
-            if (timeline != null)
-                timeline.Initialize(turnManager, combatManager, audioManager);
-
             _didStart = true;
             Subscribe();
         }
@@ -35,7 +47,11 @@ namespace TGD.UIV2.Battle
         void OnEnable()
         {
             if (_didStart)
+            {
                 Subscribe();
+                RegisterTimelineCallbacks();
+                RegisterChainPopupBehaviour();
+            }
         }
 
         void Update()
@@ -45,16 +61,92 @@ namespace TGD.UIV2.Battle
 
             if (!_subscriptionsActive && (turnManager != null || combatManager != null))
                 Subscribe();
+
+            if (combatManager != null && chainPopup != null &&
+                !ReferenceEquals(combatManager.chainPopupUiBehaviour, chainPopup))
+            {
+                RegisterChainPopupBehaviour();
+            }
         }
 
         void OnDisable()
         {
+            UnregisterTimelineCallbacks();
+            UnregisterChainPopupBehaviour();
             Unsubscribe();
         }
 
         void OnDestroy()
         {
+            UnregisterTimelineCallbacks();
+            UnregisterChainPopupBehaviour();
             Unsubscribe();
+        }
+
+        void AutoAssignSources()
+        {
+            if (!turnManager)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (!combatManager)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (!audioManager)
+                audioManager = AutoFind<BattleAudioManager>();
+        }
+
+        void AutoAssignViews()
+        {
+            if (!timeline)
+                timeline = GetComponentInChildren<TurnTimelineController>(true);
+            if (!chainPopup)
+                chainPopup = GetComponentInChildren<ChainPopupPresenter>(true);
+            if (!turnHud)
+                turnHud = GetComponentInChildren<TurnHudController>(true);
+        }
+
+        void InitializeViews()
+        {
+            if (timeline != null)
+            {
+                timeline.Init(turnManager, combatManager);
+                timeline.ForceRebuildNow();
+                RegisterTimelineCallbacks();
+            }
+
+            if (turnHud != null)
+                turnHud.Init(turnManager, combatManager);
+
+            if (chainPopup != null)
+            {
+                chainPopup.Init(combatManager, audioManager);
+                RegisterChainPopupBehaviour();
+            }
+        }
+
+        void RegisterTimelineCallbacks()
+        {
+            if (timeline != null)
+            {
+                timeline.ActiveUnitDeferred -= HandleTimelineActiveUnitDeferred;
+                timeline.ActiveUnitDeferred += HandleTimelineActiveUnitDeferred;
+            }
+        }
+
+        void UnregisterTimelineCallbacks()
+        {
+            if (timeline != null)
+                timeline.ActiveUnitDeferred -= HandleTimelineActiveUnitDeferred;
+        }
+
+        void RegisterChainPopupBehaviour()
+        {
+            if (combatManager != null && chainPopup != null)
+                combatManager.chainPopupUiBehaviour = chainPopup;
+        }
+
+        void UnregisterChainPopupBehaviour()
+        {
+            if (combatManager != null && ReferenceEquals(combatManager.chainPopupUiBehaviour, chainPopup))
+                combatManager.chainPopupUiBehaviour = null;
         }
 
         void Subscribe()
@@ -125,6 +217,12 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyBonusTurnStateChangedExternal();
+        }
+
+        void HandleTimelineActiveUnitDeferred(Unit unit)
+        {
+            if (audioManager != null)
+                BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
         }
     }
 }

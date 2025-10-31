@@ -86,6 +86,16 @@ namespace TGD.UIV2.Battle
             ResetVisualTransform(true);
         }
 
+        public void Init()
+        {
+            if (!targetImage)
+                targetImage = GetComponent<Image>();
+            if (!targetRect)
+                targetRect = GetComponent<RectTransform>();
+
+            ApplyVisualState();
+        }
+
         void Update()
         {
             var rect = TargetRect;
