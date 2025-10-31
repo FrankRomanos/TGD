@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Collections;
@@ -6,27 +6,27 @@ using System.Collections;
 namespace TGD.UIV2.Battle
 {
     /// <summary>
-    /// ´¿Õ¹Ê¾ÓÃµÄ»ØºÏÌáÊ¾ Banner¡£
-    /// Ëü×Ô¼º²»¶©ÔÄ TurnManagerV2£¬²»ÖªµÀË­ÊÇÍæ¼ÒË­ÊÇµĞÈË¡£
-    /// BattleUIService ÊÇÎ¨Ò»ÄÜµ÷ÓÃËüµÄ¡°Ö¸»Ó¹Ù¡±¡£
+    /// çº¯å±•ç¤ºç”¨çš„å›åˆæç¤º Bannerã€‚
+    /// å®ƒè‡ªå·±ä¸è®¢é˜… TurnManagerV2ï¼Œä¸çŸ¥é“è°æ˜¯ç©å®¶è°æ˜¯æ•Œäººã€‚
+    /// BattleUIService æ˜¯å”¯ä¸€èƒ½è°ƒç”¨å®ƒçš„â€œæŒ‡æŒ¥å®˜â€ã€‚
     /// </summary>
     public sealed class TurnBannerController : MonoBehaviour
     {
         [Header("UI Refs")]
-        public TMP_Text messageText;     // ÎÄ°¸£¬±ÈÈç "Íæ¼Ò»ØºÏ¿ªÊ¼" / "Ä³Ä³ µÄ»ØºÏ¿ªÊ¼"
-        public CanvasGroup canvasGroup;  // Õû¸öbanner¸ùCanvasGroup£¬ÓÃÀ´µ­Èëµ­³ö
-        public Image glow;               // ¿ÉÑ¡£ºÄãÄÇ¸ö²ÊÉ«Ãè±ß/·¢¹â±³¾°¿ò£¬Ã»ÓĞ¾ÍÁô¿Õ
+        public TMP_Text messageText;     // æ–‡æ¡ˆï¼Œæ¯”å¦‚ "ç©å®¶å›åˆå¼€å§‹" / "æŸæŸ çš„å›åˆå¼€å§‹"
+        public CanvasGroup canvasGroup;  // æ•´ä¸ªbanneræ ¹CanvasGroupï¼Œç”¨æ¥æ·¡å…¥æ·¡å‡º
+        public Image glow;               // å¯é€‰ï¼šä½ é‚£ä¸ªå½©è‰²æè¾¹/å‘å…‰èƒŒæ™¯æ¡†ï¼Œæ²¡æœ‰å°±ç•™ç©º
 
         [Header("Colors")]
-        public Color friendlyColor = new(0.2f, 0.85f, 0.2f); // ÓÑ·½/Íæ¼ÒÂÌÉ«
-        public Color enemyColor = new(0.85f, 0.2f, 0.2f); // µĞ·½ºìÉ«
-        public Color neutralColor = new(1f, 1f, 1f);    // ¶µµ×£¨Èç¹ûÎÒÃÇÒÔºóÏë²¥ÖĞÁ¢ÌáÊ¾£©
+        public Color friendlyColor = new(0.2f, 0.85f, 0.2f); // å‹æ–¹/ç©å®¶ç»¿è‰²
+        public Color enemyColor = new(0.85f, 0.2f, 0.2f); // æ•Œæ–¹çº¢è‰²
+        public Color neutralColor = new(1f, 1f, 1f);    // å…œåº•ï¼ˆå¦‚æœæˆ‘ä»¬ä»¥åæƒ³æ’­ä¸­ç«‹æç¤ºï¼‰
 
         [Header("Timing")]
         [Min(0.1f)]
-        public float displaySeconds = 1.2f; // ±£ÁôÔÚÆÁÄ»ÉÏµÄÊ±¼ä£¨²»º¬µ­³ö£©
+        public float displaySeconds = 1.2f; // ä¿ç•™åœ¨å±å¹•ä¸Šçš„æ—¶é—´ï¼ˆä¸å«æ·¡å‡ºï¼‰
         [Min(0f)]
-        public float fadeOutDuration = 0.25f; // µ­³ö¶à¾Ã
+        public float fadeOutDuration = 0.25f; // æ·¡å‡ºå¤šä¹…
         public bool enableFadeOut = true;
         public AnimationCurve fadeOutCurve =
             AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
@@ -42,7 +42,7 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
-            // rig ¹ØµôÊ±È·±£Ë²¼äÇåÀí¸É¾»£¬²»Áô½©Ê¬ UI
+            // rig å…³æ‰æ—¶ç¡®ä¿ç¬é—´æ¸…ç†å¹²å‡€ï¼Œä¸ç•™åƒµå°¸ UI
             ForceHideImmediate();
         }
 
@@ -60,9 +60,9 @@ namespace TGD.UIV2.Battle
         }
 
         /// <summary>
-        /// BattleUIService Ã¿µ±·¢Éú¡°ĞèÒª¸æËßÍæ¼ÒÒ»ÌõÊÂ¡±µÄÊ±ºò¾Í»áµ÷Õâ¸ö¡£
-        /// isPlayerSide = true ÓÃÓÑ·½ÅäÉ«£¬false ÓÃµĞ·½ÅäÉ«¡£
-        /// Äã¿ÉÒÔ´«ÖĞÎÄ¡¢Ô­ÏÈµÄ "Begin T1(1P)" ·ç¸ñ¡¢Ëæ±ã¡£
+        /// BattleUIService æ¯å½“å‘ç”Ÿâ€œéœ€è¦å‘Šè¯‰ç©å®¶ä¸€æ¡äº‹â€çš„æ—¶å€™å°±ä¼šè°ƒè¿™ä¸ªã€‚
+        /// isPlayerSide = true ç”¨å‹æ–¹é…è‰²ï¼Œfalse ç”¨æ•Œæ–¹é…è‰²ã€‚
+        /// ä½ å¯ä»¥ä¼ ä¸­æ–‡ã€åŸå…ˆçš„ "Begin T1(1P)" é£æ ¼ã€éšä¾¿ã€‚
         /// </summary>
         public void ShowBanner(string message, bool isPlayerSide)
         {
@@ -77,7 +77,7 @@ namespace TGD.UIV2.Battle
                 glow.color = isPlayerSide ? friendlyColor : enemyColor;
             }
 
-            // Á¢¿ÌÁÁ³öÀ´
+            // ç«‹åˆ»äº®å‡ºæ¥
             if (_fadeRoutine != null)
             {
                 StopCoroutine(_fadeRoutine);
@@ -96,8 +96,8 @@ namespace TGD.UIV2.Battle
         }
 
         /// <summary>
-        /// BattleUIService ¿ÉÒÔÔÚ OnEnable ³õÊ¼»¯»ò OnDisable ÇåÀíµÄÊ±ºò½ĞÕâ¸ö¡£
-        /// Á¢¿ÌÒş²Ø£¬²»ÁôÎÄ×Ö£¬²»Áôalpha¡£
+        /// BattleUIService å¯ä»¥åœ¨ OnEnable åˆå§‹åŒ–æˆ– OnDisable æ¸…ç†çš„æ—¶å€™å«è¿™ä¸ªã€‚
+        /// ç«‹åˆ»éšè—ï¼Œä¸ç•™æ–‡å­—ï¼Œä¸ç•™alphaã€‚
         /// </summary>
         public void ForceHideImmediate()
         {
