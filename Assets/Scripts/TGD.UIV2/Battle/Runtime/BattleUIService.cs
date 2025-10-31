@@ -55,7 +55,6 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
-            // 1. Autofind£¨ÄãÒÑ¾­ÓĞÁËÄÇ¶Î AutoFind£¬Èç¹û²»Îª null ¾Í±ğ¶¯£©
             if (turnManager == null) turnManager = AutoFind<TurnManagerV2>();
             if (combatManager == null) combatManager = AutoFind<CombatActionManagerV2>();
             if (audioManager == null) audioManager = AutoFind<BattleAudioManager>();
@@ -63,33 +62,33 @@ namespace TGD.UIV2.Battle
             if (chainPopup == null) chainPopup = AutoFind<ChainPopupPresenter>();
             if (turnHud == null) turnHud = AutoFind<TurnHudController>();
 
-            // 2. ³õÊ¼»¯ + ÊÂ¼şÇÅ½Ó
             if (timeline != null)
             {
                 timeline.Initialize(turnManager, combatManager);
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
-                timeline.RefreshNow(); // ¡ï ĞÂÔö
+                timeline.ForceRebuildNow();
             }
 
             if (turnHud != null)
             {
                 turnHud.Initialize(turnManager, combatManager);
-                // turnHud Ã»ÓĞ RefreshNow£¬ÓÃ DispatchInitialState() À´Î¹
             }
 
             if (chainPopup != null)
             {
                 chainPopup.Initialize(turnManager, combatManager);
+
+                bool stillWaiting = combatManager != null && combatManager.IsAwaitingChainDecision;
+                chainPopup.RestoreFromSnapshotIfNeeded(stillWaiting);
+                chainPopup.RefreshNow();
+
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
-                chainPopup.RefreshNow(); // ¡ï ĞÂÔö
             }
 
-            // 3. ¶©ÔÄ TurnManager/CombatManager µÄÊÂ¼ş
             Subscribe();
 
-            // 4. ¸ø HUD ²¹Ò»´Îµ±Ç°×´Ì¬
             DispatchInitialState();
         }
 
@@ -97,33 +96,33 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
-            // 1. ÍË¶©È«¾ÖÊÂ¼ş
+            // 1. é€€è®¢å…¨å±€äº‹ä»¶
             Unsubscribe();
 
-            // 2. ²ğµô service->view µÄÊÂ¼şÏß
+            // 2. æ‹†æ‰ service->view çš„äº‹ä»¶çº¿
             if (timeline != null)
             {
                 timeline.ActiveUnitDeferred -= OnUnitDeferred;
-                timeline.Shutdown(); // ¡ï ÓÃÍ³Ò» Shutdown
+                timeline.Shutdown(); // â˜… ç”¨ç»Ÿä¸€ Shutdown
             }
 
             if (chainPopup != null)
             {
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
-                chainPopup.Shutdown(); // ¡ï ÓÃÍ³Ò» Shutdown
+                chainPopup.Shutdown(); // â˜… ç”¨ç»Ÿä¸€ Shutdown
             }
 
             if (turnHud != null)
             {
-                turnHud.Shutdown(); // ÒÑ¾­ÓĞ
+                turnHud.Shutdown(); // å·²ç»æœ‰
             }
         }
 
 
         void OnDestroy()
         {
-            // ÀíÂÛÉÏ OnDisable ÒÑ¾­ÇåÁËËùÓĞÊÂ¼ş¡£
-            // ÕâÀïÖ»ÊÇÔÙ·ÀÓùÒ»´Î£¬·ÀÖ¹ Unity Ä³Ğ©¼«¶ËÏú»ÙË³ĞòÏÂ OnDisable Ã»±»µ÷ÓÃ¡£
+            // ç†è®ºä¸Š OnDisable å·²ç»æ¸…äº†æ‰€æœ‰äº‹ä»¶ã€‚
+            // è¿™é‡Œåªæ˜¯å†é˜²å¾¡ä¸€æ¬¡ï¼Œé˜²æ­¢ Unity æŸäº›æç«¯é”€æ¯é¡ºåºä¸‹ OnDisable æ²¡è¢«è°ƒç”¨ã€‚
             Unsubscribe();
 
             if (timeline != null)
