@@ -156,6 +156,8 @@ namespace TGD.UIV2.Battle
 
         void OnUnitDeferred(TGD.HexBoard.Unit u)
         {
+            if (audioManager != null)
+                audioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
             UnityEngine.Debug.Log($"[BattleUIService] Deferred unit: {u}");
         }
 

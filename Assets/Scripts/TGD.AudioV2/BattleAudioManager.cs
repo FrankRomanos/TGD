@@ -81,7 +81,7 @@ namespace TGD.AudioV2
                 if (c != null) _eventLookup[c.EventType] = c;
         }
 
-        public static void PlayEvent(BattleAudioEvent evt)
+        public void PlayEvent(BattleAudioEvent evt)
         {
             // 永不抛异常，最多打一条 Warning，避免把 UI 流程中断
             if (_instance == null) { Debug.LogWarning($"[Audio] PlayEvent({evt}) called but manager not ready."); return; }

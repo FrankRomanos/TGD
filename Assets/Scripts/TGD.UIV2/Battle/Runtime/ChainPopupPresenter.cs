@@ -13,6 +13,10 @@ namespace TGD.UIV2.Battle
         [SerializeField] PanelSettings panelSettings;
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
+        public BattleAudioManager audioManager; // <-- 新增：实例引用，不再用静态
+
+        CombatActionManagerV2 _combat;
+        bool _isOpen;
 
         [Header("Display")]
         [SerializeField, Min(0.1f)] float defaultScale = 1f;
@@ -49,6 +53,12 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
+        // 让 BattleUIService 来注入依赖，而不是自己乱找
+        public void Initialize(CombatActionManagerV2 combatMgr, BattleAudioManager audioMgr)
+        {
+            _combat = combatMgr;
+            audioManager = audioMgr;
+        }
 
         struct OptionEntry
         {
@@ -278,7 +288,8 @@ namespace TGD.UIV2.Battle
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
-            BattleAudioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
+            if (audioManager != null)
+                audioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }

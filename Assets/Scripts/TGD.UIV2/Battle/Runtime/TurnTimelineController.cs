@@ -83,6 +83,7 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            EnsureInitialized();
             if (!_isInitialized)
                 return;
 
@@ -492,7 +493,6 @@ namespace TGD.UIV2.Battle
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
-                    BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
                 }
             }
 
@@ -1128,6 +1128,25 @@ namespace TGD.UIV2.Battle
                 // 找不到 / 状态不合法 / 正在切队列
                 return -1;
             }
+        }
+        void EnsureInitialized()
+        {
+            // 如果已经走过 Initialize()，就别重复
+            if (_isInitialized)
+                return;
+
+            // 兜底：如果 service 没给我塞引用，我自己去找
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
+
+            // 现在把这些引用喂给现有的 Initialize(...)
+            Initialize(turnManager, combatManager, audioManager);
+
+            // Initialize() 里面应该会把 _isInitialized = true; （他之前已经这么做了）
         }
     }
 }
