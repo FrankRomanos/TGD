@@ -489,9 +489,11 @@ namespace TGD.UIV2
 
         bool IsValidDropTarget(SlotEntryVisual slot)
         {
+            // 1) 基础合法性检查
             if (_activeDrag == null || slot == null)
                 return false;
 
+            // 只能在玩家自己当回合时拖自己，不能拿敌人拖敌人，不能拿非当前单位拖
             if (!slot.entry.isPlayer || !slot.entry.isActivePhase)
                 return false;
 
@@ -501,15 +503,34 @@ namespace TGD.UIV2
             if (turnManager == null)
                 return false;
 
-            int candidateIndex = slot.entry.turnOrderIndex >= 0 ? slot.entry.turnOrderIndex : turnManager.GetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
-            if (_activeDragOrderIndex == int.MaxValue)
-                _activeDragOrderIndex = turnManager.GetTurnOrderIndex(_activeDrag.entry.unit, _activeDrag.entry.isPlayer);
+            // 2) 安全地拿 candidateIndex
+            int candidateIndex = slot.entry.turnOrderIndex >= 0
+                ? slot.entry.turnOrderIndex
+                : SafeGetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
 
+            if (candidateIndex < 0)
+                return false; // 说明这个slot现在不在turn order里，拖它没有意义
+
+            // 3) 我们自己的 index（_activeDrag 的顺位）
+            if (_activeDragOrderIndex == int.MaxValue)
+            {
+                _activeDragOrderIndex = _activeDrag.entry.turnOrderIndex >= 0
+                    ? _activeDrag.entry.turnOrderIndex
+                    : SafeGetTurnOrderIndex(_activeDrag.entry.unit, _activeDrag.entry.isPlayer);
+            }
+
+            if (_activeDragOrderIndex < 0)
+                return false; // 我自己都不在队列里？那这次拖拽直接视为无效
+
+            // 4) 最后才比较谁在后面
+            // （注意：你想的是“把我塞到他后面”，所以要允许 candidateIndex >= myIndex+1）
             return candidateIndex > _activeDragOrderIndex;
         }
 
+
         void ShowDropTarget(SlotEntryVisual slot)
         {
+
             if (ReferenceEquals(_currentDropTarget, slot))
                 return;
 
@@ -928,6 +949,22 @@ namespace TGD.UIV2
             public VisualElement icon;
             public Label label;
             public VisualElement insertMarker;
+        }
+        int SafeGetTurnOrderIndex(Unit unit, bool isPlayerSide)
+        {
+            if (unit == null || turnManager == null)
+                return -1;
+
+            try
+            {
+                // 这一行就是原本会抛异常的调用
+                return turnManager.GetTurnOrderIndex(unit, isPlayerSide);
+            }
+            catch
+            {
+                // 找不到 / 状态不合法 / 正在切队列
+                return -1;
+            }
         }
     }
 }
