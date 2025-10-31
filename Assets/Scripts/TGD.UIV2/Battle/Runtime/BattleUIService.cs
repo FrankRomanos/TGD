@@ -56,7 +56,6 @@ namespace TGD.UIV2.Battle
                 timeline.Initialize(turnManager, combatManager);
 
             _didStart = true;
-            Subscribe();
         }
 
         void OnEnable()
@@ -64,8 +63,7 @@ namespace TGD.UIV2.Battle
             if (timeline != null)
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
 
-            if (_didStart)
-                Subscribe();
+            Subscribe();
         }
 
         void Update()
