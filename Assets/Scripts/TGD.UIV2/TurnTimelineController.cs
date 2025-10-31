@@ -978,9 +978,13 @@ namespace TGD.UIV2
             var root = new VisualElement();
             root.AddToClassList("event-root");
 
+            var row = new VisualElement();
+            row.AddToClassList("event-row");
+            root.Add(row);
+
             var card = new VisualElement();
             card.AddToClassList("event-card");
-            root.Add(card);
+            row.Add(card);
 
             var icon = new VisualElement();
             icon.AddToClassList("event-icon");
@@ -988,11 +992,12 @@ namespace TGD.UIV2
 
             var text = new Label();
             text.AddToClassList("event-text");
-            root.Add(text);
+            row.Add(text);
 
             return new EventVisuals
             {
                 root = root,
+                row = row,
                 card = card,
                 icon = icon,
                 text = text
@@ -1024,6 +1029,7 @@ namespace TGD.UIV2
         struct EventVisuals
         {
             public VisualElement root;
+            public VisualElement row;
             public VisualElement card;
             public VisualElement icon;
             public Label text;
