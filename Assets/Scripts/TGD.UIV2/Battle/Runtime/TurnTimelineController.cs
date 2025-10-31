@@ -14,8 +14,8 @@ namespace TGD.UIV2.Battle
     public sealed class TurnTimelineController : MonoBehaviour
     {
         [Header("Runtime")]
-        public TurnManagerV2 turnManager;
-        public CombatActionManagerV2 combatManager;
+        private TurnManagerV2 turnManager;
+        private CombatActionManagerV2 combatManager;
         public UIDocument document;
 
         [Header("Look")]

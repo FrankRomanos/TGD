@@ -13,7 +13,7 @@ namespace TGD.UIV2.Battle
         [SerializeField] PanelSettings panelSettings;
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
-        public BattleAudioManager audioManager; // <-- ÐÂÔö£ºÊµÀýÒýÓÃ£¬²»ÔÙÓÃ¾²Ì¬
+        public BattleAudioManager audioManager; // <-- æ–°å¢žï¼šå®žä¾‹å¼•ç”¨ï¼Œä¸å†ç”¨é™æ€
 
         CombatActionManagerV2 _combat;
         bool _isOpen;
@@ -53,7 +53,7 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
-        // ÈÃ BattleUIService À´×¢ÈëÒÀÀµ£¬¶ø²»ÊÇ×Ô¼ºÂÒÕÒ
+        // è®© BattleUIService æ¥æ³¨å…¥ä¾èµ–ï¼Œè€Œä¸æ˜¯è‡ªå·±ä¹±æ‰¾
         public void Initialize(CombatActionManagerV2 combatMgr, BattleAudioManager audioMgr)
         {
             _combat = combatMgr;
