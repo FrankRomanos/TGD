@@ -23,6 +23,33 @@ namespace TGD.UIV2.Battle
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
 
+        static T AutoFind<T>() where T : Object
+        {
+#if UNITY_2023_1_OR_NEWER
+            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
+#else
+            return Object.FindObjectOfType<T>();
+#endif
+        }
+
+        void Awake()
+        {
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
+
+            if (timeline == null)
+                timeline = AutoFind<TurnTimelineController>();
+
+            if (timeline != null)
+                timeline.ForceRebuildNow();
+        }
+
         void Start()
         {
             if (timeline != null)
@@ -34,6 +61,9 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            if (timeline != null)
+                timeline.ActiveUnitDeferred += OnUnitDeferred;
+
             if (_didStart)
                 Subscribe();
         }
@@ -49,6 +79,9 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
+            if (timeline != null)
+                timeline.ActiveUnitDeferred -= OnUnitDeferred;
+
             Unsubscribe();
         }
 
@@ -119,6 +152,11 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyTurnOrderChangedExternal(isPlayerSide);
+        }
+
+        void OnUnitDeferred(TGD.HexBoard.Unit u)
+        {
+            UnityEngine.Debug.Log($"[BattleUIService] Deferred unit: {u}");
         }
 
         void HandleBonusTurnStateChanged()

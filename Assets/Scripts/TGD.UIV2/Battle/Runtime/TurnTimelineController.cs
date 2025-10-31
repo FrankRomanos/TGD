@@ -27,6 +27,8 @@ namespace TGD.UIV2.Battle
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
 
+        public event System.Action<TGD.HexBoard.Unit> ActiveUnitDeferred;
+
         VisualElement _contentRoot;
         VisualElement _dragOverlay;
         VisualElement _dragGhost;
@@ -232,6 +234,11 @@ namespace TGD.UIV2.Battle
 
             if (isPlayerSide)
                 RebuildTimeline();
+        }
+
+        public void ForceRebuildNow()
+        {
+            RebuildTimeline();
         }
 
         void RebuildTimeline()
@@ -476,9 +483,12 @@ namespace TGD.UIV2.Battle
         void FinishSlotDrag(bool applyDrop)
         {
             bool applied = false;
+            TGD.HexBoard.Unit deferredUnit = null;
 
             if (applyDrop && _activeDrag != null && _currentDropTarget != null && turnManager != null)
             {
+                deferredUnit = _activeDrag.entry.unit;
+
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
@@ -489,7 +499,10 @@ namespace TGD.UIV2.Battle
             ClearDragState();
 
             if (applied)
+            {
                 RebuildTimeline();
+                ActiveUnitDeferred?.Invoke(deferredUnit);
+            }
         }
 
         void UpdateDropTarget(Vector2 pointerPosition)
