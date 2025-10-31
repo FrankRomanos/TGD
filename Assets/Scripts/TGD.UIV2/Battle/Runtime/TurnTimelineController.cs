@@ -27,6 +27,8 @@ namespace TGD.UIV2.Battle
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
 
+        public event System.Action<TGD.HexBoard.Unit> ActiveUnitDeferred;
+
         VisualElement _contentRoot;
         VisualElement _dragOverlay;
         VisualElement _dragGhost;
@@ -81,6 +83,7 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            EnsureInitialized();
             if (!_isInitialized)
                 return;
 
@@ -232,6 +235,11 @@ namespace TGD.UIV2.Battle
 
             if (isPlayerSide)
                 RebuildTimeline();
+        }
+
+        public void ForceRebuildNow()
+        {
+            RebuildTimeline();
         }
 
         void RebuildTimeline()
@@ -476,20 +484,25 @@ namespace TGD.UIV2.Battle
         void FinishSlotDrag(bool applyDrop)
         {
             bool applied = false;
+            TGD.HexBoard.Unit deferredUnit = null;
 
             if (applyDrop && _activeDrag != null && _currentDropTarget != null && turnManager != null)
             {
+                deferredUnit = _activeDrag.entry.unit;
+
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
-                    BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
                 }
             }
 
             ClearDragState();
 
             if (applied)
+            {
                 RebuildTimeline();
+                ActiveUnitDeferred?.Invoke(deferredUnit);
+            }
         }
 
         void UpdateDropTarget(Vector2 pointerPosition)
@@ -1115,6 +1128,25 @@ namespace TGD.UIV2.Battle
                 // 找不到 / 状态不合法 / 正在切队列
                 return -1;
             }
+        }
+        void EnsureInitialized()
+        {
+            // 如果已经走过 Initialize()，就别重复
+            if (_isInitialized)
+                return;
+
+            // 兜底：如果 service 没给我塞引用，我自己去找
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
+
+            // 现在把这些引用喂给现有的 Initialize(...)
+            Initialize(turnManager, combatManager, audioManager);
+
+            // Initialize() 里面应该会把 _isInitialized = true; （他之前已经这么做了）
         }
     }
 }
