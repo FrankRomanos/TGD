@@ -49,6 +49,7 @@ namespace TGD.UIV2.Battle
             if (_didStart)
             {
                 Subscribe();
+                RegisterTimelineCallbacks();
                 RegisterChainPopupBehaviour();
             }
         }
@@ -70,12 +71,14 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
+            UnregisterTimelineCallbacks();
             UnregisterChainPopupBehaviour();
             Unsubscribe();
         }
 
         void OnDestroy()
         {
+            UnregisterTimelineCallbacks();
             UnregisterChainPopupBehaviour();
             Unsubscribe();
         }
@@ -106,6 +109,7 @@ namespace TGD.UIV2.Battle
             {
                 timeline.Init(turnManager, combatManager);
                 timeline.ForceRebuildNow();
+                RegisterTimelineCallbacks();
             }
 
             if (turnHud != null)
@@ -116,6 +120,21 @@ namespace TGD.UIV2.Battle
                 chainPopup.Init(combatManager, audioManager);
                 RegisterChainPopupBehaviour();
             }
+        }
+
+        void RegisterTimelineCallbacks()
+        {
+            if (timeline != null)
+            {
+                timeline.ActiveUnitDeferred -= HandleTimelineActiveUnitDeferred;
+                timeline.ActiveUnitDeferred += HandleTimelineActiveUnitDeferred;
+            }
+        }
+
+        void UnregisterTimelineCallbacks()
+        {
+            if (timeline != null)
+                timeline.ActiveUnitDeferred -= HandleTimelineActiveUnitDeferred;
         }
 
         void RegisterChainPopupBehaviour()
@@ -198,6 +217,12 @@ namespace TGD.UIV2.Battle
         {
             if (timeline != null)
                 timeline.NotifyBonusTurnStateChangedExternal();
+        }
+
+        void HandleTimelineActiveUnitDeferred(Unit unit)
+        {
+            if (audioManager != null)
+                BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
         }
     }
 }

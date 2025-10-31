@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -21,6 +22,8 @@ namespace TGD.UIV2.Battle
         [Header("Look")]
         public Sprite fallbackAvatar;
         [Min(1)] public int maxVisibleSlots = 4;
+
+        public event Action<Unit> ActiveUnitDeferred;
 
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
@@ -476,7 +479,7 @@ namespace TGD.UIV2.Battle
                 if (turnManager.TryDeferActivePlayerUnit(_currentDropTarget.entry.unit))
                 {
                     applied = true;
-                    BattleAudioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
+                    ActiveUnitDeferred?.Invoke(_activeDrag.entry.unit);
                 }
             }
 
