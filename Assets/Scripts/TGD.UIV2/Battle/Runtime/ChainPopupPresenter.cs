@@ -54,7 +54,7 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
-        // ====== ÈÈ²å°Î»Ö¸´ĞèÒªµÄ¿ìÕÕ ======
+        // ====== çƒ­æ’æ‹”æ¢å¤éœ€è¦çš„å¿«ç…§ ======
         ChainPopupWindowData _cachedWindow;
         ChainPopupStageData _cachedStage;
         bool _snapshotValid;
@@ -67,87 +67,65 @@ namespace TGD.UIV2.Battle
             if (!_isInitialized)
                 HideImmediate();
         }
-        public void RefreshNow()
-        {
-            // Èç¹û UI ¸ù±¾»¹Ã» Initialize£¬¾Í±ğ»­
-            if (!_isInitialized)
-                return;
 
+        public void RestoreFromSnapshotIfNeeded(bool shouldBeVisible)
+        {
             EnsureDocument();
 
-            // Èç¹ûÖ®Ç°Ã»ÓĞÒ»¸ö¡°ÕıÔÚ½øĞĞµÄµ¯´°Ñ¡Ôñ½×¶Î¡±£¨±ÈÈçÕ½¶·µ±Ç°Ã»ÓĞÔÚµÈ·´Ó¦£©
-            // ÄÇÎÒÃÇ¾Í±£³ÖÒş²Ø×´Ì¬
-            if (!_snapshotValid)
+            if (!shouldBeVisible)
             {
                 HideImmediate();
                 return;
             }
 
-            // ÓĞ¿ìÕÕ£¬ËµÃ÷ÎÒÃÇÔÚ±»¹ØµôÇ°´°¿ÚÊÇ¿ªµÄ£¬ËùÒÔÒª°ÑËü»Ö¸´
-            if (_overlay == null)
+            if (_visible && _windowActive)
                 return;
 
-            // ==== 1. »Ö¸´´°¿Ú¿Ç£¨±êÌâ¡¢ÌáÊ¾¡¢ÉÏÏÂÎÄ£© ====
-
-            _overlay.style.display = DisplayStyle.Flex;
+            if (_overlay != null)
+                _overlay.style.display = DisplayStyle.Flex;
             if (_windowWrap != null)
                 _windowWrap.style.display = DisplayStyle.Flex;
-
-            if (_phaseLabel != null)
-                _phaseLabel.text = _cachedWindow.Header ?? string.Empty;
-
-            if (_promptLabel != null)
-                _promptLabel.text = _cachedWindow.Prompt ?? string.Empty;
-
-            if (_contextLabel != null)
-            {
-                string context = _cachedWindow.Context ?? string.Empty;
-                _contextLabel.text = context;
-                _contextLabel.style.display = string.IsNullOrEmpty(context)
-                    ? DisplayStyle.None
-                    : DisplayStyle.Flex;
-            }
 
             _windowActive = true;
             _visible = true;
 
-            // ±£ÊØÒ»µã£º»Ö¸´Ê±ÎÒÃÇ²»Ç¿ĞĞ¼Ç×¡Ö®Ç°µãÁËÄÄ¸öÑ¡Ïî
-            //£¨Èç¹ûÄãÏë±£Áô pendingSelection£¬¿ÉÒÔ²»ÇåÀíËü£©
+            _pendingSelection = -1;
+            _skipRequested = false;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
 
-            // ==== 2. »Ö¸´Ñ¡ÏîÁĞ±í ====
-
-            CopyOptions(_cachedStage.Options);          // _cachedStage ÊÇ struct£¬ËùÒÔ×ÜÊÇÓĞÖµ
-            EnsureEntryCount(_stageOptions.Count);
-
-            for (int i = 0; i < _stageOptions.Count; i++)
-            {
-                var entry = _entries[i];
-                entry = UpdateEntry(entry, _stageOptions[i], i);
-                _entries[i] = entry;
-            }
-
-            for (int i = _stageOptions.Count; i < _entries.Count; i++)
-            {
-                var entry = _entries[i];
-                if (entry.container != null)
-                    entry.container.style.display = DisplayStyle.None;
-            }
-
-            if (_footer != null)
-                _footer.style.display = _cachedStage.ShowSkip ? DisplayStyle.Flex : DisplayStyle.None;
-
-            if (!_cachedStage.ShowSkip && _noneToggle != null)
-                _noneToggle.SetValueWithoutNotify(false);
-
-            // ==== 3. »Ö¸´¸ßÁÁ & Î»ÖÃ ====
-
-            RefreshSelectionVisuals();
             UpdateAnchorPosition();
-
-            // ÖØĞÂ¸æËßÈ«¾Ö¡°µ¯´°ÊÇ¿ªµÄ¡±£¬µ«²»ÒªÔÙ´Î²¥ÒôĞ§
             ChainPopupState.NotifyVisibility(true);
+        }
+        public void RefreshNow()
+        {
+            if (!_isInitialized)
+                return;
+
+            if (_combatManager == null)
+                return;
+
+            EnsureDocument();
+
+            bool waiting = _combatManager.IsAwaitingChainDecision;
+            if (!waiting)
+            {
+                HideImmediate();
+                return;
+            }
+
+            var cachedWindow = _combatManager.LastChainWindow;
+            if (cachedWindow.Equals(default(ChainPopupWindowData)))
+            {
+                HideImmediate();
+                return;
+            }
+
+            OpenWindow(cachedWindow);
+
+            var cachedStage = _combatManager.LastChainStage;
+            if (!cachedStage.Equals(default(ChainPopupStageData)))
+                UpdateStage(cachedStage);
         }
 
 
@@ -158,7 +136,7 @@ namespace TGD.UIV2.Battle
             _pendingSelection = -1;
             _skipRequested = false;
 
-            HideImmediate();    // Äã×Ô¼ºÒÑ¾­ÓĞµÄ£¬°Ñ overlay/´°¿ÚÒş²Ø
+            HideImmediate();    // ä½ è‡ªå·±å·²ç»æœ‰çš„ï¼ŒæŠŠ overlay/çª—å£éšè—
             _isInitialized = false;
         }
 
@@ -358,7 +336,7 @@ namespace TGD.UIV2.Battle
 
         public void OpenWindow(ChainPopupWindowData window)
         {
-            // ÏÈ»º´æ£¬±íÊ¾¡°ÓĞÒ»¸ö»¹Ã»½áÊøµÄÁ¬Ëø´°¿Ú¡±
+            // å…ˆç¼“å­˜ï¼Œè¡¨ç¤ºâ€œæœ‰ä¸€ä¸ªè¿˜æ²¡ç»“æŸçš„è¿é”çª—å£â€
             _cachedWindow = window;
             _snapshotValid = true;
 
@@ -421,7 +399,7 @@ namespace TGD.UIV2.Battle
 
             RefreshSelectionVisuals();
             ChainPopupState.NotifyVisibility(false);
-            // ¹Ø¼ü£º½»»¥³¹µ×½áÊøºó£¬¿ìÕÕÊ§Ğ§
+            // å…³é”®ï¼šäº¤äº’å½»åº•ç»“æŸåï¼Œå¿«ç…§å¤±æ•ˆ
             _snapshotValid = false;
         }
 

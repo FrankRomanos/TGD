@@ -80,6 +80,10 @@ namespace TGD.CombatV2
         Phase _phase = Phase.Idle;
         public bool IsExecuting => _phase == Phase.Executing;
 
+        public bool IsAwaitingChainDecision { get; private set; }
+        public ChainPopupWindowData LastChainWindow { get; private set; }
+        public ChainPopupStageData LastChainStage { get; private set; }
+
         readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
         IActionToolV2 _activeTool;
         Unit _currentUnit;
@@ -2174,9 +2178,6 @@ namespace TGD.CombatV2
 
         void UpdateChainPopupStage(IChainPopupUI popup, string label, List<ChainOption> options, bool showSkip)
         {
-            if (popup == null)
-                return;
-
             _chainPopupOptionBuffer.Clear();
             if (options != null && options.Count > 1)
                 options.Sort(CompareChainOptions);
@@ -2219,7 +2220,12 @@ namespace TGD.CombatV2
                     groupLabel));
             }
 
-            popup.UpdateStage(new ChainPopupStageData(label, _chainPopupOptionBuffer, showSkip));
+            var stageOptions = _chainPopupOptionBuffer.ToArray();
+            var stageData = new ChainPopupStageData(label, stageOptions, showSkip);
+            LastChainStage = stageData;
+
+            if (popup != null)
+                popup.UpdateStage(stageData);
         }
 
         int CompareChainOptions(ChainOption a, ChainOption b)
@@ -2281,11 +2287,19 @@ namespace TGD.CombatV2
                 }
 
                 popup = ChainPopupUI;
-                if (popup != null && keepLooping)
+                if (keepLooping)
                 {
-                    popup.OpenWindow(BuildChainPopupWindow(unit, basePlan, baseKind, isEnemyPhase));
-                    popup.SetAnchor(ResolveChainAnchor(unit));
-                    popupOpened = true;
+                    var windowData = BuildChainPopupWindow(unit, basePlan, baseKind, isEnemyPhase);
+                    IsAwaitingChainDecision = true;
+                    LastChainWindow = windowData;
+                    LastChainStage = default;
+
+                    if (popup != null)
+                    {
+                        popup.OpenWindow(windowData);
+                        popup.SetAnchor(ResolveChainAnchor(unit));
+                        popupOpened = true;
+                    }
                 }
 
                 if (!keepLooping)
@@ -2656,6 +2670,10 @@ namespace TGD.CombatV2
             }
             finally
             {
+                IsAwaitingChainDecision = false;
+                LastChainWindow = default;
+                LastChainStage = default;
+
                 SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
@@ -2781,13 +2799,20 @@ namespace TGD.CombatV2
 
                 popup = ChainPopupUI;
                 bool isEnemyPhase = turnManager != null && turnManager.IsEnemyUnit(unit);
+                var windowData = BuildDerivedPopupWindow(unit, baseTool, basePlan, isEnemyPhase);
+
+                IsAwaitingChainDecision = true;
+                LastChainWindow = windowData;
+                LastChainStage = default;
+
                 if (popup != null)
                 {
-                    popup.OpenWindow(BuildDerivedPopupWindow(unit, baseTool, basePlan, isEnemyPhase));
+                    popup.OpenWindow(windowData);
                     popup.SetAnchor(ResolveChainAnchor(unit));
-                    UpdateChainPopupStage(popup, "W4.5", options, true);
                     popupOpened = true;
                 }
+
+                UpdateChainPopupStage(popup, "W4.5", options, true);
 
                 bool resolved = false;
                 while (!resolved)
@@ -2879,6 +2904,10 @@ namespace TGD.CombatV2
             }
             finally
             {
+                IsAwaitingChainDecision = false;
+                LastChainWindow = default;
+                LastChainStage = default;
+
                 if (popupOpened && popup != null)
                     popup.CloseWindow();
 
