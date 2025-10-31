@@ -421,7 +421,7 @@ namespace TGD.UIV2
                 return;
             }
 
-            if (_activeDrag != null && pointerPosition.y <= _dragStartPosition.y + 12f)
+            if (_activeDrag != null && Mathf.Abs(pointerPosition.y - _dragStartPosition.y) <= 12f)
             {
                 ShowDropTarget(null);
                 return;
@@ -464,11 +464,14 @@ namespace TGD.UIV2
             if (turnManager == null)
                 return false;
 
-            int candidateIndex = slot.entry.turnOrderIndex >= 0 ? slot.entry.turnOrderIndex : turnManager.GetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
             if (_activeDragOrderIndex == int.MaxValue)
                 _activeDragOrderIndex = turnManager.GetTurnOrderIndex(_activeDrag.entry.unit, _activeDrag.entry.isPlayer);
 
-            return candidateIndex > _activeDragOrderIndex;
+            int candidateIndex = slot.entry.turnOrderIndex >= 0
+                ? slot.entry.turnOrderIndex
+                : turnManager.GetTurnOrderIndex(slot.entry.unit, slot.entry.isPlayer);
+
+            return candidateIndex != _activeDragOrderIndex;
         }
 
         void ShowDropTarget(SlotEntryVisual slot)
