@@ -5,7 +5,11 @@ using UnityEngine.Audio;
 
 namespace TGD.AudioV2
 {
-    public enum BattleAudioEvent { ChainPopupOpen }
+    public enum BattleAudioEvent
+    {
+        ChainPopupOpen,
+        TurnTimelineInsert
+    }
 
     [Serializable]
     public sealed class BattleAudioEventConfig
