@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
-using TGD.AudioV2;
 using TGD.CombatV2;
 
 namespace TGD.UIV2.Battle
@@ -13,9 +12,9 @@ namespace TGD.UIV2.Battle
         [SerializeField] PanelSettings panelSettings;
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
-        public BattleAudioManager audioManager; // <-- 新增：实例引用，不再用静态
-
-        CombatActionManagerV2 _combat;
+        TurnManagerV2 _turnManager;
+        CombatActionManagerV2 _combatManager;
+        bool _isInitialized;
         bool _isOpen;
 
         [Header("Display")]
@@ -46,6 +45,8 @@ namespace TGD.UIV2.Battle
         readonly List<OptionEntry> _entries = new();
         readonly List<ChainPopupOptionData> _stageOptions = new();
 
+        public event System.Action ChainPopupOpened;
+
         int _pendingSelection = -1;
         bool _skipRequested;
         bool _windowActive;
@@ -53,11 +54,23 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
-        // 让 BattleUIService 来注入依赖，而不是自己乱找
-        public void Initialize(CombatActionManagerV2 combatMgr, BattleAudioManager audioMgr)
+
+        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
-            _combat = combatMgr;
-            audioManager = audioMgr;
+            _turnManager = turnManager;
+            _combatManager = combatManager;
+            _isInitialized = _turnManager != null || _combatManager != null;
+
+            if (!_isInitialized)
+                HideImmediate();
+        }
+
+        public void Deinitialize()
+        {
+            _turnManager = null;
+            _combatManager = null;
+            _isInitialized = false;
+            HideImmediate();
         }
 
         struct OptionEntry
@@ -288,9 +301,8 @@ namespace TGD.UIV2.Battle
             RefreshSelectionVisuals();
 
             UpdateAnchorPosition();
-            if (audioManager != null)
-                audioManager.PlayEvent(BattleAudioEvent.ChainPopupOpen);
             ChainPopupState.NotifyVisibility(true);
+            ChainPopupOpened?.Invoke();
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }
 
@@ -529,6 +541,9 @@ namespace TGD.UIV2.Battle
 
         public void SetAnchor(Transform anchor)
         {
+            if (!_isInitialized)
+                return;
+
             if (_visible)
                 UpdateAnchorPosition();
         }
