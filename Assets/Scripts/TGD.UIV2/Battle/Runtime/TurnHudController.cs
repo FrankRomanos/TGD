@@ -2,6 +2,7 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.HexBoard;
 
@@ -50,22 +51,11 @@ namespace TGD.UIV2.Battle
         bool _hourglassStateInitialized;
         bool _forceInstantStats;
 
-        static T AutoFind<T>() where T : Object
-        {
-#if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<T>(FindObjectsInactive.Include);
-#else
-            return FindObjectOfType<T>();
-#endif
-        }
+        bool _initialized;
+        bool _subscriptionsActive;
 
         void Awake()
         {
-            if (!turnManager)
-                turnManager = AutoFind<TurnManagerV2>();
-            if (!combatManager)
-                combatManager = AutoFind<CombatActionManagerV2>();
-
             CacheInitialHourglasses();
 
             if (!healthGauge && healthFill)
@@ -76,6 +66,9 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            if (!_initialized)
+                return;
+
             Subscribe();
             RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : null);
             RefreshAll();
@@ -83,11 +76,39 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
+            if (!_initialized)
+                return;
+
             Unsubscribe();
+        }
+
+        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        {
+            if (_subscriptionsActive)
+                Unsubscribe();
+
+            this.turnManager = turnManager;
+            this.combatManager = combatManager;
+            _initialized = true;
+
+            if (healthGauge)
+                healthGauge.Init();
+            if (energyGauge)
+                energyGauge.Init();
+
+            if (isActiveAndEnabled)
+            {
+                Subscribe();
+                RefreshDisplayUnit(turnManager != null ? turnManager.ActiveUnit : _displayUnit);
+                RefreshAll();
+            }
         }
 
         void Subscribe()
         {
+            if (_subscriptionsActive)
+                return;
+
             if (turnManager != null)
             {
                 turnManager.TurnStarted += OnTurnStarted;
@@ -101,10 +122,15 @@ namespace TGD.UIV2.Battle
                 combatManager.ChainFocusChanged += OnChainFocusChanged;
                 combatManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
             }
+
+            _subscriptionsActive = turnManager != null || combatManager != null;
         }
 
         void Unsubscribe()
         {
+            if (!_subscriptionsActive)
+                return;
+
             if (turnManager != null)
             {
                 turnManager.TurnStarted -= OnTurnStarted;
@@ -118,6 +144,8 @@ namespace TGD.UIV2.Battle
                 combatManager.ChainFocusChanged -= OnChainFocusChanged;
                 combatManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
             }
+
+            _subscriptionsActive = false;
         }
 
         void CacheInitialHourglasses()
@@ -530,7 +558,11 @@ namespace TGD.UIV2.Battle
 
             var animator = image.GetComponent<TurnHudHourglass>();
             if (!animator)
+            {
                 animator = image.gameObject.AddComponent<TurnHudHourglass>();
+            }
+
+            animator.Init();
             return animator;
         }
 

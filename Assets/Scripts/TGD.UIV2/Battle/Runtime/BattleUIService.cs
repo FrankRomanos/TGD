@@ -23,11 +23,24 @@ namespace TGD.UIV2.Battle
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
 
+        static T AutoFind<T>() where T : Object
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<T>(FindObjectsInactive.Include);
+#else
+            return FindObjectOfType<T>();
+#endif
+        }
+
+        void Awake()
+        {
+            AutoAssignSources();
+            AutoAssignViews();
+            InitializeViews();
+        }
+
         void Start()
         {
-            if (timeline != null)
-                timeline.Initialize(turnManager, combatManager, audioManager);
-
             _didStart = true;
             Subscribe();
         }
@@ -55,6 +68,44 @@ namespace TGD.UIV2.Battle
         void OnDestroy()
         {
             Unsubscribe();
+        }
+
+        void AutoAssignSources()
+        {
+            if (!turnManager)
+                turnManager = AutoFind<TurnManagerV2>();
+            if (!combatManager)
+                combatManager = AutoFind<CombatActionManagerV2>();
+            if (!audioManager)
+                audioManager = AutoFind<BattleAudioManager>();
+        }
+
+        void AutoAssignViews()
+        {
+            if (!timeline)
+                timeline = GetComponentInChildren<TurnTimelineController>(true);
+            if (!chainPopup)
+                chainPopup = GetComponentInChildren<ChainPopupPresenter>(true);
+            if (!turnHud)
+                turnHud = GetComponentInChildren<TurnHudController>(true);
+            if (!actionHudMessageListener)
+                actionHudMessageListener = GetComponentInChildren<ActionHudMessageListenerTMP>(true);
+        }
+
+        void InitializeViews()
+        {
+            if (timeline != null)
+                timeline.Init(turnManager, combatManager, audioManager);
+
+            if (turnHud != null)
+                turnHud.Init(turnManager, combatManager, audioManager);
+
+            if (chainPopup != null)
+            {
+                chainPopup.Init(turnManager, combatManager, audioManager);
+                if (combatManager != null)
+                    combatManager.chainPopupUiBehaviour = chainPopup;
+            }
         }
 
         void Subscribe()

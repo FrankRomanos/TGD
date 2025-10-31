@@ -60,21 +60,10 @@ namespace TGD.UIV2.Battle
             public string auxText;
         }
 
-        static T AutoFind<T>() where T : Object
-        {
-    #if UNITY_2023_1_OR_NEWER
-            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
-    #else
-            return Object.FindObjectOfType<T>();
-    #endif
-        }
-
         void Awake()
         {
             if (!document)
                 document = GetComponent<UIDocument>();
-            if (!document)
-                document = AutoFind<UIDocument>();
 
             InitializeRoot();
         }
@@ -94,7 +83,7 @@ namespace TGD.UIV2.Battle
             ClearAll();
         }
 
-        public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
+        public void Init(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager, BattleAudioManager audioManager)
         {
             this.turnManager = turnManager;
             this.combatManager = combatManager;
