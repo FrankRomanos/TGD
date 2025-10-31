@@ -5,60 +5,75 @@
             <ui:VisualElement name="viewportBg" class="viewport-bg" />
             <ui:VisualElement name="viewportFrame" class="viewport-frame" />
             <ui:VisualElement name="Content" class="timeline-content">
-                <ui:VisualElement name="TurnSeparator" class="turn-separator" style="justify-content: flex-start; align-self: auto;">
-                    <ui:Label name="turnLabel" text="Turn 12" selectable="false" class="turn-label" style="justify-content: flex-start; align-items: stretch; align-self: auto; align-content: auto;" />
-                </ui:VisualElement>
-                <ui:VisualElement name="Slot0" class="slot-root">
-                    <ui:VisualElement class="slot-row">
-                        <ui:VisualElement name="Slot0Drag" class="slot-drag-handle" />
-                        <ui:VisualElement name="Slot0Card" class="slot-card player-turn">
-                            <ui:VisualElement class="slot-skin">
-                                <ui:VisualElement name="Slot0Icon" class="slot-icon" />
-                            </ui:VisualElement>
-                            <ui:VisualElement class="slot-ornate-frame" />
+                <ui:VisualElement name="TimelineColumns" class="timeline-columns">
+                    <ui:VisualElement name="TimelineColumn" class="timeline-column">
+                        <ui:VisualElement name="TurnSeparator" class="turn-separator" style="justify-content: flex-start; align-self: auto;">
+                            <ui:Label name="turnLabel" text="Turn 12" selectable="false" class="turn-label" style="justify-content: flex-start; align-items: stretch; align-self: auto; align-content: auto;" />
                         </ui:VisualElement>
-                        <ui:Label name="Slot0Text" class="slot-meta-label" />
-                    </ui:VisualElement>
-                    <ui:VisualElement name="Slot0Insert" class="insert-marker" />
-                </ui:VisualElement>
-                <ui:VisualElement name="Slot1" class="slot-root">
-                    <ui:VisualElement class="slot-row">
-                        <ui:VisualElement name="Slot1Drag" class="slot-drag-handle" />
-                        <ui:VisualElement name="Slot1Card" class="slot-card">
-                            <ui:VisualElement class="slot-skin">
-                                <ui:VisualElement name="Slot1Icon" class="slot-icon" />
+                        <ui:VisualElement name="Slot0" class="slot-root">
+                            <ui:VisualElement class="slot-row">
+                                <ui:VisualElement name="Slot0Drag" class="slot-drag-handle" />
+                                <ui:VisualElement name="Slot0Card" class="slot-card player-turn">
+                                    <ui:VisualElement class="slot-skin">
+                                        <ui:VisualElement name="Slot0Icon" class="slot-icon" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="slot-ornate-frame" />
+                                </ui:VisualElement>
+                                <ui:Label name="Slot0Text" class="slot-meta-label" />
                             </ui:VisualElement>
-                            <ui:VisualElement class="slot-ornate-frame" />
+                            <ui:VisualElement name="Slot0Insert" class="insert-marker" />
                         </ui:VisualElement>
-                        <ui:Label name="Slot1Text" class="slot-meta-label" />
-                    </ui:VisualElement>
-                    <ui:VisualElement name="Slot1Insert" class="insert-marker" />
-                </ui:VisualElement>
-                <ui:VisualElement name="Slot2" class="slot-root">
-                    <ui:VisualElement class="slot-row">
-                        <ui:VisualElement name="Slot2Drag" class="slot-drag-handle" />
-                        <ui:VisualElement name="Slot2Card" class="slot-card">
-                            <ui:VisualElement class="slot-skin">
-                                <ui:VisualElement name="Slot2Icon" class="slot-icon" />
+                        <ui:VisualElement name="Slot1" class="slot-root">
+                            <ui:VisualElement class="slot-row">
+                                <ui:VisualElement name="Slot1Drag" class="slot-drag-handle" />
+                                <ui:VisualElement name="Slot1Card" class="slot-card">
+                                    <ui:VisualElement class="slot-skin">
+                                        <ui:VisualElement name="Slot1Icon" class="slot-icon" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="slot-ornate-frame" />
+                                </ui:VisualElement>
+                                <ui:Label name="Slot1Text" class="slot-meta-label" />
                             </ui:VisualElement>
-                            <ui:VisualElement class="slot-ornate-frame" />
+                            <ui:VisualElement name="Slot1Insert" class="insert-marker" />
                         </ui:VisualElement>
-                        <ui:Label name="Slot2Text" class="slot-meta-label" />
-                    </ui:VisualElement>
-                    <ui:VisualElement name="Slot2Insert" class="insert-marker" />
-                </ui:VisualElement>
-                <ui:VisualElement name="Slot3" class="slot-root">
-                    <ui:VisualElement class="slot-row">
-                        <ui:VisualElement name="Slot3Drag" class="slot-drag-handle" />
-                        <ui:VisualElement name="Slot3Card" class="slot-card">
-                            <ui:VisualElement class="slot-skin">
-                                <ui:VisualElement name="Slot3Icon" class="slot-icon" />
+                        <ui:VisualElement name="Slot2" class="slot-root">
+                            <ui:VisualElement class="slot-row">
+                                <ui:VisualElement name="Slot2Drag" class="slot-drag-handle" />
+                                <ui:VisualElement name="Slot2Card" class="slot-card">
+                                    <ui:VisualElement class="slot-skin">
+                                        <ui:VisualElement name="Slot2Icon" class="slot-icon" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="slot-ornate-frame" />
+                                </ui:VisualElement>
+                                <ui:Label name="Slot2Text" class="slot-meta-label" />
                             </ui:VisualElement>
-                            <ui:VisualElement class="slot-ornate-frame" />
+                            <ui:VisualElement name="Slot2Insert" class="insert-marker" />
                         </ui:VisualElement>
-                        <ui:Label name="Slot3Text" class="slot-meta-label" />
+                        <ui:VisualElement name="Slot3" class="slot-root">
+                            <ui:VisualElement class="slot-row">
+                                <ui:VisualElement name="Slot3Drag" class="slot-drag-handle" />
+                                <ui:VisualElement name="Slot3Card" class="slot-card">
+                                    <ui:VisualElement class="slot-skin">
+                                        <ui:VisualElement name="Slot3Icon" class="slot-icon" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="slot-ornate-frame" />
+                                </ui:VisualElement>
+                                <ui:Label name="Slot3Text" class="slot-meta-label" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="Slot3Insert" class="insert-marker" />
+                        </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:VisualElement name="Slot3Insert" class="insert-marker" />
+                    <ui:VisualElement name="EventColumn" class="event-column">
+                        <ui:VisualElement name="HeaderSpacer" class="event-header-spacer" />
+                        <ui:VisualElement name="Slot0EventAnchor" class="event-slot-anchor">
+                            <ui:VisualElement class="event-root">
+                                <ui:VisualElement class="event-card">
+                                    <ui:VisualElement class="event-icon" />
+                                </ui:VisualElement>
+                                <ui:Label class="event-text" text="FullRound next!" />
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
