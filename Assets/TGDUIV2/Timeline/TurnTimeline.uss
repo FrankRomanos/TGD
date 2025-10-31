@@ -114,27 +114,43 @@
 }
 
 .event-root {
+    width: 100%;
+    min-width: 100%;
+    min-height: 40px;
+    padding: 4px 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    pointer-events: none;
+}
+
+.event-row {
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
     gap: 6px;
-    pointer-events: none;
+    flex-grow: 1;
 }
 
 .event-card {
     position: relative;
-    width: 72px;
-    min-width: 72px;
-    height: 56px;
-    min-height: 56px;
-    border-radius: 8px;
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    border-radius: 6px;
     overflow: hidden;
     pointer-events: none;
+    background-color: black;
     background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png?fileID=2800000&guid=d73a620491870c54485bf72be0c9979f&type=3#tgd_chain_bg");
     background-position: center;
     background-size: cover;
     background-repeat: no-repeat;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.75), 0 0 6px rgba(255, 215, 120, 0.35);
+    border-width: 3px;
+    border-color: rgba(255,215,120,0.95);
+    box-shadow: 0 0 16px rgba(255,215,120,0.4), 0 12px 24px rgba(0,0,0,0.9);
 }
 
 .event-icon {
@@ -144,25 +160,35 @@
     top: 0;
     bottom: 0;
     border-radius: 6px;
-    background-color: transparent;
-    background-image: none;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
 }
 
 .event-text {
-    flex-grow: 1;
-    color: rgba(251, 231, 197, 0.92);
+    color: rgb(255, 228, 180);
+    unity-font-style-and-weight: bold;
     font-size: 11px;
-    unity-font-style-and-weight: semi-bold;
-    letter-spacing: 0.3px;
-    text-shadow: 0 0 8px rgba(0, 0, 0, 0.65);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 4px rgba(255,215,120,0.7);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-left: 4px;
     pointer-events: none;
+}
+
+.event-card.player-turn,
+.event-card.enemy-turn {
+    border-radius: 6px;
+}
+
+.event-card.player-turn {
+    border-width: 3px;
+    border-color: rgba(255,215,120,0.95);
+}
+
+.event-card.enemy-turn {
+    border-width: 2px;
+    border-color: rgba(255, 80, 80, 0.9);
 }
 
 .slot-drag-handle {
