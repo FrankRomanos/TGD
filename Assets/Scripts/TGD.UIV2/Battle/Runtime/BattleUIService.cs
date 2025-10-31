@@ -18,7 +18,6 @@ namespace TGD.UIV2.Battle
         public TurnHudController turnHud;
         public ActionHudMessageListenerTMP actionHudMessageListener;
 
-        bool _didStart;
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
@@ -46,47 +45,46 @@ namespace TGD.UIV2.Battle
             if (timeline == null)
                 timeline = AutoFind<TurnTimelineController>();
 
-            if (timeline != null)
-                timeline.ForceRebuildNow();
-        }
-
-        void Start()
-        {
-            if (timeline != null)
-                timeline.Initialize(turnManager, combatManager);
-
-            _didStart = true;
-            Subscribe();
         }
 
         void OnEnable()
         {
+            if (turnManager == null)
+                turnManager = AutoFind<TurnManagerV2>();
+
+            if (combatManager == null)
+                combatManager = AutoFind<CombatActionManagerV2>();
+
+            if (audioManager == null)
+                audioManager = AutoFind<BattleAudioManager>();
+
+            if (timeline == null)
+                timeline = AutoFind<TurnTimelineController>();
+
             if (timeline != null)
+            {
+                timeline.Initialize(turnManager, combatManager);
                 timeline.ActiveUnitDeferred += OnUnitDeferred;
+            }
 
-            if (_didStart)
-                Subscribe();
-        }
-
-        void Update()
-        {
-            if (!_didStart)
-                return;
-
-            if (!_subscriptionsActive && (turnManager != null || combatManager != null))
-                Subscribe();
+            Subscribe();
         }
 
         void OnDisable()
         {
-            if (timeline != null)
-                timeline.ActiveUnitDeferred -= OnUnitDeferred;
-
             Unsubscribe();
+
+            if (timeline != null)
+            {
+                timeline.ActiveUnitDeferred -= OnUnitDeferred;
+                timeline.Deinitialize();
+            }
         }
 
         void OnDestroy()
         {
+            if (timeline != null)
+                timeline.ActiveUnitDeferred -= OnUnitDeferred;
             Unsubscribe();
         }
 
@@ -102,7 +100,10 @@ namespace TGD.UIV2.Battle
             }
 
             if (combatManager != null && !_combatManagerSubscribed)
+            {
                 combatManager.BonusTurnStateChanged += HandleBonusTurnStateChanged;
+                _combatManagerSubscribed = true;
+            }
 
             _subscriptionsActive = _turnManagerSubscribed || _combatManagerSubscribed;
         }
