@@ -159,7 +159,6 @@ namespace TGD.UIV2.Battle
         {
             if (audioManager != null)
                 audioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);
-            UnityEngine.Debug.Log($"[BattleUIService] Deferred unit: {u}");
         }
 
         void HandleBonusTurnStateChanged()
