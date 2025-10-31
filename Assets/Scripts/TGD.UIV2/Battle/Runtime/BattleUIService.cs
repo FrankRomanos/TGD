@@ -16,6 +16,7 @@ namespace TGD.UIV2.Battle
         public TurnTimelineController timeline;
         public ChainPopupPresenter chainPopup;
         public TurnHudController turnHud;
+        public TurnBannerController turnBanner;
         public ActionHudMessageListenerTMP actionHudMessageListener;
 
         bool _subscriptionsActive;
@@ -41,6 +42,9 @@ namespace TGD.UIV2.Battle
 
             if (audioManager == null)
                 audioManager = AutoFind<BattleAudioManager>();
+
+            if (turnBanner == null)
+                turnBanner = AutoFind<TurnBannerController>();
 
             if (timeline == null)
                 timeline = AutoFind<TurnTimelineController>();
@@ -68,6 +72,8 @@ namespace TGD.UIV2.Battle
                 chainPopup = AutoFind<ChainPopupPresenter>();
             if (turnHud == null)
                 turnHud = AutoFind<TurnHudController>();
+            if (turnBanner == null)
+                turnBanner = AutoFind<TurnBannerController>();
 
             // --- 初始化每个UI控制器并把 manager 注入
             if (timeline != null)
@@ -90,7 +96,8 @@ namespace TGD.UIV2.Battle
                 chainPopup.ChainPopupOpened -= HandleChainPopupOpened;
                 chainPopup.ChainPopupOpened += HandleChainPopupOpened;
             }
-
+            if (turnBanner != null)
+                turnBanner.ForceHideImmediate();
             // --- 游戏层事件 -> UI
             Subscribe();
 
@@ -123,6 +130,8 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.Shutdown();
+            if (turnBanner != null)
+                turnBanner.ForceHideImmediate();
         }
 
 
@@ -217,6 +226,13 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandlePhaseBegan(isPlayerPhase);
+
+            if (turnBanner != null)
+            {
+                string msg = isPlayerPhase ? "Begin Turn(Player)" : "Begin Turn(Enemy)";
+                // isPlayerPhase = true 说明是我方行动轮，我们就用友方色
+                turnBanner.ShowBanner(msg, isPlayerPhase /*isPlayerSide*/);
+            }
         }
 
         void HandleTurnStarted(Unit unit)
@@ -226,6 +242,17 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandleTurnStarted(unit);
+            // 新增：Banner (按单位来播一句更细的提示)
+            if (turnBanner != null && turnManager != null && unit != null)
+            {
+                // 你之前的格式是类似 “Begin T1(1P)” 和 “敌方某某”
+                // 这边我用中文，保持信息密度高也清晰
+                string unitLabel = TurnManagerV2.FormatUnitLabel(unit); // 你现成的格式化方法
+                bool isPlayerSide = turnManager.IsPlayerUnit(unit);
+                string msg = $"{unitLabel} 的回合开始";
+
+                turnBanner.ShowBanner(msg, isPlayerSide);
+            }
         }
 
         void HandleTurnEnded(Unit unit)

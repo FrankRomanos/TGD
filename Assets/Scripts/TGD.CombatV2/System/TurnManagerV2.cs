@@ -1032,27 +1032,7 @@ namespace TGD.CombatV2
                     yield return StartCoroutine(routine);
             }
         }
-        string FormatContextLabel(UnitRuntimeContext context)
-        {
-            if (context == null)
-                return "?";
-
-            if (_unitByContext.TryGetValue(context, out var unit) && unit != null)
-                return FormatUnitLabel(unit);
-
-            foreach (var pair in _contextByUnit)
-            {
-                if (pair.Value == context)
-                {
-                    if (pair.Key != null)
-                    {
-                        _unitByContext[context] = pair.Key;
-                        return FormatUnitLabel(pair.Key);
-                    }
-                }
-            }
-            return string.IsNullOrEmpty(context.name) ? "?" : context.name;
-        }
+ 
 
         internal void RegisterMoveRateStatus(MoveRateStatusRuntime runtime)
         {
