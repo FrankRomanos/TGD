@@ -398,6 +398,26 @@ namespace TGD.CombatV2
             return _fullRoundStates.TryGetValue(unit, out var state) && state != null;
         }
 
+        public bool TryGetFullRoundInfo(Unit unit, out int roundsRemaining, out int totalRounds, out string actionId)
+        {
+            roundsRemaining = 0;
+            totalRounds = 0;
+            actionId = null;
+
+            if (unit == null)
+                return false;
+
+            if (_fullRoundStates.TryGetValue(unit, out var state) && state != null)
+            {
+                roundsRemaining = Mathf.Max(0, state.roundsRemaining);
+                totalRounds = Mathf.Max(0, state.totalRounds);
+                actionId = state.actionId;
+                return true;
+            }
+
+            return false;
+        }
+
         public bool CanDeclareFullRound(Unit unit, out string reason)
         {
             reason = null;

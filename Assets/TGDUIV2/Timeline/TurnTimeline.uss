@@ -113,6 +113,58 @@
     gap: 0;
 }
 
+.event-root {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.event-card {
+    position: relative;
+    width: 72px;
+    min-width: 72px;
+    height: 56px;
+    min-height: 56px;
+    border-radius: 8px;
+    overflow: hidden;
+    pointer-events: none;
+    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_bg.png?fileID=2800000&guid=d73a620491870c54485bf72be0c9979f&type=3#tgd_chain_bg");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.75), 0 0 6px rgba(255, 215, 120, 0.35);
+}
+
+.event-icon {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 6px;
+    background-color: transparent;
+    background-image: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.event-text {
+    flex-grow: 1;
+    color: rgba(251, 231, 197, 0.92);
+    font-size: 11px;
+    unity-font-style-and-weight: semi-bold;
+    letter-spacing: 0.3px;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.65);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 4px;
+    pointer-events: none;
+}
+
 .slot-drag-handle {
     display: none;
 }
