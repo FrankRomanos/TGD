@@ -220,11 +220,14 @@ namespace TGD.UIV2.Battle
 
             if (turnBanner != null && turnManager != null)
             {
-                turnBanner.ShowPhaseBegan(turnManager.IsPlayerPhase);
+                turnBanner.SetCurrentPhaseIndex(turnManager.CurrentPhaseIndex);
+                turnBanner.RegisterSideUnits(turnManager.GetSideUnits(true), true);
+                turnBanner.RegisterSideUnits(turnManager.GetSideUnits(false), false);
+                turnBanner.ShowPhaseBegan(turnManager.CurrentPhaseIndex, turnManager.IsPlayerPhase);
 
                 var activeUnit = turnManager.ActiveUnit;
                 if (activeUnit != null)
-                    turnBanner.ShowTurnStarted(activeUnit, turnManager.IsPlayerUnit(activeUnit));
+                    turnBanner.ShowTurnStarted(turnManager.CurrentPhaseIndex, activeUnit, turnManager.IsPlayerUnit(activeUnit));
             }
         }
 
@@ -236,8 +239,13 @@ namespace TGD.UIV2.Battle
             if (turnHud != null)
                 turnHud.HandlePhaseBegan(isPlayerPhase);
 
-            if (turnBanner != null)
-                turnBanner.ShowPhaseBegan(isPlayerPhase);
+            if (turnBanner != null && turnManager != null)
+            {
+                turnBanner.SetCurrentPhaseIndex(turnManager.CurrentPhaseIndex);
+                turnBanner.RegisterSideUnits(turnManager.GetSideUnits(true), true);
+                turnBanner.RegisterSideUnits(turnManager.GetSideUnits(false), false);
+                turnBanner.ShowPhaseBegan(turnManager.CurrentPhaseIndex, isPlayerPhase);
+            }
         }
 
         void HandleTurnStarted(Unit unit)
@@ -249,7 +257,12 @@ namespace TGD.UIV2.Battle
                 turnHud.HandleTurnStarted(unit);
 
             if (turnBanner != null && turnManager != null)
-                turnBanner.ShowTurnStarted(unit, turnManager.IsPlayerUnit(unit));
+            {
+                bool isPlayerUnit = turnManager.IsPlayerUnit(unit);
+                turnBanner.SetCurrentPhaseIndex(turnManager.CurrentPhaseIndex);
+                turnBanner.RegisterUnit(unit, isPlayerUnit);
+                turnBanner.ShowTurnStarted(turnManager.CurrentPhaseIndex, unit, isPlayerUnit);
+            }
         }
 
         void HandleTurnEnded(Unit unit)

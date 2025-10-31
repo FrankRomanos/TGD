@@ -50,11 +50,15 @@ namespace TGD.UIV2.Battle
         public AnimationCurve fadeOutCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
 
         readonly Queue<BannerEntry> _queue = new();
+        readonly HashSet<string> _playerLabels = new();
+        readonly HashSet<string> _enemyLabels = new();
+
         float _timer;
         bool _showing;
         bool _isVisible;
         Coroutine _fadeRoutine;
         float _emptySince = -1f;
+        int _lastKnownPhaseIndex = 1;
 
         void Awake()
         {
@@ -78,14 +82,66 @@ namespace TGD.UIV2.Battle
         }
 
         /// <summary>
+        /// Update cached phase index so upcoming messages line up with the real turn counter.
+        /// </summary>
+        public void SetCurrentPhaseIndex(int phaseIndex)
+        {
+            _lastKnownPhaseIndex = Mathf.Max(1, phaseIndex);
+        }
+
+        /// <summary>
+        /// Cache the current roster for color resolution.
+        /// </summary>
+        public void RegisterSideUnits(IReadOnlyList<Unit> units, bool isPlayerSide)
+        {
+            if (units == null)
+                return;
+
+            for (int i = 0; i < units.Count; i++)
+                RegisterUnit(units[i], isPlayerSide);
+        }
+
+        /// <summary>
+        /// Cache a specific unit for color resolution.
+        /// </summary>
+        public void RegisterUnit(Unit unit, bool? isPlayerUnit)
+        {
+            if (unit == null)
+                return;
+
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            if (string.IsNullOrEmpty(label))
+                return;
+
+            if (isPlayerUnit == true)
+            {
+                _playerLabels.Add(label);
+                _enemyLabels.Remove(label);
+            }
+            else if (isPlayerUnit == false)
+            {
+                _enemyLabels.Add(label);
+                _playerLabels.Remove(label);
+            }
+        }
+
+        /// <summary>
         /// Called by BattleUIService when a new phase begins.
         /// Example: Player phase vs Enemy phase.
         /// </summary>
         public void ShowPhaseBegan(bool isPlayerPhase)
         {
-            string who = isPlayerPhase ? "Player" : "Enemy";
-            Color color = isPlayerPhase ? friendlyColor : enemyColor;
-            EnqueueMessage($"Begin Turn ({who})", color);
+            ShowPhaseBegan(_lastKnownPhaseIndex, isPlayerPhase);
+        }
+
+        /// <summary>
+        /// Phase announcement with explicit phase index.
+        /// </summary>
+        public void ShowPhaseBegan(int phaseIndex, bool isPlayerPhase)
+        {
+            _lastKnownPhaseIndex = Mathf.Max(1, phaseIndex);
+            string phaseLabel = isPlayerPhase ? "P1" : "Enemy";
+            EnqueueTurnMessage($"[Turn] Begin T{_lastKnownPhaseIndex}({phaseLabel})", isPlayerPhase);
         }
 
         /// <summary>
@@ -93,18 +149,31 @@ namespace TGD.UIV2.Battle
         /// </summary>
         public void ShowTurnStarted(Unit unit, bool isPlayerUnit)
         {
-            string unitLabel = (unit != null) ? TurnManagerV2.FormatUnitLabel(unit) : (isPlayerUnit ? "Player" : "Enemy");
-            Color color = isPlayerUnit ? friendlyColor : enemyColor;
-            EnqueueMessage($"Begin {unitLabel}", color);
+            ShowTurnStarted(_lastKnownPhaseIndex, unit, isPlayerUnit);
+        }
+
+        /// <summary>
+        /// Turn start with explicit phase index to maintain ordering.
+        /// </summary>
+        public void ShowTurnStarted(int phaseIndex, Unit unit, bool isPlayerUnit)
+        {
+            _lastKnownPhaseIndex = Mathf.Max(1, phaseIndex);
+            RegisterUnit(unit, isPlayerUnit);
+            string unitLabel = (unit != null) ? TurnManagerV2.FormatUnitLabel(unit) : (isPlayerUnit ? "P1" : "Enemy");
+            EnqueueTurnMessage($"[Turn] Begin T{_lastKnownPhaseIndex}({unitLabel})", isPlayerUnit);
         }
 
         /// <summary>
         /// Optional hook for bonus turn style announcements.
         /// </summary>
-        public void ShowBonusTurn(string text)
+        public void ShowBonusTurn(Unit unit, bool? isPlayerUnit, string rawText = null)
         {
-            if (!string.IsNullOrEmpty(text))
-                EnqueueMessage(text, bonusColor);
+            RegisterUnit(unit, isPlayerUnit);
+            string labelText = !string.IsNullOrEmpty(rawText)
+                ? rawText
+                : CreateBonusTurnMessage(unit);
+            if (!string.IsNullOrEmpty(labelText))
+                EnqueueTurnMessage(labelText, isPlayerUnit, true);
         }
 
         /// <summary>
@@ -138,14 +207,83 @@ namespace TGD.UIV2.Battle
             }
         }
 
-        void EnqueueMessage(string text, Color color)
+        void EnqueueTurnMessage(string rawText, bool? isPlayerHint, bool isBonus = false)
         {
-            if (string.IsNullOrEmpty(text))
+            if (string.IsNullOrEmpty(rawText))
                 return;
 
-            _queue.Enqueue(new BannerEntry(text, color));
+            string display = FormatDisplayMessage(rawText);
+            Color color = ResolveColor(rawText, isPlayerHint, isBonus);
+            _queue.Enqueue(new BannerEntry(display, color));
             if (!_showing)
                 TryDisplayNext();
+        }
+
+        string CreateBonusTurnMessage(Unit unit)
+        {
+            if (unit == null)
+                return null;
+
+            string label = TurnManagerV2.FormatUnitLabel(unit);
+            if (string.IsNullOrEmpty(label))
+                return null;
+
+            return $"[Turn] BonusT({label})";
+        }
+
+        string FormatDisplayMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return string.Empty;
+
+            if (!message.StartsWith("[Turn]"))
+                return message;
+
+            int extraIndex = message.IndexOf(" TT=");
+            if (extraIndex > 0)
+                return message.Substring(0, extraIndex).TrimEnd();
+
+            return message;
+        }
+
+        string ExtractLabel(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return null;
+
+            int open = message.IndexOf('(');
+            int close = message.IndexOf(')', open + 1);
+            if (open >= 0 && close > open)
+                return message.Substring(open + 1, close - open - 1);
+            return null;
+        }
+
+        Color ResolveColor(string message, bool? isPlayerHint, bool isBonus)
+        {
+            if (isBonus)
+                return bonusColor;
+
+            string label = ExtractLabel(message);
+            if (!string.IsNullOrEmpty(label))
+            {
+                if (_playerLabels.Contains(label))
+                    return friendlyColor;
+                if (_enemyLabels.Contains(label))
+                    return enemyColor;
+            }
+
+            if (isPlayerHint.HasValue)
+                return isPlayerHint.Value ? friendlyColor : enemyColor;
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                if (message.Contains("(Enemy)"))
+                    return enemyColor;
+                if (message.Contains("(Player)") || message.Contains("(P1)"))
+                    return friendlyColor;
+            }
+
+            return friendlyColor;
         }
 
         void TryDisplayNext()
