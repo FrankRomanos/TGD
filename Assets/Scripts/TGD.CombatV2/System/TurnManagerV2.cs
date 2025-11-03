@@ -1250,7 +1250,12 @@ namespace TGD.CombatV2
 
                 float product = status?.GetProduct() ?? 1f;
                 float combinedMult = Mathf.Clamp(context.MoveRates.NormalizedMultiplier * product, 0.01f, 100f);
-                float recomputed = StatsMathV2.MR_MultiThenFlat(context.BaseMoveRate, new[] { combinedMult }, context.MoveRateFlatAdd);
+                float recomputed = StatsMathV2.MR_MultiThenFlat(
+                    context.BaseMoveRate,
+                    new[] { combinedMult },
+                    context.MoveRateFlatAdd,
+                    context.MoveRateMin,
+                    context.MoveRateMax);
                 context.CurrentMoveRate = recomputed;
                 string unitLabel = FormatUnitLabel(unit);
                 string tagsCsv = status?.ActiveTagsCsv ?? "none";

@@ -123,13 +123,19 @@ namespace TGD.CombatV2
         [Header("Sticky Slow (optional)")]
         public MoveRateStatusRuntime status;        // 黏性修饰器运行时（可选）
         public MonoBehaviour stickySource;          // 任意实现了 IStickySlowSource 的组件
-        const float MR_MIN = 1f;
-        const float MR_MAX = 12f;
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
         const float MULT_MIN = 0.01f;
         const float MULT_MAX = 100f;
         IStickyMoveSource _sticky;
+
+        float MoveRateMin => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMin;
+        float MoveRateMax => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMax;
+        int MoveRateMinInt => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMinInt;
+        int MoveRateMaxInt => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMaxInt;
+
+        float ClampMoveRate(float value) => Mathf.Clamp(value, MoveRateMin, MoveRateMax);
+        int ClampMoveRateInt(int value) => Mathf.Clamp(value, MoveRateMinInt, MoveRateMaxInt);
 
         struct MoveRateSnapshot
         {
@@ -553,7 +559,7 @@ namespace TGD.CombatV2
         MoveRateSnapshot BuildMoveRates(Hex start)
         {
             int baseRate = ctx != null ? ctx.BaseMoveRate : GetFallbackBaseRate();
-            baseRate = Mathf.Clamp(baseRate, (int)MR_MIN, (int)MR_MAX);
+            baseRate = ClampMoveRateInt(baseRate);
 
             float buffMult = 1f;
             int flatAfter = 0;
@@ -568,14 +574,19 @@ namespace TGD.CombatV2
             stickyMult = Mathf.Clamp(stickyMult, MULT_MIN, MULT_MAX);
 
             float combined = Mathf.Clamp(buffMult * stickyMult, MULT_MIN, MULT_MAX);
-            float baseNoEnv = StatsMathV2.MR_MultiThenFlat(baseRate, new[] { combined }, flatAfter);
-            baseNoEnv = Mathf.Clamp(baseNoEnv, MR_MIN, MR_MAX);
+            float baseNoEnv = StatsMathV2.MR_MultiThenFlat(
+                baseRate,
+                new[] { combined },
+                flatAfter,
+                MoveRateMin,
+                MoveRateMax);
+            baseNoEnv = ClampMoveRate(baseNoEnv);
 
             var startSample = SampleStepModifier(start);
             float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, ENV_MIN, ENV_MAX);
             float startUse = startSample.Sticky ? 1f : startEnv;
             startUse = Mathf.Clamp(startUse, ENV_MIN, ENV_MAX);
-            float mrClick = Mathf.Clamp(baseNoEnv * startUse, MR_MIN, MR_MAX);
+            float mrClick = ClampMoveRate(baseNoEnv * startUse);
 
             return new MoveRateSnapshot
             {
@@ -626,7 +637,7 @@ namespace TGD.CombatV2
             int steps = config != null ? Mathf.Max(1, config.fallbackSteps) : 3;
             float seconds = config != null ? Mathf.Max(0.1f, config.timeCostSeconds) : 1f;
             float mr = steps / Mathf.Max(0.1f, seconds);
-            return Mathf.Clamp(Mathf.RoundToInt(mr), (int)MR_MIN, (int)MR_MAX);
+            return ClampMoveRateInt(Mathf.RoundToInt(mr));
         }
 
         bool TryRebuildPathCache(out MovableRangeResult result)
@@ -649,9 +660,9 @@ namespace TGD.CombatV2
             var rates = BuildMoveRates(startHex);
 
             bool startGivesSticky = rates.startIsSticky;
-            float mrNoEnv = Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
+            float mrNoEnv = ClampMoveRate(rates.baseNoEnv);
             float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
-            float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
+            float mrPreview = ClampMoveRate(mrNoEnv * startMultUse);
 
             int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
             int cap = config ? config.stepsCap : 12;
@@ -869,7 +880,9 @@ namespace TGD.CombatV2
                     requiredSec,
                     SampleStepModifier,
                     refundThreshold,
-                    debugLog
+                    debugLog,
+                    MoveRateMin,
+                    MoveRateMax
                 );
                 var reached = sim.ReachedPath;
 
@@ -961,8 +974,8 @@ namespace TGD.CombatV2
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]
-                        : Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
-                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
+                        : ClampMoveRate(rates.baseNoEnv);
+                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MoveRateMin, effMR));
 
 
                     float t = 0f;

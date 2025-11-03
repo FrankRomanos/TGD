@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace TGD.CoreV2
@@ -46,7 +45,7 @@ namespace TGD.CoreV2
         public static int CooldownToTurns(int seconds)
             => (seconds <= 0) ? 0 : (seconds + BaseTurnSeconds - 1) / BaseTurnSeconds;
 
-        public static float MR_MultiThenFlat(int baseR, IEnumerable<float> mults, float flatAfter)
+        public static float MR_MultiThenFlat(int baseR, IEnumerable<float> mults, float flatAfter, float min = MoveRateRules.DefaultMin, float max = MoveRateRules.DefaultMax)
         {
             float M = 1f;
             if (mults != null)
@@ -54,8 +53,13 @@ namespace TGD.CoreV2
                 foreach (var m in mults)
                     M *= Mathf.Clamp(m, 0.01f, 100f);
             }
-            float mr = baseR * M + Mathf.Max(0f, flatAfter);
-            return Mathf.Max(0.01f, mr);
+
+            int minInt = Mathf.FloorToInt(min);
+            int maxInt = Mathf.CeilToInt(max);
+            int baseClamped = Mathf.Clamp(baseR, minInt, maxInt);
+
+            float mr = baseClamped * M + flatAfter;
+            return Mathf.Clamp(mr, min, max);
         }
 
 
@@ -65,14 +69,17 @@ namespace TGD.CoreV2
         }
 
 
-        public static int EffectiveMoveRateFromBase(int baseR, IEnumerable<float> percentMults, int flatAddLegacy)
+        public static int EffectiveMoveRateFromBase(int baseR, IEnumerable<float> percentMults, int flatAddLegacy, int min = MoveRateRules.DefaultMinInt, int max = MoveRateRules.DefaultMaxInt)
         {
             float mr = MR_MultiThenFlat(
-                Mathf.Max(1, baseR),
+                baseR,
                 percentMults,
-                flatAddLegacy
+                flatAddLegacy,
+                min,
+                max
             );
-            return Mathf.Max(1, Mathf.FloorToInt(mr + 1e-3f));
+            int floored = Mathf.FloorToInt(mr + 1e-3f);
+            return Mathf.Clamp(floored, min, max);
         }
 
 

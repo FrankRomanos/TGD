@@ -34,17 +34,29 @@ namespace TGD.CoreV2
 
         // ========= 便捷只读访问（统一入口；外部系统只读这些） =========
         // —— 移动 —— 
-        public int MoveRate => (stats != null) ? stats.MoveRate : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
+        public int MoveRateMin => stats != null ? MoveRateRules.ResolveMin(stats) : MoveRateRules.DefaultMinInt;
+        public int MoveRateMax => stats != null ? MoveRateRules.ResolveMax(stats) : MoveRateRules.DefaultMaxInt;
+        public int MoveRate => stats != null
+            ? Mathf.Clamp(stats.MoveRate, MoveRateMin, MoveRateMax)
+            : Mathf.Clamp(Mathf.RoundToInt(fallbackMoveRate), MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
         // ★ 新增：基础移速（可写，写回 Stats 或 fallback）
         public int BaseMoveRate
         {
-            get => stats != null ? Mathf.Max(1, stats.MoveRate)
-                                 : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
+            get => stats != null
+                ? Mathf.Clamp(stats.MoveRate, MoveRateMin, MoveRateMax)
+                : Mathf.Clamp(Mathf.RoundToInt(fallbackMoveRate), MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
             set
             {
-                int v = Mathf.Max(1, value);
-                if (stats != null) stats.MoveRate = v;
-                else fallbackMoveRate = v;
+                int v = Mathf.Clamp(value, MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
+                if (stats != null)
+                {
+                    stats.MoveRate = Mathf.Clamp(v, MoveRateMin, MoveRateMax);
+                }
+                else
+                {
+                    fallbackMoveRate = Mathf.Clamp(v, MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
+                }
+                _currentMoveRate = -1f;
             }
         }
         [SerializeField]
@@ -54,11 +66,20 @@ namespace TGD.CoreV2
             get
             {
                 if (_currentMoveRate <= 0f)
-                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd);
-                return _currentMoveRate;
+                {
+                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(
+                        BaseMoveRate,
+                        new[] { MoveRates.NormalizedMultiplier },
+                        MoveRateFlatAdd,
+                        MoveRateMin,
+                        MoveRateMax
+                    );
+                }
+                return Mathf.Clamp(_currentMoveRate, MoveRateMin, MoveRateMax);
             }
-            set => _currentMoveRate = Mathf.Max(0.01f, value);
+            set => _currentMoveRate = Mathf.Clamp(value, MoveRateMin, MoveRateMax);
         }
+        public int CurrentMoveRateDisplay => Mathf.Clamp(Mathf.FloorToInt(CurrentMoveRate), MoveRateMin, MoveRateMax);
         public float MoveRatePctAdd => MoveRates.PercentAdd;
         public int MoveRateFlatAdd => MoveRates.FlatAdd;
         //speed
@@ -92,7 +113,12 @@ namespace TGD.CoreV2
         {
             if (stats != null) stats.Clamp();
             MoveRates.Clamp();
-            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd));
+            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(
+                BaseMoveRate,
+                new[] { MoveRates.NormalizedMultiplier },
+                MoveRateFlatAdd,
+                MoveRateMin,
+                MoveRateMax));
         }
 
         [ContextMenu("Debug/Print Snapshot")]

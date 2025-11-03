@@ -1,6 +1,7 @@
 // File: TGD.CombatV2/AttackPlannerV2.cs
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -29,10 +30,14 @@ namespace TGD.CombatV2
             int budgetSeconds,
             float baseMoveRate,
             System.Func<Hex, MoveSimulator.StickySample> getStepModifier,
-            float refundThresholdSeconds = 0.8f)
+            float refundThresholdSeconds = 0.8f,
+            float moveRateMin = MoveRateRules.DefaultMin,
+            float moveRateMax = MoveRateRules.DefaultMax)
         {
             var plan = new Plan { target = target };
             if (layout == null || occ == null) return plan;
+
+            baseMoveRate = Mathf.Clamp(baseMoveRate, moveRateMin, moveRateMax);
 
             var candidates = new List<Hex>();
             foreach (var h in Hex.Ring(target, meleeRange))
@@ -77,7 +82,7 @@ namespace TGD.CombatV2
             var startSample = getStepModifier != null ? getStepModifier(best[0]) : MoveSimulator.StickySample.None;
             float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, 0.1f, 5f);
             float startUse = startSample.Sticky ? 1f : startEnv;
-            float mrPlanned = Mathf.Clamp(baseMoveRate * startUse, 1f, 12f);
+            float mrPlanned = Mathf.Clamp(baseMoveRate * startUse, moveRateMin, moveRateMax);
 
             var sim = MoveSimulator.Run(
                 best,
@@ -85,7 +90,10 @@ namespace TGD.CombatV2
                 mrPlanned,
                 Mathf.Max(0, budgetSeconds),
                 getStepModifier,
-                refundThresholdSeconds
+                refundThresholdSeconds,
+                false,
+                moveRateMin,
+                moveRateMax
             );
 
             plan.truncatedPath = sim.ReachedPath;
