@@ -14,8 +14,6 @@ namespace TGD.CombatV2
     [RequireComponent(typeof(PlayerOccupancyBridge))]
     public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
     {
-        const float MR_MIN = 1f;
-        const float MR_MAX = 12f;
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
 
@@ -36,8 +34,6 @@ namespace TGD.CombatV2
         public MonoBehaviour stickySource;
 
         [Header("Config")]
-        public AttackActionConfigV2 attackConfig;
-        public MoveActionConfig moveConfig;
         public MonoBehaviour enemyProvider;
 
         [Header("Turn Manager Binding")]
@@ -79,6 +75,59 @@ namespace TGD.CombatV2
         int _planAnchorVersion = -1;
         IStickyMoveSource _sticky;
         IEnemyLocator _enemyLocator;
+
+        float MoveRateMin => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMin;
+        float MoveRateMax => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMax;
+        int MoveRateMinInt => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMinInt;
+        int MoveRateMaxInt => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMaxInt;
+
+        float ClampMoveRate(float value) => Mathf.Clamp(value, MoveRateMin, MoveRateMax);
+        int ClampMoveRateInt(int value) => Mathf.Clamp(value, MoveRateMinInt, MoveRateMaxInt);
+
+        int ResolveAttackSeconds()
+        {
+            if (ctx != null)
+                return Mathf.Max(0, ctx.AttackSeconds);
+            return AttackProfileRules.DefaultSeconds;
+        }
+
+        int ResolveAttackEnergyCost()
+        {
+            if (ctx != null)
+                return Mathf.Max(0, ctx.AttackEnergyCost);
+            return AttackProfileRules.DefaultEnergyCost;
+        }
+
+        int ResolveMoveEnergyPerSecond()
+            => ctx != null ? ctx.MoveEnergyPerSecond : MoveProfileRules.DefaultEnergyPerSecond;
+
+        int ResolveMoveBudgetSeconds()
+        {
+            if (ctx != null)
+                return ctx.MoveBaseSecondsCeil;
+            return Mathf.Max(1, Mathf.CeilToInt(MoveProfileRules.DefaultSeconds));
+        }
+
+        float ResolveMoveRefundThreshold()
+            => ctx != null ? ctx.MoveRefundThresholdSeconds : MoveProfileRules.DefaultRefundThresholdSeconds;
+
+        int ResolveMeleeRange()
+            => ctx != null ? ctx.AttackMeleeRange : AttackProfileRules.DefaultMeleeRange;
+
+        float ResolveAttackRefundThreshold()
+            => ctx != null ? ctx.AttackRefundThresholdSeconds : AttackProfileRules.DefaultRefundThresholdSeconds;
+
+        float ResolveAttackFreeMoveCutoff()
+            => ctx != null ? ctx.AttackFreeMoveCutoffSeconds : AttackProfileRules.DefaultFreeMoveCutoffSeconds;
+
+        float ResolveAttackKeepDeg()
+            => ctx != null ? ctx.AttackKeepDeg : AttackProfileRules.DefaultKeepDeg;
+
+        float ResolveAttackTurnDeg()
+            => ctx != null ? ctx.AttackTurnDeg : AttackProfileRules.DefaultTurnDeg;
+
+        float ResolveAttackTurnSpeed()
+            => ctx != null ? ctx.AttackTurnSpeedDegPerSec : AttackProfileRules.DefaultTurnSpeedDegPerSec;
 
         TargetingSpec _attackSpec;
 
@@ -232,20 +281,20 @@ namespace TGD.CombatV2
         }
         int ComputeAttackEnergyCost(bool treatAsEnemy)
         {
-            if (!treatAsEnemy || attackConfig == null)
+            if (!treatAsEnemy)
                 return 0;
 
             int comboIndex = Mathf.Max(0, _attacksThisTurn);
-            int baseCost = Mathf.Max(0, attackConfig.baseEnergyCost);
+            int baseCost = ResolveAttackEnergyCost();
             float scale = 1f + 0.5f * comboIndex;
             return Mathf.Max(0, Mathf.CeilToInt(baseCost * scale));
         }
 
         public PlannedAttackCost PeekPlannedCost(Hex target)
         {
-            int fallbackMoveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
-            int moveEnergyRate = moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0;
-            int fallbackAtkSecs = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0;
+            int fallbackMoveSecs = ResolveMoveBudgetSeconds();
+            int moveEnergyRate = ResolveMoveEnergyPerSecond();
+            int fallbackAtkSecs = ResolveAttackSeconds();
             int fallbackAtkEnergy = ComputeAttackEnergyCost(true);
 
             var result = new PlannedAttackCost
@@ -289,10 +338,10 @@ namespace TGD.CombatV2
 
         public PlannedAttackCost GetBaselineCost()
         {
-            int moveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
-            int moveEnergyRate = moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0;
-            int atkSecs = Mathf.Max(0, attackConfig ? attackConfig.baseTimeSeconds : 0);
-            int atkEnergy = Mathf.Max(0, attackConfig ? attackConfig.baseEnergyCost : 0);
+            int moveSecs = ResolveMoveBudgetSeconds();
+            int moveEnergyRate = ResolveMoveEnergyPerSecond();
+            int atkSecs = ResolveAttackSeconds();
+            int atkEnergy = ResolveAttackEnergyCost();
 
             return new PlannedAttackCost
             {
@@ -306,10 +355,10 @@ namespace TGD.CombatV2
 
         public (int moveSecs, int atkSecs, int energyMove, int energyAtk) GetPlannedCost()
         {
-            int moveSecs = Mathf.Max(1, Mathf.CeilToInt(moveConfig ? moveConfig.timeCostSeconds : 1f));
-            int moveEnergy = moveSecs * (moveConfig ? Mathf.Max(0, moveConfig.energyCost) : 0);
-            int atkSecs = Mathf.Max(0, Mathf.CeilToInt(attackConfig ? attackConfig.baseTimeSeconds : 0f));
-            int atkEnergy = attackConfig ? Mathf.Max(0, attackConfig.baseEnergyCost) : 0;
+            int moveSecs = ResolveMoveBudgetSeconds();
+            int moveEnergy = moveSecs * ResolveMoveEnergyPerSecond();
+            int atkSecs = ResolveAttackSeconds();
+            int atkEnergy = ResolveAttackEnergyCost();
             return (moveSecs, atkSecs, moveEnergy, atkEnergy);
         }
 
@@ -851,7 +900,7 @@ namespace TGD.CombatV2
                 rates = rates,
                 mrClick = rates.mrClick,
                 mrNoEnv = rates.mrNoEnv,
-                attackSecsCharge = attackConfig ? Mathf.Max(0, attackConfig.baseTimeSeconds) : 0
+                attackSecsCharge = ResolveAttackSeconds()
             };
 
             if (layout != null && !layout.Contains(target))
@@ -905,7 +954,7 @@ namespace TGD.CombatV2
 
             if (treatAsEnemy)
             {
-                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                int range = Mathf.Max(1, ResolveMeleeRange());
                 if (!TryFindMeleePath(start, target, range, passability, out landing, out path))
                 {
                     preview.valid = false;
@@ -944,7 +993,7 @@ namespace TGD.CombatV2
             preview.path = path;
             preview.steps = Mathf.Max(0, (path?.Count ?? 1) - 1);
 
-            float mrClick = Mathf.Max(MR_MIN, rates.mrClick);
+            float mrClick = ClampMoveRate(rates.mrClick);
             int predSecs = preview.steps > 0 ? Mathf.CeilToInt(preview.steps / Mathf.Max(0.01f, mrClick)) : 0;
             int chargeSecs = predSecs;
             if (treatAsEnemy)
@@ -1044,7 +1093,7 @@ namespace TGD.CombatV2
             List<Hex> executionPath = null;
             if (preview.targetIsEnemy)
             {
-                int range = attackConfig ? Mathf.Max(1, attackConfig.meleeRange) : 1;
+                int range = Mathf.Max(1, ResolveMeleeRange());
                 if (!TryFindMeleePath(startAnchor, preview.targetHex, range, passability, out _, out executionPath))
                 {
                     HandleApproachAbort();
@@ -1079,16 +1128,16 @@ namespace TGD.CombatV2
             {
                 var fromW = hexSpace.HexToWorld(executionPath[0], y);
                 var toW = hexSpace.HexToWorld(executionPath[^1], y);
-                float keep = attackConfig ? attackConfig.keepDeg : 45f;
-                float turn = attackConfig ? attackConfig.turnDeg : 135f;
-                float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                float keep = ResolveAttackKeepDeg();
+                float turn = ResolveAttackTurnDeg();
+                float speed = ResolveAttackTurnSpeed();
                 var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(finalFacing, fromW, toW, keep, turn);
                 yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
                 finalFacing = nf;
             }
 
             float mrNoEnv = preview.mrNoEnv;
-            float refundThreshold = attackConfig ? Mathf.Max(0.01f, attackConfig.refundThresholdSeconds) : 0.8f;
+            float refundThreshold = Mathf.Max(0.01f, ResolveAttackRefundThreshold());
 
             var sim = MoveSimulator.Run(
                 executionPath,
@@ -1097,7 +1146,9 @@ namespace TGD.CombatV2
                 moveSecsCharge,
                 SampleStepModifier,
                 refundThreshold,
-                debugLog);
+                debugLog,
+                MoveRateMin,
+                MoveRateMax);
 
             var reached = sim.ReachedPath ?? new List<Hex>();
             int refundedSeconds = Mathf.Max(0, sim.RefundedSeconds);
@@ -1130,9 +1181,9 @@ namespace TGD.CombatV2
                     {
                         var fromW = hexSpace.HexToWorld(startAnchor, y);
                         var toW = hexSpace.HexToWorld(preview.targetHex, y);
-                        float keep = attackConfig ? attackConfig.keepDeg : 45f;
-                        float turn = attackConfig ? attackConfig.turnDeg : 135f;
-                        float speed = attackConfig ? attackConfig.turnSpeedDegPerSec : 720f;
+                        float keep = ResolveAttackKeepDeg();
+                        float turn = ResolveAttackTurnDeg();
+                        float speed = ResolveAttackTurnSpeed();
                         var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(finalFacing, fromW, toW, keep, turn);
                         yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
                         finalFacing = nf;
@@ -1200,8 +1251,8 @@ namespace TGD.CombatV2
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]
-                        : Mathf.Clamp(mrNoEnv, MR_MIN, MR_MAX);
-                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MR_MIN, effMR));
+                        : ClampMoveRate(mrNoEnv);
+                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MoveRateMin, effMR));
 
                     if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                     {
@@ -1277,7 +1328,7 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
-                float cutoff = attackConfig ? Mathf.Max(0f, attackConfig.freeMoveCutoffSeconds) : 0.2f;
+                float cutoff = Mathf.Max(0f, ResolveAttackFreeMoveCutoff());
                 bool isMelee = attackPlanned;
                 bool canFree = isMelee && moveSecsCharge >= 1;
                 bool freeMoveApplied = false;
@@ -1388,8 +1439,8 @@ namespace TGD.CombatV2
 
         MoveRatesSnapshot BuildMoveRates(Hex start)
         {
-            int baseRate = ctx != null ? Mathf.Max(1, ctx.BaseMoveRate) : GetFallbackBaseRate();
-            baseRate = Mathf.Clamp(baseRate, (int)MR_MIN, (int)MR_MAX);
+            int baseRate = ctx != null ? ctx.BaseMoveRate : GetFallbackBaseRate();
+            baseRate = ClampMoveRateInt(baseRate);
 
             float buffMult = 1f;
             int flatAfter = 0;
@@ -1400,15 +1451,26 @@ namespace TGD.CombatV2
             }
 
             float stickyMult = status != null ? status.GetProduct() : 1f;
+            buffMult = Mathf.Clamp(buffMult, 0.01f, 100f);
+            stickyMult = Mathf.Clamp(stickyMult, 0.01f, 100f);
+
+            float combined = Mathf.Clamp(buffMult * stickyMult, 0.01f, 100f);
 
             var startSample = SampleStepModifier(start);
             float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, ENV_MIN, ENV_MAX);
             bool startIsSticky = startSample.Sticky;
 
-            float mrNoEnv = Mathf.Clamp(baseRate * buffMult * stickyMult + flatAfter, MR_MIN, MR_MAX);
+            float mrNoEnv = StatsMathV2.MR_MultiThenFlat(
+                baseRate,
+                new[] { combined },
+                flatAfter,
+                MoveRateMin,
+                MoveRateMax);
+            mrNoEnv = ClampMoveRate(mrNoEnv);
+
             float startUse = startIsSticky ? 1f : startEnv;
             startUse = Mathf.Clamp(startUse, ENV_MIN, ENV_MAX);
-            float mrClick = Mathf.Clamp(mrNoEnv * startUse, MR_MIN, MR_MAX);
+            float mrClick = ClampMoveRate(mrNoEnv * startUse);
 
             return new MoveRatesSnapshot
             {
@@ -1455,10 +1517,10 @@ namespace TGD.CombatV2
         int GetFallbackBaseRate()
         {
             if (ctx != null) return ctx.BaseMoveRate;
-            return 3;
+            return ClampMoveRateInt(3);
         }
 
-        int MoveEnergyPerSecond() => moveConfig != null ? Mathf.Max(0, moveConfig.energyCost) : 0;
+        int MoveEnergyPerSecond() => Mathf.Max(0, ResolveMoveEnergyPerSecond());
 
         bool IsEnemyHex(Hex hex)
         {

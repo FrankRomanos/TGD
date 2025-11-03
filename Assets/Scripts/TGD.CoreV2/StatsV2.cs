@@ -16,7 +16,19 @@ namespace TGD.CoreV2
 
         // —— 时间 & 移动 ——
         public int Speed;                  // +秒/回合
-        public int MoveRate = 1;           // 格/秒（底座）
+        [Min(MoveRateRules.DefaultMinInt)]
+        public int MoveRate = MoveRateRules.DefaultMinInt;           // 格/秒（底座）
+        [Tooltip("Minimum allowed move rate for this unit (after all runtime modifiers).")]
+        public int MoveRateMin = MoveRateRules.DefaultMinInt;
+        [Tooltip("Maximum allowed move rate for this unit (after all runtime modifiers).")]
+        public int MoveRateMax = MoveRateRules.DefaultMaxInt;
+
+        [Tooltip("Base move pacing settings for the standard action.")]
+        public MoveProfileV2 MoveProfile = new MoveProfileV2();
+
+        // —— 攻击节奏 ——
+        [Tooltip("Base attack pacing settings for the standard action.")]
+        public AttackProfileV2 AttackProfile = new AttackProfileV2();
 
         // —— 公共资源 —— 
         public int MaxHP = 100, HP = 100;
@@ -74,7 +86,15 @@ namespace TGD.CoreV2
             MaxEnergy = Mathf.Max(0, MaxEnergy);
             Energy = Mathf.Clamp(Energy, 0, MaxEnergy);
 
-            MoveRate = Mathf.Max(1, MoveRate);
+            MoveRateMin = Mathf.Clamp(MoveRateMin, MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
+            MoveRateMax = Mathf.Clamp(MoveRateMax, MoveRateMin, MoveRateRules.DefaultMaxInt);
+            MoveRate = Mathf.Clamp(MoveRate, MoveRateMin, MoveRateMax);
+            if (MoveProfile == null)
+                MoveProfile = new MoveProfileV2();
+            MoveProfile.Clamp();
+            if (AttackProfile == null)
+                AttackProfile = new AttackProfileV2();
+            AttackProfile.Clamp();
             // 非负保障
             PrimaryAddPct = Mathf.Max(0f, PrimaryAddPct);
             BaseCrit = Mathf.Max(0f, BaseCrit);
