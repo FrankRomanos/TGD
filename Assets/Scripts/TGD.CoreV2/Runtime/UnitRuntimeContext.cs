@@ -15,6 +15,30 @@ namespace TGD.CoreV2
         [Header("Fallbacks (for tests)")]
         [Tooltip("当 stats 为空时用于测试的默认 MoveRate")]
         public float fallbackMoveRate = 5f;
+        [Tooltip("当 stats 为空时用于测试的默认攻击秒数")]
+        public int fallbackAttackSeconds = AttackProfileRules.DefaultSeconds;
+        [Tooltip("当 stats 为空时用于测试的默认攻击能量消耗")]
+        public int fallbackAttackEnergyCost = AttackProfileRules.DefaultEnergyCost;
+        [Tooltip("当 stats 为空时用于测试的默认移动耗能（能量/秒）")]
+        public int fallbackMoveEnergyPerSecond = MoveProfileRules.DefaultEnergyPerSecond;
+        [Tooltip("当 stats 为空时用于测试的默认移动时间预算（秒）")]
+        public float fallbackMoveBaseSeconds = MoveProfileRules.DefaultSeconds;
+        [Tooltip("当 stats 为空时用于测试的默认移动返还阈值（秒）")]
+        public float fallbackMoveRefundThresholdSeconds = MoveProfileRules.DefaultRefundThresholdSeconds;
+        [Tooltip("当 stats 为空时用于测试的默认预览步数（无路径时显示）")]
+        public int fallbackMoveFallbackSteps = MoveProfileRules.DefaultFallbackSteps;
+        [Tooltip("当 stats 为空时用于测试的默认步数上限")]
+        public int fallbackMoveStepsCap = MoveProfileRules.DefaultStepsCap;
+        [Tooltip("当 stats 为空时用于测试的默认保持角度（度）")]
+        public float fallbackMoveKeepDeg = MoveProfileRules.DefaultKeepDeg;
+        [Tooltip("当 stats 为空时用于测试的默认转向角度（度）")]
+        public float fallbackMoveTurnDeg = MoveProfileRules.DefaultTurnDeg;
+        [Tooltip("当 stats 为空时用于测试的默认转向速度（度/秒）")]
+        public float fallbackMoveTurnSpeedDegPerSec = MoveProfileRules.DefaultTurnSpeedDegPerSec;
+        [Tooltip("当 stats 为空时用于测试的默认移动冷却（秒）")]
+        public float fallbackMoveCooldownSeconds = MoveProfileRules.DefaultCooldownSeconds;
+        [Tooltip("当 stats 为空时用于测试的默认移动 ActionId")]
+        public string fallbackMoveActionId = MoveProfileRules.DefaultActionId;
 
         [Header("Runtime State")]
         [SerializeField]
@@ -34,17 +58,29 @@ namespace TGD.CoreV2
 
         // ========= 便捷只读访问（统一入口；外部系统只读这些） =========
         // —— 移动 —— 
-        public int MoveRate => (stats != null) ? stats.MoveRate : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
+        public int MoveRateMin => stats != null ? MoveRateRules.ResolveMin(stats) : MoveRateRules.DefaultMinInt;
+        public int MoveRateMax => stats != null ? MoveRateRules.ResolveMax(stats) : MoveRateRules.DefaultMaxInt;
+        public int MoveRate => stats != null
+            ? Mathf.Clamp(stats.MoveRate, MoveRateMin, MoveRateMax)
+            : Mathf.Clamp(Mathf.RoundToInt(fallbackMoveRate), MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
         // ★ 新增：基础移速（可写，写回 Stats 或 fallback）
         public int BaseMoveRate
         {
-            get => stats != null ? Mathf.Max(1, stats.MoveRate)
-                                 : Mathf.Max(1, Mathf.RoundToInt(fallbackMoveRate));
+            get => stats != null
+                ? Mathf.Clamp(stats.MoveRate, MoveRateMin, MoveRateMax)
+                : Mathf.Clamp(Mathf.RoundToInt(fallbackMoveRate), MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
             set
             {
-                int v = Mathf.Max(1, value);
-                if (stats != null) stats.MoveRate = v;
-                else fallbackMoveRate = v;
+                int v = Mathf.Clamp(value, MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
+                if (stats != null)
+                {
+                    stats.MoveRate = Mathf.Clamp(v, MoveRateMin, MoveRateMax);
+                }
+                else
+                {
+                    fallbackMoveRate = Mathf.Clamp(v, MoveRateRules.DefaultMinInt, MoveRateRules.DefaultMaxInt);
+                }
+                _currentMoveRate = -1f;
             }
         }
         [SerializeField]
@@ -54,16 +90,88 @@ namespace TGD.CoreV2
             get
             {
                 if (_currentMoveRate <= 0f)
-                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd);
-                return _currentMoveRate;
+                {
+                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(
+                        BaseMoveRate,
+                        new[] { MoveRates.NormalizedMultiplier },
+                        MoveRateFlatAdd,
+                        MoveRateMin,
+                        MoveRateMax
+                    );
+                }
+                return Mathf.Clamp(_currentMoveRate, MoveRateMin, MoveRateMax);
             }
-            set => _currentMoveRate = Mathf.Max(0.01f, value);
+            set => _currentMoveRate = Mathf.Clamp(value, MoveRateMin, MoveRateMax);
         }
+        public int CurrentMoveRateDisplay => Mathf.Clamp(Mathf.FloorToInt(CurrentMoveRate), MoveRateMin, MoveRateMax);
         public float MoveRatePctAdd => MoveRates.PercentAdd;
         public int MoveRateFlatAdd => MoveRates.FlatAdd;
         //speed
         public int Speed => (stats != null) ? stats.Speed : 0;
-        // —— 能量 —— 
+        public int AttackSeconds => stats != null
+            ? AttackProfileRules.ResolveSeconds(stats)
+            : Mathf.Clamp(fallbackAttackSeconds, AttackProfileRules.MinSeconds, AttackProfileRules.MaxSeconds);
+        public int AttackEnergyCost => stats != null
+            ? AttackProfileRules.ResolveEnergy(stats)
+            : Mathf.Clamp(fallbackAttackEnergyCost, 0, AttackProfileRules.MaxEnergyCost);
+        public float AttackRefundThresholdSeconds => stats != null
+            ? AttackProfileRules.ResolveRefundThreshold(stats)
+            : AttackProfileRules.DefaultRefundThresholdSeconds;
+        public float AttackFreeMoveCutoffSeconds => stats != null
+            ? AttackProfileRules.ResolveFreeMoveCutoff(stats)
+            : AttackProfileRules.DefaultFreeMoveCutoffSeconds;
+        public int AttackMeleeRange => stats != null
+            ? AttackProfileRules.ResolveMeleeRange(stats)
+            : AttackProfileRules.DefaultMeleeRange;
+        public float AttackKeepDeg => stats != null
+            ? AttackProfileRules.ResolveKeepDeg(stats)
+            : AttackProfileRules.DefaultKeepDeg;
+        public float AttackTurnDeg => stats != null
+            ? AttackProfileRules.ResolveTurnDeg(stats)
+            : AttackProfileRules.DefaultTurnDeg;
+        public float AttackTurnSpeedDegPerSec => stats != null
+            ? AttackProfileRules.ResolveTurnSpeed(stats)
+            : AttackProfileRules.DefaultTurnSpeedDegPerSec;
+        public int MoveEnergyPerSecond => stats != null
+            ? MoveProfileRules.ResolveEnergyPerSecond(stats)
+            : Mathf.Clamp(fallbackMoveEnergyPerSecond, 0, MoveProfileRules.MaxEnergyPerSecond);
+        public float MoveBaseSeconds => stats != null
+            ? MoveProfileRules.ResolveBaseSeconds(stats)
+            : Mathf.Clamp(fallbackMoveBaseSeconds, MoveProfileRules.MinSeconds, MoveProfileRules.MaxSeconds);
+        public int MoveBaseSecondsCeil => Mathf.Max(1, Mathf.CeilToInt(MoveBaseSeconds));
+        public float MoveRefundThresholdSeconds => stats != null
+            ? MoveProfileRules.ResolveRefundThreshold(stats)
+            : Mathf.Clamp(fallbackMoveRefundThresholdSeconds, 0.01f, 1f);
+        public int MoveFallbackSteps => stats != null
+            ? MoveProfileRules.ResolveFallbackSteps(stats)
+            : Mathf.Clamp(fallbackMoveFallbackSteps, MoveProfileRules.MinFallbackSteps, MoveProfileRules.MaxFallbackSteps);
+        public int MoveStepsCap => stats != null
+            ? MoveProfileRules.ResolveStepsCap(stats)
+            : Mathf.Clamp(fallbackMoveStepsCap, MoveProfileRules.MinStepsCap, MoveProfileRules.MaxStepsCap);
+        public float MoveKeepDeg => stats != null
+            ? MoveProfileRules.ResolveKeepDeg(stats)
+            : Mathf.Repeat(Mathf.Max(0f, fallbackMoveKeepDeg), 360f);
+        public float MoveTurnDeg => stats != null
+            ? MoveProfileRules.ResolveTurnDeg(stats)
+            : Mathf.Repeat(Mathf.Max(0f, fallbackMoveTurnDeg), 360f);
+        public float MoveTurnSpeedDegPerSec => stats != null
+            ? MoveProfileRules.ResolveTurnSpeed(stats)
+            : Mathf.Max(0f, fallbackMoveTurnSpeedDegPerSec);
+        public float MoveCooldownSeconds => stats != null
+            ? MoveProfileRules.ResolveCooldownSeconds(stats)
+            : Mathf.Max(0f, fallbackMoveCooldownSeconds);
+        public string MoveActionId
+        {
+            get
+            {
+                if (stats != null)
+                    return MoveProfileRules.ResolveActionId(stats);
+                return string.IsNullOrWhiteSpace(fallbackMoveActionId)
+                    ? MoveProfileRules.DefaultActionId
+                    : fallbackMoveActionId.Trim();
+            }
+        }
+        // —— 能量 ——
         public int Energy => stats != null ? stats.Energy : 0;
         public int MaxEnergy => stats != null ? stats.MaxEnergy : 0;
 
@@ -92,7 +200,24 @@ namespace TGD.CoreV2
         {
             if (stats != null) stats.Clamp();
             MoveRates.Clamp();
-            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd));
+            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(
+                BaseMoveRate,
+                new[] { MoveRates.NormalizedMultiplier },
+                MoveRateFlatAdd,
+                MoveRateMin,
+                MoveRateMax));
+            fallbackAttackSeconds = Mathf.Clamp(fallbackAttackSeconds, AttackProfileRules.MinSeconds, AttackProfileRules.MaxSeconds);
+            fallbackAttackEnergyCost = Mathf.Clamp(fallbackAttackEnergyCost, 0, AttackProfileRules.MaxEnergyCost);
+            fallbackMoveEnergyPerSecond = Mathf.Clamp(fallbackMoveEnergyPerSecond, 0, MoveProfileRules.MaxEnergyPerSecond);
+            fallbackMoveBaseSeconds = Mathf.Clamp(fallbackMoveBaseSeconds, MoveProfileRules.MinSeconds, MoveProfileRules.MaxSeconds);
+            fallbackMoveRefundThresholdSeconds = Mathf.Clamp(fallbackMoveRefundThresholdSeconds, 0.01f, 1f);
+            fallbackMoveFallbackSteps = Mathf.Clamp(fallbackMoveFallbackSteps, MoveProfileRules.MinFallbackSteps, MoveProfileRules.MaxFallbackSteps);
+            fallbackMoveStepsCap = Mathf.Clamp(fallbackMoveStepsCap, MoveProfileRules.MinStepsCap, MoveProfileRules.MaxStepsCap);
+            fallbackMoveKeepDeg = Mathf.Repeat(Mathf.Max(0f, fallbackMoveKeepDeg), 360f);
+            fallbackMoveTurnDeg = Mathf.Repeat(Mathf.Max(0f, fallbackMoveTurnDeg), 360f);
+            fallbackMoveTurnSpeedDegPerSec = Mathf.Max(0f, fallbackMoveTurnSpeedDegPerSec);
+            if (string.IsNullOrWhiteSpace(fallbackMoveActionId))
+                fallbackMoveActionId = MoveProfileRules.DefaultActionId;
         }
 
         [ContextMenu("Debug/Print Snapshot")]

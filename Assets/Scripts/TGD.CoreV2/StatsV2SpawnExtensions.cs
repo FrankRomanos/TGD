@@ -17,7 +17,15 @@ namespace TGD.CoreV2
             dst.Speed = init.Speed;
             dst.MoveRate = init.MoveRate;
 
-            // —— 资源 —— 
+            if (dst.MoveProfile == null)
+                dst.MoveProfile = new MoveProfileV2();
+            dst.MoveProfile.CopyFrom(init.MoveProfile);
+
+            if (dst.AttackProfile == null)
+                dst.AttackProfile = new AttackProfileV2();
+            dst.AttackProfile.CopyFrom(init.AttackProfile);
+
+            // —— 资源 ——
             dst.MaxHP = Mathf.Max(1, init.MaxHP);
             dst.HP = Mathf.Clamp(init.HP, 0, dst.MaxHP);
             dst.MaxEnergy = Mathf.Max(0, init.MaxEnergy);

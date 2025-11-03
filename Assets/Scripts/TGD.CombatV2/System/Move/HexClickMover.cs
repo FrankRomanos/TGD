@@ -10,31 +10,11 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
-    [CreateAssetMenu(menuName = "TGD/Combat/Move Action Config")]
-    public class MoveActionConfig : ScriptableObject
-    {
-        [Header("Costs")] public int energyCost = 10;
-        public float timeCostSeconds = 1f;
-        public float cooldownSeconds = 0f;
-        public string actionId = "Move";
-
-        [Header("Distance")] public int fallbackSteps = 3;
-        public int stepsCap = 12;
-
-        [Header("Facing")] public float keepDeg = 45f;
-        public float turnDeg = 135f;
-        public float turnSpeedDegPerSec = 720f;
-
-        [Header("Refund")]
-        [Tooltip("节省时间累计达到该阈值即返还 1 秒（及对应能量）")]
-        [Min(0.01f)] public float refundThresholdSeconds = 0.8f;
-    }
-
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -63,6 +43,7 @@ namespace TGD.CombatV2
         [SerializeField, Tooltip("当前剩余回合秒数（运行时）")]
         int _turnSecondsLeft = -1;
         int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
+        public string CooldownKey => ResolveMoveActionId();
         void EnsureTurnTimeInited()
         {
             if (!ManageTurnTimeLocally) return;
@@ -83,7 +64,6 @@ namespace TGD.CombatV2
                 _turnSecondsLeft = -1;
         }
         [Header("Action Config & Cost")]
-        public MoveActionConfig config;
         public MonoBehaviour costProvider;
         IMoveCostService _cost;
 
@@ -123,13 +103,66 @@ namespace TGD.CombatV2
         [Header("Sticky Slow (optional)")]
         public MoveRateStatusRuntime status;        // 黏性修饰器运行时（可选）
         public MonoBehaviour stickySource;          // 任意实现了 IStickySlowSource 的组件
-        const float MR_MIN = 1f;
-        const float MR_MAX = 12f;
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
         const float MULT_MIN = 0.01f;
         const float MULT_MAX = 100f;
         IStickyMoveSource _sticky;
+
+        float MoveRateMin => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMin;
+        float MoveRateMax => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMax;
+        int MoveRateMinInt => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMinInt;
+        int MoveRateMaxInt => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMaxInt;
+
+        float ClampMoveRate(float value) => Mathf.Clamp(value, MoveRateMin, MoveRateMax);
+        int ClampMoveRateInt(int value) => Mathf.Clamp(value, MoveRateMinInt, MoveRateMaxInt);
+
+        public float ResolveMoveBaseSecondsRaw()
+            => ctx != null ? ctx.MoveBaseSeconds : MoveProfileRules.DefaultSeconds;
+
+        public int ResolveMoveBudgetSeconds()
+        {
+            if (ctx != null)
+                return ctx.MoveBaseSecondsCeil;
+            return Mathf.Max(1, Mathf.CeilToInt(MoveProfileRules.DefaultSeconds));
+        }
+
+        public int ResolveMoveEnergyPerSecond()
+            => ctx != null ? ctx.MoveEnergyPerSecond : MoveProfileRules.DefaultEnergyPerSecond;
+
+        public float ResolveMoveRefundThreshold()
+            => ctx != null ? ctx.MoveRefundThresholdSeconds : MoveProfileRules.DefaultRefundThresholdSeconds;
+
+        public int ResolveFallbackSteps()
+            => ctx != null ? ctx.MoveFallbackSteps : MoveProfileRules.DefaultFallbackSteps;
+
+        public int ResolveStepsCap()
+            => ctx != null ? ctx.MoveStepsCap : MoveProfileRules.DefaultStepsCap;
+
+        public float ResolveMoveKeepDeg()
+            => ctx != null ? ctx.MoveKeepDeg : MoveProfileRules.DefaultKeepDeg;
+
+        public float ResolveMoveTurnDeg()
+            => ctx != null ? ctx.MoveTurnDeg : MoveProfileRules.DefaultTurnDeg;
+
+        public float ResolveMoveTurnSpeed()
+            => ctx != null ? ctx.MoveTurnSpeedDegPerSec : MoveProfileRules.DefaultTurnSpeedDegPerSec;
+
+        public float ResolveMoveCooldownSeconds()
+            => ctx != null ? ctx.MoveCooldownSeconds : MoveProfileRules.DefaultCooldownSeconds;
+
+        public string ResolveMoveActionId()
+            => ctx != null ? ctx.MoveActionId : MoveProfileRules.DefaultActionId;
+
+        MoveCostSpec BuildCostSpec()
+        {
+            return new MoveCostSpec
+            {
+                actionId = ResolveMoveActionId(),
+                energyPerSecond = Mathf.Max(0, ResolveMoveEnergyPerSecond()),
+                cooldownSeconds = Mathf.Max(0f, ResolveMoveCooldownSeconds())
+            };
+        }
 
         struct MoveRateSnapshot
         {
@@ -177,8 +210,8 @@ namespace TGD.CombatV2
         string _reportRefundTag;
         public (int timeSec, int energy) PeekPlannedCost()
         {
-            int seconds = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            int energyRate = config ? Mathf.Max(0, config.energyCost) : 0;
+            int seconds = ResolveMoveBudgetSeconds();
+            int energyRate = ResolveMoveEnergyPerSecond();
             return (seconds, energyRate * seconds);
         }
 
@@ -191,8 +224,8 @@ namespace TGD.CombatV2
 
         public PlannedMoveCost PeekPlannedCost(Hex target)
         {
-            int moveSecs = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            int moveEnergy = moveSecs * (config ? Mathf.Max(0, config.energyCost) : 0);
+            int moveSecs = ResolveMoveBudgetSeconds();
+            int moveEnergy = moveSecs * ResolveMoveEnergyPerSecond();
 
             var result = new PlannedMoveCost
             {
@@ -309,7 +342,8 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int needSec = ResolveMoveBudgetSeconds();
+            var costSpec = BuildCostSpec();
             if (UseTurnManager)
             {
                 var budget = (_turnManager != null && unit != null)
@@ -330,11 +364,11 @@ namespace TGD.CombatV2
                 reason = "(no-time)";
                 return false;
             }
-            if (_cost != null && config != null)
+            if (_cost != null)
             {
                 if (UseTurnManager)
                 {
-                    int energyRate = Mathf.Max(0, config.energyCost);
+                    int energyRate = Mathf.Max(0, costSpec.energyPerSecond);
                     if (energyRate > 0 && _turnManager != null && unit != null)
                     {
                         var pool = _turnManager.GetResources(unit);
@@ -347,7 +381,7 @@ namespace TGD.CombatV2
                         }
                     }
                 }
-                else if (!_cost.HasEnough(unit, config))
+                else if (!_cost.HasEnough(unit, costSpec))
                 {
                     if (raiseHud)
                         HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
@@ -393,7 +427,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            int needSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+            int needSec = ResolveMoveBudgetSeconds();
 
             // 再做一次兜底预检查（避免竞态）
             if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < needSec)
@@ -401,7 +435,8 @@ namespace TGD.CombatV2
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
                 yield break;
             }
-            if (_cost != null && config != null && !_cost.HasEnough(driver.UnitRef, config))
+            var costSpec = BuildCostSpec();
+            if (_cost != null && !_cost.HasEnough(driver.UnitRef, costSpec))
             {
                 HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null);
                 yield break;
@@ -553,7 +588,7 @@ namespace TGD.CombatV2
         MoveRateSnapshot BuildMoveRates(Hex start)
         {
             int baseRate = ctx != null ? ctx.BaseMoveRate : GetFallbackBaseRate();
-            baseRate = Mathf.Clamp(baseRate, (int)MR_MIN, (int)MR_MAX);
+            baseRate = ClampMoveRateInt(baseRate);
 
             float buffMult = 1f;
             int flatAfter = 0;
@@ -568,14 +603,19 @@ namespace TGD.CombatV2
             stickyMult = Mathf.Clamp(stickyMult, MULT_MIN, MULT_MAX);
 
             float combined = Mathf.Clamp(buffMult * stickyMult, MULT_MIN, MULT_MAX);
-            float baseNoEnv = StatsMathV2.MR_MultiThenFlat(baseRate, new[] { combined }, flatAfter);
-            baseNoEnv = Mathf.Clamp(baseNoEnv, MR_MIN, MR_MAX);
+            float baseNoEnv = StatsMathV2.MR_MultiThenFlat(
+                baseRate,
+                new[] { combined },
+                flatAfter,
+                MoveRateMin,
+                MoveRateMax);
+            baseNoEnv = ClampMoveRate(baseNoEnv);
 
             var startSample = SampleStepModifier(start);
             float startEnv = Mathf.Clamp(startSample.Multiplier <= 0f ? 1f : startSample.Multiplier, ENV_MIN, ENV_MAX);
             float startUse = startSample.Sticky ? 1f : startEnv;
             startUse = Mathf.Clamp(startUse, ENV_MIN, ENV_MAX);
-            float mrClick = Mathf.Clamp(baseNoEnv * startUse, MR_MIN, MR_MAX);
+            float mrClick = ClampMoveRate(baseNoEnv * startUse);
 
             return new MoveRateSnapshot
             {
@@ -623,10 +663,10 @@ namespace TGD.CombatV2
         {
             if (ctx != null) return ctx.BaseMoveRate;
 
-            int steps = config != null ? Mathf.Max(1, config.fallbackSteps) : 3;
-            float seconds = config != null ? Mathf.Max(0.1f, config.timeCostSeconds) : 1f;
+            int steps = Mathf.Max(1, ResolveFallbackSteps());
+            float seconds = Mathf.Max(0.1f, ResolveMoveBaseSecondsRaw());
             float mr = steps / Mathf.Max(0.1f, seconds);
-            return Mathf.Clamp(Mathf.RoundToInt(mr), (int)MR_MIN, (int)MR_MAX);
+            return ClampMoveRateInt(Mathf.RoundToInt(mr));
         }
 
         bool TryRebuildPathCache(out MovableRangeResult result)
@@ -649,12 +689,12 @@ namespace TGD.CombatV2
             var rates = BuildMoveRates(startHex);
 
             bool startGivesSticky = rates.startIsSticky;
-            float mrNoEnv = Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
+            float mrNoEnv = ClampMoveRate(rates.baseNoEnv);
             float startMultUse = startGivesSticky ? 1f : Mathf.Clamp(rates.startEnvMult, ENV_MIN, ENV_MAX);
-            float mrPreview = Mathf.Clamp(mrNoEnv * startMultUse, MR_MIN, MR_MAX);
+            float mrPreview = ClampMoveRate(mrNoEnv * startMultUse);
 
-            int timeSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
-            int cap = config ? config.stepsCap : 12;
+            int timeSec = ResolveMoveBudgetSeconds();
+            int cap = ResolveStepsCap();
             int steps = Mathf.Min(cap, StatsMathV2.StepsAllowedF32(mrPreview, timeSec));
 
             var passability = PassabilityFactory.ForMove(_occ, SelfActor, startHex);
@@ -837,7 +877,7 @@ namespace TGD.CombatV2
                 if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
                     yield break;
 
-                int requiredSec = Mathf.Max(1, Mathf.CeilToInt(config ? config.timeCostSeconds : 1f));
+                int requiredSec = ResolveMoveBudgetSeconds();
 
                 if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
                 {
@@ -845,22 +885,23 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                if (_cost != null && config != null)
+                var costSpec = BuildCostSpec();
+                if (_cost != null)
                 {
-                    if (_cost.IsOnCooldown(driver.UnitRef, config))
+                    if (_cost.IsOnCooldown(driver.UnitRef, costSpec))
                     { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
-                    if (!_cost.HasEnough(driver.UnitRef, config))
+                    if (!_cost.HasEnough(driver.UnitRef, costSpec))
                     { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
 
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost.Pay(driver.UnitRef, config);
+                        _cost.Pay(driver.UnitRef, costSpec);
                 }
 
                 var rates = BuildMoveRates(path[0]);
                 var startAnchor = CurrentAnchor;
                 var passability = PassabilityFactory.ForMove(_occ, SelfActor, startAnchor);
 
-                float refundThreshold = Mathf.Max(0.01f, (config ? config.refundThresholdSeconds : 0.8f));
+                float refundThreshold = Mathf.Max(0.01f, ResolveMoveRefundThreshold());
 
                 var sim = MoveSimulator.Run(
                     path,
@@ -869,24 +910,21 @@ namespace TGD.CombatV2
                     requiredSec,
                     SampleStepModifier,
                     refundThreshold,
-                    debugLog
+                    debugLog,
+                    MoveRateMin,
+                    MoveRateMax
                 );
                 var reached = sim.ReachedPath;
 
                 int refunded = Mathf.Max(0, sim.RefundedSeconds);
                 int spentSec = Mathf.Max(0, requiredSec - refunded);
                 var stepRates = sim.StepEffectiveRates;
-                int energyNet = 0;
-                if (config != null)
-                {
-                    int costPerSecond = Mathf.Max(0, config.energyCost);
-                    energyNet = (requiredSec - refunded) * costPerSecond;
-                }
+                int energyNet = (requiredSec - refunded) * Mathf.Max(0, costSpec.energyPerSecond);
 
                 if (reached == null || reached.Count < 2)
                 {
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(driver.UnitRef, config, requiredSec);
+                        _cost?.RefundSeconds(driver.UnitRef, costSpec, requiredSec);
                     if (!UseTurnManager && ManageTurnTimeLocally)
                         _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                     HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
@@ -906,9 +944,9 @@ namespace TGD.CombatV2
                 {
                     var fromW = hexSpace.HexToWorld(reached[0], y);
                     var toW = hexSpace.HexToWorld(reached[^1], y);
-                    float keep = config ? config.keepDeg : 45f;
-                    float turn = config ? config.turnDeg : 135f;
-                    float speed = config ? config.turnSpeedDegPerSec : 720f;
+                    float keep = ResolveMoveKeepDeg();
+                    float turn = ResolveMoveTurnDeg();
+                    float speed = ResolveMoveTurnSpeed();
 
                     var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
                     yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
@@ -961,8 +999,8 @@ namespace TGD.CombatV2
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]
-                        : Mathf.Clamp(rates.baseNoEnv, MR_MIN, MR_MAX);
-                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(0.01f, effMR));
+                        : ClampMoveRate(rates.baseNoEnv);
+                    float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MoveRateMin, effMR));
 
 
                     float t = 0f;
@@ -1011,7 +1049,7 @@ namespace TGD.CombatV2
                 if (refunded > 0)
                 {
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(driver.UnitRef, config, refunded);
+                        _cost?.RefundSeconds(driver.UnitRef, costSpec, refunded);
                     HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
                 }
             }

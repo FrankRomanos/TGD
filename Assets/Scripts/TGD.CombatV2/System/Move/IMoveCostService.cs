@@ -1,11 +1,19 @@
-using TGD.CombatV2;
 using TGD.HexBoard;
 
-public interface IMoveCostService
+namespace TGD.CombatV2
 {
-    bool IsOnCooldown(Unit unit, MoveActionConfig cfg);
-    bool HasEnough(Unit unit, MoveActionConfig cfg);
-    void Pay(Unit unit, MoveActionConfig cfg);
-    // ★ 新增占位：移动过程中“节省≥阈值”时退回 N 秒的成本（能量等）
-    void RefundSeconds(Unit unit, MoveActionConfig cfg, int seconds);
+    public struct MoveCostSpec
+    {
+        public string actionId;
+        public int energyPerSecond;
+        public float cooldownSeconds;
+    }
+
+    public interface IMoveCostService
+    {
+        bool IsOnCooldown(Unit unit, in MoveCostSpec spec);
+        bool HasEnough(Unit unit, in MoveCostSpec spec);
+        void Pay(Unit unit, in MoveCostSpec spec);
+        void RefundSeconds(Unit unit, in MoveCostSpec spec, int seconds);
+    }
 }

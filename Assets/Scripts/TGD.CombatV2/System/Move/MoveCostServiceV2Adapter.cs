@@ -16,11 +16,17 @@ namespace TGD.CombatV2
         public UnitRuntimeContext ctx;
 
         [Header("Options")]
-        public string actionIdOverride = ""; // 留空则用 MoveActionConfig.actionId
+        public string actionIdOverride = ""; // 留空则用单位配置里的移动 ActionId
 
         CooldownStoreSecV2 Store => cooldownHub != null ? cooldownHub.secStore : null;
-        string Key(MoveActionConfig cfg)
-            => string.IsNullOrEmpty(actionIdOverride) ? (cfg != null ? cfg.actionId : "Move") : actionIdOverride;
+        string Key(in MoveCostSpec spec)
+        {
+            if (!string.IsNullOrEmpty(actionIdOverride))
+                return actionIdOverride;
+            if (!string.IsNullOrWhiteSpace(spec.actionId))
+                return spec.actionId.Trim();
+            return MoveProfileRules.DefaultActionId;
+        }
 
         Unit ResolveUnit(Unit unit)
         {
@@ -29,19 +35,17 @@ namespace TGD.CombatV2
             return driver != null ? driver.UnitRef : null;
         }
 
-        public bool IsOnCooldown(Unit unit, MoveActionConfig cfg)
+        public bool IsOnCooldown(Unit unit, in MoveCostSpec spec)
         {
             if (turnManager != null)
                 return false;
-            string key = Key(cfg);
+            string key = Key(spec);
             return Store != null && !Store.Ready(key);
         }
 
-        public bool HasEnough(Unit unit, MoveActionConfig cfg)
+        public bool HasEnough(Unit unit, in MoveCostSpec spec)
         {
-            if (cfg == null) return true;
-
-            int need = Mathf.Max(0, cfg.energyCost);
+            int need = Mathf.Max(0, spec.energyPerSecond);
             if (turnManager != null)
             {
                 unit = ResolveUnit(unit);
@@ -55,33 +59,32 @@ namespace TGD.CombatV2
             return sourceStats.Energy >= need;
         }
 
-        public void Pay(Unit unit, MoveActionConfig cfg)
+        public void Pay(Unit unit, in MoveCostSpec spec)
         {
-            if (cfg == null) return;
             if (turnManager != null)
                 return;
-            int need = Mathf.Max(0, cfg.energyCost);
-            string key = Key(cfg);
+            int need = Mathf.Max(0, spec.energyPerSecond);
+            string key = Key(spec);
 
             if (stats != null)
                 stats.Energy = Mathf.Clamp(stats.Energy - need, 0, stats.MaxEnergy);
 
             // 开冷却（秒→回合；Move 通常 0）
-            if (Store != null && cfg.cooldownSeconds > 0f)
+            if (Store != null && spec.cooldownSeconds > 0f)
             {
-                int seconds = Mathf.CeilToInt(cfg.cooldownSeconds);
+                int seconds = Mathf.CeilToInt(spec.cooldownSeconds);
                 Store.StartSeconds(key, seconds);
             }
         }
-        public void RefundSeconds(Unit unit, MoveActionConfig cfg, int seconds)
+        public void RefundSeconds(Unit unit, in MoveCostSpec spec, int seconds)
         {
-            if (cfg == null || seconds <= 0) return;
+            if (seconds <= 0) return;
 
             if (turnManager != null)
                 return;
-            
+
             if (stats == null) return;
-            int refund = Mathf.Max(0, cfg.energyCost) * seconds;
+            int refund = Mathf.Max(0, spec.energyPerSecond) * seconds;
             int before = stats.Energy;
             stats.Energy = Mathf.Clamp(stats.Energy + refund, 0, stats.MaxEnergy);
 
