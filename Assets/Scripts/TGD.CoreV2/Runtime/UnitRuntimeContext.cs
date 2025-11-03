@@ -15,10 +15,22 @@ namespace TGD.CoreV2
         [Header("Fallbacks (for tests)")]
         [Tooltip("当 stats 为空时用于测试的默认 MoveRate")]
         public float fallbackMoveRate = 5f;
-        // File: TGD.CoreV2/UnitRuntimeContext.cs
-        // 在类里其它便捷属性旁边新增：
-        public bool Entangled => stats != null && stats.IsEntangled; // ★ 新增：对外只读，不暴露 StatsV2
 
+        [Header("Runtime State")]
+        [SerializeField]
+        MoveRateManager _moveRates = new MoveRateManager();
+
+        public MoveRateManager MoveRates
+        {
+            get
+            {
+                if (_moveRates == null)
+                    _moveRates = new MoveRateManager();
+                return _moveRates;
+            }
+        }
+
+        public bool Entangled => MoveRates.IsEntangled;
 
         // ========= 便捷只读访问（统一入口；外部系统只读这些） =========
         // —— 移动 —— 
@@ -42,13 +54,13 @@ namespace TGD.CoreV2
             get
             {
                 if (_currentMoveRate <= 0f)
-                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd);
+                    _currentMoveRate = StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd);
                 return _currentMoveRate;
             }
             set => _currentMoveRate = Mathf.Max(0.01f, value);
         }
-        public float MoveRatePctAdd => stats != null ? stats.MoveRatePctAdd : 0f;
-        public int MoveRateFlatAdd => stats != null ? stats.MoveRateFlatAdd : 0;
+        public float MoveRatePctAdd => MoveRates.PercentAdd;
+        public int MoveRateFlatAdd => MoveRates.FlatAdd;
         //speed
         public int Speed => (stats != null) ? stats.Speed : 0;
         // —— 能量 —— 
@@ -64,21 +76,23 @@ namespace TGD.CoreV2
         public float Mastery => stats != null ? stats.Mastery : 0f;           // 可>1 的精通
 
         // —— 其它常用桶/减伤直通（需要就用，没用可以忽略） —— 
-        public float DmgBonusA_P => stats != null ? stats.DmgBonusA_P : 0f;
-        public float DmgBonusB_P => stats != null ? stats.DmgBonusB_P : 0f;
-        public float DmgBonusC_P => stats != null ? stats.DmgBonusC_P : 0f;
-        public float ReduceA_P => stats != null ? stats.ReduceA_P : 0f;
-        public float ReduceB_P => stats != null ? stats.ReduceB_P : 0f;
-        public float ReduceC_P => stats != null ? stats.ReduceC_P : 0f;
+        public float DamageBonusPct => stats != null ? stats.DamageBonusPct : 0f;
+        public float DamageReducePct => stats != null ? stats.DamageReducePct : 0f;
 
         // ========= 调试 =========
         [Header("Debug")]
         public bool debugLog = true;
 
+        void Awake()
+        {
+            MoveRates.ResetRuntime();
+        }
+
         void OnValidate()
         {
             if (stats != null) stats.Clamp();
-            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { 1f }, MoveRateFlatAdd));
+            MoveRates.Clamp();
+            _currentMoveRate = Mathf.Max(0.01f, StatsMathV2.MR_MultiThenFlat(BaseMoveRate, new[] { MoveRates.NormalizedMultiplier }, MoveRateFlatAdd));
         }
 
         [ContextMenu("Debug/Print Snapshot")]
@@ -88,7 +102,7 @@ namespace TGD.CoreV2
             Debug.Log(
                 $"[UnitCtx] MR={MoveRate}  Energy={Energy}/{MaxEnergy}  " +
                 $"ATK={Attack}  PrimaryP={PrimaryP:F3}  Crit={CritChance:P1} (Overflow={CritOverflow:P1})  CritMult={CritMult:F2}  " +
-                $"Mastery={Mastery:F3}  BonusA={DmgBonusA_P:P0} BonusB={DmgBonusB_P:P0} BonusC={DmgBonusC_P:P0}  ReduceA={ReduceA_P:P0} ReduceB={ReduceB_P:P0} ReduceC={ReduceC_P:P0}",
+                $"Mastery={Mastery:F3}  DmgBonus={DamageBonusPct:P0}  DmgReduce={DamageReducePct:P0}",
                 this
             );
         }

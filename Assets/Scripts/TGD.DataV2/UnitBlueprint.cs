@@ -1,19 +1,35 @@
+using System;
+using TGD.CoreV2;
 using UnityEngine;
 
-namespace Unity.FantasyKingdom
+namespace TGD.DataV2
 {
-    public class UnitBluePrint : MonoBehaviour
+    /// <summary>
+    /// Scriptable blueprint describing the static data required to spawn a unit.
+    /// </summary>
+    [CreateAssetMenu(menuName = "TGD/Units/UnitBlueprint", fileName = "UnitBlueprint")]
+    public sealed class UnitBlueprint : ScriptableObject
     {
-        // Start is called once before the first execution of Update after the MonoBehaviour is created
-        void Start()
-        {
-        
-        }
+        [Header("Identity")]
+        public string unitId;
+        public string displayName;
+        public UnitFaction faction = UnitFaction.Friendly;
 
-        // Update is called once per frame
-        void Update()
+        [Header("Stats")]
+        [Tooltip("Base StatsV2 snapshot copied to runtime on spawn.")]
+        public StatsV2 baseStats = new StatsV2();
+
+        [Header("Abilities")]
+        [Tooltip("Initial ability loadout for this unit.")]
+        public AbilitySlot[] abilities = new AbilitySlot[0];
+
+        [Serializable]
+        public struct AbilitySlot
         {
-        
+            public string actionId;
+            public bool learned;
+            [Min(0)]
+            public int initialCooldownSeconds;
         }
     }
 }

@@ -5,8 +5,9 @@ namespace TGD.CoreV2
     public static class DamageFormulaV2
     {
         /// <summary>
-        /// 统一伤害： (Atk*Coeff) * Crit * (1+Primary) * (1+Mastery?) * (1+A) * (1+B) * (1+C) * (1 - [Armor + RedA + RedB + RedC])
-        /// 其中 [Armor + Red...] 会 clamp 到 [0,0.95]。
+        /// Damage formula:
+        /// (Atk * skillCoeff) * crit * (1 + Primary) * (1 + Mastery?) * (1 + DamageBonusPct) * (1 - totalReduction).
+        /// totalReduction = clamp(Armor + DamageReducePct, [0, 0.95]).
         /// </summary>
         public static int ComputeDamage(ref bool isCrit,
                                         StatsV2 atk, StatsV2 def,
@@ -14,29 +15,27 @@ namespace TGD.CoreV2
                                         bool includeMasteryBucket,
                                         float extraCritDamageFromOverflow = 0f)
         {
-            // 基础体
+            // Base term
             float baseDmg = Mathf.Max(0, atk.Attack) * Mathf.Max(0f, skillCoeff);
 
-            // 暴击
+            // Crit multiplier
             float critMult = 1f;
             if (isCrit)
             {
-                critMult = atk.CritMult * (1f + Mathf.Max(0f, extraCritDamageFromOverflow)); // 溢出转暴伤
+                critMult = atk.CritMult * (1f + Mathf.Max(0f, extraCritDamageFromOverflow));
             }
 
-            // 独立增伤桶（乘法）
+            // Multiplicative bonuses
             float amp = 1f;
             amp *= (1f + Mathf.Max(0f, atk.PrimaryP));
             if (includeMasteryBucket) amp *= (1f + Mathf.Max(0f, atk.Mastery));
-            amp *= (1f + Mathf.Max(0f, atk.DmgBonusA_P));
-            amp *= (1f + Mathf.Max(0f, atk.DmgBonusB_P));
-            amp *= (1f + Mathf.Max(0f, atk.DmgBonusC_P));
+            amp *= (1f + Mathf.Max(0f, atk.DamageBonusPct));
 
             float afterAmp = baseDmg * critMult * amp;
 
-            // 减伤（加法 + Clamp）
+            // Damage reduction (additive then clamped)
             float armorDR = StatsMathV2.ArmorDR(def.Armor);
-            float totalDR = Mathf.Clamp01(armorDR + Mathf.Max(0f, def.ReduceA_P) + Mathf.Max(0f, def.ReduceB_P) + Mathf.Max(0f, def.ReduceC_P));
+            float totalDR = Mathf.Clamp01(armorDR + Mathf.Max(0f, def.DamageReducePct));
             totalDR = Mathf.Min(totalDR, 0.95f);
 
             float final = afterAmp * (1f - totalDR);

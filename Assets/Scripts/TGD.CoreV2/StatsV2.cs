@@ -14,25 +14,9 @@ namespace TGD.CoreV2
         public int Stamina;
         public int Armor;
 
-        // —— 时间 & 移动 —— 
+        // —— 时间 & 移动 ——
         public int Speed;                  // +秒/回合
         public int MoveRate = 1;           // 格/秒（底座）
-        // 移速改动（由效果叠加）
-        public int MoveRateFlatAdd = 0;  // 平坦加减
-        public float MoveRatePctAdd = 0f; // 百分比加总（-0.5 = -50%）
-        public bool IsEntangled = false; // 只有它能把速度变成 0
-
-        public int EffectiveMoveRate
-        {
-            get
-            {
-                if (IsEntangled) return 0;
-                float baseR = Mathf.Max(1, MoveRate + MoveRateFlatAdd);
-                float afterPct = baseR * (1f + MoveRatePctAdd);
-                int r = Mathf.FloorToInt(afterPct);
-                return Mathf.Max(1, r);
-            }
-        }
 
         // —— 公共资源 —— 
         public int MaxHP = 100, HP = 100;
@@ -70,15 +54,11 @@ namespace TGD.CoreV2
         public float MasteryClassCoeff = 1f;
         public float Mastery => StatsMathV2.MasteryValue(BaseMasteryP, MasteryRating, MasteryAddPct, 20f, MasteryClassCoeff);
 
-        // —— 独立增伤桶（乘法相乘，桶内加法） —— 
-        public float DmgBonusA_P = 0f;
-        public float DmgBonusB_P = 0f;
-        public float DmgBonusC_P = 0f;
-
-        // —— 独立减伤（加法） —— 
-        public float ReduceA_P = 0f;
-        public float ReduceB_P = 0f;
-        public float ReduceC_P = 0f;
+        // —— 增伤/减伤（初始系数） ——
+        [Tooltip("初始增伤百分比（0 = 无额外增伤）")]
+        public float DamageBonusPct = 0f;
+        [Tooltip("初始减伤百分比（0 = 无额外减伤）")]
+        public float DamageReducePct = 0f;
 
         // —— 威胁/削韧增强（加法百分比） —— 
         public float ThreatAddPct = 0f;
@@ -95,8 +75,6 @@ namespace TGD.CoreV2
             Energy = Mathf.Clamp(Energy, 0, MaxEnergy);
 
             MoveRate = Mathf.Max(1, MoveRate);
-            // 允许 MoveRatePctAdd < -1，但最终 EffectiveMoveRate 至少为1（非定身）
-
             // 非负保障
             PrimaryAddPct = Mathf.Max(0f, PrimaryAddPct);
             BaseCrit = Mathf.Max(0f, BaseCrit);
@@ -105,13 +83,8 @@ namespace TGD.CoreV2
             MasteryAddPct = Mathf.Max(0f, MasteryAddPct);
             MasteryClassCoeff = Mathf.Max(0f, MasteryClassCoeff);
 
-            DmgBonusA_P = Mathf.Max(0f, DmgBonusA_P);
-            DmgBonusB_P = Mathf.Max(0f, DmgBonusB_P);
-            DmgBonusC_P = Mathf.Max(0f, DmgBonusC_P);
-
-            ReduceA_P = Mathf.Max(0f, ReduceA_P);
-            ReduceB_P = Mathf.Max(0f, ReduceB_P);
-            ReduceC_P = Mathf.Max(0f, ReduceC_P);
+            DamageBonusPct = Mathf.Max(0f, DamageBonusPct);
+            DamageReducePct = Mathf.Clamp(DamageReducePct, 0f, 0.95f);
         }
     }
 }
