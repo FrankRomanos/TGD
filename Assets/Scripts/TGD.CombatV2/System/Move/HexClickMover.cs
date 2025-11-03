@@ -14,7 +14,7 @@ namespace TGD.CombatV2
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -43,6 +43,7 @@ namespace TGD.CombatV2
         [SerializeField, Tooltip("当前剩余回合秒数（运行时）")]
         int _turnSecondsLeft = -1;
         int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
+        public string CooldownKey => ResolveMoveActionId();
         void EnsureTurnTimeInited()
         {
             if (!ManageTurnTimeLocally) return;
@@ -116,41 +117,41 @@ namespace TGD.CombatV2
         float ClampMoveRate(float value) => Mathf.Clamp(value, MoveRateMin, MoveRateMax);
         int ClampMoveRateInt(int value) => Mathf.Clamp(value, MoveRateMinInt, MoveRateMaxInt);
 
-        float ResolveMoveBaseSecondsRaw()
+        public float ResolveMoveBaseSecondsRaw()
             => ctx != null ? ctx.MoveBaseSeconds : MoveProfileRules.DefaultSeconds;
 
-        int ResolveMoveBudgetSeconds()
+        public int ResolveMoveBudgetSeconds()
         {
             if (ctx != null)
                 return ctx.MoveBaseSecondsCeil;
             return Mathf.Max(1, Mathf.CeilToInt(MoveProfileRules.DefaultSeconds));
         }
 
-        int ResolveMoveEnergyPerSecond()
+        public int ResolveMoveEnergyPerSecond()
             => ctx != null ? ctx.MoveEnergyPerSecond : MoveProfileRules.DefaultEnergyPerSecond;
 
-        float ResolveMoveRefundThreshold()
+        public float ResolveMoveRefundThreshold()
             => ctx != null ? ctx.MoveRefundThresholdSeconds : MoveProfileRules.DefaultRefundThresholdSeconds;
 
-        int ResolveFallbackSteps()
+        public int ResolveFallbackSteps()
             => ctx != null ? ctx.MoveFallbackSteps : MoveProfileRules.DefaultFallbackSteps;
 
-        int ResolveStepsCap()
+        public int ResolveStepsCap()
             => ctx != null ? ctx.MoveStepsCap : MoveProfileRules.DefaultStepsCap;
 
-        float ResolveMoveKeepDeg()
+        public float ResolveMoveKeepDeg()
             => ctx != null ? ctx.MoveKeepDeg : MoveProfileRules.DefaultKeepDeg;
 
-        float ResolveMoveTurnDeg()
+        public float ResolveMoveTurnDeg()
             => ctx != null ? ctx.MoveTurnDeg : MoveProfileRules.DefaultTurnDeg;
 
-        float ResolveMoveTurnSpeed()
+        public float ResolveMoveTurnSpeed()
             => ctx != null ? ctx.MoveTurnSpeedDegPerSec : MoveProfileRules.DefaultTurnSpeedDegPerSec;
 
-        float ResolveMoveCooldownSeconds()
+        public float ResolveMoveCooldownSeconds()
             => ctx != null ? ctx.MoveCooldownSeconds : MoveProfileRules.DefaultCooldownSeconds;
 
-        string ResolveMoveActionId()
+        public string ResolveMoveActionId()
             => ctx != null ? ctx.MoveActionId : MoveProfileRules.DefaultActionId;
 
         MoveCostSpec BuildCostSpec()

@@ -12,7 +12,7 @@ namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider
     {
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
@@ -62,7 +62,7 @@ namespace TGD.CombatV2
 
         TargetSelectionCursor _cursor;
         TargetSelectionCursor Cursor => _cursor;
-
+        public string CooldownKey => AttackProfileRules.DefaultActionId;
         public void SetCursorHighlighter(IHexHighlighter highlighter)
         {
             _cursor = highlighter != null ? new TargetSelectionCursor(highlighter) : null;
@@ -84,49 +84,49 @@ namespace TGD.CombatV2
         float ClampMoveRate(float value) => Mathf.Clamp(value, MoveRateMin, MoveRateMax);
         int ClampMoveRateInt(int value) => Mathf.Clamp(value, MoveRateMinInt, MoveRateMaxInt);
 
-        int ResolveAttackSeconds()
+        public int ResolveAttackSeconds()
         {
             if (ctx != null)
                 return Mathf.Max(0, ctx.AttackSeconds);
             return AttackProfileRules.DefaultSeconds;
         }
 
-        int ResolveAttackEnergyCost()
+        public int ResolveAttackEnergyCost()
         {
             if (ctx != null)
                 return Mathf.Max(0, ctx.AttackEnergyCost);
             return AttackProfileRules.DefaultEnergyCost;
         }
 
-        int ResolveMoveEnergyPerSecond()
+        public int ResolveMoveEnergyPerSecond()
             => ctx != null ? ctx.MoveEnergyPerSecond : MoveProfileRules.DefaultEnergyPerSecond;
 
-        int ResolveMoveBudgetSeconds()
+        public int ResolveMoveBudgetSeconds()
         {
             if (ctx != null)
                 return ctx.MoveBaseSecondsCeil;
             return Mathf.Max(1, Mathf.CeilToInt(MoveProfileRules.DefaultSeconds));
         }
 
-        float ResolveMoveRefundThreshold()
+        public float ResolveMoveRefundThreshold()
             => ctx != null ? ctx.MoveRefundThresholdSeconds : MoveProfileRules.DefaultRefundThresholdSeconds;
 
-        int ResolveMeleeRange()
+        public int ResolveMeleeRange()
             => ctx != null ? ctx.AttackMeleeRange : AttackProfileRules.DefaultMeleeRange;
 
-        float ResolveAttackRefundThreshold()
+        public float ResolveAttackRefundThreshold()
             => ctx != null ? ctx.AttackRefundThresholdSeconds : AttackProfileRules.DefaultRefundThresholdSeconds;
 
-        float ResolveAttackFreeMoveCutoff()
+        public float ResolveAttackFreeMoveCutoff()
             => ctx != null ? ctx.AttackFreeMoveCutoffSeconds : AttackProfileRules.DefaultFreeMoveCutoffSeconds;
 
-        float ResolveAttackKeepDeg()
+        public float ResolveAttackKeepDeg()
             => ctx != null ? ctx.AttackKeepDeg : AttackProfileRules.DefaultKeepDeg;
 
-        float ResolveAttackTurnDeg()
+        public float ResolveAttackTurnDeg()
             => ctx != null ? ctx.AttackTurnDeg : AttackProfileRules.DefaultTurnDeg;
 
-        float ResolveAttackTurnSpeed()
+        public float ResolveAttackTurnSpeed()
             => ctx != null ? ctx.AttackTurnSpeedDegPerSec : AttackProfileRules.DefaultTurnSpeedDegPerSec;
 
         TargetingSpec _attackSpec;

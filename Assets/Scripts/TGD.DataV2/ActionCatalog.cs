@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.DataV2
@@ -9,10 +9,10 @@ namespace TGD.DataV2
         [System.Serializable]
         public struct Entry
         {
-            public string actionId;    // ÓëCAMÒ»ÖÂ
-            public string displayName; // ¿ÉÑ¡£º¸ø±à¼­Æ÷¿´
-            public Sprite icon;        // ¿ÉÑ¡£ºUI
-            public bool noCooldown;    // ¿ÉÑ¡£ºĞ£ÑéÓÃ
+            public string actionId;    // ä¸CAMä¸€è‡´
+            public string displayName; // å¯é€‰ï¼šç»™ç¼–è¾‘å™¨çœ‹
+            public Sprite icon;        // å¯é€‰ï¼šUI
+            public bool noCooldown;    // å¯é€‰ï¼šæ ¡éªŒç”¨
         }
 
         public List<Entry> entries = new();

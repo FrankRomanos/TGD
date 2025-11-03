@@ -1145,138 +1145,141 @@ namespace TGD.CombatV2
                         fullRoundTool.PrepareFullRoundSeconds(cost.TotalSeconds);
                 }
 
-            int remain = budget != null ? budget.Remaining : 0;
-            int energyBefore = resources != null ? resources.Get("Energy") : 0;
+                int remain = budget != null ? budget.Remaining : 0;
+                int energyBefore = resources != null ? resources.Get("Energy") : 0;
 
-            Log($"[Gate] W2 PreDeduct (move={cost.moveSecs}s/{cost.moveEnergy}, atk={cost.atkSecs}s/{cost.atkEnergy}, total={cost.TotalSeconds}s/{cost.TotalEnergy}, remain={remain}s, energy={energyBefore})");
+                Log($"[Gate] W2 PreDeduct (move={cost.moveSecs}s/{cost.moveEnergy}, atk={cost.atkSecs}s/{cost.atkEnergy}, total={cost.TotalSeconds}s/{cost.TotalEnergy}, remain={remain}s, energy={energyBefore})");
 
-            string failReason = null;
-            if (!cost.valid)
-                failReason = "targetInvalid";
-            else
-                failReason = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
+                string failReason = null;
+                if (!cost.valid)
+                    failReason = "targetInvalid";
+                else
+                    failReason = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
 
-            if (failReason == null && !IsCooldownReadyForConfirm(tool, cooldowns))
-                failReason = "cooldown";
+                if (failReason == null && !IsCooldownReadyForConfirm(tool, cooldowns))
+                    failReason = "cooldown";
 
-            if (failReason != null)
-            {
-                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={failReason})");
-                ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={failReason})");
-                NotifyConfirmAbort(tool, unit, failReason);
-                CleanupAfterAbort(tool, false);
-                yield break;
-            }
-
-            ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckOk");
-
-            if (budget != null && cost.TotalSeconds > 0)
-                budget.SpendTime(cost.TotalSeconds);
-
-            if (resources != null)
-            {
-                if (cost.moveEnergy > 0)
-                    resources.Spend("Energy", cost.moveEnergy, "PreDeduct_Move");
-                if (cost.atkEnergy > 0)
-                    resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
-            }
-
-            var basePreDeduct = new PreDeduct
-            {
-                secs = cost.TotalSeconds,
-                energyMove = cost.moveEnergy,
-                energyAtk = cost.atkEnergy,
-                valid = true
-            };
-            ApplyBonusPreDeduct(unit, ref basePreDeduct);
-            _planStack.Push(basePreDeduct);
-
-            TryHideAllAimUI();
-
-            var pendingChain = new List<ChainQueuedAction>();
-            bool cancelBase = false;
-            if (ShouldOpenChainWindow(tool, unit))
-            {
-                bool isEnemyPhase = IsEffectiveEnemyPhase(unit);
-                yield return RunChainWindow(unit, actionPlan, tool.Kind, isEnemyPhase, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
-            }
-
-            for (int i = pendingChain.Count - 1; i >= 0; --i)
-            {
-                var pending = pendingChain[i];
-                if (pending.tool != null)
+                if (failReason != null)
                 {
-                    if (_queuedActionsPending > 0)
-                        _queuedActionsPending--;
-                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={failReason})");
+                    NotifyConfirmAbort(tool, unit, failReason);
+                    CleanupAfterAbort(tool, false);
+                    yield break;
                 }
-            }
 
-            if (cancelBase)
-            {
-                if (_planStack.Count > 0)
-                    _planStack.Pop();
-                if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
-                    budget.RefundTime(basePreDeduct.secs);
-                if (IsBonusTurnFor(unit) && basePreDeduct.valid && basePreDeduct.bonusSecs > 0)
+                ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckOk");
+
+                if (budget != null && cost.TotalSeconds > 0)
+                    budget.SpendTime(cost.TotalSeconds);
+
+                if (resources != null)
                 {
-                    int before = _bonusTurn.remaining;
-                    int after = Mathf.Min(_bonusTurn.cap, before + basePreDeduct.bonusSecs);
-                    if (after != before)
+                    if (cost.moveEnergy > 0)
+                        resources.Spend("Energy", cost.moveEnergy, "PreDeduct_Move");
+                    if (cost.atkEnergy > 0)
+                        resources.Spend("Energy", cost.atkEnergy, "PreDeduct_Attack");
+                }
+
+                var basePreDeduct = new PreDeduct
+                {
+                    secs = cost.TotalSeconds,
+                    energyMove = cost.moveEnergy,
+                    energyAtk = cost.atkEnergy,
+                    valid = true
+                };
+                ApplyBonusPreDeduct(unit, ref basePreDeduct);
+                _planStack.Push(basePreDeduct);
+
+                TryHideAllAimUI();
+
+                if (cooldowns != null)
+                    TryStartCooldownIfAny(tool, cooldowns);
+
+                var pendingChain = new List<ChainQueuedAction>();
+                bool cancelBase = false;
+                if (ShouldOpenChainWindow(tool, unit))
+                {
+                    bool isEnemyPhase = IsEffectiveEnemyPhase(unit);
+                    yield return RunChainWindow(unit, actionPlan, tool.Kind, isEnemyPhase, budget, resources, cooldowns, cost.TotalSeconds, pendingChain, cancelled => cancelBase = cancelled);
+                }
+
+                for (int i = pendingChain.Count - 1; i >= 0; --i)
+                {
+                    var pending = pendingChain[i];
+                    if (pending.tool != null)
                     {
-                        _bonusTurn.remaining = after;
-                        NotifyBonusTurnStateChanged();
+                        if (_queuedActionsPending > 0)
+                            _queuedActionsPending--;
+                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
                     }
                 }
-                ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
-                NotifyConfirmAbort(tool, unit, "LinkCancelled");
-                CleanupAfterAbort(tool, false);
-                yield break;
-            }
 
-            if (tool.Kind == ActionKind.Sustained)
-            {
-                int bonusCap = Mathf.Max(0, basePreDeduct.secs);
-                yield return RunSustainedBonusTurns(bonusCap, actionPlan.kind);
-            }
-            if (tool.Kind == ActionKind.FullRound && tool is IFullRoundActionTool frTool)
-            {
-                var planData = BuildFullRoundPlan(actionPlan, basePreDeduct, budget, resources);
-                frTool.TriggerFullRoundImmediate(unit, turnManager, planData);
-
-                if (budget != null)
-                    planData.budgetAfter = budget.Remaining;
-                if (resources != null)
-                    planData.energyAfter = resources.Get("Energy");
-
-                if (_planStack.Count > 0)
-                    _planStack.Pop();
-
-                ApplyCooldown(tool, unit);
-
-                if (turnManager != null && unit != null)
+                if (cancelBase)
                 {
-                    int rounds = Mathf.Max(1, frTool.FullRoundRounds);
-                    turnManager.RegisterFullRound(unit, rounds, actionPlan.kind, frTool, planData);
-                    turnManager.EndTurn(unit);
+                    if (_planStack.Count > 0)
+                        _planStack.Pop();
+                    if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
+                        budget.RefundTime(basePreDeduct.secs);
+                    if (IsBonusTurnFor(unit) && basePreDeduct.valid && basePreDeduct.bonusSecs > 0)
+                    {
+                        int before = _bonusTurn.remaining;
+                        int after = Mathf.Min(_bonusTurn.cap, before + basePreDeduct.bonusSecs);
+                        if (after != before)
+                        {
+                            _bonusTurn.remaining = after;
+                            NotifyBonusTurnStateChanged();
+                        }
+                    }
+                    ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
+                    NotifyConfirmAbort(tool, unit, "LinkCancelled");
+                    CleanupAfterAbort(tool, false);
+                    yield break;
                 }
 
-                if (tool is IActionExecReportV2 execReport)
-                    execReport.Consume();
+                if (tool.Kind == ActionKind.Sustained)
+                {
+                    int bonusCap = Mathf.Max(0, basePreDeduct.secs);
+                    yield return RunSustainedBonusTurns(bonusCap, actionPlan.kind);
+                }
+                if (tool.Kind == ActionKind.FullRound && tool is IFullRoundActionTool frTool)
+                {
+                    var planData = BuildFullRoundPlan(actionPlan, basePreDeduct, budget, resources);
+                    frTool.TriggerFullRoundImmediate(unit, turnManager, planData);
 
-                _activeTool = null;
-                _hover = null;
-                _phase = Phase.Idle;
-                yield break;
+                    if (budget != null)
+                        planData.budgetAfter = budget.Remaining;
+                    if (resources != null)
+                        planData.energyAfter = resources.Get("Energy");
+
+                    if (_planStack.Count > 0)
+                        _planStack.Pop();
+
+                    ApplyCooldown(tool, unit);
+
+                    if (turnManager != null && unit != null)
+                    {
+                        int rounds = Mathf.Max(1, frTool.FullRoundRounds);
+                        turnManager.RegisterFullRound(unit, rounds, actionPlan.kind, frTool, planData);
+                        turnManager.EndTurn(unit);
+                    }
+
+                    if (tool is IActionExecReportV2 execReport)
+                        execReport.Consume();
+
+                    _activeTool = null;
+                    _hover = null;
+                    _phase = Phase.Idle;
+                    yield break;
+                }
+                yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+                TryFinalizeEndTurn();
             }
-            yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
-            TryFinalizeEndTurn();
-        }
-        finally
-        {
-            if (guardActive && guardUnit != null)
-                turnManager.PopAutoTurnEndGuard(guardUnit);
-        }
+            finally
+            {
+                if (guardActive && guardUnit != null)
+                    turnManager.PopAutoTurnEndGuard(guardUnit);
+            }
 
         }
 
@@ -1463,22 +1466,22 @@ namespace TGD.CombatV2
         }
         void ApplyCooldown(IActionToolV2 tool, Unit unit)
         {
-            if (turnManager == null || tool == null || unit == null)
-                return;
+            //if (turnManager == null || tool == null || unit == null)
+            //    return;
 
-            var cooldowns = turnManager.GetCooldowns(unit);
-            if (cooldowns == null)
-                return;
+            //var cooldowns = turnManager.GetCooldowns(unit);
+            //if (cooldowns == null)
+            //    return;
 
-            switch (tool)
-            {
-                case ChainTestActionBase chainTool:
-                    int seconds = chainTool.CooldownSeconds;
-                    string skillId = chainTool.CooldownId;
-                    if (!string.IsNullOrEmpty(skillId) && seconds > 0)
-                        cooldowns.StartSeconds(skillId, seconds);
-                    break;
-            }
+            //switch (tool)
+            //{
+            //    case ChainTestActionBase chainTool:
+            //        int seconds = chainTool.CooldownSeconds;
+            //        string skillId = chainTool.CooldownId;
+            //        if (!string.IsNullOrEmpty(skillId) && seconds > 0)
+            //            cooldowns.StartSeconds(skillId, seconds);
+            //        break;
+            //}
         }
 
         ExecReportData BuildExecReport(IActionToolV2 tool, out IActionExecReportV2 exec)
@@ -1656,7 +1659,9 @@ namespace TGD.CombatV2
 
         PlannedCost GetBaselineCost(IActionToolV2 tool)
         {
-            if (tool is IActionCostPreviewV2 preview && preview.TryPeekCost(out var previewSecs, out var previewEnergy))
+            // 1) 工具自己能给更精确的预览就用它（目标/路径已知）
+            if (tool is IActionCostPreviewV2 preview &&
+                preview.TryPeekCost(out var previewSecs, out var previewEnergy))
             {
                 return new PlannedCost
                 {
@@ -1668,36 +1673,40 @@ namespace TGD.CombatV2
                 };
             }
 
+            // 2) 纯移动（HexClickMover）
             if (tool is HexClickMover mover)
             {
-                int secs = Mathf.Max(1, Mathf.CeilToInt(mover.config ? mover.config.timeCostSeconds : 1f));
-                int energyRate = mover.config ? Mathf.Max(0, mover.config.energyCost) : 0;
+                int secsCeil = Mathf.Max(1, mover.ResolveMoveBudgetSeconds());
+                int energyRate = Mathf.Max(0, mover.ResolveMoveEnergyPerSecond());
                 return new PlannedCost
                 {
-                    moveSecs = Mathf.Max(0, secs),
-                    moveEnergy = Mathf.Max(0, energyRate),
+                    moveSecs = secsCeil,
+                    moveEnergy = energyRate,
                     atkSecs = 0,
                     atkEnergy = 0,
                     valid = true
                 };
             }
 
-            if (tool is AttackControllerV2 attack)
+            // 3) 攻击（AttackControllerV2）：
+            //    这里 W2 阶段只需要一个“靠近移动”的费率做预算门槛。
+            if (tool is TGD.CombatV2.AttackControllerV2 attack)
             {
-                int moveSecs = 1;
-                int moveEnergyRate = attack.moveConfig ? Mathf.Max(0, attack.moveConfig.energyCost) : 0;
+                int moveEnergyRate = Mathf.Max(0, attack.ResolveMoveEnergyPerSecond());
                 return new PlannedCost
                 {
-                    moveSecs = Mathf.Max(1, moveSecs),
-                    atkSecs = 0,
-                    moveEnergy = Mathf.Max(0, moveEnergyRate),
+                    moveSecs = 1,                 // 最小估算，和你们旧逻辑一致
+                    moveEnergy = moveEnergyRate,    // 靠近阶段按费率估算
+                    atkSecs = 0,                 // 攻击本体的秒/能量在 W3 实际执行时依据 AttackProfile 结算
                     atkEnergy = 0,
                     valid = true
                 };
             }
 
+            // 4) 兜底：其它工具（未来新技能未接入也不会炸）
             return new PlannedCost { valid = true };
         }
+
 
         PlannedCost BuildPlannedCost(IActionToolV2 tool, Hex target)
         {
@@ -2989,7 +2998,23 @@ namespace TGD.CombatV2
                 onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
+            // —— 新增：拿冷却池
+            var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
 
+            // —— 新增：先做“是否就绪”检查（防止目录里该 Key 正在冷却）
+            {
+                string fail = EvaluateBudgetFailure(unit, option.secs, option.energy, budget, resources);
+                if (fail == null && !IsCooldownReadyForConfirm(tool, cooldowns))
+                    fail = "cooldown";
+
+                if (fail != null)
+                {
+                    ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={fail})");
+                    ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={fail})");
+                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                    yield break;
+                }
+            }
             string failReason = EvaluateBudgetFailure(unit, option.secs, option.energy, budget, resources);
 
             if (failReason != null)
@@ -3001,6 +3026,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
+            TryStartCooldownIfAny(tool, cooldowns);
 
             int timeBefore = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
@@ -3154,7 +3180,7 @@ namespace TGD.CombatV2
                 onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
-
+            var cooldowns = (turnManager != null && owner != null) ? turnManager.GetCooldowns(owner) : null;
             var budget = option.budget;
             var resources = option.resources;
             string failReason = EvaluateBudgetFailure(owner, option.secs, option.energy, budget, resources);
@@ -3168,7 +3194,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(owner, tool.Id, "W2_PreDeductCheckOk");
-
+            TryStartCooldownIfAny(tool, cooldowns);
             if (budget != null && option.secs > 0)
                 budget.SpendTime(option.secs);
 
@@ -3241,25 +3267,12 @@ namespace TGD.CombatV2
             return "notReady";
         }
 
-        bool IsCooldownReadyForConfirm(IActionToolV2 tool, ICooldownSink sink)
+        private static bool IsCooldownReadyForConfirm(IActionToolV2 tool, ICooldownSink sink)
         {
             if (sink == null) return true;
-            string skillId = null;
-
-            if (tool is HexClickMover mover && mover.config != null && !string.IsNullOrEmpty(mover.config.actionId))
-                skillId = mover.config.actionId;
-            else if (tool is AttackControllerV2 attack && attack.attackConfig != null)
-                skillId = attack.attackConfig.name;
-            else if (tool is ChainTestActionBase chain)
-                skillId = chain.CooldownId;
-
-            if (string.IsNullOrEmpty(skillId))
-                skillId = tool?.Id;
-
-            if (string.IsNullOrEmpty(skillId))
-                return true;
-
-            return sink.Ready(skillId);
+            var key = GetCooldownKey(tool);
+            if (string.IsNullOrEmpty(key)) return true;
+            return sink.Ready(key); // Hub 内部若不存在该 key，应视为 Ready
         }
 
         bool IsAnyToolBusy()
@@ -3513,6 +3526,34 @@ namespace TGD.CombatV2
 
             _planStack.Clear();
             TryFinalizeEndTurn();
+        }
+        private static string GetCooldownKey(IActionToolV2 tool)
+        {
+            if (tool is ICooldownKeyProvider p && !string.IsNullOrEmpty(p.CooldownKey))
+                return p.CooldownKey;
+            if (tool is ChainTestActionBase chain && !string.IsNullOrEmpty(chain.CooldownId))
+                return chain.CooldownId;
+            return tool?.Id; // 兜底
+        }
+        void TryStartCooldownIfAny(IActionToolV2 tool, ICooldownSink sink)
+        {
+            if (sink == null || tool == null) return;
+
+            string key = null;
+            if (tool is ICooldownKeyProvider p && !string.IsNullOrEmpty(p.CooldownKey))
+                key = p.CooldownKey;
+            if (string.IsNullOrEmpty(key))
+                key = tool.Id;
+
+            if (string.IsNullOrEmpty(key))
+                return;
+
+            int cd = TGD.DataV2.ActionCooldownCatalog.Instance != null
+                   ? TGD.DataV2.ActionCooldownCatalog.Instance.GetSeconds(key)
+                   : 0;
+
+            if (cd > 0)
+                sink.StartSeconds(key, cd);
         }
 
 
