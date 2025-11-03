@@ -1,51 +1,51 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 namespace TGD.CoreV2
 {
     public static class StatsV2SpawnExtensions
     {
-        /// °²È«¿½±´¡°³ö³§ÊıÖµ¡±¡úÔËĞĞÊ±£¬²¢ÇåÀíÕ½¶·ÆÚ×Ö¶Î
+        /// å®‰å…¨æ‹·è´â€œå‡ºå‚æ•°å€¼â€â†’è¿è¡Œæ—¶ï¼Œå¹¶æ¸…ç†æˆ˜æ–—æœŸå­—æ®µ
         public static void ApplyInit(this StatsV2 dst, StatsV2 init)
         {
-            // ¡ª¡ª »ù´¡ ¡ª¡ª 
+            // â€”â€” åŸºç¡€ â€”â€” 
             dst.Level = init.Level;
             dst.Attack = init.Attack;
             dst.Stamina = init.Stamina;
             dst.Armor = init.Armor;
 
-            // ¡ª¡ª Ê±¼ä&ÒÆ¶¯ ¡ª¡ª 
+            // â€”â€” æ—¶é—´&ç§»åŠ¨ â€”â€” 
             dst.Speed = init.Speed;
             dst.MoveRate = init.MoveRate;
-            dst.MoveRateFlatAdd = 0;     // runtime ÇåÁã
-            dst.MoveRatePctAdd = 0f;     // runtime ÇåÁã
-            dst.IsEntangled = false;     // runtime ÇåÁã
+            dst.MoveRateFlatAdd = 0;     // runtime æ¸…é›¶
+            dst.MoveRatePctAdd = 0f;     // runtime æ¸…é›¶
+            dst.IsEntangled = false;     // runtime æ¸…é›¶
 
-            // ¡ª¡ª ×ÊÔ´ ¡ª¡ª 
+            // â€”â€” èµ„æº â€”â€” 
             dst.MaxHP = Mathf.Max(1, init.MaxHP);
             dst.HP = Mathf.Clamp(init.HP, 0, dst.MaxHP);
             dst.MaxEnergy = Mathf.Max(0, init.MaxEnergy);
             dst.Energy = Mathf.Clamp(init.Energy, 0, dst.MaxEnergy);
             dst.EnergyRegenPer2s = init.EnergyRegenPer2s;
 
-            // ¡ª¡ª Ö÷ÊôĞÔ ¡ª¡ª 
+            // â€”â€” ä¸»å±æ€§ â€”â€” 
             dst.Strength = init.Strength;
             dst.Agility = init.Agility;
             dst.PrimaryAttr = init.PrimaryAttr;
-            dst.PrimaryAddPct = 0f;      // runtime ÇåÁã
+            dst.PrimaryAddPct = 0f;      // runtime æ¸…é›¶
 
-            // ¡ª¡ª ±©»÷ ¡ª¡ª 
+            // â€”â€” æš´å‡» â€”â€” 
             dst.BaseCrit = init.BaseCrit;
             dst.CritRating = init.CritRating;
-            dst.CritAddPct = 0f;         // runtime ÇåÁã
+            dst.CritAddPct = 0f;         // runtime æ¸…é›¶
             dst.CritDamagePct = init.CritDamagePct;
 
-            // ¡ª¡ª ¾«Í¨ ¡ª¡ª 
+            // â€”â€” ç²¾é€š â€”â€” 
             dst.BaseMasteryP = init.BaseMasteryP;
             dst.MasteryRating = init.MasteryRating;
-            dst.MasteryAddPct = 0f;      // runtime ÇåÁã
+            dst.MasteryAddPct = 0f;      // runtime æ¸…é›¶
             dst.MasteryClassCoeff = init.MasteryClassCoeff;
 
-            // ¡ª¡ª ÔöÉË/¼õÉËÍ°£¨runtime ÇåÁã£© ¡ª¡ª 
+            // â€”â€” å¢ä¼¤/å‡ä¼¤æ¡¶ï¼ˆruntime æ¸…é›¶ï¼‰ â€”â€” 
             dst.DmgBonusA_P = 0f; dst.DmgBonusB_P = 0f; dst.DmgBonusC_P = 0f;
             dst.ReduceA_P = 0f; dst.ReduceB_P = 0f; dst.ReduceC_P = 0f;
             dst.ThreatAddPct = 0f; dst.ShredAddPct = 0f;
