@@ -12,4 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80205f918dcad9e48bcab753eb2cf12f, type: 3}
   m_Name: ActionCooldownCatalog
   m_EditorClassIdentifier: 
-  entries: []
+  entries:
+  - key: Reaction20
+    seconds: 12

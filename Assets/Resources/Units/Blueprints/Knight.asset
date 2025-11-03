@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca97717ca4955a5499de412e790c500f, type: 3}
+  m_Name: Knight
+  m_EditorClassIdentifier: 
+  unitId: Knight001
+  displayName: Knight
+  faction: 0
+  baseStats:
+    Level: 1
+    Attack: 10
+    Stamina: 0
+    Armor: 0
+    Speed: 0
+    MoveRate: 4
+    MoveRateMin: 1
+    MoveRateMax: 14
+    MoveProfile:
+      baseTimeSeconds: 1
+      energyPerSecond: 10
+      cooldownSeconds: 0
+      fallbackSteps: 3
+      stepsCap: 12
+      refundThresholdSeconds: 0.8
+      actionId: Move
+      keepDeg: 45
+      turnDeg: 135
+      turnSpeedDegPerSec: 720
+    AttackProfile:
+      attackSeconds: 2
+      energyCost: 20
+      refundThresholdSeconds: 0.8
+      freeMoveCutoffSeconds: 0.2
+      meleeRange: 1
+      keepDeg: 45
+      turnDeg: 135
+      turnSpeedDegPerSec: 720
+    MaxHP: 100
+    HP: 100
+    MaxEnergy: 100
+    Energy: 0
+    EnergyRegenPer2s: 0
+    Strength: 0
+    Agility: 0
+    PrimaryAttr: 0
+    PrimaryAddPct: 0
+    BaseCrit: 0
+    CritRating: 0
+    CritAddPct: 0
+    CritDamagePct: 200
+    BaseMasteryP: 0
+    MasteryRating: 0
+    MasteryAddPct: 0
+    MasteryClassCoeff: 1
+    DamageBonusPct: 0
+    DamageReducePct: 0
+    ThreatAddPct: 0
+    ShredAddPct: 0
+  abilities:
+  - actionId: 
+    learned: 0
+    initialCooldownSeconds: 0
