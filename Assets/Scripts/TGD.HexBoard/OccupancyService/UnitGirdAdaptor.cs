@@ -1,7 +1,6 @@
 // File: TGD.HexBoard/UnitGridAdapter.cs
 namespace TGD.HexBoard
 {
-    ///  Unit ҽӵ
     public sealed class UnitGridAdapter : IGridActor
     {
         readonly Unit unit;
