@@ -30,15 +30,13 @@ namespace TGD.HexBoard
             public static StickySample None => new(1f, false);
         }
 
-        const float MR_MIN = 1f;
-        const float MR_MAX = 12f;
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
 
         /// <summary>
         /// Accurate move simulation that mirrors the preview calculation.
-        /// MR_base = clamp(baseMoveRateNoEnv, [MR_MIN, MR_MAX])
-        /// effMR(step) = clamp(MR_base * stickyProduct, [MR_MIN, MR_MAX])
+        /// MR_base = clamp(baseMoveRateNoEnv, [moveRateMin, moveRateMax])
+        /// effMR(step) = clamp(MR_base * stickyProduct, [moveRateMin, moveRateMax])
         /// Refund is measured against the planned step cost (MR_click).
         /// </summary>
         public static Result Run(
@@ -48,13 +46,15 @@ namespace TGD.HexBoard
             int budgetSeconds,
             System.Func<Hex, StickySample> getStepModifier,
             float refundThresholdSeconds = 0.8f,
-            bool debug = false)
+            bool debug = false,
+            float moveRateMin = MoveRateRules.DefaultMin,
+            float moveRateMax = MoveRateRules.DefaultMax)
         {
             var res = new Result();
             if (path == null || path.Count == 0) return res;
 
-            float mrBase = Mathf.Clamp(baseMoveRateNoEnv, MR_MIN, MR_MAX);
-            float mrPlanned = Mathf.Clamp(plannedMoveRate, MR_MIN, MR_MAX);
+            float mrBase = Mathf.Clamp(baseMoveRateNoEnv, moveRateMin, moveRateMax);
+            float mrPlanned = Mathf.Clamp(plannedMoveRate, moveRateMin, moveRateMax);
 
             res.ReachedPath.Add(path[0]);
 
@@ -63,7 +63,7 @@ namespace TGD.HexBoard
             float used = 0f;
             int refunds = 0;
 
-            float baseStepCost = 1f / Mathf.Max(MR_MIN, mrPlanned);
+            float baseStepCost = 1f / Mathf.Max(moveRateMin, mrPlanned);
 
             float activeSticky = 1f;
             float immediateMult = 1f;
@@ -88,8 +88,8 @@ namespace TGD.HexBoard
             for (int i = 1; i < path.Count; i++)
             {
                 float stepMult = Mathf.Clamp(activeSticky * immediateMult, ENV_MIN, ENV_MAX);
-                float effMR = Mathf.Clamp(mrBase * stepMult, MR_MIN, MR_MAX);
-                float stepCost = 1f / Mathf.Max(MR_MIN, effMR);
+                float effMR = Mathf.Clamp(mrBase * stepMult, moveRateMin, moveRateMax);
+                float stepCost = 1f / Mathf.Max(moveRateMin, effMR);
 
                 if (budget + 1e-6f < stepCost) break;
 
