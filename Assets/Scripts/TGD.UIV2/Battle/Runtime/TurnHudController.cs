@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using TGD.CombatV2;
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 
 namespace TGD.UIV2.Battle

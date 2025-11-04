@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
     public sealed class MovableRangeResult
     {
-        // ÖÕµã ¡ú ×î¶ÌÂ·¾¶£¨º¬ÆğµãÓëÖÕµã£©
+        // ç»ˆç‚¹ â†’ æœ€çŸ­è·¯å¾„ï¼ˆå«èµ·ç‚¹ä¸ç»ˆç‚¹ï¼‰
         public readonly Dictionary<Hex, List<Hex>> Paths = new();
-        // ±»×èµ²µÄ¸ñ×Ó£¨¿ÉÓÃ×÷ºìÉ«ÌáÊ¾£©
+        // è¢«é˜»æŒ¡çš„æ ¼å­ï¼ˆå¯ç”¨ä½œçº¢è‰²æç¤ºï¼‰
         public readonly HashSet<Hex> Blocked = new();
     }
 
@@ -19,7 +20,7 @@ namespace TGD.CombatV2
             HexBoardMap<Unit> map,
             Hex start,
             int steps,
-            System.Func<Hex, bool> isBlocked // Ô½½ç/Õ¼Î»/ÎïÀíÕÏ°­µÄÍ³Ò»ÅĞ¶¨
+            System.Func<Hex, bool> isBlocked // è¶Šç•Œ/å ä½/ç‰©ç†éšœç¢çš„ç»Ÿä¸€åˆ¤å®š
         )
 
         {
@@ -57,7 +58,7 @@ namespace TGD.CombatV2
                 }
             }
 
-            // »ØËİ×î¶ÌÂ·¾¶
+            // å›æº¯æœ€çŸ­è·¯å¾„
             foreach (var kv in dist)
             {
                 var cell = kv.Key; int d = kv.Value;
@@ -77,16 +78,16 @@ namespace TGD.CombatV2
             return res;
         }
         /// <summary>
-        /// ¼ÓÈ¨¿É´ï£¨Dijkstra£©£ºcost(h)=1/ speedMult(h)¡£
-        /// ·µ»Ø£º¿É´ï¸ñ -> Â·¾¶£¨º¬Æğµãµ½×ÔÉí£©¡£
+        /// åŠ æƒå¯è¾¾ï¼ˆDijkstraï¼‰ï¼šcost(h)=1/ speedMult(h)ã€‚
+        /// è¿”å›ï¼šå¯è¾¾æ ¼ -> è·¯å¾„ï¼ˆå«èµ·ç‚¹åˆ°è‡ªèº«ï¼‰ã€‚
         /// </summary>
         public static (Dictionary<Hex, List<Hex>> Paths, HashSet<Hex> Blocked)
             ComputeWeighted(
                 HexBoardLayout layout,
                 Hex start,
-                float budget,                        // ²½ÊıÔ¤Ëã£¨¿ÉÒÔÊÇÕûÊı steps£©
-                Func<Hex, bool> isBlocked,           // ÈÔÈ»ÓÃÄãÏÖÓĞµÄ×èµ²£¨Õ¼Î»/ÎïÀí/Ô½½çµÈ£©
-                Func<Hex, float> getSpeedMult        // À´×Ô HexEnvironmentSystem
+                float budget,                        // æ­¥æ•°é¢„ç®—ï¼ˆå¯ä»¥æ˜¯æ•´æ•° stepsï¼‰
+                Func<Hex, bool> isBlocked,           // ä»ç„¶ç”¨ä½ ç°æœ‰çš„é˜»æŒ¡ï¼ˆå ä½/ç‰©ç†/è¶Šç•Œç­‰ï¼‰
+                Func<Hex, float> getSpeedMult        // æ¥è‡ª HexEnvironmentSystem
             )
         {
             var blocked = new HashSet<Hex>();
@@ -101,7 +102,7 @@ namespace TGD.CombatV2
             {
                 var cur = pq.Dequeue();
 
-                // ¼ôÖ¦
+                // å‰ªæ
                 if (dist[cur] > budget + 1e-4f) continue;
 
                 foreach (var nb in SixNeighbors(cur))
@@ -118,7 +119,7 @@ namespace TGD.CombatV2
                     }
 
                     float mult = Math.Max(0.1f, getSpeedMult != null ? getSpeedMult(nb) : 1f);
-                    float stepCost = 1f / mult; // mult=0.5 => 2¸ñ³É±¾£»mult=2 => 0.5¸ñ³É±¾
+                    float stepCost = 1f / mult; // mult=0.5 => 2æ ¼æˆæœ¬ï¼›mult=2 => 0.5æ ¼æˆæœ¬
                     float nd = dist[cur] + stepCost;
 
                     if (nd > budget + 1e-4f) continue;
@@ -131,7 +132,7 @@ namespace TGD.CombatV2
                     }
                 }
             }
-            // ×é×°Â·¾¶
+            // ç»„è£…è·¯å¾„
             var paths = new Dictionary<Hex, List<Hex>>();
             foreach (var kv in dist)
             {
@@ -162,7 +163,7 @@ namespace TGD.CombatV2
             yield return new Hex(h.q - 1, h.r + 1);
             yield return new Hex(h.q + 0, h.r + 1);
         }
-        // ¼«¼òÓÅÏÈ¶ÓÁĞ£¨.NET 4.x ÓĞÄÚÖÃ PriorityQueue£©
+        // æç®€ä¼˜å…ˆé˜Ÿåˆ—ï¼ˆ.NET 4.x æœ‰å†…ç½® PriorityQueueï¼‰
         sealed class PriorityQueue<T, TKey> where TKey : IComparable<TKey>
         {
             readonly List<(T item, TKey key)> data = new();

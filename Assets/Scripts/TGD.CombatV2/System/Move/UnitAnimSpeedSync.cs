@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Collections.Generic;
 using TGD.HexBoard;
 using UnityEngine;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.HexBoard.Pathfinding

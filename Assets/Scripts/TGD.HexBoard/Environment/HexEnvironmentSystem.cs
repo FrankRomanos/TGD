@@ -1,6 +1,7 @@
 // File: TGD.HexBoard/Environment/HexEnvironmentSystem.cs
 using System;
 using System.Collections.Generic;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard

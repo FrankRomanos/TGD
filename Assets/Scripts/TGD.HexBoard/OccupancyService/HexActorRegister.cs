@@ -1,3 +1,4 @@
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
@@ -5,8 +6,8 @@ namespace TGD.HexBoard
     public sealed class HexActorRegister : MonoBehaviour
     {
         public HexOccupancyService occService;
-        public HexBoardTestDriver driver;           // Ö±½Ó¸´ÓÃÄãÏÖÓĞµÄ TestDriver
-        public FootprintShape footprint;        // ÕâÀïÍÏ 4 ¸ñµÄÕ¼Î» SO
+        public HexBoardTestDriver driver;           // ç›´æ¥å¤ç”¨ä½ ç°æœ‰çš„ TestDriver
+        public FootprintShape footprint;        // è¿™é‡Œæ‹– 4 æ ¼çš„å ä½ SO
 
         IGridActor _actor;
 
@@ -14,7 +15,7 @@ namespace TGD.HexBoard
         {
             if (occService == null || driver == null || !driver.IsReady) return;
             _actor = new UnitGridAdapter(driver.UnitRef, footprint);
-            // °´µ±Ç° Unit µÄÎ»ÖÃºÍ³¯Ïò×¢²áµ½¹²ÏíÕ¼Î»
+            // æŒ‰å½“å‰ Unit çš„ä½ç½®å’Œæœå‘æ³¨å†Œåˆ°å…±äº«å ä½
             occService.Register(_actor, driver.UnitRef.Position, driver.UnitRef.Facing);
         }
 

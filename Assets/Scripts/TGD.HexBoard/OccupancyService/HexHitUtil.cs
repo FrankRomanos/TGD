@@ -1,11 +1,12 @@
 // File: TGD.HexBoard/HexHitUtil.cs
 using System.Collections.Generic;
+using TGD.CoreV2;
 
 namespace TGD.HexBoard
 {
     public static class HexHitUtil
     {
-        // ÃüÖĞ£ºfootprint Óë hitCells ½»¼¯·Ç¿Õ
+        // å‘½ä¸­ï¼šfootprint ä¸ hitCells äº¤é›†éç©º
         public static bool Hit(IGridActor actor, HashSet<Hex> hitCells)
         {
             if (actor == null || hitCells == null) return false;
@@ -14,7 +15,7 @@ namespace TGD.HexBoard
             return false;
         }
 
-        // Ïß¶Î¼Ó´Ö£¨A->B£¬¿í¶È=T£©
+        // çº¿æ®µåŠ ç²—ï¼ˆA->Bï¼Œå®½åº¦=Tï¼‰
         public static HashSet<Hex> ThickLine(Hex a, Hex b, int T)
         {
             var set = new HashSet<Hex>();

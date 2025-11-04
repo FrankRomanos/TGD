@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using TGD.AudioV2;
 using TGD.CombatV2;
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.UIV2.Battle
 {
@@ -284,7 +284,7 @@ namespace TGD.UIV2.Battle
                 turnHud.HandleChainFocusChanged(unit);
         }
 
-        void OnUnitDeferred(TGD.HexBoard.Unit u)
+        void OnUnitDeferred(Unit u)
         {
             if (audioManager != null)
                 audioManager.PlayEvent(BattleAudioEvent.TurnTimelineInsert);

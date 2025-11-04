@@ -1,7 +1,7 @@
 // File: TGD.CombatV2/AttackEventsV2.cs
 using System;
 using System.Collections.Generic;
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {

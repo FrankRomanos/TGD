@@ -1,8 +1,9 @@
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// 0¡ã = r+£¨+Z£©£¬90¡ã = q+£¨+X£©£¬180¡ã = r-£¬270¡ã = q-
+    /// 0Â° = r+ï¼ˆ+Zï¼‰ï¼Œ90Â° = q+ï¼ˆ+Xï¼‰ï¼Œ180Â° = r-ï¼Œ270Â° = q-
     public static class HexFacingUtil
     {
         public static float YawFromFacing(Facing4 f) => f switch
@@ -26,7 +27,7 @@ namespace TGD.HexBoard
             };
         }
 
-        public static Facing4 LeftOf(Facing4 f) => f switch  // ÄæÊ±Õë 90¡ã
+        public static Facing4 LeftOf(Facing4 f) => f switch  // é€†æ—¶é’ˆ 90Â°
         {
             Facing4.PlusR => Facing4.MinusQ,
             Facing4.MinusQ => Facing4.MinusR,
@@ -34,7 +35,7 @@ namespace TGD.HexBoard
             _ => Facing4.PlusR,
         };
 
-        public static Facing4 RightOf(Facing4 f) => f switch // Ë³Ê±Õë 90¡ã
+        public static Facing4 RightOf(Facing4 f) => f switch // é¡ºæ—¶é’ˆ 90Â°
         {
             Facing4.PlusR => Facing4.PlusQ,
             Facing4.PlusQ => Facing4.MinusR,
@@ -58,7 +59,7 @@ namespace TGD.HexBoard
             _ => new Vector2(-1f, 0f),
         };
 
-        /// 45¡ã ÉÈÇøÒ»´ÎÐÔ×ªÏò£º|¦Ä|¡Ükeep -> ±£³Ö£» ¡Üturn -> ×ó/ÓÒÏàÁÚ£»>turn -> ·´Ïò
+        /// 45Â° æ‰‡åŒºä¸€æ¬¡æ€§è½¬å‘ï¼š|Î´|â‰¤keep -> ä¿æŒï¼› â‰¤turn -> å·¦/å³ç›¸é‚»ï¼›>turn -> åå‘
         public static (Facing4 facing, float targetYaw) ChooseFacingByAngle45(
             Facing4 currentFacing, Vector3 fromWorld, Vector3 toWorld,
             float keepDeg = 45f, float turnDeg = 135f)
@@ -70,7 +71,7 @@ namespace TGD.HexBoard
             Vector2 f = BasisXZ(currentFacing);
 
             float dot = f.x * v.x + f.y * v.y;
-            float cross = f.x * v.y - f.y * v.x; // ×óÕýÓÒ¸º
+            float cross = f.x * v.y - f.y * v.x; // å·¦æ­£å³è´Ÿ
             float delta = Mathf.Atan2(cross, dot) * Mathf.Rad2Deg; // (-180,180]
             float a = Mathf.Abs(delta);
 
@@ -88,7 +89,7 @@ namespace TGD.HexBoard
             }
         }
 
-        /// Ðý×ªÐ­³Ì£ºÒÔ½ÇËÙ¶È(¶È/Ãë)»º¶¯µ½Ä¿±ê yaw
+        /// æ—‹è½¬åç¨‹ï¼šä»¥è§’é€Ÿåº¦(åº¦/ç§’)ç¼“åŠ¨åˆ°ç›®æ ‡ yaw
         public static System.Collections.IEnumerator RotateToYaw(Transform t, float targetYaw, float degPerSec = 720f)
         {
             float Normalize(float a) => (a % 360f + 360f) % 360f;

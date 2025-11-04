@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using TGD.CombatV2;
 using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.LevelV2
 {

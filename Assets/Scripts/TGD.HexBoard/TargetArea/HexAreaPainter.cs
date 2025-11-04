@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2

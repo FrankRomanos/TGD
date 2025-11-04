@@ -1,5 +1,6 @@
 using UnityEngine;
 using TGD.CombatV2.Integration;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2

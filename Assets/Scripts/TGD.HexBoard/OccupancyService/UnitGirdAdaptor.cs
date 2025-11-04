@@ -1,3 +1,4 @@
+using TGD.CoreV2;
 // File: TGD.HexBoard/UnitGridAdapter.cs
 namespace TGD.HexBoard
 {
