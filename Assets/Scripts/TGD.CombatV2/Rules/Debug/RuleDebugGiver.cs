@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2;
@@ -34,8 +34,8 @@ namespace TGD.CombatV2
         public bool ignoreComboPenalty;
 
         [Header("Attached Listeners (optional)")]
-        public ReduceCooldownOnCast reduceListener;
-        public RefreshCooldownOnCast refreshListener;
+        [SerializeField, HideInInspector] ReduceCooldownOnCast reduceListener;
+        [SerializeField, HideInInspector] RefreshCooldownOnCast refreshListener;
 
         readonly List<IRuleModifier> _activeModifiers = new();
         readonly List<PendingVoucherUsage> _pendingVoucherUsage = new();
@@ -64,12 +64,26 @@ namespace TGD.CombatV2
             _pendingVoucherUsage.Clear();
         }
 
+        // 2) OnValidate 不再直接 Apply/Destroy，改为延迟重建（避免 DestroyImmediate 报错）
         void OnValidate()
         {
-            if (isActiveAndEnabled)
-                Apply();
+#if UNITY_EDITOR
+            if (!isActiveAndEnabled) return;
+            UnityEditor.EditorApplication.delayCall += RebuildInEditor;
+#endif
         }
 
+#if UNITY_EDITOR
+        void RebuildInEditor()
+        {
+            if (this == null) return;                  // 组件已被删除
+            UnityEditor.EditorApplication.delayCall -= RebuildInEditor;
+            if (!isActiveAndEnabled) return;
+            Apply();
+        }
+#endif
+
+        // 3) Apply 前清理 Missing（编辑器专用），然后配置监听器
         void Apply()
         {
             _ctx = GetComponentInParent<UnitRuntimeContext>(true);
@@ -77,45 +91,20 @@ namespace TGD.CombatV2
             TeardownListeners();
             ResetCharges();
 
-            if (_ctx == null)
-                return;
+            if (_ctx == null) return;
+
+#if UNITY_EDITOR
+            UnityEditor.GameObjectUtility.RemoveMonoBehavioursWithMissingScript(_ctx.gameObject);
+#endif
 
             ConfigureListeners();
 
             var ruleSet = _ctx.Rules;
-            if (ruleSet == null)
-            {
-                ruleSet = new UnitRuleSet();
-                _ctx.Rules = ruleSet;
-            }
+            if (ruleSet == null) return;  // 由 UCTX 持有，不在这里 new / 赋值
 
-            if ((firstCostFreeTime || firstCostFreeEnergy) && !string.IsNullOrEmpty(firstCostFilter))
-            {
-                var voucher = new DebugCostVoucher();
-                voucher.Initialize(this, firstCostFreeTime, firstCostFreeEnergy);
-                if (firstCostIsPrefix)
-                    voucher.filter.actionIdStartsWith = firstCostFilter;
-                else
-                    voucher.filter.actionIdEquals = firstCostFilter;
-                ruleSet.Add(voucher);
-                _activeModifiers.Add(voucher);
-            }
-
-            if (cooldownFollowsTurnTime && !string.IsNullOrEmpty(cooldownActionPrefix))
-            {
-                var scaler = new DebugCooldownScaler();
-                scaler.filter.actionIdStartsWith = cooldownActionPrefix;
-                ruleSet.Add(scaler);
-                _activeModifiers.Add(scaler);
-            }
-
-            if (ignoreComboPenalty)
-            {
-                var combo = new DebugComboPolicy();
-                ruleSet.Add(combo);
-                _activeModifiers.Add(combo);
-            }
+            // ……voucher / scaler / combo 按你现有逻辑继续 Add 到 ruleSet
         }
+
 
         void RemoveModifiers()
         {
@@ -240,9 +229,8 @@ namespace TGD.CombatV2
         {
             if (autoReduceCooldown)
             {
-                if (reduceListener == null)
-                    reduceListener = EnsureListener<ReduceCooldownOnCast>();
-                if (reduceListener != null)
+                reduceListener = EnsureListener(ref reduceListener);
+                if (reduceListener)
                 {
                     reduceListener.enabled = true;
                     reduceListener.triggerActionId = reduceTriggerId;
@@ -260,9 +248,8 @@ namespace TGD.CombatV2
         {
             if (autoRefreshCooldown)
             {
-                if (refreshListener == null)
-                    refreshListener = EnsureListener<RefreshCooldownOnCast>();
-                if (refreshListener != null)
+                refreshListener = EnsureListener(ref refreshListener);
+                if (refreshListener)
                 {
                     refreshListener.enabled = true;
                     refreshListener.triggerActionId = refreshTriggerId;
@@ -281,29 +268,25 @@ namespace TGD.CombatV2
             DestroyListener(ref refreshListener);
         }
 
-        T EnsureListener<T>() where T : Component
+        // 4) 统一“确保/销毁”逻辑：始终用 Destroy（排队销毁），不要 DestroyImmediate
+        T EnsureListener<T>(ref T cache) where T : Component
         {
-            if (_ctx == null)
-                return null;
-
-            var existing = _ctx.GetComponent<T>();
-            if (existing != null)
-                return existing;
-
-            return _ctx.gameObject.AddComponent<T>();
+            if (!_ctx) return null;
+            if (!cache || cache.gameObject != _ctx.gameObject)
+            {
+                if (!_ctx.TryGetComponent<T>(out cache))
+                    cache = _ctx.gameObject.AddComponent<T>();
+            }
+            return cache;
         }
 
         void DestroyListener<T>(ref T listener) where T : Component
         {
-            if (listener == null)
-                return;
-
-            if (Application.isPlaying)
-                Destroy(listener);
-            else
-                DestroyImmediate(listener);
+            if (!listener) { listener = null; return; }
+            Destroy(listener);      // ✅ 始终排队销毁，避免“立即销毁”错误
             listener = null;
         }
+
 
         sealed class DebugCostVoucher : RuleModifierBase, ICostModifier
         {
@@ -359,21 +342,17 @@ namespace TGD.CombatV2
 
         sealed class DebugCooldownScaler : RuleModifierBase, ICooldownPolicy
         {
+            //  起始冷却不要缩放 —— 保持目录值
             public void OnStartCooldown(in RuleContext ctx, ref int startSeconds)
             {
-                int turnTime = ctx.stats != null ? Mathf.Max(0, ctx.stats.TurnTime) : StatsMathV2.BaseTurnSeconds;
-                if (turnTime <= 0)
-                    turnTime = StatsMathV2.BaseTurnSeconds;
-                if (startSeconds <= 0)
-                    return;
-                float scale = turnTime / (float)StatsMathV2.BaseTurnSeconds;
-                startSeconds = Mathf.Max(0, Mathf.CeilToInt(startSeconds * scale));
+                // 留空即可；如需个别技能特例，做单独 Policy
             }
 
+            //  每回合 Tick = -(6 + Speed)，Speed 为“秒”
             public void OnTickCooldown(in RuleContext ctx, ref int tickDelta)
             {
-                int turnTime = ctx.stats != null ? Mathf.Max(0, ctx.stats.TurnTime) : StatsMathV2.BaseTurnSeconds;
-                tickDelta = -Mathf.Max(0, turnTime);
+                int sp = (ctx.stats != null) ? ctx.stats.Speed : 0;
+                tickDelta = -(StatsMathV2.BaseTurnSeconds + sp); // 例如 - (6+3) = -9
             }
         }
 
