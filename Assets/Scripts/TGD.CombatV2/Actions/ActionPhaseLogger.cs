@@ -11,5 +11,11 @@ namespace TGD.CombatV2
             string suffix = string.IsNullOrEmpty(message) ? string.Empty : $" {message}";
             Debug.Log($"[Action] {label} [{toolId}] {phase}{suffix}");
         }
+
+        public static void Log(string message)
+        {
+            if (!string.IsNullOrEmpty(message))
+                Debug.Log(message);
+        }
     }
 }
