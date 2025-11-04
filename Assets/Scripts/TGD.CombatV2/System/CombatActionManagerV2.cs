@@ -5,6 +5,8 @@ using System.Linq;
 using UnityEngine;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
+using TGD.CoreV2.Runtime;
+using TGD.CoreV2.Rules;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -93,6 +95,8 @@ namespace TGD.CombatV2
         int _endTurnGuardDepth;
         int _queuedActionsPending;
         int _chainWindowDepth;
+        int _chainDepth;
+        readonly Dictionary<UnitRuntimeContext, AttackControllerV2> _attackControllerCache = new();
         bool _ownsGateHub;
         int _bonusPlanDepth = -1;
 
@@ -158,6 +162,16 @@ namespace TGD.CombatV2
             public ActionPlan plan;
             public ITurnBudget budget;
             public IResourcePool resources;
+            public int depth;
+        }
+
+        struct DerivedQueuedAction
+        {
+            public IActionToolV2 tool;
+            public ActionPlan plan;
+            public ITurnBudget budget;
+            public IResourcePool resources;
+            public int depth;
         }
 
         struct ChainQueueOutcome
@@ -1085,6 +1099,8 @@ namespace TGD.CombatV2
                 }
             }
 
+            int previousChainDepth = _chainDepth;
+            _chainDepth = 0;
             try
             {
                 ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
@@ -1145,6 +1161,57 @@ namespace TGD.CombatV2
                         fullRoundTool.PrepareFullRoundSeconds(cost.TotalSeconds);
                 }
 
+                {
+                    var context = turnManager != null && unit != null ? turnManager.GetContext(unit) : null;
+                    var set = context != null ? context.Rules : null;
+                    bool? friendlyHint = null;
+                    if (turnManager != null && unit != null)
+                        friendlyHint = turnManager.IsPlayerUnit(unit);
+
+                    var ctx2 = RulesAdapter.BuildContext(
+                        context,
+                        actionId: tool.Id,
+                        kind: tool.Kind,
+                        chainDepth: _chainDepth,
+                        comboIndex: GetAttackComboCount(unit),
+                        planSecs: actionPlan.cost.TotalSeconds,
+                        planEnergy: actionPlan.cost.TotalEnergy,
+                        unitIdHint: unit != null ? unit.Id : null,
+                        isFriendlyHint: friendlyHint
+                    );
+
+                    int secs = actionPlan.cost.TotalSeconds;
+                    int moveE = actionPlan.cost.moveEnergy;
+                    int atkE = actionPlan.cost.atkEnergy;
+
+                    RuleEngineV2.Instance.ApplyCostModifiers(set, in ctx2, ref secs, ref moveE, ref atkE);
+
+                    if (secs != actionPlan.cost.TotalSeconds || (moveE + atkE) != actionPlan.cost.TotalEnergy)
+                        ActionPhaseLogger.Log($"[Rules] Cost secs:{actionPlan.cost.TotalSeconds}->{secs}, energy:{actionPlan.cost.TotalEnergy}->{moveE + atkE} (CostMods)");
+
+                    int originalMoveSecs = actionPlan.cost.moveSecs;
+                    int originalAtkSecs = actionPlan.cost.atkSecs;
+                    int originalTotalSecs = Mathf.Max(0, originalMoveSecs + originalAtkSecs);
+                    int newMoveSecs;
+                    int newAtkSecs;
+                    if (originalTotalSecs > 0)
+                    {
+                        newMoveSecs = Mathf.Clamp(Mathf.RoundToInt((float)originalMoveSecs / originalTotalSecs * secs), 0, Mathf.Max(0, secs));
+                        newAtkSecs = Mathf.Max(0, secs - newMoveSecs);
+                    }
+                    else
+                    {
+                        newMoveSecs = Mathf.Max(0, secs);
+                        newAtkSecs = 0;
+                    }
+
+                    actionPlan.cost.moveSecs = newMoveSecs;
+                    actionPlan.cost.atkSecs = newAtkSecs;
+                    actionPlan.cost.moveEnergy = Mathf.Max(0, moveE);
+                    actionPlan.cost.atkEnergy = Mathf.Max(0, atkE);
+                    cost = actionPlan.cost;
+                }
+
                 int remain = budget != null ? budget.Remaining : 0;
                 int energyBefore = resources != null ? resources.Get("Energy") : 0;
 
@@ -1194,7 +1261,7 @@ namespace TGD.CombatV2
                 TryHideAllAimUI();
 
                 if (cooldowns != null)
-                    TryStartCooldownIfAny(tool, cooldowns);
+                    TryStartCooldownIfAny(tool, unit, cooldowns, _chainDepth);
 
                 var pendingChain = new List<ChainQueuedAction>();
                 bool cancelBase = false;
@@ -1211,7 +1278,7 @@ namespace TGD.CombatV2
                     {
                         if (_queuedActionsPending > 0)
                             _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
                     }
                 }
 
@@ -1270,20 +1337,23 @@ namespace TGD.CombatV2
                     _phase = Phase.Idle;
                     yield break;
                 }
-                yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+                yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources, 0);
                 TryFinalizeEndTurn();
             }
             finally
             {
+                _chainDepth = previousChainDepth;
                 if (guardActive && guardUnit != null)
                     turnManager.PopAutoTurnEndGuard(guardUnit);
             }
 
         }
 
-        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources)
+        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources, int chainDepth)
         {
             _endTurnGuardDepth++;
+            int previousDepth = _chainDepth;
+            _chainDepth = chainDepth;
             try
             {
                 _phase = Phase.Executing;
@@ -1314,6 +1384,7 @@ namespace TGD.CombatV2
             }
             finally
             {
+                _chainDepth = previousDepth;
                 _endTurnGuardDepth = Mathf.Max(0, _endTurnGuardDepth - 1);
                 TryFinalizeEndTurn();
             }
@@ -1407,7 +1478,7 @@ namespace TGD.CombatV2
                 }
             }
 
-            var derivedQueue = new List<Tuple<IActionToolV2, ActionPlan>>();
+            var derivedQueue = new List<DerivedQueuedAction>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
             bool shouldDerived = ShouldRunDerivedWindow(unit, tool);
             bool skipDerived = shouldDerived && _pendingEndTurn && IsPendingEndTurnFor(unit);
@@ -1424,6 +1495,9 @@ namespace TGD.CombatV2
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
+            var resolvedContext = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+            CAM.RaiseActionResolved(resolvedContext, tool != null ? tool.Id : null);
+
             exec.Consume();
             _activeTool = null;
             _hover = null;
@@ -1434,11 +1508,13 @@ namespace TGD.CombatV2
                 for (int i = 0; i < derivedQueue.Count; i++)
                 {
                     var pending = derivedQueue[i];
-                    if (pending?.Item1 != null)
+                    if (pending.tool != null)
                     {
                         if (_queuedActionsPending > 0)
                             _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                        var pendingBudget = pending.budget ?? budget;
+                        var pendingResources = pending.resources ?? resources;
+                        yield return ExecuteAndResolve(pending.tool, unit, pending.plan, pendingBudget, pendingResources, pending.depth);
                     }
                 }
             }
@@ -2459,7 +2535,7 @@ namespace TGD.CombatV2
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
 
                             ChainQueueOutcome outcome = default;
-                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, pendingActions, result => outcome = result);
+                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, depth + 1, pendingActions, result => outcome = result);
 
                             if (outcome.cancel)
                             {
@@ -2723,7 +2799,7 @@ namespace TGD.CombatV2
             return true;
         }
 
-        IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue)
+        IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<DerivedQueuedAction> derivedQueue)
         {
             _chainWindowDepth++;
             PushInputSuppression();
@@ -2733,7 +2809,7 @@ namespace TGD.CombatV2
 
             try
             {
-                derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
+                derivedQueue ??= new List<DerivedQueuedAction>();
 
                 var rules = ResolveRules();
                 var allowedIds = rules?.AllowedDerivedActions(basePlan.kind);
@@ -2874,7 +2950,7 @@ namespace TGD.CombatV2
             }
         }
 
-        IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue, Action<ChainQueueOutcome> onComplete)
+        IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<DerivedQueuedAction> derivedQueue, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -3003,7 +3079,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
-            TryStartCooldownIfAny(tool, cooldowns);
+            TryStartCooldownIfAny(tool, unit, cooldowns, 1);
 
             int timeBefore = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
@@ -3043,7 +3119,14 @@ namespace TGD.CombatV2
                 cost = planCost
             };
 
-            derivedQueue.Add(Tuple.Create(tool, actionPlan));
+            derivedQueue.Add(new DerivedQueuedAction
+            {
+                tool = tool,
+                plan = actionPlan,
+                budget = budget,
+                resources = resources,
+                depth = 1
+            });
 
             _queuedActionsPending++;
 
@@ -3052,7 +3135,7 @@ namespace TGD.CombatV2
             onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
         }
 
-        IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
+        IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, int chainDepth, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -3171,7 +3254,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(owner, tool.Id, "W2_PreDeductCheckOk");
-            TryStartCooldownIfAny(tool, cooldowns);
+            TryStartCooldownIfAny(tool, owner, cooldowns, chainDepth);
             if (budget != null && option.secs > 0)
                 budget.SpendTime(option.secs);
 
@@ -3215,7 +3298,8 @@ namespace TGD.CombatV2
                 owner = owner,
                 plan = actionPlan,
                 budget = budget,
-                resources = resources
+                resources = resources,
+                depth = Mathf.Max(0, chainDepth)
             });
 
             _queuedActionsPending++;
@@ -3493,17 +3577,45 @@ namespace TGD.CombatV2
             for (int i = pendingChain.Count - 1; i >= 0; --i)
             {
                 var pending = pendingChain[i];
-                if (pending.tool != null)
-                {
-                    if (_queuedActionsPending > 0)
-                        _queuedActionsPending--;
-                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                    if (pending.tool != null)
+                    {
+                        if (_queuedActionsPending > 0)
+                            _queuedActionsPending--;
+                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
+                    }
                 }
-            }
 
             _planStack.Clear();
             TryFinalizeEndTurn();
         }
+        int GetAttackComboCount(Unit unit)
+        {
+            if (unit == null || turnManager == null)
+                return 0;
+
+            var context = turnManager.GetContext(unit);
+            var controller = ResolveAttackController(context);
+            return controller != null ? Mathf.Max(0, controller.ReportComboBaseCount) : 0;
+        }
+
+        AttackControllerV2 ResolveAttackController(UnitRuntimeContext context)
+        {
+            if (context == null)
+                return null;
+
+            if (_attackControllerCache.TryGetValue(context, out var cached))
+            {
+                if (cached != null)
+                    return cached;
+                _attackControllerCache.Remove(context);
+            }
+
+            var resolved = context.GetComponentInChildren<AttackControllerV2>(true);
+            if (resolved != null)
+                _attackControllerCache[context] = resolved;
+            return resolved;
+        }
+
         private static string GetCooldownKey(IActionToolV2 tool)
         {
             if (tool is ICooldownKeyProvider p && !string.IsNullOrEmpty(p.CooldownKey))
@@ -3512,7 +3624,7 @@ namespace TGD.CombatV2
                 return chain.CooldownId;
             return tool?.Id; // 兜底
         }
-        void TryStartCooldownIfAny(IActionToolV2 tool, ICooldownSink sink)
+        void TryStartCooldownIfAny(IActionToolV2 tool, Unit unit, ICooldownSink sink, int chainDepth)
         {
             if (sink == null || tool == null) return;
 
@@ -3525,12 +3637,46 @@ namespace TGD.CombatV2
             if (string.IsNullOrEmpty(key))
                 return;
 
-            int cd = TGD.DataV2.ActionCooldownCatalog.Instance != null
+            int seconds = TGD.DataV2.ActionCooldownCatalog.Instance != null
                    ? TGD.DataV2.ActionCooldownCatalog.Instance.GetSeconds(key)
                    : 0;
 
-            if (cd > 0)
-                sink.StartSeconds(key, cd);
+            int previousDepth = _chainDepth;
+            _chainDepth = chainDepth;
+            try
+            {
+                var context = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+                var set = context != null ? context.Rules : null;
+                bool? friendlyHint = null;
+                if (turnManager != null && unit != null)
+                    friendlyHint = turnManager.IsPlayerUnit(unit);
+
+                var ctx2 = RulesAdapter.BuildContext(
+                    context,
+                    actionId: key,
+                    kind: tool.Kind,
+                    chainDepth: _chainDepth,
+                    comboIndex: GetAttackComboCount(unit),
+                    planSecs: 0,
+                    planEnergy: 0,
+                    unitIdHint: unit != null ? unit.Id : null,
+                    isFriendlyHint: friendlyHint
+                );
+
+                int before = seconds;
+                RuleEngineV2.Instance.OnStartCooldown(set, in ctx2, ref seconds);
+                if (seconds != before)
+                    ActionPhaseLogger.Log($"[Rules] CD start {key}: {before}->{seconds} (StartMods)");
+            }
+            finally
+            {
+                _chainDepth = previousDepth;
+            }
+
+            if (seconds < 0)
+                seconds = 0;
+
+            sink.StartSeconds(key, seconds);
         }
 
 
