@@ -1,7 +1,8 @@
 using UnityEngine;
 using TGD.CoreV2;
+using TGD.CombatV2;
 
-namespace TGD.CombatV2
+namespace TGD.PlayV2
 {
     [DisallowMultipleComponent]
     public sealed class ReduceCooldownOnCast : MonoBehaviour

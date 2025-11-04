@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
+using TGD.CombatV2;
+using TGD.PlayV2;
 
-namespace TGD.CombatV2
+namespace TGD.DebugV2
 {
     [DisallowMultipleComponent]
     public sealed class RuleDebugGiver : MonoBehaviour
