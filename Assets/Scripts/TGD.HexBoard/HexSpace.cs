@@ -1,4 +1,5 @@
 using System;
+using TGD.CoreV2;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -175,11 +176,11 @@ namespace TGD.HexBoard
         bool TryGetMouseRay(out Ray ray)
         {
 #if UNITY_EDITOR
-            // 1) Èç¹û SceneView Õı±»Êó±êĞüÍ££¬ÔòÓÅÏÈÊ¹ÓÃËüµÄÏà»úÓëÊó±ê
+            // 1) å¦‚æœ SceneView æ­£è¢«é¼ æ ‡æ‚¬åœï¼Œåˆ™ä¼˜å…ˆä½¿ç”¨å®ƒçš„ç›¸æœºä¸é¼ æ ‡
             var over = EditorWindow.mouseOverWindow as SceneView;
             if (over != null && over.camera != null)
             {
-                // SceneView µÄ Event ×ø±êÊÇ¡°GUI ÏñËØ×ø±ê¡±£¬ĞèÒªµ¹ÖÃ Y
+                // SceneView çš„ Event åæ ‡æ˜¯â€œGUI åƒç´ åæ ‡â€ï¼Œéœ€è¦å€’ç½® Y
                 var cam = over.camera;
                 var evt = Event.current;
                 Vector2 mp = (evt != null)
@@ -190,7 +191,7 @@ namespace TGD.HexBoard
                 return true;
             }
 
-            // 2) ÈôÄÃ²»µ½ SceneView ÉäÏß£¬ÔÙ¸ù¾İµ±Ç°ÉÏÏÂÎÄÑ¡ Game/Current Ïà»ú
+            // 2) è‹¥æ‹¿ä¸åˆ° SceneView å°„çº¿ï¼Œå†æ ¹æ®å½“å‰ä¸Šä¸‹æ–‡é€‰ Game/Current ç›¸æœº
             var camFallback = Camera.current ?? Camera.main;
             if (camFallback != null)
             {
@@ -222,7 +223,7 @@ namespace TGD.HexBoard
             hit = default;
             return false;
         }
-        // HexSpace.cs ÀïÔö¼Ó£º
+        // HexSpace.cs é‡Œå¢åŠ ï¼š
         public static string Explain(Hex h)
         {
             var inst = Instance;
@@ -240,7 +241,7 @@ namespace TGD.HexBoard
             Debug.Log(Explain(new Hex(11, 5)), this);
         }
 
-        // ¿ÉÑ¡£º¶ÔÄ³¸ö unit ×ö¡°±ä»» vs Âß¼­¡±µÄ¶ÔÕÕ´òÓ¡
+        // å¯é€‰ï¼šå¯¹æŸä¸ª unit åšâ€œå˜æ¢ vs é€»è¾‘â€çš„å¯¹ç…§æ‰“å°
         public static void DebugUnit(Unit u)
         {
             if (u == null) { Debug.Log("[HexSpace] DebugUnit: null"); return; }

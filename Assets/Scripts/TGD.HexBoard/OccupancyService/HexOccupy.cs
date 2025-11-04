@@ -1,5 +1,6 @@
 // File: TGD.HexBoard/HexOccupancy.cs
 using System.Collections.Generic;
+using TGD.CoreV2;
 
 
 namespace TGD.HexBoard

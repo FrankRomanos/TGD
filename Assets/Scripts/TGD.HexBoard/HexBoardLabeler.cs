@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using TGD.CoreV2;
+using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif

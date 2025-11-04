@@ -1,5 +1,6 @@
 // File: TGD.HexBoard/HexFootprint.cs
 using System.Collections.Generic;
+using TGD.CoreV2;
 
 namespace TGD.HexBoard
 {
@@ -8,7 +9,7 @@ namespace TGD.HexBoard
         static Hex Forward(Facing4 f) => Hex.Directions[HexAreaUtil.FacingToDirIndex(f)];
         static Hex Left(Facing4 f) => f switch
         {
-            Facing4.PlusQ => Hex.Directions[2], // -R£¨ÊÓ¾õÉÏ¡°ÉÏ¡±£©
+            Facing4.PlusQ => Hex.Directions[2], // -RÂ£Â¨ÃŠÃ“Â¾ÃµÃ‰ÃÂ¡Â°Ã‰ÃÂ¡Â±Â£Â©
             Facing4.MinusQ => Hex.Directions[5], // +R
             Facing4.PlusR => Hex.Directions[0], // +Q
             _ => Hex.Directions[3], // -Q

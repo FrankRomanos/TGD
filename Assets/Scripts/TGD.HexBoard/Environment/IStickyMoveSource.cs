@@ -1,13 +1,14 @@
+using TGD.CoreV2;
 // File: TGD.HexBoard/IStickyMoveSource.cs
 namespace TGD.HexBoard
 {
     public interface IStickyMoveSource
     {
         /// <summary>
-        /// ÔÚ¸ñ×Ó at ÊÇ·ñÌá¹©Ìù¸½£¨°Ù·Ö±È³ËÊı + ³ÖĞø»ØºÏ + È¥ÖØtag£©¡£
-        /// - multiplier: ÀıÈç 0.8f¡¢1.2f
-        /// - durationTurns: <0=ÓÀ¾Ã£»>=0=°´»ØºÏ
-        /// - tag: Í¬Ô´È¥ÖØKey£¨ÀıÈç "Patch@8,6"¡¢"Hazard@AcidPool@14,3"£©
+        /// åœ¨æ ¼å­ at æ˜¯å¦æä¾›è´´é™„ï¼ˆç™¾åˆ†æ¯”ä¹˜æ•° + æŒç»­å›åˆ + å»é‡tagï¼‰ã€‚
+        /// - multiplier: ä¾‹å¦‚ 0.8fã€1.2f
+        /// - durationTurns: <0=æ°¸ä¹…ï¼›>=0=æŒ‰å›åˆ
+        /// - tag: åŒæºå»é‡Keyï¼ˆä¾‹å¦‚ "Patch@8,6"ã€"Hazard@AcidPool@14,3"ï¼‰
         /// </summary>
         bool TryGetSticky(Hex at, out float multiplier, out int durationTurns, out string tag);
     }

@@ -1,5 +1,6 @@
 // File: TGD.HexBoard/HexAreaUtil.cs
 using System.Collections.Generic;
+using TGD.CoreV2;
 using UnityEngine; // 为默认阻挡构造器使用到 Physics/LayerMask
 
 namespace TGD.HexBoard

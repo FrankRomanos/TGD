@@ -1,4 +1,5 @@
 // File: Assets/Scripts/TGD.HexBoard/HexBoardLabelerGizmos.cs
+using TGD.CoreV2;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;

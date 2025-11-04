@@ -1,5 +1,6 @@
 // File: TGD.HexBoard/HexEnvironmentOverlay.cs
 using System.Collections.Generic;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
@@ -11,10 +12,10 @@ namespace TGD.HexBoard
         public HexBoardTiler tiler;
         public HexEnvironmentSystem env;
 
-        public Color slowColor = new(0.65f, 0.3f, 1f, 0.65f); // ¼õËÙ£¨À´×Ô GetSpeedMult£©
-        public Color fastColor = new(0.2f, 1f, 0.85f, 0.65f);  // ¼ÓËÙ
-        public Color trapColor = new(1f, 0.25f, 0.25f, 0.75f); // ÏİÚå£¨ºì£©
-        public Color pitColor = new(0.1f, 0.1f, 0.1f, 0.85f); // ÂäÑ¨£¨ÉîÉ«£©
+        public Color slowColor = new(0.65f, 0.3f, 1f, 0.65f); // å‡é€Ÿï¼ˆæ¥è‡ª GetSpeedMultï¼‰
+        public Color fastColor = new(0.2f, 1f, 0.85f, 0.65f);  // åŠ é€Ÿ
+        public Color trapColor = new(1f, 0.25f, 0.25f, 0.75f); // é™·é˜±ï¼ˆçº¢ï¼‰
+        public Color pitColor = new(0.1f, 0.1f, 0.1f, 0.85f); // è½ç©´ï¼ˆæ·±è‰²ï¼‰
 
         public bool showOnlyChanged = true;
         public float epsilon = 0.001f;

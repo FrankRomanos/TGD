@@ -1,9 +1,10 @@
 // File: TGD.HexBoard/HexHazardWatcher.cs
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    /// ¼àÌıµ¥Î»¸ñÎ»±ä»¯£º²ÈÏİÚå´òÓ¡£»ÂäÑ¨×èµ²ÔÚÔ¤ÀÀ½×¶ÎÓÉ ClickMover µÄ Block + env.IsPit ¸ºÔğ
+    /// ç›‘å¬å•ä½æ ¼ä½å˜åŒ–ï¼šè¸©é™·é˜±æ‰“å°ï¼›è½ç©´é˜»æŒ¡åœ¨é¢„è§ˆé˜¶æ®µç”± ClickMover çš„ Block + env.IsPit è´Ÿè´£
     [DisallowMultipleComponent]
     public sealed class HexHazardWatcher : MonoBehaviour
     {
@@ -27,10 +28,10 @@ namespace TGD.HexBoard
 
             if (!cur.Equals(_last))
             {
-                // ½øÈëĞÂ¸ñ£ºÏİÚå´¥·¢£¨¿ÉÖØ¸´£¬Ã¿´Î½øÈë¶¼´òÓ¡£©
+                // è¿›å…¥æ–°æ ¼ï¼šé™·é˜±è§¦å‘ï¼ˆå¯é‡å¤ï¼Œæ¯æ¬¡è¿›å…¥éƒ½æ‰“å°ï¼‰
                 if (env.IsTrap(cur))
                 {
-                    Debug.Log($"[Trap] {driver.UnitRef} stepped on TRAP at {cur} ¡ú take damage (test log)");
+                    Debug.Log($"[Trap] {driver.UnitRef} stepped on TRAP at {cur} â†’ take damage (test log)");
                 }
                 _last = cur;
             }
