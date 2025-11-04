@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TGD.CoreV2;
 using TGD.HexBoard;
+using TGD.CoreV2.Rules;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -1321,6 +1322,23 @@ namespace TGD.CombatV2
                 return;
             }
 
+            int defaultDelta = -StatsMathV2.BaseTurnSeconds;
+            int delta = defaultDelta;
+            var context = runtime.Context;
+            var set = context != null ? context.Rules : null;
+            var rulesCtx = RulesAdapter.BuildContext(
+                context,
+                actionId: null,
+                kind: ActionKind.Free,
+                chainDepth: 0,
+                comboIndex: 0,
+                planSecs: 0,
+                planEnergy: 0
+            );
+            RuleEngineV2.Instance.OnTickCooldown(set, in rulesCtx, ref delta);
+            if (delta != defaultDelta)
+                ActionPhaseLogger.Log($"[Rules] CD tick: {defaultDelta}->{delta} (TickMods)");
+
             var entries = store.Entries.ToList();
             List<string> details = new();
             foreach (var kv in entries)
@@ -1331,7 +1349,7 @@ namespace TGD.CombatV2
                 int before = kv.Value;
                 if (before <= 0)
                     continue;
-                int after = store.AddSeconds(skillId, -StatsMathV2.BaseTurnSeconds);
+                int after = store.AddSeconds(skillId, delta);
                 if (after < 0)
                 {
                     store.StartSeconds(skillId, 0);

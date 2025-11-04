@@ -8,7 +8,7 @@
 
     public interface ICostModifier : IRuleModifier
     {
-        void ModifyCost(in RuleContext ctx, ref int secs, ref int energyMove, ref int energyAtk);
+        void ModifyCost(in RuleContext ctx, ref int moveSecs, ref int atkSecs, ref int energyMove, ref int energyAtk);
     }
 
     public interface ICooldownPolicy : IRuleModifier

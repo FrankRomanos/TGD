@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
+using TGD.CoreV2.Rules;
 using TGD.HexBoard;
 using TGD.HexBoard.Path;
 using UnityEngine;
@@ -287,6 +288,25 @@ namespace TGD.CombatV2
             int comboIndex = Mathf.Max(0, _attacksThisTurn);
             int baseCost = ResolveAttackEnergyCost();
             float scale = 1f + 0.5f * comboIndex;
+
+            if (ctx != null)
+            {
+                var set = ctx.Rules;
+                if (set != null)
+                {
+                    var ruleCtx = RulesAdapter.BuildContext(
+                        ctx,
+                        actionId: AttackProfileRules.DefaultActionId,
+                        kind: Kind,
+                        chainDepth: 0,
+                        comboIndex: comboIndex,
+                        planSecs: ResolveAttackSeconds(),
+                        planEnergy: baseCost
+                    );
+                    RuleEngineV2.Instance.ModifyComboFactor(set, in ruleCtx, ref scale);
+                }
+            }
+
             return Mathf.Max(0, Mathf.CeilToInt(baseCost * scale));
         }
 
