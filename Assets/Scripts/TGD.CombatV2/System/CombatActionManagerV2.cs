@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEngine;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
+using TGD.CoreV2.Rules;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -93,6 +94,8 @@ namespace TGD.CombatV2
         int _endTurnGuardDepth;
         int _queuedActionsPending;
         int _chainWindowDepth;
+        int _chainDepth;
+        readonly Dictionary<UnitRuntimeContext, AttackControllerV2> _attackControllerCache = new();
         bool _ownsGateHub;
         int _bonusPlanDepth = -1;
 
@@ -129,6 +132,9 @@ namespace TGD.CombatV2
             public int energyAtk;
             public bool valid;
             public int bonusSecs;
+            public string actionId;
+            public int chainDepth;
+            public bool ruleOverride;
         }
 
         struct ActionPlan
@@ -136,6 +142,7 @@ namespace TGD.CombatV2
             public string kind;
             public Hex target;
             public PlannedCost cost;
+            public int chainDepth;
         }
 
         struct ChainOption
@@ -158,6 +165,16 @@ namespace TGD.CombatV2
             public ActionPlan plan;
             public ITurnBudget budget;
             public IResourcePool resources;
+            public int depth;
+        }
+
+        struct DerivedQueuedAction
+        {
+            public IActionToolV2 tool;
+            public ActionPlan plan;
+            public ITurnBudget budget;
+            public IResourcePool resources;
+            public int depth;
         }
 
         struct ChainQueueOutcome
@@ -294,6 +311,28 @@ namespace TGD.CombatV2
                     NotifyBonusTurnStateChanged();
                 }
             }
+        }
+
+        void DiscardRuleCostOverride(Unit unit, PreDeduct preDeduct)
+        {
+            if (!preDeduct.ruleOverride)
+                return;
+
+            if (string.IsNullOrEmpty(preDeduct.actionId))
+                return;
+
+            var context = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+            context?.RuleLedger?.TryDiscardCost(preDeduct.actionId, preDeduct.chainDepth);
+        }
+
+        void ClearPlanStack(Unit unit)
+        {
+            if (_planStack.Count == 0)
+                return;
+
+            foreach (var pending in _planStack)
+                DiscardRuleCostOverride(unit, pending);
+            _planStack.Clear();
         }
 
         bool IsEffectivePlayerPhase(Unit unit)
@@ -1069,11 +1108,12 @@ namespace TGD.CombatV2
 
         IEnumerator ConfirmRoutine(IActionToolV2 tool, Unit unit, Hex? target)
         {
-            _planStack.Clear();
+            ClearPlanStack(unit);
             _phase = Phase.Executing;
             string kind = tool.Id;
             Unit guardUnit = null;
             bool guardActive = false;
+            bool ruleCostOverridden = false;
             if (turnManager != null && !IsEffectivePlayerPhase(unit))
             {
                 // 敌方回合：guard 键应当是当前激活的敌人，而不是本动作的 owner（可能是友方）
@@ -1085,6 +1125,8 @@ namespace TGD.CombatV2
                 }
             }
 
+            int previousChainDepth = _chainDepth;
+            _chainDepth = 0;
             try
             {
                 ActionPhaseLogger.Log(unit, kind, "W2_ConfirmStart");
@@ -1116,7 +1158,8 @@ namespace TGD.CombatV2
                 {
                     kind = kind,
                     target = target.Value,
-                    cost = BuildPlannedCost(tool, target.Value)
+                    cost = BuildPlannedCost(tool, target.Value),
+                    chainDepth = _chainDepth
                 };
 
                 var budget = turnManager != null && unit != null ? turnManager.GetBudget(unit) : null;
@@ -1143,6 +1186,81 @@ namespace TGD.CombatV2
 
                     if (tool is IFullRoundActionTool fullRoundTool)
                         fullRoundTool.PrepareFullRoundSeconds(cost.TotalSeconds);
+                }
+
+                {
+                    var context = turnManager != null && unit != null ? turnManager.GetContext(unit) : null;
+                    var set = context != null ? context.Rules : null;
+                    bool? friendlyHint = null;
+                    if (turnManager != null && unit != null)
+                        friendlyHint = turnManager.IsPlayerUnit(unit);
+
+                    var ctx2 = RulesAdapter.BuildContext(
+                        context,
+                        actionId: tool.Id,
+                        kind: tool.Kind,
+                        chainDepth: _chainDepth,
+                        comboIndex: GetAttackComboCount(unit),
+                        planSecs: actionPlan.cost.TotalSeconds,
+                        planEnergy: actionPlan.cost.TotalEnergy,
+                        unitIdHint: unit != null ? unit.Id : null,
+                        isFriendlyHint: friendlyHint
+                    );
+
+                    int originalMoveSecs = actionPlan.cost.moveSecs;
+                    int originalAtkSecs = actionPlan.cost.atkSecs;
+                    int originalMoveEnergy = actionPlan.cost.moveEnergy;
+                    int originalAtkEnergy = actionPlan.cost.atkEnergy;
+
+                    int moveSecs = originalMoveSecs;
+                    int atkSecs = originalAtkSecs;
+                    int moveE = originalMoveEnergy;
+                    int atkE = originalAtkEnergy;
+
+                    RuleEngineV2.Instance.ApplyCostModifiers(set, in ctx2, ref moveSecs, ref atkSecs, ref moveE, ref atkE);
+
+                    int finalMoveSecs = Mathf.Max(0, moveSecs);
+                    int finalAtkSecs = Mathf.Max(0, atkSecs);
+                    int finalMoveEnergy = Mathf.Max(0, moveE);
+                    int finalAtkEnergy = Mathf.Max(0, atkE);
+
+                    ruleCostOverridden = finalMoveSecs != originalMoveSecs
+                    || finalAtkSecs != originalAtkSecs
+                        || finalMoveEnergy != originalMoveEnergy
+                        || finalAtkEnergy != originalAtkEnergy;
+
+                    if (ruleCostOverridden)
+                    {
+                        int originalTotalSecs = Mathf.Max(0, originalMoveSecs + originalAtkSecs);
+                        int finalTotalSecs = Mathf.Max(0, finalMoveSecs + finalAtkSecs);
+                        int originalTotalEnergy = Mathf.Max(0, originalMoveEnergy + originalAtkEnergy);
+                        int finalTotalEnergy = Mathf.Max(0, finalMoveEnergy + finalAtkEnergy);
+                        ActionPhaseLogger.Log($"[Rules] Cost secs:{originalTotalSecs}->{finalTotalSecs}, energy:{originalTotalEnergy}->{finalTotalEnergy} (CostMods)");
+                    }
+
+                    actionPlan.cost.moveSecs = finalMoveSecs;
+                    actionPlan.cost.atkSecs = finalAtkSecs;
+                    actionPlan.cost.moveEnergy = finalMoveEnergy;
+                    actionPlan.cost.atkEnergy = finalAtkEnergy;
+                    cost = actionPlan.cost;
+
+                    if (ruleCostOverridden && context != null)
+                    {
+                        var ledger = context.RuleLedger;
+                        ledger?.RecordCost(new RuleCostApplication
+                        {
+                            actionId = tool.Id,
+                            chainDepth = actionPlan.chainDepth,
+                            originalMoveSecs = originalMoveSecs,
+                            originalAtkSecs = originalAtkSecs,
+                            originalMoveEnergy = originalMoveEnergy,
+                            originalAtkEnergy = originalAtkEnergy,
+                            finalMoveSecs = finalMoveSecs,
+                            finalAtkSecs = finalAtkSecs,
+                            finalMoveEnergy = finalMoveEnergy,
+                            finalAtkEnergy = finalAtkEnergy
+                        });
+                    }
                 }
 
                 int remain = budget != null ? budget.Remaining : 0;
@@ -1186,7 +1304,10 @@ namespace TGD.CombatV2
                     secs = cost.TotalSeconds,
                     energyMove = cost.moveEnergy,
                     energyAtk = cost.atkEnergy,
-                    valid = true
+                    valid = true,
+                    actionId = tool.Id,
+                    chainDepth = actionPlan.chainDepth,
+                    ruleOverride = ruleCostOverridden
                 };
                 ApplyBonusPreDeduct(unit, ref basePreDeduct);
                 _planStack.Push(basePreDeduct);
@@ -1194,7 +1315,7 @@ namespace TGD.CombatV2
                 TryHideAllAimUI();
 
                 if (cooldowns != null)
-                    TryStartCooldownIfAny(tool, cooldowns);
+                    TryStartCooldownIfAny(tool, unit, cooldowns, _chainDepth);
 
                 var pendingChain = new List<ChainQueuedAction>();
                 bool cancelBase = false;
@@ -1211,14 +1332,16 @@ namespace TGD.CombatV2
                     {
                         if (_queuedActionsPending > 0)
                             _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
                     }
                 }
 
                 if (cancelBase)
                 {
+                    PreDeduct popped = default;
                     if (_planStack.Count > 0)
-                        _planStack.Pop();
+                        popped = _planStack.Pop();
+                    DiscardRuleCostOverride(unit, popped);
                     if (budget != null && basePreDeduct.valid && basePreDeduct.secs > 0)
                         budget.RefundTime(basePreDeduct.secs);
                     if (IsBonusTurnFor(unit) && basePreDeduct.valid && basePreDeduct.bonusSecs > 0)
@@ -1253,7 +1376,10 @@ namespace TGD.CombatV2
                         planData.energyAfter = resources.Get("Energy");
 
                     if (_planStack.Count > 0)
-                        _planStack.Pop();
+                    {
+                        var popped = _planStack.Pop();
+                        DiscardRuleCostOverride(unit, popped);
+                    }
 
                     if (turnManager != null && unit != null)
                     {
@@ -1270,20 +1396,23 @@ namespace TGD.CombatV2
                     _phase = Phase.Idle;
                     yield break;
                 }
-                yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources);
+                yield return ExecuteAndResolve(tool, unit, actionPlan, budget, resources, 0);
                 TryFinalizeEndTurn();
             }
             finally
             {
+                _chainDepth = previousChainDepth;
                 if (guardActive && guardUnit != null)
                     turnManager.PopAutoTurnEndGuard(guardUnit);
             }
 
         }
 
-        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources)
+        IEnumerator ExecuteAndResolve(IActionToolV2 tool, Unit unit, ActionPlan plan, ITurnBudget budget, IResourcePool resources, int chainDepth)
         {
             _endTurnGuardDepth++;
+            int previousDepth = _chainDepth;
+            _chainDepth = chainDepth;
             try
             {
                 _phase = Phase.Executing;
@@ -1306,6 +1435,8 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
+                report = ApplyRuleCostOverrides(unit, tool, plan, report);
+
                 LogExecSummary(unit, plan.kind, report);
 
                 ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
@@ -1314,6 +1445,7 @@ namespace TGD.CombatV2
             }
             finally
             {
+                _chainDepth = previousDepth;
                 _endTurnGuardDepth = Mathf.Max(0, _endTurnGuardDepth - 1);
                 TryFinalizeEndTurn();
             }
@@ -1407,7 +1539,7 @@ namespace TGD.CombatV2
                 }
             }
 
-            var derivedQueue = new List<Tuple<IActionToolV2, ActionPlan>>();
+            var derivedQueue = new List<DerivedQueuedAction>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
             bool shouldDerived = ShouldRunDerivedWindow(unit, tool);
             bool skipDerived = shouldDerived && _pendingEndTurn && IsPendingEndTurnFor(unit);
@@ -1424,6 +1556,9 @@ namespace TGD.CombatV2
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
+            var resolvedContext = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+            CAM.RaiseActionResolved(resolvedContext, tool != null ? tool.Id : null);
+
             exec.Consume();
             _activeTool = null;
             _hover = null;
@@ -1434,11 +1569,13 @@ namespace TGD.CombatV2
                 for (int i = 0; i < derivedQueue.Count; i++)
                 {
                     var pending = derivedQueue[i];
-                    if (pending?.Item1 != null)
+                    if (pending.tool != null)
                     {
                         if (_queuedActionsPending > 0)
                             _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.Item1, unit, pending.Item2, budget, resources);
+                        var pendingBudget = pending.budget ?? budget;
+                        var pendingResources = pending.resources ?? resources;
+                        yield return ExecuteAndResolve(pending.tool, unit, pending.plan, pendingBudget, pendingResources, pending.depth);
                     }
                 }
             }
@@ -1525,6 +1662,65 @@ namespace TGD.CombatV2
             return data;
         }
 
+        ExecReportData ApplyRuleCostOverrides(Unit unit, IActionToolV2 tool, ActionPlan plan, ExecReportData report)
+        {
+            if (tool == null)
+                return report;
+
+            var context = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+            var ledger = context?.RuleLedger;
+            if (ledger == null)
+                return report;
+
+            if (!ledger.TryConsumeCost(tool.Id, plan.chainDepth, out var application))
+                return report;
+
+            bool secsChanged = false;
+            bool energyChanged = false;
+
+            int finalMoveSecs = Mathf.Max(0, application.finalMoveSecs);
+            if (report.plannedSecsMove != finalMoveSecs)
+            {
+                report.plannedSecsMove = finalMoveSecs;
+                secsChanged = true;
+            }
+
+            int finalAtkSecs = Mathf.Max(0, application.finalAtkSecs);
+            if (report.plannedSecsAtk != finalAtkSecs)
+            {
+                report.plannedSecsAtk = finalAtkSecs;
+                secsChanged = true;
+            }
+
+            report.refundedSecsMove = Mathf.Min(report.refundedSecsMove, report.plannedSecsMove);
+            report.refundedSecsAtk = Mathf.Min(report.refundedSecsAtk, report.plannedSecsAtk);
+
+            int finalMoveEnergy = Mathf.Max(0, application.finalMoveEnergy);
+            if (report.energyMoveNet > finalMoveEnergy)
+            {
+                report.energyMoveNet = finalMoveEnergy;
+                energyChanged = true;
+            }
+
+            int finalAtkEnergy = Mathf.Max(0, application.finalAtkEnergy);
+            if (report.energyAtkNet > finalAtkEnergy)
+            {
+                report.energyAtkNet = finalAtkEnergy;
+                energyChanged = true;
+            }
+
+            if (secsChanged || energyChanged)
+            {
+                int originalSecs = Mathf.Max(0, application.originalMoveSecs + application.originalAtkSecs);
+                int finalSecs = Mathf.Max(0, application.finalMoveSecs + application.finalAtkSecs);
+                int originalEnergy = Mathf.Max(0, application.originalMoveEnergy + application.originalAtkEnergy);
+                int finalEnergy = Mathf.Max(0, application.finalMoveEnergy + application.finalAtkEnergy);
+                ActionPhaseLogger.Log($"[Rules] Exec adjust {tool.Id}: secs {originalSecs}->{finalSecs}, energy {originalEnergy}->{finalEnergy} (CostMods)");
+            }
+
+            return report;
+        }
+
         void LogExecSummary(Unit unit, string kind, ExecReportData report)
         {
             string label = TurnManagerV2.FormatUnitLabel(unit);
@@ -1555,9 +1751,10 @@ namespace TGD.CombatV2
         {
             if (tool == null) return;
 
+            var unit = ResolveUnit(tool);
+
             if (logCancel && _phase == Phase.Aiming)
             {
-                var unit = ResolveUnit(tool);
                 ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
             }
 
@@ -1566,7 +1763,7 @@ namespace TGD.CombatV2
                 _activeTool = null;
             _hover = null;
             _phase = Phase.Idle;
-            _planStack.Clear();
+            ClearPlanStack(unit);
             TryFinalizeEndTurn();
         }
 
@@ -2459,7 +2656,7 @@ namespace TGD.CombatV2
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
 
                             ChainQueueOutcome outcome = default;
-                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, pendingActions, result => outcome = result);
+                            yield return TryQueueChainSelection(option, unit, basePlan.kind, label, depth + 1, pendingActions, result => outcome = result);
 
                             if (outcome.cancel)
                             {
@@ -2723,7 +2920,7 @@ namespace TGD.CombatV2
             return true;
         }
 
-        IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue)
+        IEnumerator RunDerivedWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, ExecReportData report, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, List<DerivedQueuedAction> derivedQueue)
         {
             _chainWindowDepth++;
             PushInputSuppression();
@@ -2733,7 +2930,7 @@ namespace TGD.CombatV2
 
             try
             {
-                derivedQueue ??= new List<Tuple<IActionToolV2, ActionPlan>>();
+                derivedQueue ??= new List<DerivedQueuedAction>();
 
                 var rules = ResolveRules();
                 var allowedIds = rules?.AllowedDerivedActions(basePlan.kind);
@@ -2874,7 +3071,7 @@ namespace TGD.CombatV2
             }
         }
 
-        IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<Tuple<IActionToolV2, ActionPlan>> derivedQueue, Action<ChainQueueOutcome> onComplete)
+        IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<DerivedQueuedAction> derivedQueue, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -3003,7 +3200,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
-            TryStartCooldownIfAny(tool, cooldowns);
+            TryStartCooldownIfAny(tool, unit, cooldowns, 1);
 
             int timeBefore = budget != null ? budget.Remaining : 0;
             int energyBefore = resources != null ? resources.Get("Energy") : 0;
@@ -3020,7 +3217,10 @@ namespace TGD.CombatV2
                 secs = option.secs,
                 energyMove = option.energy,
                 energyAtk = 0,
-                valid = true
+                valid = true,
+                actionId = tool.Id,
+                chainDepth = 1,
+                ruleOverride = false
             };
 
             ApplyBonusPreDeduct(unit, ref plan);
@@ -3040,10 +3240,18 @@ namespace TGD.CombatV2
             {
                 kind = tool.Id,
                 target = selectedTarget,
-                cost = planCost
+                cost = planCost,
+                chainDepth = 1
             };
 
-            derivedQueue.Add(Tuple.Create(tool, actionPlan));
+            derivedQueue.Add(new DerivedQueuedAction
+            {
+                tool = tool,
+                plan = actionPlan,
+                budget = budget,
+                resources = resources,
+                depth = 1
+            });
 
             _queuedActionsPending++;
 
@@ -3052,7 +3260,7 @@ namespace TGD.CombatV2
             onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
         }
 
-        IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
+        IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, int chainDepth, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
             if (tool == null)
@@ -3171,7 +3379,7 @@ namespace TGD.CombatV2
             }
 
             ActionPhaseLogger.Log(owner, tool.Id, "W2_PreDeductCheckOk");
-            TryStartCooldownIfAny(tool, cooldowns);
+            TryStartCooldownIfAny(tool, owner, cooldowns, chainDepth);
             if (budget != null && option.secs > 0)
                 budget.SpendTime(option.secs);
 
@@ -3186,7 +3394,10 @@ namespace TGD.CombatV2
                 secs = option.secs,
                 energyMove = option.energy,
                 energyAtk = 0,
-                valid = true
+                valid = true,
+                actionId = tool.Id,
+                chainDepth = chainDepth,
+                ruleOverride = false
             };
 
             ApplyBonusPreDeduct(owner, ref plan);
@@ -3206,7 +3417,8 @@ namespace TGD.CombatV2
             {
                 kind = tool.Id,
                 target = selectedTarget,
-                cost = planCost
+                cost = planCost,
+                chainDepth = chainDepth
             };
 
             pendingActions.Add(new ChainQueuedAction
@@ -3215,7 +3427,8 @@ namespace TGD.CombatV2
                 owner = owner,
                 plan = actionPlan,
                 budget = budget,
-                resources = resources
+                resources = resources,
+                depth = Mathf.Max(0, chainDepth)
             });
 
             _queuedActionsPending++;
@@ -3454,7 +3667,7 @@ namespace TGD.CombatV2
             var budget = turnManager.GetBudget(unit);
             var resources = turnManager.GetResources(unit);
 
-            _planStack.Clear();
+            ClearPlanStack(unit);
 
             if (turnManager.HasActiveFullRound(unit))
             {
@@ -3469,7 +3682,8 @@ namespace TGD.CombatV2
             {
                 kind = planKind,
                 target = Hex.Zero,
-                cost = new PlannedCost { valid = true }
+                cost = new PlannedCost { valid = true },
+                chainDepth = 0
             };
 
             var cooldowns = turnManager.GetCooldowns(unit);
@@ -3486,7 +3700,7 @@ namespace TGD.CombatV2
 
             if (cancelBase)
             {
-                _planStack.Clear();
+                ClearPlanStack(unit);
                 yield break;
             }
 
@@ -3497,13 +3711,41 @@ namespace TGD.CombatV2
                 {
                     if (_queuedActionsPending > 0)
                         _queuedActionsPending--;
-                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources);
+                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
                 }
             }
 
-            _planStack.Clear();
+            ClearPlanStack(unit);
             TryFinalizeEndTurn();
         }
+        int GetAttackComboCount(Unit unit)
+        {
+            if (unit == null || turnManager == null)
+                return 0;
+
+            var context = turnManager.GetContext(unit);
+            var controller = ResolveAttackController(context);
+            return controller != null ? Mathf.Max(0, controller.ReportComboBaseCount) : 0;
+        }
+
+        AttackControllerV2 ResolveAttackController(UnitRuntimeContext context)
+        {
+            if (context == null)
+                return null;
+
+            if (_attackControllerCache.TryGetValue(context, out var cached))
+            {
+                if (cached != null)
+                    return cached;
+                _attackControllerCache.Remove(context);
+            }
+
+            var resolved = context.GetComponentInChildren<AttackControllerV2>(true);
+            if (resolved != null)
+                _attackControllerCache[context] = resolved;
+            return resolved;
+        }
+
         private static string GetCooldownKey(IActionToolV2 tool)
         {
             if (tool is ICooldownKeyProvider p && !string.IsNullOrEmpty(p.CooldownKey))
@@ -3512,7 +3754,7 @@ namespace TGD.CombatV2
                 return chain.CooldownId;
             return tool?.Id; // 兜底
         }
-        void TryStartCooldownIfAny(IActionToolV2 tool, ICooldownSink sink)
+        void TryStartCooldownIfAny(IActionToolV2 tool, Unit unit, ICooldownSink sink, int chainDepth)
         {
             if (sink == null || tool == null) return;
 
@@ -3525,12 +3767,46 @@ namespace TGD.CombatV2
             if (string.IsNullOrEmpty(key))
                 return;
 
-            int cd = TGD.DataV2.ActionCooldownCatalog.Instance != null
+            int seconds = TGD.DataV2.ActionCooldownCatalog.Instance != null
                    ? TGD.DataV2.ActionCooldownCatalog.Instance.GetSeconds(key)
                    : 0;
 
-            if (cd > 0)
-                sink.StartSeconds(key, cd);
+            int previousDepth = _chainDepth;
+            _chainDepth = chainDepth;
+            try
+            {
+                var context = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+                var set = context != null ? context.Rules : null;
+                bool? friendlyHint = null;
+                if (turnManager != null && unit != null)
+                    friendlyHint = turnManager.IsPlayerUnit(unit);
+
+                var ctx2 = RulesAdapter.BuildContext(
+                    context,
+                    actionId: key,
+                    kind: tool.Kind,
+                    chainDepth: _chainDepth,
+                    comboIndex: GetAttackComboCount(unit),
+                    planSecs: 0,
+                    planEnergy: 0,
+                    unitIdHint: unit != null ? unit.Id : null,
+                    isFriendlyHint: friendlyHint
+                );
+
+                int before = seconds;
+                RuleEngineV2.Instance.OnStartCooldown(set, in ctx2, ref seconds);
+                if (seconds != before)
+                    ActionPhaseLogger.Log($"[Rules] CD start {key}: {before}->{seconds} (StartMods)");
+            }
+            finally
+            {
+                _chainDepth = previousDepth;
+            }
+
+            if (seconds < 0)
+                seconds = 0;
+
+            sink.StartSeconds(key, seconds);
         }
 
 

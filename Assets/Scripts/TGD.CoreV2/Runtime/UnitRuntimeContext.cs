@@ -1,5 +1,6 @@
 ﻿// File: TGD.CoreV2/UnitRuntimeContext.cs
 using UnityEngine;
+using TGD.CoreV2.Rules;
 
 namespace TGD.CoreV2
 {
@@ -55,6 +56,21 @@ namespace TGD.CoreV2
         }
 
         public bool Entangled => MoveRates.IsEntangled;
+
+        UnitRuleSet _rules = new UnitRuleSet();
+        [SerializeField]
+        RuleRuntimeLedger _ruleLedger = new RuleRuntimeLedger();
+        public UnitRuleSet Rules { get; } = new UnitRuleSet();
+
+        public RuleRuntimeLedger RuleLedger
+        {
+            get
+            {
+                if (_ruleLedger == null)
+                    _ruleLedger = new RuleRuntimeLedger();
+                return _ruleLedger;
+            }
+        }
 
         // ========= 便捷只读访问（统一入口；外部系统只读这些） =========
         // —— 移动 —— 
@@ -218,6 +234,8 @@ namespace TGD.CoreV2
             fallbackMoveTurnSpeedDegPerSec = Mathf.Max(0f, fallbackMoveTurnSpeedDegPerSec);
             if (string.IsNullOrWhiteSpace(fallbackMoveActionId))
                 fallbackMoveActionId = MoveProfileRules.DefaultActionId;
+            if (_rules == null)
+                _rules = new UnitRuleSet();
         }
 
         [ContextMenu("Debug/Print Snapshot")]

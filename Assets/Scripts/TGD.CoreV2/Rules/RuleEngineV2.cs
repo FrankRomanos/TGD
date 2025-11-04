@@ -4,11 +4,11 @@ namespace TGD.CoreV2.Rules
     {
         public static RuleEngineV2 Instance { get; } = new RuleEngineV2();
 
-        public void ApplyCostModifiers(UnitRuleSet set, in RuleContext ctx, ref int secs, ref int moveEnergy, ref int atkEnergy)
+        public void ApplyCostModifiers(UnitRuleSet set, in RuleContext ctx, ref int moveSecs, ref int atkSecs, ref int moveEnergy, ref int atkEnergy)
         {
             if (set == null) return;
             foreach (var m in set.Enumerate<ICostModifier>())
-                if (m.Matches(ctx)) m.ModifyCost(ctx, ref secs, ref moveEnergy, ref atkEnergy);
+                if (m.Matches(ctx)) m.ModifyCost(ctx, ref moveSecs, ref atkSecs, ref moveEnergy, ref atkEnergy);
         }
 
         public void OnStartCooldown(UnitRuleSet set, in RuleContext ctx, ref int startSeconds)
