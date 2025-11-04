@@ -1255,8 +1255,6 @@ namespace TGD.CombatV2
                     if (_planStack.Count > 0)
                         _planStack.Pop();
 
-                    ApplyCooldown(tool, unit);
-
                     if (turnManager != null && unit != null)
                     {
                         int rounds = Mathf.Max(1, frTool.FullRoundRounds);
@@ -1426,8 +1424,6 @@ namespace TGD.CombatV2
             int energyAfter = resources != null ? resources.Get("Energy") : 0;
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
-            ApplyCooldown(tool, unit);
-
             exec.Consume();
             _activeTool = null;
             _hover = null;
@@ -1463,25 +1459,6 @@ namespace TGD.CombatV2
                 energyAfter = resources != null ? resources.Get("Energy") : 0
             };
             return queued;
-        }
-        void ApplyCooldown(IActionToolV2 tool, Unit unit)
-        {
-            //if (turnManager == null || tool == null || unit == null)
-            //    return;
-
-            //var cooldowns = turnManager.GetCooldowns(unit);
-            //if (cooldowns == null)
-            //    return;
-
-            //switch (tool)
-            //{
-            //    case ChainTestActionBase chainTool:
-            //        int seconds = chainTool.CooldownSeconds;
-            //        string skillId = chainTool.CooldownId;
-            //        if (!string.IsNullOrEmpty(skillId) && seconds > 0)
-            //            cooldowns.StartSeconds(skillId, seconds);
-            //        break;
-            //}
         }
 
         ExecReportData BuildExecReport(IActionToolV2 tool, out IActionExecReportV2 exec)
