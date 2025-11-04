@@ -66,6 +66,6 @@ MonoBehaviour:
     ThreatAddPct: 0
     ShredAddPct: 0
   abilities:
-  - actionId: 
-    learned: 0
+  - actionId: Move
+    learned: 1
     initialCooldownSeconds: 0
