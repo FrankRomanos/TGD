@@ -1,4 +1,4 @@
-// File: TGD.HexBoard/IGridActor.cs
+using TGD.CoreV2;
 namespace TGD.HexBoard
 {
     /// 把任何“单位”适配到格子层需要的最小信息

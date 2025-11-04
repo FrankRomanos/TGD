@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TGD.HexBoard
+namespace TGD.CoreV2
 {
     /// <summary> 轴坐标（q,r）；立方坐标 s = -q-r 隐含。</summary>
     [Serializable]

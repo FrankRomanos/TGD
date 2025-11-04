@@ -1,6 +1,7 @@
 // File: TGD.CombatV2/System/AttackSystem/SimpleEnemyRegistry.cs
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2

@@ -1,6 +1,6 @@
 // File: TGD.CombatV2/System/AttackSystem/IEnemyLocator.cs
 using System.Collections.Generic;
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {

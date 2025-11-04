@@ -1,4 +1,4 @@
-namespace TGD.HexBoard
+namespace TGD.CoreV2
 {
     /// <summary> 面向 = 四向之一（±Q、±R）。</summary>
     public enum Facing4 { PlusQ, MinusQ, PlusR, MinusR }

@@ -1,6 +1,7 @@
 // File: TGD.HexBoard/HexOccupancy.cs
 using System.Collections.Generic;
 
+
 namespace TGD.HexBoard
 {
     public enum OccLayer
