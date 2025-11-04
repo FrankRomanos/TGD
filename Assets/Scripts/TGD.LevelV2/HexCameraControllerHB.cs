@@ -5,6 +5,7 @@ using UnityEngine.EventSystems;
 using TGD.CombatV2;
 using TGD.HexBoard;
 using TGD.UIV2.Battle;
+using TGD.CoreV2;
 
 namespace TGD.LevelV2
 {

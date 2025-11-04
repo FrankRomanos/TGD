@@ -1,7 +1,6 @@
 using System.Collections;
-using TGD.CombatV2;
 using TGD.CombatV2.Targeting;
-using TGD.HexBoard;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.CombatV2

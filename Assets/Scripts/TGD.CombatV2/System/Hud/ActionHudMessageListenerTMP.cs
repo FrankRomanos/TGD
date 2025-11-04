@@ -2,7 +2,7 @@ using System.Collections;
 using TMPro;
 using TGD.HexBoard;
 using UnityEngine;
-using Unit = TGD.HexBoard.Unit;
+using Unit = TGD.CoreV2.Unit;
 
 namespace TGD.CombatV2
 {

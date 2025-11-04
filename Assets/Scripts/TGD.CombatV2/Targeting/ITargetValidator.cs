@@ -1,4 +1,4 @@
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2.Targeting
 {

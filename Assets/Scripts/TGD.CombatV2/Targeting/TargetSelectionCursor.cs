@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2.Targeting

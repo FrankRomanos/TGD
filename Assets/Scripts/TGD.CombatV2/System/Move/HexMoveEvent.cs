@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {

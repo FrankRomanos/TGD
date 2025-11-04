@@ -1,6 +1,7 @@
 using UnityEngine;
 using TGD.HexBoard;
 using TGD.HexBoard.Path;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2.Targeting
 {

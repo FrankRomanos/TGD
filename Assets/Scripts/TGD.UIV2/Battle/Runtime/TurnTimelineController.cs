@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
 using TGD.HexBoard;
+using TGD.CoreV2;
 
 namespace TGD.UIV2.Battle
 {
@@ -25,7 +26,7 @@ namespace TGD.UIV2.Battle
         readonly HashSet<Unit> _completedThisPhase = new();
         readonly List<SlotEntryVisual> _slotEntries = new();
 
-        public event System.Action<TGD.HexBoard.Unit> ActiveUnitDeferred;
+        public event System.Action<Unit> ActiveUnitDeferred;
 
         VisualElement _contentRoot;
         VisualElement _dragOverlay;
@@ -518,7 +519,7 @@ namespace TGD.UIV2.Battle
         void FinishSlotDrag(bool applyDrop)
         {
             bool applied = false;
-            TGD.HexBoard.Unit deferredUnit = null;
+            Unit deferredUnit = null;
 
             if (applyDrop && _activeDrag != null && _currentDropTarget != null && turnManager != null)
             {
