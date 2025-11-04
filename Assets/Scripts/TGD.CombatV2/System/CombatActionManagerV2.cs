@@ -1113,6 +1113,7 @@ namespace TGD.CombatV2
             string kind = tool.Id;
             Unit guardUnit = null;
             bool guardActive = false;
+            bool ruleCostOverridden = false;
             if (turnManager != null && !IsEffectivePlayerPhase(unit))
             {
                 // 敌方回合：guard 键应当是当前激活的敌人，而不是本动作的 owner（可能是友方）
@@ -1223,12 +1224,12 @@ namespace TGD.CombatV2
                     int finalMoveEnergy = Mathf.Max(0, moveE);
                     int finalAtkEnergy = Mathf.Max(0, atkE);
 
-                    bool costChanged = finalMoveSecs != originalMoveSecs
-                        || finalAtkSecs != originalAtkSecs
+                    ruleCostOverridden = finalMoveSecs != originalMoveSecs
+                    || finalAtkSecs != originalAtkSecs
                         || finalMoveEnergy != originalMoveEnergy
                         || finalAtkEnergy != originalAtkEnergy;
 
-                    if (costChanged)
+                    if (ruleCostOverridden)
                     {
                         int originalTotalSecs = Mathf.Max(0, originalMoveSecs + originalAtkSecs);
                         int finalTotalSecs = Mathf.Max(0, finalMoveSecs + finalAtkSecs);
@@ -1243,7 +1244,7 @@ namespace TGD.CombatV2
                     actionPlan.cost.atkEnergy = finalAtkEnergy;
                     cost = actionPlan.cost;
 
-                    if (costChanged && context != null)
+                    if (ruleCostOverridden && context != null)
                     {
                         var ledger = context.RuleLedger;
                         ledger?.RecordCost(new RuleCostApplication
@@ -1306,7 +1307,7 @@ namespace TGD.CombatV2
                     valid = true,
                     actionId = tool.Id,
                     chainDepth = actionPlan.chainDepth,
-                    ruleOverride = costChanged
+                    ruleOverride = ruleCostOverridden
                 };
                 ApplyBonusPreDeduct(unit, ref basePreDeduct);
                 _planStack.Push(basePreDeduct);
@@ -3706,13 +3707,13 @@ namespace TGD.CombatV2
             for (int i = pendingChain.Count - 1; i >= 0; --i)
             {
                 var pending = pendingChain[i];
-                    if (pending.tool != null)
-                    {
-                        if (_queuedActionsPending > 0)
-                            _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
-                    }
+                if (pending.tool != null)
+                {
+                    if (_queuedActionsPending > 0)
+                        _queuedActionsPending--;
+                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
                 }
+            }
 
             ClearPlanStack(unit);
             TryFinalizeEndTurn();
