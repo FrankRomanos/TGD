@@ -1282,6 +1282,10 @@ namespace TGD.CombatV2
                         if (!UseTurnManager && ManageTurnTimeLocally)
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                        var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+                        var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
+                        CAM.RaiseActionCancelled(cancelCtx, AttackProfileRules.DefaultActionId, "RolledBack");
+                        CAM.RaiseActionCancelled(cancelCtx, "Attack", "RolledBack");
                         AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
                     }
 

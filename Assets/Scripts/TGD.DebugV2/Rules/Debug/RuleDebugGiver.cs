@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
+using TGD.CombatV2;
+using TGD.PlayV2;
 
-namespace TGD.CombatV2
+namespace TGD.DebugV2
 {
     [DisallowMultipleComponent]
     public sealed class RuleDebugGiver : MonoBehaviour
@@ -53,12 +55,14 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             CAM.ActionResolved += HandleActionResolved;
+            CAM.ActionCancelled += HandleActionCancelled;
             Apply();
         }
 
         void OnDisable()
         {
             CAM.ActionResolved -= HandleActionResolved;
+            CAM.ActionCancelled -= HandleActionCancelled;
             RemoveModifiers();
             TeardownListeners();
             _pendingVoucherUsage.Clear();
@@ -196,6 +200,14 @@ namespace TGD.CombatV2
             }
         }
 
+        void HandleActionCancelled(UnitRuntimeContext casterCtx, string actionId)
+        {
+            if (!_ctx || casterCtx != _ctx)
+                return;
+
+            CancelPendingLocal(actionId);
+        }
+
         internal bool TryRegisterVoucherUsage(string actionId, bool wantsTime, bool wantsEnergy, out bool applyTime, out bool applyEnergy)
         {
             applyTime = wantsTime && ChargesAvailable(_timeChargesRemaining);
@@ -216,6 +228,20 @@ namespace TGD.CombatV2
             });
 
             return true;
+        }
+
+        internal void CancelPendingLocal(string actionId)
+        {
+            if (string.IsNullOrEmpty(actionId))
+                actionId = string.Empty;
+
+            for (int i = _pendingVoucherUsage.Count - 1; i >= 0; --i)
+            {
+                var pending = _pendingVoucherUsage[i];
+                if (!string.Equals(pending.actionId, actionId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                _pendingVoucherUsage.RemoveAt(i);
+            }
         }
 
         internal bool IsAttackAction(string actionId)

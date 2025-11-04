@@ -1281,6 +1281,8 @@ namespace TGD.CombatV2
                 {
                     ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={failReason})");
                     ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={failReason})");
+                    var uctx = turnManager != null && unit != null ? turnManager.GetContext(unit) : null;
+                    CAM.RaiseActionCancelled(uctx, tool.Id, failReason);
                     NotifyConfirmAbort(tool, unit, failReason);
                     CleanupAfterAbort(tool, false);
                     yield break;
@@ -1354,7 +1356,8 @@ namespace TGD.CombatV2
                             NotifyBonusTurnStateChanged();
                         }
                     }
-                    ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason={LinkCancelled})");
+                    ActionPhaseLogger.Log(unit, actionPlan.kind, "W2_ConfirmAbort", "(reason=LinkCancelled)");
+                    CAM.RaiseActionCancelled(turnManager != null && unit != null ? turnManager.GetContext(unit) : null, tool.Id, "LinkCancelled");
                     NotifyConfirmAbort(tool, unit, "LinkCancelled");
                     CleanupAfterAbort(tool, false);
                     yield break;

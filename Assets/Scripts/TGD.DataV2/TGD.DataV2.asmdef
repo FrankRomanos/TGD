@@ -1,0 +1,16 @@
+{
+    "name": "TGD.DataV2",
+    "rootNamespace": "",
+    "references": [
+        "GUID:a1b5b619a2c3db644bba9df3442b0243"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
