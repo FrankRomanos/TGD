@@ -60,17 +60,7 @@ namespace TGD.CoreV2
         UnitRuleSet _rules = new UnitRuleSet();
         [SerializeField]
         RuleRuntimeLedger _ruleLedger = new RuleRuntimeLedger();
-
-        public UnitRuleSet Rules
-        {
-            get
-            {
-                if (_rules == null)
-                    _rules = new UnitRuleSet();
-                return _rules;
-            }
-            set => _rules = value ?? new UnitRuleSet();
-        }
+        public UnitRuleSet Rules { get; } = new UnitRuleSet();
 
         public RuleRuntimeLedger RuleLedger
         {

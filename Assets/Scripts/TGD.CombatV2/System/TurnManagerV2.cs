@@ -1322,46 +1322,63 @@ namespace TGD.CombatV2
                 return;
             }
 
+            // 基线 tick：仍然每回合 -6s
             int defaultDelta = -StatsMathV2.BaseTurnSeconds;
-            int delta = defaultDelta;
+
             var context = runtime.Context;
             var set = context != null ? context.Rules : null;
-            var rulesCtx = RulesAdapter.BuildContext(
-                context,
-                actionId: null,
-                kind: ActionKind.Free,
-                chainDepth: 0,
-                comboIndex: 0,
-                planSecs: 0,
-                planEnergy: 0
-            );
-            RuleEngineV2.Instance.OnTickCooldown(set, in rulesCtx, ref delta);
-            if (delta != defaultDelta)
-                ActionPhaseLogger.Log($"[Rules] CD tick: {defaultDelta}->{delta} (TickMods)");
 
+            // ✅ 逐技能调用规则（不要再用全局 actionId=null 的一次性调用）
             var entries = store.Entries.ToList();
             List<string> details = new();
+
             foreach (var kv in entries)
             {
                 var skillId = kv.Key;
                 if (string.IsNullOrEmpty(skillId))
                     continue;
+
                 int before = kv.Value;
                 if (before <= 0)
                     continue;
+
+                // 每个技能从默认 -6 开始，给规则层机会按该 skillId 改写
+                int delta = defaultDelta;
+
+                if (set != null)
+                {
+                    var rulesCtx = RulesAdapter.BuildContext(
+                        context,
+                        actionId: skillId,             // ✅ 关键：把技能ID传给规则层，才能命中前缀/等过滤
+                        kind: ActionKind.Free,
+                        chainDepth: 0,
+                        comboIndex: 0,
+                        planSecs: 0,
+                        planEnergy: 0
+                    );
+                    RuleEngineV2.Instance.OnTickCooldown(set, in rulesCtx, ref delta);
+                }
+
                 int after = store.AddSeconds(skillId, delta);
                 if (after < 0)
                 {
                     store.StartSeconds(skillId, 0);
                     after = 0;
                 }
+
                 int turns = store.TurnsLeft(skillId);
-                details.Add($"{skillId}:{before}->{after} (turns={turns})");
+
+                // 日志里把实际 tick 也带上，方便核验
+                if (delta != defaultDelta)
+                    details.Add($"{skillId}:{before}->{after} (turns={turns}, tick={defaultDelta}->{delta})");
+                else
+                    details.Add($"{skillId}:{before}->{after} (turns={turns})");
             }
 
             string detailText = details.Count > 0 ? string.Join(";", details) : "none";
             Debug.Log($"[CD]    Tick   T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} -{StatsMathV2.BaseTurnSeconds}s (skills:{detailText})", this);
         }
+
 
         void TickBuffsForUnit(Unit unit, string phaseLabel)
         {

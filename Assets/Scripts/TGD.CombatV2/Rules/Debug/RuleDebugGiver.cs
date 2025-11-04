@@ -34,15 +34,15 @@ namespace TGD.CombatV2
         public bool ignoreComboPenalty;
 
         [Header("Attached Listeners (optional)")]
-        [SerializeField, HideInInspector] ReduceCooldownOnCast reduceListener;
-        [SerializeField, HideInInspector] RefreshCooldownOnCast refreshListener;
+        public ReduceCooldownOnCast reduceListener;
+        public RefreshCooldownOnCast refreshListener;
 
         readonly List<IRuleModifier> _activeModifiers = new();
         readonly List<PendingVoucherUsage> _pendingVoucherUsage = new();
         UnitRuntimeContext _ctx;
         int _timeChargesRemaining;
         int _energyChargesRemaining;
-
+        bool _pendingEditorApply = false;
         struct PendingVoucherUsage
         {
             public string actionId;
@@ -69,26 +69,23 @@ namespace TGD.CombatV2
         {
 #if UNITY_EDITOR
             if (!isActiveAndEnabled) return;
-            UnityEditor.EditorApplication.delayCall += RebuildInEditor;
+            if (_pendingEditorApply) return;
+            _pendingEditorApply = true;
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null) return;
+                _pendingEditorApply = false;
+                if (isActiveAndEnabled) Apply();
+            };
 #endif
         }
 
-#if UNITY_EDITOR
-        void RebuildInEditor()
-        {
-            if (this == null) return;                  // 组件已被删除
-            UnityEditor.EditorApplication.delayCall -= RebuildInEditor;
-            if (!isActiveAndEnabled) return;
-            Apply();
-        }
-#endif
 
         // 3) Apply 前清理 Missing（编辑器专用），然后配置监听器
         void Apply()
         {
-            _ctx = GetComponentInParent<UnitRuntimeContext>(true);
-            RemoveModifiers();
-            TeardownListeners();
+            _ctx = FindContext();          // ✅ 三向查找
+            RemoveModifiers();             // 只移除规则，不要在这里先把监听器全砍掉
             ResetCharges();
 
             if (_ctx == null) return;
@@ -97,12 +94,41 @@ namespace TGD.CombatV2
             UnityEditor.GameObjectUtility.RemoveMonoBehavioursWithMissingScript(_ctx.gameObject);
 #endif
 
+            // 👉 改为“按开关配置”，内部会 create 或 destroy
             ConfigureListeners();
 
             var ruleSet = _ctx.Rules;
-            if (ruleSet == null) return;  // 由 UCTX 持有，不在这里 new / 赋值
+            if (ruleSet == null) return; // 推荐 UCTX: public UnitRuleSet Rules { get; } = new UnitRuleSet();
 
-            // ……voucher / scaler / combo 按你现有逻辑继续 Add 到 ruleSet
+            // === First Cost Free ===
+            if ((firstCostFreeTime || firstCostFreeEnergy) && !string.IsNullOrEmpty(firstCostFilter))
+            {
+                var voucher = new DebugCostVoucher();
+                voucher.Initialize(this, firstCostFreeTime, firstCostFreeEnergy);
+                if (firstCostIsPrefix) voucher.filter.actionIdStartsWith = firstCostFilter;
+                else voucher.filter.actionIdEquals = firstCostFilter;
+                ruleSet.Add(voucher);
+                _activeModifiers.Add(voucher);
+            }
+
+            // === 冷却随“真实回合时间”（先全局生效；以后做 per-key 再加前缀过滤） ===
+            if (cooldownFollowsTurnTime)
+            {
+                var scaler = new DebugCooldownScaler();
+                // 若 TMV2 还是“全局 tick”，不要设置 action 过滤，否则匹配不上
+                // 如果已经是 per-key tick，再打开这一行：
+                // scaler.filter.actionIdStartsWith = cooldownActionPrefix;
+                ruleSet.Add(scaler);
+                _activeModifiers.Add(scaler);
+            }
+
+            // === 忽略连击惩罚 ===
+            if (ignoreComboPenalty)
+            {
+                var combo = new DebugComboPolicy();
+                ruleSet.Add(combo);
+                _activeModifiers.Add(combo);
+            }
         }
 
 
@@ -272,20 +298,30 @@ namespace TGD.CombatV2
         T EnsureListener<T>(ref T cache) where T : Component
         {
             if (!_ctx) return null;
-            if (!cache || cache.gameObject != _ctx.gameObject)
+            var go = _ctx.gameObject;                     // ✅ 统一挂到 UCTX 所在的 GameObject 上
+            if (!cache || cache.gameObject != go)
             {
-                if (!_ctx.TryGetComponent<T>(out cache))
-                    cache = _ctx.gameObject.AddComponent<T>();
+                if (!go.TryGetComponent<T>(out cache))
+                    cache = go.AddComponent<T>();
             }
+#if UNITY_EDITOR
+            // 让 Inspector 里能看到引用
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.EditorUtility.SetDirty(go);
+#endif
             return cache;
         }
 
         void DestroyListener<T>(ref T listener) where T : Component
         {
             if (!listener) { listener = null; return; }
-            Destroy(listener);      // ✅ 始终排队销毁，避免“立即销毁”错误
+#if UNITY_EDITOR
+            if (!Application.isPlaying) { DestroyImmediate(listener); listener = null; return; }
+#endif
+            Destroy(listener);
             listener = null;
         }
+
 
 
         sealed class DebugCostVoucher : RuleModifierBase, ICostModifier
@@ -338,6 +374,19 @@ namespace TGD.CombatV2
                     }
                 }
             }
+        }
+        // ===== 在类里加一个工具方法 =====
+        UnitRuntimeContext FindContext()
+        {
+            // 先找自己
+            if (TryGetComponent<UnitRuntimeContext>(out var self) && self) return self;
+            // 再找父层（包含隐藏/未激活）
+            var up = GetComponentInParent<UnitRuntimeContext>(true);
+            if (up) return up;
+            // 最后找子层（包含隐藏/未激活）
+            var down = GetComponentInChildren<UnitRuntimeContext>(true);
+            if (down) return down;
+            return null;
         }
 
         sealed class DebugCooldownScaler : RuleModifierBase, ICooldownPolicy
