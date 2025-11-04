@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "TGD.sln",
+    "projects": [
+      "TGD.AudioV2.csproj",
+      "TGD.CombatV2.csproj",
+      "TGD.CoreV2.csproj",
+      "TGD.DataV2.csproj",
+      "TGD.DebugV2.csproj",
+      "TGD.Editor.csproj",
+      "TGD.HexBoard.csproj",
+      "TGD.LevelV2.csproj",
+      "TGD.PlayV2.csproj",
+      "TGD.UIV2.csproj",
+      "TGD.VFXV2.csproj"
+    ]
+  }
+}

@@ -15,3 +15,15 @@ MonoBehaviour:
   entries:
   - key: Reaction20
     seconds: 12
+  - key: Reaction40
+    seconds: 18
+  - key: Reaction20(2P)
+    seconds: 6
+  - key: Reaction40(2P)
+    seconds: 24
+  - key: FullRoundTest
+    seconds: 60
+  - key: Free10
+    seconds: 60
+  - key: Free10(2P)
+    seconds: 36

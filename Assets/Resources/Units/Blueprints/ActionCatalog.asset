@@ -15,5 +15,5 @@ MonoBehaviour:
   entries:
   - actionId: Move
     displayName: Move
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: c0e400fa25476224cb77d40f780ebfd9, type: 3}
     noCooldown: 1
