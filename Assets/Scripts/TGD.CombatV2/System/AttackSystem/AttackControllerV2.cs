@@ -527,6 +527,7 @@ namespace TGD.CombatV2
                 _boundTurnManager = null;
             }
             ClearPendingAttack();
+            ResetComboCounters();
             ClearTempReservations("OnDisable");
             Cursor?.Clear();
             _currentPreview = null;
@@ -558,9 +559,15 @@ namespace TGD.CombatV2
             if (!UseTurnManager || turnManager == null || driver == null || driver.UnitRef != unit)
                 return;
 
+            ResetComboCounters();
+            _turnSecondsLeft = -1f;
+        }
+
+        void ResetComboCounters()
+        {
             _attacksThisTurn = 0;
             _pendingComboBaseCount = 0;
-            _turnSecondsLeft = -1f;
+            _reportComboBaseCount = 0;
         }
 
         void EnsureTurnTimeInited()
@@ -1796,6 +1803,7 @@ namespace TGD.CombatV2
             if (!belongs)
                 return;
 
+            ResetComboCounters();
             ClearTempReservations("SideEnd", true);
         }
         void ClearPendingAttack()
