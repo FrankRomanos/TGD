@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ca97717ca4955a5499de412e790c500f, type: 3}
-  m_Name: Knight
+  m_Name: Enemy
   m_EditorClassIdentifier: 
-  unitId: Knight001
-  displayName: Knight
-  faction: 0
+  unitId: Tree
+  displayName: Tree1P
+  faction: 1
   baseStats:
     Level: 1
-    Attack: 10
+    Attack: 100
     Stamina: 0
-    Armor: 0
+    Armor: 100
     Speed: 0
-    MoveRate: 4
+    MoveRate: 1
     MoveRateMin: 1
     MoveRateMax: 14
     MoveProfile:
@@ -65,7 +65,7 @@ MonoBehaviour:
     DamageReducePct: 0
     ThreatAddPct: 0
     ShredAddPct: 0
-  basePrefab: {fileID: 0}
+  basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
   abilities:
   - actionId: Move
     learned: 1
