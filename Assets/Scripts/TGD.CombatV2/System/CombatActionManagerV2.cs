@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -688,7 +688,7 @@ namespace TGD.CombatV2
                 return;
 
             string phaseLabel = isPlayerSide ? "Player" : "Enemy";
-            Debug.Log($"[Attack] ComboReset T{turnManager.CurrentPhaseIndex}({phaseLabel}) 攻击计数清0", this);
+            Debug.Log($"[Attack] ComboReset T{turnManager.CurrentPhaseIndex}({phaseLabel}) AttackCombo Reset!", this);
         }
 
         IActionToolV2 SelectTool(string id)
