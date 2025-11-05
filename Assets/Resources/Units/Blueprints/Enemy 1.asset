@@ -10,16 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ca97717ca4955a5499de412e790c500f, type: 3}
-  m_Name: Knight
+  m_Name: Enemy 1
   m_EditorClassIdentifier: 
-  unitId: Knight001
-  displayName: Knight
-  faction: 0
+  unitId: Tree2
+  displayName: Tree2P
+  faction: 1
   baseStats:
     Level: 1
-    Attack: 10
+    Attack: 100
     Stamina: 0
-    Armor: 0
+    Armor: 100
     Speed: 0
     MoveRate: 4
     MoveRateMin: 1
@@ -47,8 +47,8 @@ MonoBehaviour:
     MaxHP: 100
     HP: 100
     MaxEnergy: 100
-    Energy: 100
-    EnergyRegenPer2s: 10
+    Energy: 0
+    EnergyRegenPer2s: 0
     Strength: 0
     Agility: 0
     PrimaryAttr: 0
@@ -65,14 +65,5 @@ MonoBehaviour:
     DamageReducePct: 0
     ThreatAddPct: 0
     ShredAddPct: 0
-  basePrefab: {fileID: 6350957915083591713, guid: 99584da8cd1fb4f4cba8ba48af0c2a02, type: 3}
-  abilities:
-  - actionId: Move
-    learned: 1
-    initialCooldownSeconds: 0
-  - actionId: Attack
-    learned: 1
-    initialCooldownSeconds: 0
-  - actionId: Skill001
-    learned: 1
-    initialCooldownSeconds: 24
+  basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
+  abilities: []

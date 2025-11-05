@@ -10,10 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ca97717ca4955a5499de412e790c500f, type: 3}
-  m_Name: Knight
+  m_Name: Knight 1
   m_EditorClassIdentifier: 
-  unitId: Knight001
-  displayName: Knight
+  unitId: Knight002
+  displayName: Knight002
   faction: 0
   baseStats:
     Level: 1
@@ -48,7 +48,7 @@ MonoBehaviour:
     HP: 100
     MaxEnergy: 100
     Energy: 100
-    EnergyRegenPer2s: 10
+    EnergyRegenPer2s: 0
     Strength: 0
     Agility: 0
     PrimaryAttr: 0
@@ -73,6 +73,3 @@ MonoBehaviour:
   - actionId: Attack
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Skill001
-    learned: 1
-    initialCooldownSeconds: 24
