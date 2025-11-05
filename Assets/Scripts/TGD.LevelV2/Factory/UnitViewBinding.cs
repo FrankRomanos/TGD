@@ -1,5 +1,5 @@
-using UnityEngine;
-using TGD.CombatV2;
+﻿using UnityEngine;
+using TGD.CoreV2;
 using TGD.HexBoard;
 
 namespace TGD.LevelV2
