@@ -3,7 +3,7 @@ using UnityEngine;
 using TGD.CoreV2;
 using TGD.DataV2;
 
-namespace TGD.CombatV2
+namespace TGD.LevelV2
 {
     public sealed class UnitFactorySandbox : MonoBehaviour
     {
