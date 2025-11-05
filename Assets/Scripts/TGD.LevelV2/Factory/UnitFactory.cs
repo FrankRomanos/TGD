@@ -94,9 +94,11 @@ namespace TGD.LevelV2
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
             WireActionComponents(go, context, cooldownHub);
 
-            TrackUnit(unit, final.faction, go, context, cooldownHub, adapter);
+            TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
+
+            UnitActionBinder.Bind(go, context, final.abilities, cam);
 
             MaybeAutoStartBattle();
             return unit;
@@ -344,7 +346,7 @@ namespace TGD.LevelV2
             }
         }
 
-        void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter)
+        void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar)
         {
             var record = new SpawnRecord
             {
@@ -356,10 +358,10 @@ namespace TGD.LevelV2
 
             _spawned[unit] = record;
 
-            TryRegisterUnitView(unit, go);
+            TryRegisterUnitView(unit, go, avatar);
         }
 
-        void TryRegisterUnitView(Unit unit, GameObject go)
+        void TryRegisterUnitView(Unit unit, GameObject go, Sprite avatar)
         {
             if (unit == null || go == null)
                 return;
@@ -377,6 +379,7 @@ namespace TGD.LevelV2
                         binder.SetViewTransform(candidate);
                 }
                 binder.Bind(unit);
+                binder.SetAvatar(avatar);
                 return;
             }
         }

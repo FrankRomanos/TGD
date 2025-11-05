@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
+using UnityEngine;
 
 namespace TGD.DataV2
 {
@@ -15,6 +16,7 @@ namespace TGD.DataV2
         public UnitFaction faction = UnitFaction.Friendly;
         public StatsV2 stats = new StatsV2();
         public List<LearnedAbility> abilities = new List<LearnedAbility>();
+        public Sprite avatar;
 
         public bool IsFriendly => faction == UnitFaction.Friendly;
         public bool IsEnemy => faction == UnitFaction.Enemy;
