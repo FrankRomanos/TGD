@@ -612,6 +612,7 @@ namespace TGD.CombatV2
             if (turnManager != null)
             {
                 turnManager.TurnStarted += OnTurnStarted;
+                turnManager.SideEnded += OnSideEnded;
             }
             if (registerAsGateHub && TryClaimGateHub())
             {
@@ -629,6 +630,7 @@ namespace TGD.CombatV2
             if (turnManager != null)
             {
                 turnManager.TurnStarted -= OnTurnStarted;
+                turnManager.SideEnded -= OnSideEnded;
             }
             if (_ownsGateHub)
             {
@@ -678,6 +680,15 @@ namespace TGD.CombatV2
 
             if (!registerAsGateHub || turnManager == null || unit == null)
                 return;
+        }
+
+        void OnSideEnded(bool isPlayerSide)
+        {
+            if (turnManager == null)
+                return;
+
+            string phaseLabel = isPlayerSide ? "Player" : "Enemy";
+            Debug.Log($"[Attack] ComboReset T{turnManager.CurrentPhaseIndex}({phaseLabel}) 攻击计数清0", this);
         }
 
         IActionToolV2 SelectTool(string id)
