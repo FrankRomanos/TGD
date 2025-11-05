@@ -355,6 +355,30 @@ namespace TGD.LevelV2
             };
 
             _spawned[unit] = record;
+
+            TryRegisterUnitView(unit, go);
+        }
+
+        void TryRegisterUnitView(Unit unit, GameObject go)
+        {
+            if (unit == null || go == null)
+                return;
+
+            var binder = go.GetComponentInChildren<UnitViewBinding>(true);
+            if (binder == null)
+                binder = go.AddComponent<UnitViewBinding>();
+
+            if (binder != null)
+            {
+                if (!binder.HasExplicitViewTransform)
+                {
+                    var candidate = go.transform.Find("UnitView");
+                    if (candidate != null)
+                        binder.SetViewTransform(candidate);
+                }
+                binder.Bind(unit);
+                return;
+            }
         }
     }
 }
