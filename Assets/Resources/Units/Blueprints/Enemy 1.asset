@@ -21,7 +21,7 @@ MonoBehaviour:
     Stamina: 0
     Armor: 100
     Speed: 0
-    MoveRate: 1
+    MoveRate: 4
     MoveRateMin: 1
     MoveRateMax: 14
     MoveProfile:
@@ -66,10 +66,4 @@ MonoBehaviour:
     ThreatAddPct: 0
     ShredAddPct: 0
   basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
-  abilities:
-  - actionId: Move
-    learned: 1
-    initialCooldownSeconds: 0
-  - actionId: Attack
-    learned: 1
-    initialCooldownSeconds: 0
+  abilities: []

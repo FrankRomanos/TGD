@@ -47,7 +47,7 @@ MonoBehaviour:
     MaxHP: 100
     HP: 100
     MaxEnergy: 100
-    Energy: 0
+    Energy: 100
     EnergyRegenPer2s: 0
     Strength: 0
     Agility: 0
@@ -65,7 +65,7 @@ MonoBehaviour:
     DamageReducePct: 0
     ThreatAddPct: 0
     ShredAddPct: 0
-  basePrefab: {fileID: 0}
+  basePrefab: {fileID: 6350957915083591713, guid: 99584da8cd1fb4f4cba8ba48af0c2a02, type: 3}
   abilities:
   - actionId: Move
     learned: 1

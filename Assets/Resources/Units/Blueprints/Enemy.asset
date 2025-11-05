@@ -21,7 +21,7 @@ MonoBehaviour:
     Stamina: 0
     Armor: 100
     Speed: 0
-    MoveRate: 1
+    MoveRate: 3
     MoveRateMin: 1
     MoveRateMax: 14
     MoveProfile:

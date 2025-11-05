@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using TGD.CombatV2;
 using TGD.CoreV2;
@@ -52,10 +52,14 @@ namespace TGD.LevelV2
 
             var final = UnitComposeService.Compose(blueprint);
             final.faction = faction;
-            return SpawnFromFinal(final, spawnHex);
+
+            // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
+            var prefab = ResolvePrefab(preferred: blueprint.basePrefab);
+            return SpawnFromFinal(final, spawnHex, prefab);
         }
 
-        public Unit SpawnFromFinal(FinalUnitConfig final, Hex spawnHex)
+
+        public Unit SpawnFromFinal(FinalUnitConfig final, Hex spawnHex, GameObject prefab)
         {
             if (final == null)
             {
@@ -63,7 +67,6 @@ namespace TGD.LevelV2
                 return null;
             }
 
-            var prefab = ResolvePrefab();
             if (prefab == null)
             {
                 Debug.LogError("[Factory] Spawn failed: missing unit prefab.", this);
@@ -154,10 +157,10 @@ namespace TGD.LevelV2
             StartBattle();
         }
 
-        GameObject ResolvePrefab()
+        GameObject ResolvePrefab(GameObject preferred = null)
         {
-            if (defaultPrefab != null)
-                return defaultPrefab;
+            if (preferred != null) return preferred;
+            if (defaultPrefab != null) return defaultPrefab;
 
             const string resourcePath = "Units/DefaultUnit";
             var loaded = Resources.Load<GameObject>(resourcePath);
@@ -166,7 +169,6 @@ namespace TGD.LevelV2
                 defaultPrefab = loaded;
                 return defaultPrefab;
             }
-
             return null;
         }
 
