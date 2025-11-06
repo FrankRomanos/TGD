@@ -165,6 +165,23 @@ namespace TGD.CombatV2
         }
 
         PendingAttack _pendingAttack;
+
+        Unit ResolveSelfUnit()
+        {
+            if (ctx != null && ctx.boundUnit != null) return ctx.boundUnit;
+            if (driver != null) return driver.UnitRef;
+            return null;
+        }
+
+        Transform ResolveSelfView()
+        {
+            var unit = ResolveSelfUnit();
+            if (unit != null && UnitAnchorV2.TryGetView(unit, out var anchor)) return anchor;
+            if (driver != null && driver.unitView != null) return driver.unitView;
+            if (ctx != null) return ctx.transform;
+            return transform;
+        }
+
         void ClearExecReport()
         {
             _reportUsedSeconds = 0;
@@ -1136,7 +1153,7 @@ namespace TGD.CombatV2
                 yield break;
             }
             var unit = driver.UnitRef;
-            Transform view = driver.unitView != null ? driver.unitView : transform;
+            var view = ResolveSelfView();
             var playerBridge = _bridge as PlayerOccupancyBridge;
             if (playerBridge != null)
             {

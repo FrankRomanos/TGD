@@ -53,6 +53,22 @@ namespace TGD.CombatV2
             }
         }
 
+        Unit ResolveSelfUnit()
+        {
+            if (ctx != null && ctx.boundUnit != null) return ctx.boundUnit;
+            if (driver != null) return driver.UnitRef;
+            return null;
+        }
+
+        Transform ResolveSelfView()
+        {
+            var unit = ResolveSelfUnit();
+            if (unit != null && UnitAnchorV2.TryGetView(unit, out var anchor)) return anchor;
+            if (driver != null && driver.unitView != null) return driver.unitView;
+            if (ctx != null) return ctx.transform;
+            return transform;
+        }
+
         public void AttachTurnManager(TurnManagerV2 tm)
         {
             _turnManager = tm;
@@ -976,6 +992,7 @@ namespace TGD.CombatV2
                     Debug.LogWarning("[HexClickMover] HexSpace instance is missing.", this);
                     yield break;
                 }
+                var view = ResolveSelfView();
                 _moving = true;
                 if (driver.unitView != null)
                 {
@@ -996,7 +1013,6 @@ namespace TGD.CombatV2
                 var layout = authoring.Layout;
                 var unit = driver.UnitRef;
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
                 bool truncatedByBudget = (reached.Count < path.Count);
                 bool stoppedByExternal = false;
 
