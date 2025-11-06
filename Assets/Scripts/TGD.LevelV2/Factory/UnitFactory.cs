@@ -94,7 +94,7 @@ namespace TGD.LevelV2
 
             var adapter = RegisterOccupancy(unit, spawnHex, unit.Facing);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
-            WireActionComponents(go, context, cooldownHub);
+            WireActionComponents(go, context, cooldownHub, unit);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
@@ -307,7 +307,7 @@ namespace TGD.LevelV2
                 list.Add(unit);
         }
 
-        void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub)
+        void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
         {
             if (go == null) return;
 
@@ -393,7 +393,40 @@ namespace TGD.LevelV2
 
                 attack.bridgeOverride = ownerBridge;    // ★
                 attack.viewOverride = view;           // ★
-                attack.driver = null;           // ★
+            }
+
+            var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
+            foreach (var animDriver in attackAnimDrivers)
+            {
+                if (animDriver == null)
+                    continue;
+
+                if (animDriver.ctx == null)
+                    animDriver.ctx = context;
+                if (unit != null)
+                    animDriver.BindUnit(unit);
+            }
+
+            var attackMoveListeners = go.GetComponentsInChildren<AttackMoveAnimListener>(true);
+            foreach (var listener in attackMoveListeners)
+            {
+                if (listener == null)
+                    continue;
+
+                if (listener.ctx == null)
+                    listener.ctx = context;
+            }
+
+            var unitMoveListeners = go.GetComponentsInChildren<UnitMoveAnimListener>(true);
+            foreach (var listener in unitMoveListeners)
+            {
+                if (listener == null)
+                    continue;
+
+                if (listener.ctx == null)
+                    listener.ctx = context;
+                if (listener.mover == null)
+                    listener.mover = listener.GetComponent<HexClickMover>() ?? listener.GetComponentInParent<HexClickMover>(true);
             }
 
             var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);

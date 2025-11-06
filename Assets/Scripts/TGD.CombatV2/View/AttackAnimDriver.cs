@@ -1,6 +1,5 @@
 // File: TGD.CombatV2/View/AttackAnimDriver.cs
 using UnityEngine;
-using TGD.HexBoard;
 using TGD.CoreV2;
 
 namespace TGD.CombatV2
@@ -9,9 +8,9 @@ namespace TGD.CombatV2
     public sealed class AttackAnimDriver : MonoBehaviour
     {
         public Animator anim;
-          [Header("Optional")]
-    public HexBoardTestDriver driver;         // 允许拖引用（没有也行）
-    public bool requireUnitMatch = false;     // 默认不强制校验 Unit
+        [Header("Optional")]
+        public UnitRuntimeContext ctx;
+        public bool requireUnitMatch = false;     // 默认不强制校验 Unit
 
         [Header("State Names")]
         public string stateAttack1 = "Attack1";
@@ -27,13 +26,28 @@ namespace TGD.CombatV2
         bool _busy;
         int _currentCombo;
         Unit _unit;
+        AttackControllerV2 _attack;
 
         public void BindUnit(Unit unit) => _unit = unit;
+
+        void Reset()
+        {
+            if (!anim)
+                anim = GetComponentInChildren<Animator>(true);
+            if (!ctx)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
+            if (_attack == null)
+                _attack = GetComponentInParent<AttackControllerV2>(true);
+        }
 
         void Awake()
         {
             if (!anim)
                 anim = GetComponentInChildren<Animator>(true);
+            if (!ctx)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
+            if (_attack == null)
+                _attack = GetComponentInParent<AttackControllerV2>(true);
 
             ResolveUnit();
         }
@@ -56,10 +70,11 @@ namespace TGD.CombatV2
             // 先确保有 Animator
             if (anim == null) return;
 
+            ResolveUnit();
+
             // 只有在需要严格校验时才比较 Unit
             if (requireUnitMatch)
             {
-                ResolveUnit();
                 if (_unit == null || _unit != unit) return;
             }
 
@@ -96,12 +111,22 @@ namespace TGD.CombatV2
         {
             if (_unit != null) return;
 
-            // ✅ 先用 inspector 里拖的 driver；没有再向上找
-            var drv = driver != null ? driver : GetComponentInParent<HexBoardTestDriver>();
-            if (drv != null)
+            if (ctx == null)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
+
+            if (ctx != null && ctx.boundUnit != null)
             {
-                drv.EnsureInit();
-                _unit = drv.UnitRef;
+                _unit = ctx.boundUnit;
+                return;
+            }
+
+            if (_attack == null)
+                _attack = GetComponentInParent<AttackControllerV2>(true);
+
+            if (_attack != null && _attack.ctx != null && _attack.ctx.boundUnit != null)
+            {
+                ctx = _attack.ctx;
+                _unit = ctx.boundUnit;
             }
         }
     }

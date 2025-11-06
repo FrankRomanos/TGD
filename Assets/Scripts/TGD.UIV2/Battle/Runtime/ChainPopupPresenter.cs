@@ -116,15 +116,22 @@ namespace TGD.UIV2.Battle
                 _runtimePanelSettings.hideFlags = HideFlags.DontSave;
             }
 
+            if (_runtimePanelSettings == null && _document.panelSettings != null)
+            {
+                _runtimePanelSettings = _document.panelSettings;
+            }
+
+            if (_runtimePanelSettings == null)
+            {
+                _runtimePanelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+                _runtimePanelSettings.name = "ChainPopupPresenter Panel (Runtime)";
+                _runtimePanelSettings.hideFlags = HideFlags.DontSave;
+            }
+
             if (_runtimePanelSettings != null)
             {
                 _runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
                 _document.panelSettings = _runtimePanelSettings;
-            }
-            else if (_document.panelSettings != null)
-            {
-                _runtimePanelSettings = _document.panelSettings;
-                _runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
             }
 
             if (_overlay == null)

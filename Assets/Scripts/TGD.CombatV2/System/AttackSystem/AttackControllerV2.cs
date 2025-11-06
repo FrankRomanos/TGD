@@ -498,6 +498,8 @@ namespace TGD.CombatV2
             if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
                 occupancyService = concreteBridge.occupancyService;
 
+            RefreshOccupancy();
+
             _attackSpec = new TargetingSpec
             {
                 occupant = TargetOccupantMask.Enemy | TargetOccupantMask.Empty,
@@ -518,6 +520,7 @@ namespace TGD.CombatV2
             AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
             AttachTurnManager(turnManager);
+            RefreshOccupancy();
         }
 
         void Start()
@@ -531,10 +534,7 @@ namespace TGD.CombatV2
             }
 
             if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-            if (occupancyService) _occ = occupancyService.Get();
-            else if (_playerBridge != null && _playerBridge.occupancyService)
-                _occ = _playerBridge.occupancyService.Get();
-            _bridge?.EnsurePlacedNow();
+            RefreshOccupancy();
         }
 
         void OnDisable()
@@ -758,9 +758,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
+            RefreshOccupancy();
 
             var unit = ResolveSelfUnit();
             var targetCheck = ValidateAttackTarget(unit, hex);
@@ -980,11 +978,7 @@ namespace TGD.CombatV2
             var layout = authoring.Layout;
             var unit = ResolveSelfUnit();
 
-            _bridge?.EnsurePlacedNow();
-            if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge.occupancyService)
-                _occ = playerBridge.occupancyService.Get();
-            else if (occupancyService)
-                _occ = occupancyService.Get();
+            RefreshOccupancy();
 
             var start = CurrentAnchor;
             _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
@@ -1166,19 +1160,7 @@ namespace TGD.CombatV2
             }
             var unit = ResolveSelfUnit();
             var view = ResolveSelfView();
-            var playerBridge = _bridge as PlayerOccupancyBridge;
-            if (playerBridge != null)
-            {
-                playerBridge.EnsurePlacedNow();
-                if (playerBridge.occupancyService)
-                    _occ = playerBridge.occupancyService.Get();
-            }
-            else
-            {
-                _bridge?.EnsurePlacedNow();
-                if (occupancyService)
-                    _occ = occupancyService.Get();
-            }
+            RefreshOccupancy();
 
             var startAnchor = CurrentAnchor;
             Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
@@ -1625,6 +1607,8 @@ namespace TGD.CombatV2
 
         bool IsEnemyHex(Hex hex)
         {
+            RefreshOccupancy();
+
             if (_enemyLocator is SimpleEnemyRegistry registry)
             {
                 if (registry.IsEnemyAt(hex, _occ))
@@ -1633,13 +1617,56 @@ namespace TGD.CombatV2
                     return true;
                 return false;
             }
+
             if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
                 return true;
 
-            if (_occ != null && _occ.TryGetActor(hex, out var actor) && actor != null && actor != SelfActor)
+            if (_occ == null)
+                return false;
+
+            if (!_occ.TryGetActor(hex, out var actor) || actor == null)
+                return false;
+
+            if (actor == SelfActor)
+                return false;
+
+            if (actor is UnitGridAdapter adapter)
+                return IsEnemyUnit(adapter.Unit);
+
+            return true;
+        }
+
+        bool IsEnemyUnit(Unit candidate)
+        {
+            if (candidate == null)
+                return false;
+
+            var self = ResolveSelfUnit();
+            if (self == null)
                 return true;
 
-            return false;
+            if (candidate == self)
+                return false;
+
+            if (!UseTurnManager || turnManager == null)
+                return candidate != self;
+
+            bool selfPlayer = turnManager.IsPlayerUnit(self);
+            bool selfEnemy = turnManager.IsEnemyUnit(self);
+
+            if (selfPlayer)
+                return turnManager.IsEnemyUnit(candidate);
+
+            if (selfEnemy)
+                return turnManager.IsPlayerUnit(candidate);
+
+            bool candidateEnemy = turnManager.IsEnemyUnit(candidate);
+            bool candidatePlayer = turnManager.IsPlayerUnit(candidate);
+
+            if (candidateEnemy || candidatePlayer)
+                return candidateEnemy && !candidatePlayer;
+
+            return candidate != self;
         }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)
@@ -1945,6 +1972,29 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAttackAnimation(unit, comboIndex);
         }
 
+        void RefreshOccupancy()
+        {
+            if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge != null)
+            {
+                playerBridge.EnsurePlacedNow();
+                var bridgeService = playerBridge.occupancyService;
+                if (bridgeService != null)
+                {
+                    if (occupancyService == null)
+                        occupancyService = bridgeService;
+                    _occ = bridgeService.Get();
+                    return;
+                }
+            }
+            else
+            {
+                _bridge?.EnsurePlacedNow();
+            }
+
+            if (occupancyService != null)
+                _occ = occupancyService.Get();
+        }
+
         PlayerOccupancyBridge ResolvePlayerBridge()
             => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
 
@@ -1971,8 +2021,7 @@ namespace TGD.CombatV2
                                    ?? (_playerBridge?.occupancyService)
                                    ?? occupancyService;
 
-            if (_occ == null && occupancyService != null)
-                _occ = occupancyService.Get();
+            RefreshOccupancy();
 
             return authoring?.Layout != null
                 && ResolveSelfUnit() != null
