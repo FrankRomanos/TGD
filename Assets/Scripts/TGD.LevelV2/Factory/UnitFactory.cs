@@ -310,16 +310,22 @@ namespace TGD.LevelV2
             if (go == null)
                 return;
 
-            var mover = go.GetComponent<HexClickMover>();
-            if (mover != null)
+            var movers = go.GetComponentsInChildren<HexClickMover>(true);
+            foreach (var mover in movers)
             {
+                if (mover == null)
+                    continue;
+
                 mover.ctx = context;
                 mover.AttachTurnManager(turnManager);
             }
 
-            var moveCost = go.GetComponent<MoveCostServiceV2Adapter>();
-            if (moveCost != null)
+            var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
+            foreach (var moveCost in moveCosts)
             {
+                if (moveCost == null)
+                    continue;
+
                 if (moveCost.stats == null)
                     moveCost.stats = context != null ? context.stats : null;
                 if (moveCost.cooldownHub == null)
@@ -328,11 +334,25 @@ namespace TGD.LevelV2
                 moveCost.turnManager = turnManager;
             }
 
-            var attack = go.GetComponent<AttackControllerV2>();
-            if (attack != null)
+            var attacks = go.GetComponentsInChildren<AttackControllerV2>(true);
+            foreach (var attack in attacks)
             {
+                if (attack == null)
+                    continue;
+
                 attack.ctx = context;
-                attack.turnManager = turnManager;
+                attack.AttachTurnManager(turnManager);
+            }
+
+            var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
+            foreach (var driver in autoDrivers)
+            {
+                if (driver == null)
+                    continue;
+
+                if (cam != null)
+                    driver.actionManager = cam;
+                driver.turnManager = turnManager;
             }
 
             var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
