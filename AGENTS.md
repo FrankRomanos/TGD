@@ -518,6 +518,8 @@ Initialize(turnManager, combatManager) / Shutdown() 仍然保留。
 
 成功标准：以后新增敌人/角色 = 调用工厂 + 配配置文件，而不是手动拷 prefab 然后手绑十几个引用。
 
+唯一真相源=PlayerOccupancyBridge。工具预览/执行一律先 bridge.EnsurePlacedNow()，再取 _occ = service.Get()。
+
 8.2 把现有 UI Prefab 全部挂到 BattleUIRig 下面
 
 现在 Timeline / HUD / ChainPopup / Banner 都已经在 Rig 里了。
