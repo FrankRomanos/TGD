@@ -5,7 +5,6 @@ using System.Linq;
 using TGD.CoreV2;
 using TGD.HexBoard;
 using TGD.CoreV2.Rules;
-using TGD.DataV2;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -1437,12 +1436,11 @@ namespace TGD.CombatV2
             RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
-        public void RegisterSpawn(Unit unit, UnitFaction faction)
+        public void RegisterSpawn(Unit unit, bool isPlayer)
         {
             if (unit == null)
                 return;
 
-            bool isPlayer = faction == UnitFaction.Friendly;
             var list = isPlayer ? _playerUnits : _enemyUnits;
             if (!list.Contains(unit))
                 list.Add(unit);

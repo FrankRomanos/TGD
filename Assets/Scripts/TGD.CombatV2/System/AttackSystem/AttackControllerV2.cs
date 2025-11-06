@@ -1638,8 +1638,11 @@ namespace TGD.CombatV2
         {
             RefreshOccupancy();
             var self = ResolveSelfUnit();
-            bool hasActor = _occ != null && _occ.TryGetActor(hex, out var occActor) && occActor != null;
+
+            IGridActor occActor = null;
+            bool hasActor = _occ != null && _occ.TryGetActor(hex, out occActor) && occActor != null;
             string actorName = hasActor ? occActor.GetType().Name : "NULL";
+
             string unitAt = "NO-UNIT";
             if (hasActor && occActor is UnitGridAdapter grid && grid.Unit != null)
                 unitAt = grid.Unit.Id;
