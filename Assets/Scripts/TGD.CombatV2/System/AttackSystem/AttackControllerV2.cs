@@ -76,6 +76,7 @@ namespace TGD.CombatV2
         HexOccupancy _occ;
         IActorOccupancyBridge _bridge;
         PlayerOccupancyBridge _playerBridge;
+        PlayerOccupancyBridge _boundPlayerBridge;
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
@@ -459,12 +460,12 @@ namespace TGD.CombatV2
         {
             get
             {
-                if (_bridge?.Actor is IGridActor g) return g;
-                var unit = ResolveSelfUnit();
-                if (unit != null && _occ != null && _occ.TryGetActor(unit.Position, out var a))
-                    return a as IGridActor;
-                return null;
-            }
+            if (_bridge?.Actor is IGridActor g) return g;
+            var unit = ResolveSelfUnit();
+            if (unit != null && _occ != null && _occ.TryGetActor(unit.Position, out var a))
+                return a as IGridActor;
+            return null;
+        }
         }
 
         Hex CurrentAnchor
@@ -523,10 +524,6 @@ namespace TGD.CombatV2
         {
             EnsureBound();
             ClearPendingAttack();
-            if (_playerBridge == null)
-                _playerBridge = GetComponent<PlayerOccupancyBridge>();
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged += HandleAnchorChanged;
             AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
@@ -555,8 +552,7 @@ namespace TGD.CombatV2
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
@@ -577,8 +573,7 @@ namespace TGD.CombatV2
 
         void OnDestroy()
         {
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;   // ← 新增
         }
 
@@ -1952,14 +1947,34 @@ namespace TGD.CombatV2
         bool EnsureBound()
         {
             // 1) 桥优先：bridgeOverride → ctx.parent → 父链 → 自己
-            if (_bridge == null)
+            PlayerOccupancyBridge desiredBridge = bridgeOverride;
+            if (desiredBridge == null)
             {
-                if (bridgeOverride != null) _bridge = bridgeOverride;
-                else if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+                if (_playerBridge == null)
+                {
+                    _playerBridge = GetComponent<PlayerOccupancyBridge>();
+                    if (_playerBridge == null && ctx != null)
+                        _playerBridge = ctx.GetComponentInParent<PlayerOccupancyBridge>(true);
+                    if (_playerBridge == null)
+                        _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+                }
+                desiredBridge = _playerBridge;
+            }
+            else if (!ReferenceEquals(_playerBridge, desiredBridge))
+            {
+                _playerBridge = desiredBridge;
+            }
+
+            UpdateBridgeSubscription(desiredBridge);
+
+            if (desiredBridge != null)
+                _bridge = desiredBridge;
+            else if (_bridge == null)
+            {
+                if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
                 if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
                 if (_bridge == null) _bridge = GetComponent<IActorOccupancyBridge>(); // 保底（空物体上的那只）
             }
-            _playerBridge ??= _bridge as PlayerOccupancyBridge;
 
             // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的
             if (occupancyService == null)
@@ -1974,6 +1989,26 @@ namespace TGD.CombatV2
                 && ResolveSelfUnit() != null
                 && _occ != null
                 && SelfActor != null;
+        }
+
+        void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
+        {
+            if (_boundPlayerBridge == desired)
+                return;
+
+            if (_boundPlayerBridge != null)
+                _boundPlayerBridge.AnchorChanged -= HandleAnchorChanged;
+
+            _boundPlayerBridge = null;
+
+            if (!isActiveAndEnabled)
+                return;
+
+            if (desired != null)
+            {
+                desired.AnchorChanged += HandleAnchorChanged;
+                _boundPlayerBridge = desired;
+            }
         }
 
     }
