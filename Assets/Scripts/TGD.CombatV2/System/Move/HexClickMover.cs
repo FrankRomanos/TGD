@@ -300,7 +300,7 @@ namespace TGD.CombatV2
                 _occ = occupancyService.Get();
             if (_occ == null)
             {
-                var svc = Object.FindFirstObjectByType<HexOccupancyService>(FindObjectsInactive.Include);
+                var svc = UnityEngine.Object.FindFirstObjectByType<HexOccupancyService>(FindObjectsInactive.Include);
                 if (svc != null)
                     _occ = svc.Get();
             }
@@ -348,7 +348,7 @@ namespace TGD.CombatV2
         static bool s_ctxBoundUnitResolved;
         static FieldInfo s_tmUnitByContextField;
         static bool s_tmUnitByContextResolved;
-        static readonly Dictionary<Type, MemberInfo> s_actorUnitMemberCache = new();
+        static readonly Dictionary<System.Type, MemberInfo> s_actorUnitMemberCache = new();
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
