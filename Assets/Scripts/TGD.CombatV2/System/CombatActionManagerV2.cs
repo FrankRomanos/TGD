@@ -44,7 +44,7 @@ namespace TGD.CombatV2
         public List<MonoBehaviour> tools = new();
 
         [Header("Keybinds")]
-        public KeyCode keyMoveAim = KeyCode.V;
+        public KeyCode keyMoveAim = KeyCode.M;
         public KeyCode keyAttackAim = KeyCode.A;
 
         [Header("Rulebook")]
