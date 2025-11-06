@@ -81,7 +81,6 @@ namespace TGD.CombatV2
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
         IStickyMoveSource _sticky;
-        IEnemyLocator _enemyLocator;
 
         float MoveRateMin => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMin;
         float MoveRateMax => ctx != null ? ctx.MoveRateMax : MoveRateRules.DefaultMax;
@@ -173,7 +172,11 @@ namespace TGD.CombatV2
         PendingAttack _pendingAttack;
 
         Unit ResolveSelfUnit()
-            => UnitRuntimeBindingUtil.ResolveUnit(ctx, driver);
+        {
+            if (ctx != null && ctx.boundUnit != null)
+                return ctx.boundUnit;
+            return null;
+        }
 
         Transform ResolveSelfView()
             => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
@@ -467,10 +470,6 @@ namespace TGD.CombatV2
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
-            _enemyLocator = enemyProvider as IEnemyLocator;
-            if (_enemyLocator == null)
-                _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
-
             _playerBridge = ResolvePlayerBridge();
 
             if (_playerBridge != null)
@@ -1609,18 +1608,6 @@ namespace TGD.CombatV2
         {
             RefreshOccupancy();
 
-            if (_enemyLocator is SimpleEnemyRegistry registry)
-            {
-                if (registry.IsEnemyAt(hex, _occ))
-                    return true;
-                if (_occ != null && _occ.TryGetActor(hex, out var actorAt) && registry.IsEnemyActor(actorAt))
-                    return true;
-                return false;
-            }
-
-            if (_enemyLocator != null && _enemyLocator.IsEnemy(hex))
-                return true;
-
             if (_occ == null)
                 return false;
 
@@ -1633,7 +1620,7 @@ namespace TGD.CombatV2
             if (actor is UnitGridAdapter adapter)
                 return IsEnemyUnit(adapter.Unit);
 
-            return true;
+            return false;
         }
 
         bool IsEnemyUnit(Unit candidate)
@@ -1643,30 +1630,26 @@ namespace TGD.CombatV2
 
             var self = ResolveSelfUnit();
             if (self == null)
-                return true;
-
-            if (candidate == self)
                 return false;
 
-            if (!UseTurnManager || turnManager == null)
-                return candidate != self;
+            if (ReferenceEquals(candidate, self))
+                return false;
 
-            bool selfPlayer = turnManager.IsPlayerUnit(self);
-            bool selfEnemy = turnManager.IsEnemyUnit(self);
+            if (UseTurnManager && turnManager != null)
+            {
+                bool selfPlayer = turnManager.IsPlayerUnit(self);
+                bool selfEnemy = turnManager.IsEnemyUnit(self);
 
-            if (selfPlayer)
-                return turnManager.IsEnemyUnit(candidate);
+                if (selfPlayer)
+                    return turnManager.IsEnemyUnit(candidate);
 
-            if (selfEnemy)
-                return turnManager.IsPlayerUnit(candidate);
+                if (selfEnemy)
+                    return turnManager.IsPlayerUnit(candidate);
 
-            bool candidateEnemy = turnManager.IsEnemyUnit(candidate);
-            bool candidatePlayer = turnManager.IsPlayerUnit(candidate);
+                return false;
+            }
 
-            if (candidateEnemy || candidatePlayer)
-                return candidateEnemy && !candidatePlayer;
-
-            return candidate != self;
+            return true;
         }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)

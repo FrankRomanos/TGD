@@ -297,9 +297,12 @@ namespace TGD.LevelV2
 
         void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction)
         {
-            if (turnManager != null && unit != null && context != null)
+            if (turnManager != null && unit != null)
             {
-                turnManager.Bind(unit, context);
+                if (faction == UnitFaction.Friendly)
+                    turnManager.RegisterPlayerUnit(unit, context);
+                else
+                    turnManager.RegisterEnemyUnit(unit, context);
             }
 
             var list = faction == UnitFaction.Friendly ? _friendlies : _enemies;
@@ -415,6 +418,21 @@ namespace TGD.LevelV2
 
                 if (listener.ctx == null)
                     listener.ctx = context;
+            }
+
+            var chainActions = go.GetComponentsInChildren<ChainTestActionBase>(true);
+            foreach (var chain in chainActions)
+            {
+                if (chain == null)
+                    continue;
+
+                chain.BindContext(context, resolvedTurnManager);
+                if (chain.targetValidator == null)
+                    chain.targetValidator = resolvedValidator;
+                if (chain.tiler == null)
+                    chain.tiler = resolvedTiler;
+                if (chain.driver != null)
+                    chain.driver = null;
             }
 
             var unitMoveListeners = go.GetComponentsInChildren<UnitMoveAnimListener>(true);
