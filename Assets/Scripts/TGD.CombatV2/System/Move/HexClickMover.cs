@@ -14,7 +14,7 @@ namespace TGD.CombatV2
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider
+    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -62,6 +62,12 @@ namespace TGD.CombatV2
             ManageEnergyLocally = !UseTurnManager;
             if (!ManageTurnTimeLocally)
                 _turnSecondsLeft = -1;
+        }
+
+        public void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
+        {
+            ctx = context;
+            AttachTurnManager(tm);
         }
         [Header("Action Config & Cost")]
         public MonoBehaviour costProvider;

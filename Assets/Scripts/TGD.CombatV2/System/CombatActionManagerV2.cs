@@ -735,6 +735,9 @@ namespace TGD.CombatV2
 
                 foreach (var tool in list)
                 {
+                    if (tool is IBindContext binder)
+                        binder.BindContext(context, turnManager);
+
                     if (tool is MonoBehaviour behaviour && behaviour != null)
                         behaviour.enabled = enabled;
                 }
