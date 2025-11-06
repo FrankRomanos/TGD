@@ -13,7 +13,6 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    [RequireComponent(typeof(PlayerOccupancyBridge))]
     public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [Header("Refs")]
@@ -67,42 +66,17 @@ namespace TGD.CombatV2
             }
         }
         Unit ResolveSelfUnit()
-        {
-            if (ctx != null && ctx.boundUnit != null) return ctx.boundUnit;
-            if (driver != null) return driver.UnitRef;
-            return null;
-        }
+            => UnitRuntimeBindingUtil.ResolveUnit(ctx, driver);
 
-        // ★ 统一视图：先取 UnitAnchorV2，再退回 driver.unitView，再退回 ctx/自身
         Transform ResolveSelfView()
-        {
-            if (viewOverride) return viewOverride;
+            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
 
-            var unit = ResolveSelfUnit();
-            if (unit != null && UnitAnchorV2.TryGetView(unit, out var anchor))
-                return anchor;
-
-            if (driver != null && driver.unitView != null) return driver.unitView;
-            if (ctx != null) return ctx.transform;
-            return transform;
-        }
-        // ★ 当前锚点：优先占位桥的 Anchor；没有就用单位的 Position
         Hex CurrentAnchor
         {
             get
             {
-                // 桥必须“长在我这个单位上”，否则忽略
-                bool bridgeLooksMine =
-                    _playerBridge != null &&
-                    (ctx == null || _playerBridge.transform == ctx.transform || _playerBridge.transform.IsChildOf(ctx.transform));
-
-                if (bridgeLooksMine)
-                    return _playerBridge.CurrentAnchor;
-
-                var u = (ctx != null && ctx.boundUnit != null) ? ctx.boundUnit
-                        : (driver != null ? driver.UnitRef : null);
-
-                return u != null ? u.Position : Hex.Zero;
+                var unit = ResolveSelfUnit();
+                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
             }
         }
 
@@ -248,6 +222,7 @@ namespace TGD.CombatV2
         // 占位
         IActorOccupancyBridge _bridge;
         PlayerOccupancyBridge _playerBridge;
+        PlayerOccupancyBridge _boundPlayerBridge;
         HexOccupancy _occ;
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
@@ -544,7 +519,14 @@ namespace TGD.CombatV2
             }
         }
 
-        IGridActor SelfActor => _bridge?.Actor as IGridActor;
+        IGridActor SelfActor
+        {
+            get
+            {
+                var unit = ResolveSelfUnit();
+                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
+            }
+        }
 
         void Awake()
         {
@@ -554,19 +536,25 @@ namespace TGD.CombatV2
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
-            _playerBridge = GetComponent<PlayerOccupancyBridge>();
-            if (_playerBridge == null && ctx != null)
-                _playerBridge = ctx.GetComponent<PlayerOccupancyBridge>();
-            if (_playerBridge == null)
-                _playerBridge = GetComponentInChildren<PlayerOccupancyBridge>(true);
-
-            _bridge = _playerBridge as IActorOccupancyBridge;
             if (driver == null)
                 driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
             if (!targetValidator)
                 targetValidator = GetComponentInParent<DefaultTargetValidator>(true);
+
+            _playerBridge = ResolvePlayerBridge();
+            if (_playerBridge != null)
+                _bridge = _playerBridge;
+
+            if (_bridge == null && bridgeOverride != null)
+                _bridge = bridgeOverride;
+
+            if (_bridge == null && ctx != null)
+                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_bridge == null)
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
 
 #if UNITY_EDITOR
             var bridges = GetComponentsInParent<PlayerOccupancyBridge>(true);
@@ -601,18 +589,19 @@ namespace TGD.CombatV2
             tiler?.EnsureBuilt();
 
             driver?.EnsureInit();
-            if (authoring?.Layout == null || driver == null || !driver.IsReady) return;
+            if (authoring?.Layout == null)
+                return;
 
-            if (_playerBridge == null)
-                _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
-            if (_bridge == null)
-                _bridge = _playerBridge as IActorOccupancyBridge;
+            if (driver != null && !driver.IsReady)
+                return;
 
-            if (occupancyService)
+            EnsureBound();
+
+            if (occupancyService != null)
                 _occ = occupancyService.Get();
-            else if (_bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
+            else if (_playerBridge != null && _playerBridge.occupancyService)
             {
-                occupancyService = concreteBridge.occupancyService;
+                occupancyService = _playerBridge.occupancyService;
                 _occ = occupancyService ? occupancyService.Get() : null;
             }
 
@@ -622,16 +611,11 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             EnsureBound();
-            if (_playerBridge == null)
-                _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged += HandleAnchorChanged;
         }
 
         void OnDisable()
         {
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
@@ -643,8 +627,7 @@ namespace TGD.CombatV2
 
         void OnDestroy()
         {
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
         }
 
         void HandleAnchorChanged(Hex anchor, int version)
@@ -1111,6 +1094,7 @@ namespace TGD.CombatV2
                     var finalAnchor = CurrentAnchor;
                     var finalFacing = SelfActor != null ? SelfActor.Facing : OwnerUnit.Facing;
                     _bridge?.MoveCommit(finalAnchor, finalFacing);
+                    UnitRuntimeBindingUtil.SyncUnit(OwnerUnit, finalAnchor, finalFacing);
                 }
 
                 _moving = false;
@@ -1148,24 +1132,66 @@ namespace TGD.CombatV2
         }
         bool EnsureBound()
         {
-            if (_bridge == null)
+            var desiredBridge = ResolvePlayerBridge();
+            if (!ReferenceEquals(_playerBridge, desiredBridge))
+                _playerBridge = desiredBridge;
+
+            UpdateBridgeSubscription(desiredBridge);
+
+            if (desiredBridge != null)
             {
-                if (bridgeOverride != null) _bridge = bridgeOverride;
-                else if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
-                if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-                if (_bridge == null) _bridge = GetComponent<IActorOccupancyBridge>();
+                _bridge = desiredBridge;
             }
-            _playerBridge ??= _bridge as PlayerOccupancyBridge;
+            else if (_bridge == null)
+            {
+                if (bridgeOverride != null)
+                    _bridge = bridgeOverride;
+                else if (ctx != null)
+                    _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+
+                if (_bridge == null)
+                    _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+            }
+
+            if (_playerBridge == null)
+                _playerBridge = _bridge as PlayerOccupancyBridge;
 
             if (occupancyService == null)
-                occupancyService = (_playerBridge?.occupancyService) ?? occupancyService;
+                occupancyService = (_turnManager?.occupancyService) ?? (_playerBridge?.occupancyService);
+
             if (_occ == null && occupancyService != null)
                 _occ = occupancyService.Get();
 
+            var unit = ResolveSelfUnit();
+            var actor = UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
+
             return authoring?.Layout != null
-                && ResolveSelfUnit() != null
+                && unit != null
                 && _occ != null
-                && SelfActor != null;
+                && actor != null;
+        }
+
+        PlayerOccupancyBridge ResolvePlayerBridge()
+            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
+
+        void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
+        {
+            if (_boundPlayerBridge == desired)
+                return;
+
+            if (_boundPlayerBridge != null)
+                _boundPlayerBridge.AnchorChanged -= HandleAnchorChanged;
+
+            _boundPlayerBridge = null;
+
+            if (!isActiveAndEnabled)
+                return;
+
+            if (desired != null)
+            {
+                desired.AnchorChanged += HandleAnchorChanged;
+                _boundPlayerBridge = desired;
+            }
         }
     }
 }
