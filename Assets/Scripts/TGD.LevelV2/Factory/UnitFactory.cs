@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using TGD.CombatV2;
 using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
@@ -89,18 +90,24 @@ namespace TGD.LevelV2
                 Position = spawnHex
             };
 
+            if (context != null && context.boundUnit == null)
+                context.boundUnit = unit;
+
             go.name = $"{ResolveDisplayName(final, unitId)} ({final.faction})";
             PlaceTransform(go.transform, spawnHex);
 
-            var adapter = RegisterOccupancy(unit, spawnHex, unit.Facing);
+            var adapter = EnsureGridAdapter(go, unit);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
             WireActionComponents(go, context, cooldownHub, unit);
+
+            FinalizeOccupancyChain(go, context, unit, final.faction, adapter);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             UnitActionBinder.Bind(go, context, final.abilities, cam);
+            ApplyAbilityLoadout(go, final.abilities);
 
             MaybeAutoStartBattle();
             return unit;
@@ -275,18 +282,6 @@ namespace TGD.LevelV2
             target.position = position;
         }
 
-        UnitGridAdapter RegisterOccupancy(Unit unit, Hex spawnHex, Facing4 facing)
-        {
-            var occ = ResolveOccupancy();
-            if (occ == null)
-                return null;
-
-            var adapter = new UnitGridAdapter(unit, null);
-            if (!occ.TryPlace(adapter, spawnHex, facing))
-                Debug.LogWarning($"[Factory] Occupancy blocked for {unit.Id} at {spawnHex}", this);
-            return adapter;
-        }
-
         HexOccupancy ResolveOccupancy()
         {
             HexOccupancyService service = board;
@@ -298,12 +293,7 @@ namespace TGD.LevelV2
         void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction)
         {
             if (turnManager != null && unit != null)
-            {
-                if (faction == UnitFaction.Friendly)
-                    turnManager.RegisterPlayerUnit(unit, context);
-                else
-                    turnManager.RegisterEnemyUnit(unit, context);
-            }
+                turnManager.Bind(unit, context);
 
             var list = faction == UnitFaction.Friendly ? _friendlies : _enemies;
             if (!list.Contains(unit))
@@ -466,6 +456,101 @@ namespace TGD.LevelV2
                 status.turnManager = turnManager;
                 if (turnManager != null)
                     status.AttachTurnManager(turnManager);
+            }
+        }
+
+        HexOccupancyService ResolveOccupancyService()
+        {
+            if (turnManager != null && turnManager.occupancyService != null)
+                return turnManager.occupancyService;
+            if (board != null)
+                return board;
+            return FindOne<HexOccupancyService>();
+        }
+
+        static UnitGridAdapter EnsureGridAdapter(GameObject go, Unit unit)
+        {
+            if (go == null)
+                return null;
+
+            var adapter = go.GetComponent<UnitGridAdapter>() ?? go.AddComponent<UnitGridAdapter>();
+            if (unit != null)
+                adapter.Unit = unit;
+            return adapter;
+        }
+
+        void FinalizeOccupancyChain(GameObject go, UnitRuntimeContext context, Unit unit, UnitFaction faction, UnitGridAdapter adapter)
+        {
+            if (go == null)
+                return;
+
+            var occSvc = ResolveOccupancyService();
+            if (occSvc != null)
+                Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
+
+            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            bridge.occupancyService = occSvc;
+
+            foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
+            {
+                if (mover != null)
+                    mover.occupancyService = occSvc;
+            }
+
+            foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+            {
+                if (attack != null)
+                    attack.occupancyService = occSvc;
+            }
+
+            var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
+            if (adapter == null)
+                adapter = EnsureGridAdapter(go, bound);
+            else if (adapter.Unit == null && bound != null)
+                adapter.Unit = bound;
+
+            if (turnManager != null && bound != null)
+            {
+                bool isFriendly = faction == UnitFaction.Friendly;
+                turnManager.RegisterSpawn(bound, isFriendly);
+                bool isEnemy = turnManager.IsEnemyUnit(bound);
+                bool isPlayer = turnManager.IsPlayerUnit(bound);
+                Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
+            }
+
+            if (!bridge.EnsurePlacedNow())
+                Debug.LogWarning($"[Factory] Failed to place {unit?.Id ?? go.name} on occupancy grid.", this);
+        }
+
+        static void ApplyAbilityLoadout(GameObject go, IEnumerable<FinalUnitConfig.LearnedAbility> abilities)
+        {
+            if (go == null)
+                return;
+
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Move",
+                "Attack"
+            };
+
+            if (abilities != null)
+            {
+                foreach (var ability in abilities)
+                {
+                    if (string.IsNullOrWhiteSpace(ability.actionId))
+                        continue;
+                    allowed.Add(ability.actionId.Trim());
+                }
+            }
+
+            var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (var behaviour in behaviours)
+            {
+                if (behaviour is IActionToolV2 tool)
+                {
+                    bool enable = allowed.Contains(tool.Id);
+                    behaviour.enabled = enable;
+                }
             }
         }
 

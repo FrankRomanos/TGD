@@ -1619,7 +1619,6 @@ namespace TGD.CombatV2
         bool IsEnemyHex(Hex hex)
         {
             RefreshOccupancy();
-
             if (_occ == null)
                 return false;
 
@@ -1629,10 +1628,29 @@ namespace TGD.CombatV2
             if (actor == SelfActor)
                 return false;
 
-            if (actor is UnitGridAdapter adapter)
+            if (actor is UnitGridAdapter adapter && adapter.Unit != null)
                 return IsEnemyUnit(adapter.Unit);
 
-            return false;
+            return true;
+        }
+
+        void DebugEnemyProbe(Hex hex)
+        {
+            RefreshOccupancy();
+            var self = ResolveSelfUnit();
+
+            IGridActor occActor = null;
+            bool hasActor = _occ != null && _occ.TryGetActor(hex, out occActor) && occActor != null;
+            string actorName = hasActor ? occActor.GetType().Name : "NULL";
+
+            string unitAt = "NO-UNIT";
+            if (hasActor && occActor is UnitGridAdapter grid && grid.Unit != null)
+                unitAt = grid.Unit.Id;
+
+            bool selfPlayer = UseTurnManager && turnManager?.IsPlayerUnit(self) == true;
+            bool selfEnemy = UseTurnManager && turnManager?.IsEnemyUnit(self) == true;
+
+            Debug.Log($"[Probe] occ={_occ != null} hasActor={hasActor} actor={actorName} unitAt={unitAt} self={self?.Id} selfP={selfPlayer} selfE={selfEnemy}", this);
         }
 
         bool IsEnemyUnit(Unit candidate)

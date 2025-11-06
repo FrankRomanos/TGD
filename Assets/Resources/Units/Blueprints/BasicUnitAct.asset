@@ -21,7 +21,7 @@ MonoBehaviour:
     displayName: Attack
     icon: {fileID: 21300000, guid: d7cc2af5daea9e649b2816a8979883eb, type: 3}
     noCooldown: 1
-  - actionId: Skill001
-    displayName: Skill001
+  - actionId: Reaction20
+    displayName: Reaction20
     icon: {fileID: 0}
     noCooldown: 0
