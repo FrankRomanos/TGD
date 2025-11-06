@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 using TGD.CombatV2;
 using TGD.CoreV2;
 using TGD.DataV2;
@@ -82,6 +83,10 @@ namespace TGD.LevelV2
             ConfigureAttackers(go, hasAttack);
 
             var availabilities = BuildAvailabilities(learnedList, moveActionId, hasMove, attackActionId, hasAttack, abilityLookup);
+
+            ctx?.SetLearnedActions(availabilities
+                .Where(a => a.unlocked && !string.IsNullOrWhiteSpace(a.actionId))
+                .Select(a => a.actionId));
             BroadcastToProviders(go, availabilities);
 
             LogActions(go, availabilities);

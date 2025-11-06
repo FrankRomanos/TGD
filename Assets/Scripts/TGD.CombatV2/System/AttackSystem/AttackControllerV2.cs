@@ -13,7 +13,7 @@ namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerOccupancyBridge))]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider
+    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
@@ -243,6 +243,12 @@ namespace TGD.CombatV2
             turnManager.TurnStarted += OnTurnStarted;
             turnManager.SideEnded += OnSideEnded;
             _boundTurnManager = turnManager;
+        }
+
+        public void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
+        {
+            ctx = context;
+            AttachTurnManager(manager);
         }
 
         IResourcePool ResolveResourcePool()
