@@ -1099,6 +1099,7 @@ namespace TGD.CombatV2
                     var finalAnchor = CurrentAnchor;
                     var finalFacing = SelfActor != null ? SelfActor.Facing : OwnerUnit.Facing;
                     _bridge?.MoveCommit(finalAnchor, finalFacing);
+                    UnitRuntimeBindingUtil.SyncUnit(OwnerUnit, finalAnchor, finalFacing);
                 }
 
                 _moving = false;

@@ -55,6 +55,15 @@ namespace TGD.CombatV2
             return unit != null ? unit.Position : Hex.Zero;
         }
 
+        public static void SyncUnit(Unit unit, Hex anchor, Facing4 facing)
+        {
+            if (unit == null)
+                return;
+
+            unit.Position = anchor;
+            unit.Facing = facing;
+        }
+
         public static PlayerOccupancyBridge ResolvePlayerBridge(Component owner, UnitRuntimeContext ctx, PlayerOccupancyBridge bridgeOverride, PlayerOccupancyBridge current)
         {
             if (bridgeOverride != null)

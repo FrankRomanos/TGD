@@ -1277,6 +1277,7 @@ namespace TGD.CombatV2
                     }
 
                     _bridge?.MoveCommit(startAnchor, finalFacing);
+                    UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
                     AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
 
                     if (attackPlanned)
@@ -1385,6 +1386,7 @@ namespace TGD.CombatV2
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
                 _bridge?.MoveCommit(lastPosition, finalFacing);
+                UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
@@ -1494,6 +1496,7 @@ namespace TGD.CombatV2
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
                 _bridge?.MoveCommit(abortAnchor, abortFacing);
+                UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
