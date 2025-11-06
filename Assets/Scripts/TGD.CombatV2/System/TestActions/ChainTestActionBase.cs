@@ -136,6 +136,8 @@ namespace TGD.CombatV2
 
         public Unit ResolveUnit()
         {
+            if (ctx != null && ctx.boundUnit != null)
+                return ctx.boundUnit;
             return driver != null ? driver.UnitRef : null;
         }
 
@@ -165,6 +167,19 @@ namespace TGD.CombatV2
         {
             ctx = context;
             turnManager = tm;
+
+            if (ctx != null)
+            {
+                if (targetValidator == null)
+                    targetValidator = ctx.GetComponentInParent<DefaultTargetValidator>(true);
+                if (tiler == null)
+                    tiler = ctx.GetComponentInParent<HexBoardTiler>(true);
+            }
+
+            if (targetValidator == null)
+                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
+            if (tiler == null)
+                tiler = GetComponentInParent<HexBoardTiler>(true);
         }
     }
 }
