@@ -1161,13 +1161,29 @@ namespace TGD.CombatV2
 
         Unit ResolveUnit(IActionToolV2 tool)
         {
-            if (tool is HexClickMover mover && mover != null && mover.driver != null)
-                return mover.driver.UnitRef;
-            if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
-                return attack.driver.UnitRef;
+            if (tool is HexClickMover mover && mover != null)
+            {
+                if (mover.ctx != null && mover.ctx.boundUnit != null)
+                    return mover.ctx.boundUnit;
+                if (mover.driver != null)
+                    return mover.driver.UnitRef;
+            }
+
+            if (tool is AttackControllerV2 attack && attack != null)
+            {
+                if (attack.ctx != null && attack.ctx.boundUnit != null)
+                    return attack.ctx.boundUnit;
+                if (attack.driver != null)
+                    return attack.driver.UnitRef;
+            }
+
             if (tool is ChainTestActionBase chain && chain != null)
                 return chain.ResolveUnit();
-            return unitDriver != null ? unitDriver.UnitRef : null;
+
+            if (unitDriver != null)
+                return unitDriver.UnitRef;
+
+            return null;
         }
 
         public void RequestAim(string toolId)

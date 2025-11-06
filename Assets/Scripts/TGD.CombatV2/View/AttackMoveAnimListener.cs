@@ -10,26 +10,42 @@ namespace TGD.CombatV2
     public sealed class AttackMoveAnimListener : MonoBehaviour
     {
         public Animator animator;
-        public HexBoardTestDriver driver;
+        public UnitRuntimeContext ctx;
         public string runningBoolName = "IsRunning";
         public bool manageRootMotion = true;
         public bool rootMotionForAttackMove = false;
 
         int _runningId;
         bool _prevRM;
-        Unit UnitRef => driver ? driver.UnitRef : null;
+        AttackControllerV2 _attack;
+        Unit UnitRef
+        {
+            get
+            {
+                if (ctx != null && ctx.boundUnit != null)
+                    return ctx.boundUnit;
+                if (_attack != null && _attack.ctx != null && _attack.ctx.boundUnit != null)
+                {
+                    ctx = _attack.ctx;
+                    return ctx.boundUnit;
+                }
+                return null;
+            }
+        }
         bool Match(Unit u) => u != null && u == UnitRef;
 
         void Reset()
         {
             if (!animator) animator = GetComponentInChildren<Animator>(true);
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
+            if (_attack == null) _attack = GetComponentInParent<AttackControllerV2>(true);
         }
 
         void Awake()
         {
             if (!animator) animator = GetComponentInChildren<Animator>(true);
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
+            if (_attack == null) _attack = GetComponentInParent<AttackControllerV2>(true);
             _runningId = Animator.StringToHash(runningBoolName);
         }
 

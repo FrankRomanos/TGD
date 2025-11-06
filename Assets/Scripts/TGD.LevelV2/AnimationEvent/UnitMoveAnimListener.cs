@@ -11,7 +11,7 @@ namespace TGD.LevelV2
         [Header("Refs")]
         public HexClickMover mover;
         public Animator animator;
-        public HexBoardTestDriver driver;     // ★ 新增：用于匹配 Unit
+        public UnitRuntimeContext ctx;
 
         public string runningBoolName = "IsRunning";
 
@@ -26,13 +26,13 @@ namespace TGD.LevelV2
         {
             if (!mover) mover = GetComponent<HexClickMover>();
             if (!animator) animator = GetComponentInChildren<Animator>();
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
         }
 
         void Awake()
         {
             _runningId = Animator.StringToHash(runningBoolName);
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             if (animator) _prevRM = animator.applyRootMotion;
         }
 
@@ -51,11 +51,19 @@ namespace TGD.LevelV2
                 animator.applyRootMotion = _prevRM;
         }
 
-        // ★ 统一按 Unit 过滤（优先 driver.UnitRef；次选 mover.driver.UnitRef）
+        // ★ 统一按 Unit 过滤（优先 ctx.boundUnit；次选 mover.ctx.boundUnit）
         bool Match(Unit u)
         {
-            var my = driver ? driver.UnitRef : mover?.driver?.UnitRef;
-            return my != null && u == my;
+            if (u == null)
+                return false;
+
+            Unit owner = null;
+            if (ctx != null && ctx.boundUnit != null)
+                owner = ctx.boundUnit;
+            else if (mover != null && mover.ctx != null && mover.ctx.boundUnit != null)
+                owner = mover.ctx.boundUnit;
+
+            return owner != null && u == owner;
         }
 
         void OnMoveStarted(Unit u, System.Collections.Generic.List<Hex> _)

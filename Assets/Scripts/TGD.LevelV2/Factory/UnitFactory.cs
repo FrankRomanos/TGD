@@ -94,7 +94,7 @@ namespace TGD.LevelV2
 
             var adapter = RegisterOccupancy(unit, spawnHex, unit.Facing);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
-            WireActionComponents(go, context, cooldownHub);
+            WireActionComponents(go, context, cooldownHub, unit);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
@@ -297,9 +297,12 @@ namespace TGD.LevelV2
 
         void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction)
         {
-            if (turnManager != null && unit != null && context != null)
+            if (turnManager != null && unit != null)
             {
-                turnManager.Bind(unit, context);
+                if (faction == UnitFaction.Friendly)
+                    turnManager.RegisterPlayerUnit(unit, context);
+                else
+                    turnManager.RegisterEnemyUnit(unit, context);
             }
 
             var list = faction == UnitFaction.Friendly ? _friendlies : _enemies;
@@ -307,7 +310,7 @@ namespace TGD.LevelV2
                 list.Add(unit);
         }
 
-        void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub)
+        void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
         {
             if (go == null) return;
 
@@ -393,7 +396,55 @@ namespace TGD.LevelV2
 
                 attack.bridgeOverride = ownerBridge;    // ★
                 attack.viewOverride = view;           // ★
-                attack.driver = null;           // ★
+            }
+
+            var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
+            foreach (var animDriver in attackAnimDrivers)
+            {
+                if (animDriver == null)
+                    continue;
+
+                if (animDriver.ctx == null)
+                    animDriver.ctx = context;
+                if (unit != null)
+                    animDriver.BindUnit(unit);
+            }
+
+            var attackMoveListeners = go.GetComponentsInChildren<AttackMoveAnimListener>(true);
+            foreach (var listener in attackMoveListeners)
+            {
+                if (listener == null)
+                    continue;
+
+                if (listener.ctx == null)
+                    listener.ctx = context;
+            }
+
+            var chainActions = go.GetComponentsInChildren<ChainTestActionBase>(true);
+            foreach (var chain in chainActions)
+            {
+                if (chain == null)
+                    continue;
+
+                chain.BindContext(context, resolvedTurnManager);
+                if (chain.targetValidator == null)
+                    chain.targetValidator = resolvedValidator;
+                if (chain.tiler == null)
+                    chain.tiler = resolvedTiler;
+                if (chain.driver != null)
+                    chain.driver = null;
+            }
+
+            var unitMoveListeners = go.GetComponentsInChildren<UnitMoveAnimListener>(true);
+            foreach (var listener in unitMoveListeners)
+            {
+                if (listener == null)
+                    continue;
+
+                if (listener.ctx == null)
+                    listener.ctx = context;
+                if (listener.mover == null)
+                    listener.mover = listener.GetComponent<HexClickMover>() ?? listener.GetComponentInParent<HexClickMover>(true);
             }
 
             var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
