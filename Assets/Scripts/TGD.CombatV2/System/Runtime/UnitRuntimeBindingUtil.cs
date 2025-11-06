@@ -35,22 +35,37 @@ namespace TGD.CombatV2
 
         public static IGridActor ResolveGridActor(Unit unit, HexOccupancy occupancy, IActorOccupancyBridge bridge)
         {
-            if (unit != null && occupancy != null && occupancy.TryGetActor(unit.Position, out var occActor) && occActor != null)
-                return occActor;
+            if (bridge != null && bridge.Actor is IGridActor bridgedActor)
+                return bridgedActor;
 
-            if (bridge != null && bridge.Actor is IGridActor gridActor)
-                return gridActor;
+            if (occupancy != null)
+            {
+                if (bridge != null && bridge.IsReady && occupancy.TryGetActor(bridge.CurrentAnchor, out var bridgeOccActor) && bridgeOccActor != null)
+                    return bridgeOccActor;
+
+                if (unit != null && occupancy.TryGetActor(unit.Position, out var occActor) && occActor != null)
+                    return occActor;
+            }
 
             return null;
         }
 
-        public static Hex ResolveAnchor(Unit unit, IGridActor actor, IActorOccupancyBridge bridge)
+        public static Hex ResolveAnchor(Unit unit, HexOccupancy occupancy, IActorOccupancyBridge bridge)
         {
-            if (actor != null)
-                return actor.Anchor;
-
             if (bridge != null && bridge.IsReady)
                 return bridge.CurrentAnchor;
+
+            if (bridge != null && bridge.Actor is IGridActor bridgedActor && !bridgedActor.Anchor.Equals(Hex.Zero))
+                return bridgedActor.Anchor;
+
+            if (occupancy != null)
+            {
+                if (bridge != null && occupancy.TryGetActor(bridge.CurrentAnchor, out var bridgeOccActor) && bridgeOccActor != null)
+                    return bridgeOccActor.Anchor;
+
+                if (unit != null && occupancy.TryGetActor(unit.Position, out var occActor) && occActor != null)
+                    return occActor.Anchor;
+            }
 
             return unit != null ? unit.Position : Hex.Zero;
         }
@@ -72,13 +87,6 @@ namespace TGD.CombatV2
             if (current != null && current)
                 return current;
 
-            if (owner != null)
-            {
-                var candidate = owner.GetComponent<PlayerOccupancyBridge>();
-                if (candidate != null)
-                    return candidate;
-            }
-
             if (ctx != null)
             {
                 var candidate = ctx.GetComponent<PlayerOccupancyBridge>();
@@ -90,6 +98,13 @@ namespace TGD.CombatV2
                     return candidate;
 
                 candidate = ctx.GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (candidate != null)
+                    return candidate;
+            }
+
+            if (owner != null)
+            {
+                var candidate = owner.GetComponent<PlayerOccupancyBridge>();
                 if (candidate != null)
                     return candidate;
             }

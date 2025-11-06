@@ -457,8 +457,7 @@ namespace TGD.CombatV2
             get
             {
                 var unit = ResolveSelfUnit();
-                var actor = UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, actor, _bridge);
+                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
             }
         }
 
@@ -1943,7 +1942,7 @@ namespace TGD.CombatV2
 
         bool EnsureBound()
         {
-            // 1) 桥优先：bridgeOverride → ctx.parent → 父链 → 自己
+            // 1) 桥优先：bridgeOverride → ctx 体系 → 父链
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))
                 _playerBridge = desiredBridge;
@@ -1956,7 +1955,6 @@ namespace TGD.CombatV2
             {
                 if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
                 if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-                if (_bridge == null) _bridge = GetComponent<IActorOccupancyBridge>(); // 保底（空物体上的那只）
             }
 
             // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的

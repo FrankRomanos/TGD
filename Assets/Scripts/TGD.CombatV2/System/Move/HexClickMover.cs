@@ -13,7 +13,6 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    [RequireComponent(typeof(PlayerOccupancyBridge))]
     public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [Header("Refs")]
@@ -77,8 +76,7 @@ namespace TGD.CombatV2
             get
             {
                 var unit = ResolveSelfUnit();
-                var actor = UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, actor, _bridge);
+                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
             }
         }
 
@@ -557,9 +555,6 @@ namespace TGD.CombatV2
 
             if (_bridge == null)
                 _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-
-            if (_bridge == null)
-                _bridge = GetComponent<IActorOccupancyBridge>();
 
 #if UNITY_EDITOR
             var bridges = GetComponentsInParent<PlayerOccupancyBridge>(true);
@@ -1156,9 +1151,6 @@ namespace TGD.CombatV2
 
                 if (_bridge == null)
                     _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-
-                if (_bridge == null)
-                    _bridge = GetComponent<IActorOccupancyBridge>();
             }
 
             if (_playerBridge == null)
