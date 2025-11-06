@@ -76,6 +76,7 @@ namespace TGD.CombatV2
         HexOccupancy _occ;
         IActorOccupancyBridge _bridge;
         PlayerOccupancyBridge _playerBridge;
+        PlayerOccupancyBridge _boundPlayerBridge;
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
@@ -173,9 +174,9 @@ namespace TGD.CombatV2
 
         Unit ResolveSelfUnit()
         {
-            if (ctx != null && ctx.boundUnit != null) return ctx.boundUnit;
-            if (driver != null) return ResolveSelfUnit();
-            return null;
+            if (ctx != null && ctx.boundUnit != null)
+                return ctx.boundUnit;
+            return driver != null ? driver.UnitRef : null;
         }
 
         Transform ResolveSelfView()
@@ -279,9 +280,10 @@ namespace TGD.CombatV2
 
         IResourcePool ResolveResourcePool()
         {
-            if (!UseTurnManager || turnManager == null || driver == null || ResolveSelfUnit() == null)
+            var unit = ResolveSelfUnit();
+            if (!UseTurnManager || turnManager == null || unit == null)
                 return null;
-            return turnManager.GetResources(ResolveSelfUnit());
+            return turnManager.GetResources(unit);
         }
 
         int ResolveEnergyAvailable(IResourcePool pool)
@@ -459,10 +461,13 @@ namespace TGD.CombatV2
         {
             get
             {
-                if (_bridge?.Actor is IGridActor g) return g;
                 var unit = ResolveSelfUnit();
-                if (unit != null && _occ != null && _occ.TryGetActor(unit.Position, out var a))
-                    return a as IGridActor;
+                if (unit != null && _occ != null && _occ.TryGetActor(unit.Position, out var occActor) && occActor != null)
+                    return occActor;
+
+                if (_bridge != null && _bridge.Actor is IGridActor gridActor)
+                    return gridActor;
+
                 return null;
             }
         }
@@ -471,9 +476,15 @@ namespace TGD.CombatV2
         {
             get
             {
-                if (_bridge != null) return _bridge.CurrentAnchor;
                 var actor = SelfActor;
-                return actor != null ? actor.Anchor : Hex.Zero;
+                if (actor != null)
+                    return actor.Anchor;
+
+                if (_bridge != null && _bridge.IsReady)
+                    return _bridge.CurrentAnchor;
+
+                var unit = ResolveSelfUnit();
+                return unit != null ? unit.Position : Hex.Zero;
             }
         }
 
@@ -487,9 +498,16 @@ namespace TGD.CombatV2
             if (_enemyLocator == null)
                 _enemyLocator = GetComponentInParent<IEnemyLocator>(true);
 
-            _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-            _playerBridge = _bridge as PlayerOccupancyBridge
-                            ?? GetComponentInParent<PlayerOccupancyBridge>(true);
+            _playerBridge = ResolvePlayerBridge();
+
+            if (_playerBridge != null)
+                _bridge = _playerBridge;
+
+            if (_bridge == null && ctx != null)
+                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_bridge == null)
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
 
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
@@ -523,10 +541,6 @@ namespace TGD.CombatV2
         {
             EnsureBound();
             ClearPendingAttack();
-            if (_playerBridge == null)
-                _playerBridge = GetComponent<PlayerOccupancyBridge>();
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged += HandleAnchorChanged;
             AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
@@ -555,8 +569,7 @@ namespace TGD.CombatV2
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
             AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
             AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
@@ -577,8 +590,7 @@ namespace TGD.CombatV2
 
         void OnDestroy()
         {
-            if (_playerBridge != null)
-                _playerBridge.AnchorChanged -= HandleAnchorChanged;
+            UpdateBridgeSubscription(null);
             AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;   // ← 新增
         }
 
@@ -594,7 +606,7 @@ namespace TGD.CombatV2
 
         void OnTurnStarted(Unit unit)
         {
-            if (!UseTurnManager || turnManager == null || driver == null || ResolveSelfUnit() != unit)
+            if (!UseTurnManager || turnManager == null || ResolveSelfUnit() != unit)
                 return;
 
             ResetComboCounters();
@@ -630,10 +642,6 @@ namespace TGD.CombatV2
                 missing.Add("authoring.Layout");
             if (!tiler)
                 missing.Add(nameof(tiler));
-            if (!driver)
-                missing.Add(nameof(driver));
-            else if (!driver.IsReady)
-                missing.Add("driver.IsReady");
             if (_bridge == null)
                 missing.Add("bridge");
             if (_playerBridge == null)
@@ -668,7 +676,7 @@ namespace TGD.CombatV2
             {
                 DumpReadiness();
                 if (raiseHud)
-                    RaiseRejected(driver ? ResolveSelfUnit() : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Not ready.");
                 reason = "(not-ready)";
                 return false;
             }
@@ -681,9 +689,10 @@ namespace TGD.CombatV2
                 return false;
             }
             int needSec = 1;
-            if (UseTurnManager && turnManager != null && driver != null && ResolveSelfUnit() != null)
+            var selfUnit = ResolveSelfUnit();
+            if (UseTurnManager && turnManager != null && selfUnit != null)
             {
-                var budget = turnManager.GetBudget(ResolveSelfUnit());
+                var budget = turnManager.GetBudget(selfUnit);
                 if (budget == null || !budget.HasTime(needSec))
                 {
                     if (raiseHud)
@@ -759,7 +768,7 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             if (!IsReady)
             {
-                RaiseRejected(driver ? ResolveSelfUnit() : null, AttackRejectReasonV2.NotReady, "Not ready.");
+                RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Not ready.");
                 yield break;
             }
             if (_moving)
@@ -772,7 +781,7 @@ namespace TGD.CombatV2
             if (occupancyService)
                 _occ = occupancyService.Get();
 
-            var unit = driver != null ? ResolveSelfUnit() : null;
+            var unit = ResolveSelfUnit();
             var targetCheck = ValidateAttackTarget(unit, hex);
             // Phase logging handled by CombatActionManagerV2.
 
@@ -928,7 +937,7 @@ namespace TGD.CombatV2
 
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
-            unit ??= driver != null ? ResolveSelfUnit() : null;
+            unit ??= ResolveSelfUnit();
             switch (reason)
             {
                 case "targetInvalid":
@@ -1191,9 +1200,7 @@ namespace TGD.CombatV2
             }
 
             var startAnchor = CurrentAnchor;
-            Facing4 finalFacing = driver != null && ResolveSelfUnit() != null
-                ? ResolveSelfUnit().Facing
-                : Facing4.PlusQ;
+            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
@@ -1283,7 +1290,7 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                     }
 
-                    if (attackPlanned && authoring?.Layout != null && driver?.unitView != null)
+                    if (attackPlanned && authoring?.Layout != null && view != null)
                     {
                         var fromW = hexSpace.HexToWorld(startAnchor, y);
                         var toW = hexSpace.HexToWorld(preview.targetHex, y);
@@ -1291,7 +1298,7 @@ namespace TGD.CombatV2
                         float turn = ResolveAttackTurnDeg();
                         float speed = ResolveAttackTurnSpeed();
                         var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(finalFacing, fromW, toW, keep, turn);
-                        yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
+                        yield return HexFacingUtil.RotateToYaw(view, yaw, speed);
                         finalFacing = nf;
                     }
 
@@ -1508,7 +1515,7 @@ namespace TGD.CombatV2
                         _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refund, 0f, MaxTurnSeconds);
                 }
 
-                var abortUnit = driver != null ? ResolveSelfUnit() : null;
+                var abortUnit = ResolveSelfUnit();
                 var abortAnchor = CurrentAnchor;
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
@@ -1871,7 +1878,7 @@ namespace TGD.CombatV2
 
         void OnSideEnded(bool isPlayerSide)
         {
-            if (!UseTurnManager || turnManager == null || driver == null)
+            if (!UseTurnManager || turnManager == null)
                 return;
 
             var unit = ResolveSelfUnit();
@@ -1893,7 +1900,11 @@ namespace TGD.CombatV2
             _pendingAttack.target = default;
             _pendingAttack.comboIndex = 0;
         }
-        bool IsMyUnit(Unit unit) => driver != null && ResolveSelfUnit() == unit;
+        bool IsMyUnit(Unit unit)
+        {
+            var self = ResolveSelfUnit();
+            return self != null && self == unit;
+        }
 
         void ReserveTemp(Hex cell)
         {
@@ -1905,7 +1916,7 @@ namespace TGD.CombatV2
                 return;
 
             _tempReservedThisAction.Add(cell);
-            string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? ResolveSelfUnit() : null);
+            string unitLabel = TurnManagerV2.FormatUnitLabel(ResolveSelfUnit());
             if (debugLog)
             {
                 LogInternal($"[Occ] TempReserve U={unitLabel} @{cell}");
@@ -1920,7 +1931,7 @@ namespace TGD.CombatV2
             _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
             {
-                string unitLabel = TurnManagerV2.FormatUnitLabel(driver != null ? ResolveSelfUnit() : null);
+                string unitLabel = TurnManagerV2.FormatUnitLabel(ResolveSelfUnit());
                 if (debugLog)
                 {
                     LogInternal($"[Occ] TempClear U={unitLabel} count={count} ({reason})");
@@ -1949,17 +1960,58 @@ namespace TGD.CombatV2
 
             AttackEventsV2.RaiseAttackAnimation(unit, comboIndex);
         }
+
+        PlayerOccupancyBridge ResolvePlayerBridge()
+        {
+            if (bridgeOverride != null)
+                return bridgeOverride;
+
+            if (_playerBridge != null && _playerBridge)
+                return _playerBridge;
+
+            var candidate = GetComponent<PlayerOccupancyBridge>();
+            if (candidate != null)
+                return candidate;
+
+            if (ctx != null)
+            {
+                candidate = ctx.GetComponent<PlayerOccupancyBridge>();
+                if (candidate != null)
+                    return candidate;
+
+                candidate = ctx.GetComponentInChildren<PlayerOccupancyBridge>(true);
+                if (candidate != null)
+                    return candidate;
+
+                candidate = ctx.GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (candidate != null)
+                    return candidate;
+            }
+
+            candidate = GetComponentInChildren<PlayerOccupancyBridge>(true);
+            if (candidate != null)
+                return candidate;
+
+            return GetComponentInParent<PlayerOccupancyBridge>(true);
+        }
+
         bool EnsureBound()
         {
             // 1) 桥优先：bridgeOverride → ctx.parent → 父链 → 自己
-            if (_bridge == null)
+            var desiredBridge = ResolvePlayerBridge();
+            if (!ReferenceEquals(_playerBridge, desiredBridge))
+                _playerBridge = desiredBridge;
+
+            UpdateBridgeSubscription(desiredBridge);
+
+            if (desiredBridge != null)
+                _bridge = desiredBridge;
+            else if (_bridge == null)
             {
-                if (bridgeOverride != null) _bridge = bridgeOverride;
-                else if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+                if (ctx != null) _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
                 if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
                 if (_bridge == null) _bridge = GetComponent<IActorOccupancyBridge>(); // 保底（空物体上的那只）
             }
-            _playerBridge ??= _bridge as PlayerOccupancyBridge;
 
             // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的
             if (occupancyService == null)
@@ -1974,6 +2026,26 @@ namespace TGD.CombatV2
                 && ResolveSelfUnit() != null
                 && _occ != null
                 && SelfActor != null;
+        }
+
+        void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
+        {
+            if (_boundPlayerBridge == desired)
+                return;
+
+            if (_boundPlayerBridge != null)
+                _boundPlayerBridge.AnchorChanged -= HandleAnchorChanged;
+
+            _boundPlayerBridge = null;
+
+            if (!isActiveAndEnabled)
+                return;
+
+            if (desired != null)
+            {
+                desired.AnchorChanged += HandleAnchorChanged;
+                _boundPlayerBridge = desired;
+            }
         }
 
     }
