@@ -12,7 +12,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
+    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
@@ -511,13 +511,27 @@ namespace TGD.CombatV2
             EnsureBound();
         }
 
-        void OnEnable()
+        protected override void HookEvents(bool bind)
         {
+            if (bind)
+            {
+                AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
+                AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
+                AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
+            }
+            else
+            {
+                AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
+                AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
+                AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
+            }
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
             EnsureBound();
             ClearPendingAttack();
-            AttackEventsV2.AttackStrikeFired += OnAttackStrikeFired;
-            AttackEventsV2.AttackAnimationEnded += OnAttackAnimationEnded;
-            AttackEventsV2.AttackMoveFinished += OnAttackMoveFinished;
             AttachTurnManager(turnManager);
             RefreshOccupancy();
         }
@@ -536,11 +550,9 @@ namespace TGD.CombatV2
             RefreshOccupancy();
         }
 
-        void OnDisable()
+        protected override void OnDisable()
         {
-            AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
-            AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
-            AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
+            base.OnDisable();
             UpdateBridgeSubscription(null);
             if (_boundTurnManager != null)
             {
@@ -560,18 +572,16 @@ namespace TGD.CombatV2
             _planAnchorVersion = -1;
         }
 
-        void OnDestroy()
+        protected override void OnDestroy()
         {
             UpdateBridgeSubscription(null);
-            AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
-            AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
-            AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
             if (_boundTurnManager != null)
             {
                 _boundTurnManager.TurnStarted -= OnTurnStarted;
                 _boundTurnManager.SideEnded -= OnSideEnded;
                 _boundTurnManager = null;
             }
+            base.OnDestroy();
         }
 
         void HandleAnchorChanged(Hex anchor, int version)
@@ -586,6 +596,8 @@ namespace TGD.CombatV2
 
         void OnTurnStarted(Unit unit)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             if (!UseTurnManager || turnManager == null || ResolveSelfUnit() != unit)
                 return;
 
@@ -1838,6 +1850,8 @@ namespace TGD.CombatV2
 
         void OnAttackStrikeFired(Unit unit, int comboIndex)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             if (!_pendingAttack.active || _pendingAttack.unit != unit)
                 return;
             if (_pendingAttack.strikeProcessed)
@@ -1856,6 +1870,8 @@ namespace TGD.CombatV2
 
         void OnAttackAnimationEnded(Unit unit, int comboIndex)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             if (_pendingAttack.unit != unit)
                 return;
             if (_pendingAttack.comboIndex > 0 && comboIndex > 0 && comboIndex != _pendingAttack.comboIndex)
@@ -1865,6 +1881,8 @@ namespace TGD.CombatV2
         }
         void OnAttackMoveFinished(Unit unit, Hex end)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             if (!IsMyUnit(unit))
                 return;
             ClearTempReservations("AttackMoveFinished", true);
@@ -1872,6 +1890,8 @@ namespace TGD.CombatV2
 
         void OnSideEnded(bool isPlayerSide)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             if (!UseTurnManager || turnManager == null)
                 return;
 
