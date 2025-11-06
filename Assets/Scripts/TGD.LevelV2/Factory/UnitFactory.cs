@@ -511,7 +511,8 @@ namespace TGD.LevelV2
 
             if (turnManager != null && bound != null)
             {
-                turnManager.RegisterSpawn(bound, faction);
+                bool isFriendly = faction == UnitFaction.Friendly;
+                turnManager.RegisterSpawn(bound, isFriendly);
                 bool isEnemy = turnManager.IsEnemyUnit(bound);
                 bool isPlayer = turnManager.IsPlayerUnit(bound);
                 Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
