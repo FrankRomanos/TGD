@@ -6,7 +6,7 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public abstract class ChainTestActionBase : MonoBehaviour, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext
+    public abstract class ChainTestActionBase : ActionToolBase, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext
     {
         [Header("Owner")]
         public HexBoardTestDriver driver;
@@ -71,6 +71,10 @@ namespace TGD.CombatV2
             }
         }
 
+        protected override void HookEvents(bool bind)
+        {
+        }
+
         TargetSelectionCursor Cursor => _cursor;
 
         public void SetCursorHighlighter(IHexHighlighter highlighter)
@@ -80,17 +84,23 @@ namespace TGD.CombatV2
 
         public virtual void OnEnterAim()
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             Cursor?.Clear();
             _lastTarget = null;
         }
 
         public virtual void OnExitAim()
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             Cursor?.Clear();
         }
 
         public virtual void OnHover(Hex hex)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                return;
             var cursor = Cursor;
             if (cursor == null)
                 return;
@@ -102,6 +112,8 @@ namespace TGD.CombatV2
 
         public virtual IEnumerator OnConfirm(Hex hex)
         {
+            if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
+                yield break;
             _lastTarget = hex;
             Cursor?.Clear();
             SetExecReport(Mathf.Max(0, timeCostSeconds), 0, Mathf.Max(0, energyCost));

@@ -13,7 +13,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
-    public sealed class HexClickMover : MonoBehaviour, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
+    public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -613,14 +613,23 @@ namespace TGD.CombatV2
             _bridge?.EnsurePlacedNow();
         }
 
-        void OnEnable()
+        protected override void HookEvents(bool bind)
         {
+            if (bind)
+                UpdateBridgeSubscription(ResolvePlayerBridge());
+            else
+                UpdateBridgeSubscription(null);
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
             EnsureBound();
         }
 
-        void OnDisable()
+        protected override void OnDisable()
         {
-            UpdateBridgeSubscription(null);
+            base.OnDisable();
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
@@ -630,9 +639,10 @@ namespace TGD.CombatV2
             _planAnchorVersion = -1;
         }
 
-        void OnDestroy()
+        protected override void OnDestroy()
         {
             UpdateBridgeSubscription(null);
+            base.OnDestroy();
         }
 
         void HandleAnchorChanged(Hex anchor, int version)

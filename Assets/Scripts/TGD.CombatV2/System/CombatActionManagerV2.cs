@@ -85,6 +85,7 @@ namespace TGD.CombatV2
         public bool IsExecuting => _phase == Phase.Executing;
 
         readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
+        readonly Dictionary<IActionToolV2, DestroySubscription> _destroySubscriptions = new();
         IActionToolV2 _activeTool;
         Unit _currentUnit;
         Hex? _hover;
@@ -187,6 +188,12 @@ namespace TGD.CombatV2
             public bool queued;
             public bool cancel;
             public IActionToolV2 tool;
+        }
+
+        struct DestroySubscription
+        {
+            public DestroyNotifier notifier;
+            public Action handler;
         }
 
         struct ExecReportData
@@ -534,27 +541,26 @@ namespace TGD.CombatV2
 
         void Awake()
         {
-            foreach (var mb in tools)
+            for (int i = tools.Count - 1; i >= 0; i--)
             {
-                if (!mb) continue;
+                var mb = tools[i];
+                if (Dead(mb))
+                {
+                    tools.RemoveAt(i);
+                    continue;
+                }
+
                 WireTurnManager(mb);
                 InjectCursorHighlighter(mb);
+
                 if (mb is IActionToolV2 tool)
-                {
-                    if (!_toolsById.TryGetValue(tool.Id, out var list))
-                    {
-                        list = new List<IActionToolV2>();
-                        _toolsById[tool.Id] = list;
-                    }
-                    if (!list.Contains(tool))
-                        list.Add(tool);
-                }
+                    RegisterTool(tool);
             }
         }
 
         void WireTurnManager(MonoBehaviour mb)
         {
-            if (mb == null) return;
+            if (Dead(mb)) return;
             switch (mb)
             {
                 case AttackControllerV2 attack:
@@ -573,7 +579,7 @@ namespace TGD.CombatV2
 
         void InjectCursorHighlighter(MonoBehaviour mb)
         {
-            if (mb == null)
+            if (Dead(mb))
                 return;
 
             switch (mb)
@@ -584,6 +590,135 @@ namespace TGD.CombatV2
                 case ChainTestActionBase chainTool:
                     chainTool.SetCursorHighlighter(EnsureChainHighlighter());
                     break;
+            }
+        }
+
+        public void RegisterTool(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+
+            var id = tool.Id;
+            if (string.IsNullOrEmpty(id))
+                return;
+
+            if (!_toolsById.TryGetValue(id, out var list) || list == null)
+            {
+                list = new List<IActionToolV2>();
+                _toolsById[id] = list;
+            }
+
+            if (!list.Contains(tool))
+                list.Add(tool);
+
+            if (tool is MonoBehaviour behaviour && !Dead(behaviour) && !tools.Contains(behaviour))
+                tools.Add(behaviour);
+
+            TrackDestroySubscription(tool);
+        }
+
+        public void UnregisterTool(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+
+            RemoveDestroySubscription(tool);
+            RemoveToolLookup(tool);
+
+            if (ReferenceEquals(_activeTool, tool))
+                CancelCurrent("toolRemoved");
+
+            if (tool is MonoBehaviour behaviour)
+            {
+                for (int i = tools.Count - 1; i >= 0; i--)
+                {
+                    var entry = tools[i];
+                    if (Dead(entry) || ReferenceEquals(entry, behaviour))
+                        tools.RemoveAt(i);
+                }
+            }
+            else
+            {
+                for (int i = tools.Count - 1; i >= 0; i--)
+                {
+                    if (Dead(tools[i]))
+                        tools.RemoveAt(i);
+                }
+            }
+        }
+
+        void TrackDestroySubscription(IActionToolV2 tool)
+        {
+            if (tool == null || _destroySubscriptions.ContainsKey(tool))
+                return;
+
+            if (tool is MonoBehaviour behaviour && !Dead(behaviour))
+            {
+                var notifier = behaviour.GetComponent<DestroyNotifier>() ?? behaviour.gameObject.AddComponent<DestroyNotifier>();
+                Action handler = () => OnToolDestroyed(tool);
+                notifier.OnDestroyed += handler;
+                _destroySubscriptions[tool] = new DestroySubscription
+                {
+                    notifier = notifier,
+                    handler = handler
+                };
+            }
+        }
+
+        void RemoveDestroySubscription(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+
+            if (_destroySubscriptions.TryGetValue(tool, out var sub))
+            {
+                if (sub.notifier != null)
+                    sub.notifier.OnDestroyed -= sub.handler;
+                _destroySubscriptions.Remove(tool);
+            }
+        }
+
+        void RemoveToolLookup(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+
+            var id = tool.Id;
+            if (string.IsNullOrEmpty(id))
+                return;
+
+            if (!_toolsById.TryGetValue(id, out var list) || list == null)
+                return;
+
+            list.Remove(tool);
+            if (list.Count == 0)
+                _toolsById.Remove(id);
+        }
+
+        void OnToolDestroyed(IActionToolV2 tool)
+        {
+            RemoveDestroySubscription(tool);
+            RemoveToolLookup(tool);
+
+            if (ReferenceEquals(_activeTool, tool))
+                CancelCurrent("toolDestroyed");
+
+            if (tool is MonoBehaviour behaviour)
+            {
+                for (int i = tools.Count - 1; i >= 0; i--)
+                {
+                    var entry = tools[i];
+                    if (Dead(entry) || ReferenceEquals(entry, behaviour))
+                        tools.RemoveAt(i);
+                }
+            }
+            else
+            {
+                for (int i = tools.Count - 1; i >= 0; i--)
+                {
+                    if (Dead(tools[i]))
+                        tools.RemoveAt(i);
+                }
             }
         }
 
@@ -854,7 +989,13 @@ namespace TGD.CombatV2
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 var candidate = list[i];
-                if (candidate == null || (candidate is MonoBehaviour behaviour && behaviour == null))
+                if (candidate == null)
+                {
+                    list.RemoveAt(i);
+                    continue;
+                }
+
+                if (candidate is UnityEngine.Object unityObj && Dead(unityObj))
                 {
                     list.RemoveAt(i);
                     continue;
@@ -869,7 +1010,7 @@ namespace TGD.CombatV2
                 for (int i = 0; i < list.Count; i++)
                 {
                     var tool = list[i];
-                    if (tool is MonoBehaviour behaviour && behaviour != null && behaviour.isActiveAndEnabled)
+                    if (tool is MonoBehaviour behaviour && !Dead(behaviour) && behaviour.isActiveAndEnabled)
                         return tool;
                 }
 
@@ -1337,7 +1478,7 @@ namespace TGD.CombatV2
 
             foreach (var mb in tools)
             {
-                if (mb == null || ReferenceEquals(mb, _activeTool))
+                if (Dead(mb) || ReferenceEquals(mb, _activeTool))
                     continue;
 
                 switch (mb)
@@ -1576,12 +1717,15 @@ namespace TGD.CombatV2
                 for (int i = pendingChain.Count - 1; i >= 0; --i)
                 {
                     var pending = pendingChain[i];
-                    if (pending.tool != null)
-                    {
-                        if (_queuedActionsPending > 0)
-                            _queuedActionsPending--;
-                        yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
-                    }
+                    if (pending.tool == null)
+                        continue;
+
+                    if (!TryResolveAliveTool(pending.tool, out var alivePending))
+                        continue;
+
+                    if (_queuedActionsPending > 0)
+                        _queuedActionsPending--;
+                    yield return ExecuteAndResolve(alivePending, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
                 }
 
                 if (cancelBase)
@@ -1857,14 +2001,17 @@ namespace TGD.CombatV2
                 for (int i = 0; i < derivedQueue.Count; i++)
                 {
                     var pending = derivedQueue[i];
-                    if (pending.tool != null)
-                    {
-                        if (_queuedActionsPending > 0)
-                            _queuedActionsPending--;
-                        var pendingBudget = pending.budget ?? budget;
-                        var pendingResources = pending.resources ?? resources;
-                        yield return ExecuteAndResolve(pending.tool, unit, pending.plan, pendingBudget, pendingResources, pending.depth);
-                    }
+                    if (pending.tool == null)
+                        continue;
+
+                    if (!TryResolveAliveTool(pending.tool, out var alivePending))
+                        continue;
+
+                    if (_queuedActionsPending > 0)
+                        _queuedActionsPending--;
+                    var pendingBudget = pending.budget ?? budget;
+                    var pendingResources = pending.resources ?? resources;
+                    yield return ExecuteAndResolve(alivePending, unit, pending.plan, pendingBudget, pendingResources, pending.depth);
                 }
             }
             TryFinalizeEndTurn();
@@ -2054,6 +2201,38 @@ namespace TGD.CombatV2
             _phase = Phase.Idle;
             ClearPlanStack(unit);
             TryFinalizeEndTurn();
+        }
+
+        void CancelCurrent(string reason)
+        {
+            var current = _activeTool;
+            if (current == null)
+                return;
+
+            var mapped = string.IsNullOrEmpty(reason) ? "toolDestroyed" : reason;
+
+            if (_phase == Phase.Aiming)
+            {
+                if (TryResolveAliveTool(current, out var alive))
+                {
+                    var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(alive);
+                    NotifyConfirmAbort(alive, unit, mapped);
+                }
+
+                CleanupAfterAbort(current, false);
+                return;
+            }
+
+            if (TryResolveAliveTool(current, out var executing))
+            {
+                var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(executing);
+                NotifyConfirmAbort(executing, unit, mapped);
+            }
+
+            TryHideAllAimUI();
+            if (ReferenceEquals(_activeTool, current))
+                _activeTool = null;
+            _hover = null;
         }
 
         void NotifyConfirmAbort(IActionToolV2 tool, Unit unit, string reason)
@@ -2748,8 +2927,8 @@ namespace TGD.CombatV2
                     for (int i = 0; i < pendingActions.Count; i++)
                     {
                         var entry = pendingActions[i];
-                        if (entry.tool != null)
-                            pendingSet.Add(entry.tool);
+                        if (entry.tool != null && TryResolveAliveTool(entry.tool, out var pendingTool))
+                            pendingSet.Add(pendingTool);
                     }
                 }
 
@@ -3809,6 +3988,8 @@ namespace TGD.CombatV2
         {
             foreach (var mb in tools)
             {
+                if (Dead(mb))
+                    continue;
                 switch (mb)
                 {
                     case HexClickMover mover when mover.IsBusy:
@@ -4047,12 +4228,15 @@ namespace TGD.CombatV2
             for (int i = pendingChain.Count - 1; i >= 0; --i)
             {
                 var pending = pendingChain[i];
-                if (pending.tool != null)
-                {
-                    if (_queuedActionsPending > 0)
-                        _queuedActionsPending--;
-                    yield return ExecuteAndResolve(pending.tool, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
-                }
+                if (pending.tool == null)
+                    continue;
+
+                if (!TryResolveAliveTool(pending.tool, out var alivePending))
+                    continue;
+
+                if (_queuedActionsPending > 0)
+                    _queuedActionsPending--;
+                yield return ExecuteAndResolve(alivePending, pending.owner ?? unit, pending.plan, pending.budget, pending.resources, pending.depth);
             }
 
             ClearPlanStack(unit);
@@ -4149,6 +4333,8 @@ namespace TGD.CombatV2
             sink.StartSeconds(key, seconds);
         }
 
+        static bool Dead(UnityEngine.Object o) => o == null || o.Equals(null);
+
         static bool TryResolveAliveTool(IActionToolV2 candidate, out IActionToolV2 tool)
         {
             if (candidate == null)
@@ -4157,7 +4343,7 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            if (candidate is UnityEngine.Object unityObj && unityObj == null)
+            if (candidate is UnityEngine.Object unityObj && Dead(unityObj))
             {
                 tool = null;
                 return false;
@@ -4195,16 +4381,50 @@ namespace TGD.CombatV2
         void PruneDeadTools()
         {
             if (_toolsById == null) return;
+
+            List<string> emptyKeys = null;
+            HashSet<IActionToolV2> removed = null;
+
             foreach (var kv in _toolsById)
             {
                 var list = kv.Value;
-                if (list == null) continue;
-                // 去掉已销毁引用（Unity 的假 null，用 (Object)o == null 判断）
-                list.RemoveAll(t =>
+                if (list == null)
+                    continue;
+
+                for (int i = list.Count - 1; i >= 0; i--)
                 {
-                    var mb = t as UnityEngine.Object;
-                    return mb == null;
-                });
+                    var tool = list[i];
+                    if (tool is UnityEngine.Object unityObj && Dead(unityObj))
+                    {
+                        list.RemoveAt(i);
+                        removed ??= new HashSet<IActionToolV2>();
+                        removed.Add(tool);
+                    }
+                }
+
+                if (list.Count == 0)
+                {
+                    emptyKeys ??= new List<string>();
+                    emptyKeys.Add(kv.Key);
+                }
+            }
+
+            if (emptyKeys != null)
+            {
+                for (int i = 0; i < emptyKeys.Count; i++)
+                    _toolsById.Remove(emptyKeys[i]);
+            }
+
+            if (removed != null)
+            {
+                foreach (var tool in removed)
+                    _destroySubscriptions.Remove(tool);
+            }
+
+            for (int i = tools.Count - 1; i >= 0; i--)
+            {
+                if (Dead(tools[i]))
+                    tools.RemoveAt(i);
             }
         }
 

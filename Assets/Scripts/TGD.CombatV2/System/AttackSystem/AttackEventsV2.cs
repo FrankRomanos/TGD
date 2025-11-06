@@ -32,6 +32,21 @@ namespace TGD.CombatV2
 
         public static event Action<Unit, AttackRejectReasonV2, string> AttackRejected;
 
+        public static void Reset()
+        {
+            AimShown = null;
+            AimHidden = null;
+            AttackMoveStarted = null;
+            AttackMoveStep = null;
+            AttackMoveFinished = null;
+            AttackHit = null;
+            AttackAnimationRequested = null;
+            AttackStrikeFired = null;
+            AttackAnimationEnded = null;
+            AttackMiss = null;
+            AttackRejected = null;
+        }
+
         internal static void RaiseAimShown(Unit u, IEnumerable<Hex> cells) => AimShown?.Invoke(u, cells);
         internal static void RaiseAimHidden() => AimHidden?.Invoke();
 
