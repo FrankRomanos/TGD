@@ -12,7 +12,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
+    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser
     {
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
@@ -1618,21 +1618,34 @@ namespace TGD.CombatV2
 
         bool IsEnemyHex(Hex hex)
         {
+            if (targetValidator == null || _attackSpec == null)
+                return false;
+
+            var self = ResolveSelfUnit();
+            var check = targetValidator.Check(self, hex, _attackSpec);
+            return check.hit == HitKind.Enemy;
+        }
+
+        void DebugEnemyProbe(Hex hex)
+        {
             RefreshOccupancy();
+            var self = ResolveSelfUnit();
 
-            if (_occ == null)
-                return false;
+            IGridActor occActor = null;
+            bool hasActor = _occ != null && _occ.TryGetActor(hex, out occActor) && occActor != null;
+            string actorName = hasActor ? occActor.GetType().Name : "NULL";
+            string unitAt = "NO-UNIT";
+            if (hasActor && occActor is UnitGridAdapter grid && grid.Unit != null)
+                unitAt = grid.Unit.Id;
 
-            if (!_occ.TryGetActor(hex, out var actor) || actor == null)
-                return false;
+            bool selfPlayer = UseTurnManager && turnManager?.IsPlayerUnit(self) == true;
+            bool selfEnemy = UseTurnManager && turnManager?.IsEnemyUnit(self) == true;
 
-            if (actor == SelfActor)
-                return false;
+            TargetCheckResult validatorResult = default;
+            if (targetValidator != null && _attackSpec != null)
+                validatorResult = targetValidator.Check(self, hex, _attackSpec);
 
-            if (actor is UnitGridAdapter adapter)
-                return IsEnemyUnit(adapter.Unit);
-
-            return false;
+            Debug.Log($"[Probe] occ={_occ != null} hasActor={hasActor} actor={actorName} unitAt={unitAt} self={self?.Id} selfP={selfPlayer} selfE={selfEnemy} validatorHit={validatorResult.hit} validatorPlan={validatorResult.plan}", this);
         }
 
         bool IsEnemyUnit(Unit candidate)
@@ -1647,21 +1660,19 @@ namespace TGD.CombatV2
             if (ReferenceEquals(candidate, self))
                 return false;
 
-            if (UseTurnManager && turnManager != null)
-            {
-                bool selfPlayer = turnManager.IsPlayerUnit(self);
-                bool selfEnemy = turnManager.IsEnemyUnit(self);
-
-                if (selfPlayer)
-                    return turnManager.IsEnemyUnit(candidate);
-
-                if (selfEnemy)
-                    return turnManager.IsPlayerUnit(candidate);
-
+            if (!UseTurnManager || turnManager == null)
                 return false;
-            }
 
-            return true;
+            bool selfPlayer = turnManager.IsPlayerUnit(self);
+            bool selfEnemy = turnManager.IsEnemyUnit(self);
+
+            if (selfPlayer)
+                return turnManager.IsEnemyUnit(candidate);
+
+            if (selfEnemy)
+                return turnManager.IsPlayerUnit(candidate);
+
+            return turnManager.IsEnemyUnit(candidate);
         }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)

@@ -5,7 +5,7 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public sealed class TestEnemySustainedAction : ChainTestActionBase
+    public sealed class TestEnemySustainedAction : ChainActionBase
     {
         [SerializeField]
         string resolveLog = "Test Sustained";

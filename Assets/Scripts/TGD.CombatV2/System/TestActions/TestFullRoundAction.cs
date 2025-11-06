@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
-    public sealed class TestFullRoundAction : ChainTestActionBase, IFullRoundActionTool
+    public sealed class TestFullRoundAction : ChainActionBase, IFullRoundActionTool
     {
         [Header("Full Round")]
         [Min(1)] public int rounds = 2;
