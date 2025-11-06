@@ -1,6 +1,7 @@
 // File: TGD.HexBoard/HexClickMover.cs
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
@@ -24,6 +25,7 @@ namespace TGD.CombatV2
         public HexOccupancyService occupancyService;
         [Header("Context (optional)")]           // ★ 新增
         public UnitRuntimeContext ctx;            // ★ 新增
+        public TurnManagerV2 turnManager;
 
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
@@ -34,7 +36,6 @@ namespace TGD.CombatV2
         public bool UseTurnManager = true;
         public bool ManageEnergyLocally = false;
         public bool ManageTurnTimeLocally = false;
-        TurnManagerV2 _turnManager;
 
         [Header("Turn Time (TEMP no-TM)")]
         public bool simulateTurnTime = true;
@@ -55,19 +56,32 @@ namespace TGD.CombatV2
 
         public void AttachTurnManager(TurnManagerV2 tm)
         {
-            _turnManager = tm;
+            turnManager = tm;
             UseTurnManager = tm != null;
             simulateTurnTime = !UseTurnManager;
             ManageTurnTimeLocally = !UseTurnManager;
             ManageEnergyLocally = !UseTurnManager;
             if (!ManageTurnTimeLocally)
                 _turnSecondsLeft = -1;
+            if (occupancyService == null && tm != null)
+                occupancyService = tm.occupancyService;
+            ReacquireOcc();
         }
 
         public void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
         {
             ctx = context;
+            if (_cachedResolvedCtx != ctx)
+            {
+                _cachedResolvedCtx = null;
+                _cachedResolvedUnit = null;
+            }
             AttachTurnManager(tm);
+        }
+
+        public void Bind(UnitRuntimeContext boundCtx, TurnManagerV2 tm)
+        {
+            BindContext(boundCtx, tm);
         }
         [Header("Action Config & Cost")]
         public MonoBehaviour costProvider;
@@ -78,7 +92,7 @@ namespace TGD.CombatV2
 
         [Header("Picking")]
         public Camera pickCamera;
-        public LayerMask pickMask = ~0;
+        public LayerMask pickMask;
         public float rayMaxDistance = 2000f;
         public float pickPlaneY = 0.01f;
 
@@ -160,6 +174,138 @@ namespace TGD.CombatV2
         public string ResolveMoveActionId()
             => ctx != null ? ctx.MoveActionId : MoveProfileRules.DefaultActionId;
 
+        Unit ResolveUnitFromContext()
+        {
+            var context = ctx;
+            if (context == null)
+                return null;
+
+            if (_cachedResolvedCtx == context && _cachedResolvedUnit != null)
+                return _cachedResolvedUnit;
+
+            Unit unit = null;
+
+            if (!s_ctxBoundUnitResolved)
+            {
+                var type = typeof(UnitRuntimeContext);
+                s_ctxBoundUnitProperty = type.GetProperty("BoundUnit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (s_ctxBoundUnitProperty == null)
+                {
+                    s_ctxBoundUnitField = type.GetField("BoundUnit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        ?? type.GetField("_boundUnit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                }
+                s_ctxBoundUnitResolved = true;
+            }
+
+            if (s_ctxBoundUnitProperty != null)
+            {
+                try { unit = s_ctxBoundUnitProperty.GetValue(context) as Unit; }
+                catch { unit = null; }
+            }
+
+            if (unit == null && s_ctxBoundUnitField != null)
+            {
+                try { unit = s_ctxBoundUnitField.GetValue(context) as Unit; }
+                catch { unit = null; }
+            }
+
+            if (unit == null && turnManager != null)
+            {
+                if (!s_tmUnitByContextResolved)
+                {
+                    s_tmUnitByContextField = typeof(TurnManagerV2).GetField("_unitByContext", BindingFlags.Instance | BindingFlags.NonPublic);
+                    s_tmUnitByContextResolved = true;
+                }
+
+                if (s_tmUnitByContextField != null)
+                {
+                    try
+                    {
+                        if (s_tmUnitByContextField.GetValue(turnManager) is Dictionary<UnitRuntimeContext, Unit> map &&
+                            map.TryGetValue(context, out var mapped) && mapped != null)
+                        {
+                            unit = mapped;
+                        }
+                    }
+                    catch { unit = null; }
+                }
+            }
+
+            if (unit != null)
+            {
+                _cachedResolvedCtx = context;
+                _cachedResolvedUnit = unit;
+            }
+
+            return unit;
+        }
+
+        static Unit ResolveUnitFromActor(object actor)
+        {
+            if (actor == null)
+                return null;
+
+            if (actor is UnitGridAdapter adapter)
+                return adapter.Unit;
+
+            var type = actor.GetType();
+            if (!s_actorUnitMemberCache.TryGetValue(type, out var member))
+            {
+                member = type.GetProperty("Unit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    ?? (MemberInfo)type.GetField("Unit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                s_actorUnitMemberCache[type] = member;
+            }
+
+            if (member is PropertyInfo prop)
+            {
+                try { return prop.GetValue(actor) as Unit; }
+                catch { return null; }
+            }
+
+            if (member is FieldInfo field)
+            {
+                try { return field.GetValue(actor) as Unit; }
+                catch { return null; }
+            }
+
+            return null;
+        }
+
+        Unit ResolveUnitFromBridge()
+        {
+            if (_bridge == null)
+                return null;
+
+            try { return ResolveUnitFromActor(_bridge.Actor); }
+            catch { return null; }
+        }
+
+        private Unit ResolveUnit()
+        {
+            var unit = ResolveUnitFromContext();
+            if (unit != null)
+                return unit;
+
+            unit = ResolveUnitFromBridge();
+            if (unit != null)
+                return unit;
+
+            return driver != null ? driver.UnitRef : null;
+        }
+
+        public void ReacquireOcc()
+        {
+            _occ = null;
+            if (occupancyService != null)
+                _occ = occupancyService.Get();
+            if (_occ == null)
+            {
+                var svc = UnityEngine.Object.FindFirstObjectByType<HexOccupancyService>(FindObjectsInactive.Include);
+                if (svc != null)
+                    _occ = svc.Get();
+            }
+        }
+
         MoveCostSpec BuildCostSpec()
         {
             return new MoveCostSpec
@@ -195,6 +341,14 @@ namespace TGD.CombatV2
         IActorOccupancyBridge _bridge;
         PlayerOccupancyBridge _playerBridge;
         HexOccupancy _occ;
+        Unit _cachedResolvedUnit;
+        UnitRuntimeContext _cachedResolvedCtx;
+        static PropertyInfo s_ctxBoundUnitProperty;
+        static FieldInfo s_ctxBoundUnitField;
+        static bool s_ctxBoundUnitResolved;
+        static FieldInfo s_tmUnitByContextField;
+        static bool s_tmUnitByContextResolved;
+        static readonly Dictionary<System.Type, MemberInfo> s_actorUnitMemberCache = new();
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
@@ -243,16 +397,15 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             RefreshStateForAim();
             _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
+            ReacquireOcc();
+
+            if (!HasReadyDependencies(out _))
+                return result;
 
             if (ctx != null && ctx.Entangled)
                 return result;
 
-            if (authoring?.Layout == null || driver == null || !driver.IsReady || _bridge == null || SelfActor == null)
-                return result;
-
-            var unit = driver != null ? driver.UnitRef : null;
+            var unit = ResolveUnit();
             if (unit == null)
                 return result;
 
@@ -326,50 +479,46 @@ namespace TGD.CombatV2
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
 
-        void DumpReadiness()
+        void DumpReadiness(string reason)
         {
 #if UNITY_EDITOR
-            var missing = new List<string>();
-            if (!authoring)
-                missing.Add(nameof(authoring));
-            else if (authoring.Layout == null)
-                missing.Add("authoring.Layout");
-            if (!tiler)
-                missing.Add(nameof(tiler));
-            if (!driver)
-                missing.Add(nameof(driver));
-            else if (!driver.IsReady)
-                missing.Add("driver.IsReady");
-            if (_playerBridge == null)
-                missing.Add("playerBridge");
-            if (_bridge == null)
-                missing.Add("bridge");
-            if (occupancyService == null)
-                missing.Add(nameof(occupancyService));
-            if (_occ == null)
-                missing.Add("_occ");
-            if (SelfActor == null)
-                missing.Add("SelfActor");
-
-            if (missing.Count > 0)
-                Debug.LogWarning($"[HexClickMover] Not ready. Missing: {string.Join(", ", missing)}", this);
+            Debug.LogWarning($"[HexClickMover] Not ready. reason={reason}", this);
 #endif
         }
 
-        public bool TryPrecheckAim(out string reason, bool raiseHud = true)
+        bool HasReadyDependencies(out string reason)
+        {
+            if (_occ == null)
+                ReacquireOcc();
+            reason = null;
+            if (ctx == null) { reason = "noCtx"; return false; }
+            if (ResolveUnit() == null) { reason = "noUnit"; return false; }
+            if (UseTurnManager && turnManager == null) { reason = "noTM"; return false; }
+            if (authoring == null) { reason = "noAuthoring"; return false; }
+            if (authoring.Layout == null) { reason = "noLayout"; return false; }
+            if (_occ == null) { reason = "noOccupancy"; return false; }
+            if (_bridge == null) { reason = "noBridge"; return false; }
+            if (SelfActor == null) { reason = "noActor"; return false; }
+            if (pickCamera == null) { reason = "noPickCamera"; return false; }
+            return true;
+        }
+
+        bool TryPrecheckAimInternal(bool raiseHud, out string reason)
         {
             EnsureTurnTimeInited();
             RefreshStateForAim();
-            var unit = driver != null ? driver.UnitRef : null;
             _bridge?.EnsurePlacedNow();
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
+            if (!HasReadyDependencies(out reason))
             {
-                DumpReadiness();
+#if UNITY_EDITOR
+                Debug.LogWarning($"[Move.NotReady] {name} reason={reason}", this);
+#endif
                 if (raiseHud)
-                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
-                reason = "(not-ready)";
+                    HexMoveEvents.RaiseRejected(ResolveUnit(), MoveBlockReason.NotReady, null);
                 return false;
             }
+
+            var unit = ResolveUnit();
 
             if (ctx != null && ctx.Entangled)
             {
@@ -383,8 +532,8 @@ namespace TGD.CombatV2
             var costSpec = BuildCostSpec();
             if (UseTurnManager)
             {
-                var budget = (_turnManager != null && unit != null)
-                    ? _turnManager.GetBudget(unit)
+                var budget = (turnManager != null && unit != null)
+                    ? turnManager.GetBudget(unit)
                     : null;
                 if (budget == null || !budget.HasTime(needSec))
                 {
@@ -401,14 +550,15 @@ namespace TGD.CombatV2
                 reason = "(no-time)";
                 return false;
             }
+
             if (_cost != null)
             {
                 if (UseTurnManager)
                 {
                     int energyRate = Mathf.Max(0, costSpec.energyPerSecond);
-                    if (energyRate > 0 && _turnManager != null && unit != null)
+                    if (energyRate > 0 && turnManager != null && unit != null)
                     {
-                        var pool = _turnManager.GetResources(unit);
+                        var pool = turnManager.GetResources(unit);
                         if (pool != null && !pool.Has("Energy", energyRate))
                         {
                             if (raiseHud)
@@ -426,8 +576,14 @@ namespace TGD.CombatV2
                     return false;
                 }
             }
+
             reason = null;
             return true;
+        }
+
+        public bool TryPrecheckAim(out string reason, bool raiseHud = true)
+        {
+            return TryPrecheckAimInternal(raiseHud, out reason);
         }
 
         public void OnEnterAim()
@@ -451,10 +607,15 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             RefreshStateForAim();
             _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
+            ReacquireOcc();
 
-            var unit = driver != null ? driver.UnitRef : null;
+            if (!HasReadyDependencies(out var reason))
+            {
+                HexMoveEvents.RaiseRejected(ResolveUnit(), MoveBlockReason.NotReady, reason);
+                yield break;
+            }
+
+            var unit = ResolveUnit();
             var targetCheck = ValidateMoveTarget(unit, hex);
             // Phase logging handled by CombatActionManagerV2.
 
@@ -469,13 +630,13 @@ namespace TGD.CombatV2
             // 再做一次兜底预检查（避免竞态）
             if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < needSec)
             {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
                 yield break;
             }
             var costSpec = BuildCostSpec();
-            if (_cost != null && !_cost.HasEnough(driver.UnitRef, costSpec))
+            if (_cost != null && !_cost.HasEnough(unit, costSpec))
             {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null);
+                HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
                 yield break;
             }
 
@@ -493,7 +654,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, null);
+                HexMoveEvents.RaiseRejected(unit, MoveBlockReason.PathBlocked, null);
                 yield break;
             }
         }
@@ -518,8 +679,10 @@ namespace TGD.CombatV2
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
-            _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
-            _bridge = _playerBridge as IActorOccupancyBridge;
+            _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+            _playerBridge = _bridge as PlayerOccupancyBridge ?? GetComponentInParent<PlayerOccupancyBridge>(true);
+            if (_bridge == null && _playerBridge != null)
+                _bridge = _playerBridge;
             if (driver == null)
                 driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (!occupancyService)
@@ -559,21 +722,31 @@ namespace TGD.CombatV2
             tiler?.EnsureBuilt();
 
             driver?.EnsureInit();
-            if (authoring?.Layout == null || driver == null || !driver.IsReady) return;
 
             if (_playerBridge == null)
                 _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
             if (_bridge == null)
-                _bridge = _playerBridge as IActorOccupancyBridge;
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true) ?? _playerBridge;
 
             if (occupancyService)
                 _occ = occupancyService.Get();
-            else if (_bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
+            else if (_playerBridge != null && _playerBridge.occupancyService)
             {
-                occupancyService = concreteBridge.occupancyService;
+                occupancyService = _playerBridge.occupancyService;
                 _occ = occupancyService ? occupancyService.Get() : null;
             }
 
+            if (occupancyService == null && driver != null)
+            {
+                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
+                if (!occupancyService && driver.authoring != null)
+                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
+                if (occupancyService)
+                    _occ = occupancyService.Get();
+            }
+
+            if (_occ == null)
+                ReacquireOcc();
             _bridge?.EnsurePlacedNow();
         }
 
@@ -581,6 +754,8 @@ namespace TGD.CombatV2
         {
             if (_playerBridge == null)
                 _playerBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+            if (_bridge == null)
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true) ?? _playerBridge;
             if (_playerBridge != null)
                 _playerBridge.AnchorChanged += HandleAnchorChanged;
         }
@@ -619,7 +794,8 @@ namespace TGD.CombatV2
         void Update()
         {
             if (!_showing || _moving) return;
-            if (authoring == null || driver == null || !driver.IsReady) return;//短路返回
+            if (authoring == null || authoring.Layout == null) return;
+            if (_bridge == null || SelfActor == null) return;
         }
 
         MoveRateSnapshot BuildMoveRates(Hex start)
@@ -711,17 +887,18 @@ namespace TGD.CombatV2
             result = null;
 
             _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
+            ReacquireOcc();
 
-            if (authoring?.Layout == null || driver == null || !driver.IsReady || _bridge == null || SelfActor == null)
+            if (authoring?.Layout == null || _bridge == null || SelfActor == null)
                 return false;
 
-            if (occupancyService != null && _occ == null)
+            if (_occ == null)
                 return false;
 
             var layout = authoring.Layout;
             var startHex = CurrentAnchor;
+
+            var unit = ResolveUnit();
 
             var rates = BuildMoveRates(startHex);
 
@@ -772,8 +949,8 @@ namespace TGD.CombatV2
             }
 
             var previewMap = new HexBoardMap<Unit>(layout);
-            if (driver != null && driver.UnitRef != null)
-                previewMap.Set(driver.UnitRef, startHex);
+            if (unit != null)
+                previewMap.Set(unit, startHex);
 
             result = HexMovableRange.Compute(layout, previewMap, startHex, steps, Block);
 
@@ -793,17 +970,22 @@ namespace TGD.CombatV2
             if (!_isAiming || _isExecuting)
                 return;
 #if UNITY_EDITOR
-            var unitPos = (driver != null && driver.UnitRef != null) ? driver.UnitRef.Position : Hex.Zero;
+            var unit = ResolveUnit();
+            var unitPos = unit != null ? unit.Position : Hex.Zero;
             var anchor = CurrentAnchor;
-            var occOk = (_playerBridge != null && _playerBridge.IsReady);
-            var label = TurnManagerV2.FormatUnitLabel(driver?.UnitRef);
-            LogInternal($"[Probe][MoveAim] unit={label} driver={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
+            var occOk = _bridge != null;
+            var label = TurnManagerV2.FormatUnitLabel(unit);
+            LogInternal($"[Probe][MoveAim] unit={label} pos={unitPos} anchor={anchor} occReady={occOk} bridge={_bridge?.GetType().Name}");
 #endif
             _bridge?.EnsurePlacedNow();
-            if (occupancyService)
-                _occ = occupancyService.Get();
-            if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
-            { HexMoveEvents.RaiseRejected(driver ? driver.UnitRef : null, MoveBlockReason.NotReady, null); return; }
+            ReacquireOcc();
+
+            var resolvedUnit = ResolveUnit();
+            if (!HasReadyDependencies(out var reason))
+            {
+                HexMoveEvents.RaiseRejected(resolvedUnit, MoveBlockReason.NotReady, reason);
+                return;
+            }
 
             _painter.Clear();
 
@@ -811,22 +993,24 @@ namespace TGD.CombatV2
             {
                 _paths.Clear();
                 _previewDirty = true;
-                HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, null);
+                HexMoveEvents.RaiseRejected(resolvedUnit, MoveBlockReason.Entangled, null);
                 _showing = true;
                 return;
             }
 
-            if (!TryRebuildPathCache(out var result))
+            if (!TryRebuildPathCache(out var result) || result == null)
             {
                 _paths.Clear();
                 _previewDirty = true;
+                HexMoveEvents.RaiseRejected(resolvedUnit, MoveBlockReason.PathBlocked, null);
                 return;
             }
 
             _painter.Paint(result.Paths.Keys, rangeColor);
-            if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor);
+            if (showBlockedAsRed)
+                _painter.Paint(result.Blocked, invalidColor);
 
-            HexMoveEvents.RaiseRangeShown(driver.UnitRef, result.Paths.Keys);
+            HexMoveEvents.RaiseRangeShown(resolvedUnit, result.Paths.Keys);
             _showing = true;
         }
 
@@ -856,7 +1040,7 @@ namespace TGD.CombatV2
 
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
-            unit ??= driver != null ? driver.UnitRef : null;
+            unit ??= ResolveUnit();
             (MoveBlockReason mapped, string message) = reason switch
             {
                 "lackTime" => (MoveBlockReason.NoBudget, "No More Time"),
@@ -898,40 +1082,43 @@ namespace TGD.CombatV2
             if (path == null || path.Count < 2) yield break;
 
             _isExecuting = true;
+            var unit = ResolveUnit();
 
             try
             {
                 if (_playerBridge != null && plannedAnchorVersion >= 0 && plannedAnchorVersion != _playerBridge.AnchorVersion)
                 {
                     Debug.LogWarning($"[Guard] Anchor changed before execute (planV={plannedAnchorVersion} nowV={_playerBridge.AnchorVersion}). Abort.", this);
-                    HexMoveEvents.RaiseRejected(driver != null ? driver.UnitRef : null, MoveBlockReason.PathBlocked, "Anchor changed.");
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.PathBlocked, "Anchor changed.");
                     yield break;
                 }
 
                 _bridge?.EnsurePlacedNow();
-                if (occupancyService)
-                    _occ = occupancyService.Get();
-                if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
+                ReacquireOcc();
+                if (!HasReadyDependencies(out var reason))
+                {
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, reason);
                     yield break;
+                }
 
                 int requiredSec = ResolveMoveBudgetSeconds();
 
                 if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
                 {
-                    HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NoBudget, "No More Time");
+                    HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
                     yield break;
                 }
 
                 var costSpec = BuildCostSpec();
                 if (_cost != null)
                 {
-                    if (_cost.IsOnCooldown(driver.UnitRef, costSpec))
-                    { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.OnCooldown, null); yield break; }
-                    if (!_cost.HasEnough(driver.UnitRef, costSpec))
-                    { HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.NotEnoughResource, null); yield break; }
+                    if (_cost.IsOnCooldown(unit, costSpec))
+                    { HexMoveEvents.RaiseRejected(unit, MoveBlockReason.OnCooldown, null); yield break; }
+                    if (!_cost.HasEnough(unit, costSpec))
+                    { HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null); yield break; }
 
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost.Pay(driver.UnitRef, costSpec);
+                        _cost.Pay(unit, costSpec);
                 }
 
                 var rates = BuildMoveRates(path[0]);
@@ -961,10 +1148,10 @@ namespace TGD.CombatV2
                 if (reached == null || reached.Count < 2)
                 {
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(driver.UnitRef, costSpec, requiredSec);
+                        _cost?.RefundSeconds(unit, costSpec, requiredSec);
                     if (!UseTurnManager && ManageTurnTimeLocally)
                         _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
-                    HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, requiredSec);
+                    HexMoveEvents.RaiseTimeRefunded(unit, requiredSec);
                     yield break;
                 }
 
@@ -977,7 +1164,8 @@ namespace TGD.CombatV2
                     yield break;
                 }
                 _moving = true;
-                if (driver.unitView != null)
+                Transform view = (driver != null && driver.unitView != null) ? driver.unitView : transform;
+                if (driver != null && driver.unitView != null && unit != null)
                 {
                     var fromW = hexSpace.HexToWorld(reached[0], y);
                     var toW = hexSpace.HexToWorld(reached[^1], y);
@@ -985,18 +1173,15 @@ namespace TGD.CombatV2
                     float turn = ResolveMoveTurnDeg();
                     float speed = ResolveMoveTurnSpeed();
 
-                    var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(driver.UnitRef.Facing, fromW, toW, keep, turn);
+                    var (nf, yaw) = HexFacingUtil.ChooseFacingByAngle45(unit.Facing, fromW, toW, keep, turn);
                     yield return HexFacingUtil.RotateToYaw(driver.unitView, yaw, speed);
-                    driver.UnitRef.Facing = nf;
+                    unit.Facing = nf;
                     if (SelfActor != null) SelfActor.Facing = nf;
                 }
 
-                HexMoveEvents.RaiseMoveStarted(driver.UnitRef, reached);
+                HexMoveEvents.RaiseMoveStarted(unit, reached);
 
-                var layout = authoring.Layout;
-                var unit = driver.UnitRef;
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                Transform view = (driver.unitView != null) ? driver.unitView : this.transform;
                 bool truncatedByBudget = (reached.Count < path.Count);
                 bool stoppedByExternal = false;
 
@@ -1004,7 +1189,7 @@ namespace TGD.CombatV2
                 {
                     if (ctx != null && ctx.Entangled)
                     {
-                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.Entangled, "Break Move!");
+                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, "Break Move!");
                         stoppedByExternal = true;
                     }
 
@@ -1023,13 +1208,12 @@ namespace TGD.CombatV2
                     }
                     if (env != null && env.IsPit(to))
                     {
-                        HexMoveEvents.RaiseRejected(driver.UnitRef, MoveBlockReason.PathBlocked, "Pit");
+                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.PathBlocked, "Pit");
                         stoppedByExternal = true;
                         break;
                     }
 
                     HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
-
 
                     var fromW = hexSpace.HexToWorld(from, y);
                     var toW = hexSpace.HexToWorld(to, y);
@@ -1039,7 +1223,6 @@ namespace TGD.CombatV2
                         : ClampMoveRate(rates.baseNoEnv);
                     float stepDuration = Mathf.Max(minStepSeconds, 1f / Mathf.Max(MoveRateMin, effMR));
 
-
                     float t = 0f;
                     while (t < 1f)
                     {
@@ -1048,8 +1231,8 @@ namespace TGD.CombatV2
                         yield return null;
                     }
 
-
-                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing);
+                    var commitFacing = SelfActor != null ? SelfActor.Facing : unit.Facing;
+                    _bridge?.MoveCommit(to, commitFacing);
                     if (_sticky != null && status != null &&
                           _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
                           stickTurns > 0 && !Mathf.Approximately(stickM, 1f))
@@ -1058,24 +1241,23 @@ namespace TGD.CombatV2
                         LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                     }
 
-                    if (driver.Map != null)
+                    if (driver != null && driver.Map != null)
                     { if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to); }
-                    unit.Position = to;
-                    driver.SyncView();
+                    if (unit != null)
+                        unit.Position = to;
+                    if (driver != null)
+                        driver.SyncView();
                 }
 
-                if (driver != null && driver.UnitRef != null)
-                {
-                    var finalAnchor = CurrentAnchor;
-                    var finalFacing = SelfActor != null ? SelfActor.Facing : driver.UnitRef.Facing;
-                    _bridge?.MoveCommit(finalAnchor, finalFacing);
-                }
+                var finalAnchor = CurrentAnchor;
+                var finalFacing = SelfActor != null ? SelfActor.Facing : unit?.Facing ?? Facing4.PlusQ;
+                _bridge?.MoveCommit(finalAnchor, finalFacing);
 
                 _moving = false;
-                HexMoveEvents.RaiseMoveFinished(driver.UnitRef, CurrentAnchor);
+                HexMoveEvents.RaiseMoveFinished(unit, CurrentAnchor);
                 if (truncatedByBudget && !stoppedByExternal)
                 {
-                    HexMoveEvents.RaiseNoMoreTime(driver.UnitRef);
+                    HexMoveEvents.RaiseNoMoreTime(unit);
                     LogInternal("[Move] No more time.");
                 }
 
@@ -1086,8 +1268,8 @@ namespace TGD.CombatV2
                 if (refunded > 0)
                 {
                     if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(driver.UnitRef, costSpec, refunded);
-                    HexMoveEvents.RaiseTimeRefunded(driver.UnitRef, refunded);
+                        _cost?.RefundSeconds(unit, costSpec, refunded);
+                    HexMoveEvents.RaiseTimeRefunded(unit, refunded);
                 }
             }
             finally

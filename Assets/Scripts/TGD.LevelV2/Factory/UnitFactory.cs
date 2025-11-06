@@ -339,7 +339,7 @@ namespace TGD.LevelV2
 
                 mover.ctx = context;
                 mover.AttachTurnManager(resolvedTurnManager);
-                if (!mover.authoring)
+                if (!mover.authoring && resolvedAuthoring != null)
                     mover.authoring = resolvedAuthoring;
                 if (!mover.tiler)
                     mover.tiler = resolvedTiler;
@@ -347,6 +347,11 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
+                if (mover.pickCamera == null)
+                    mover.pickCamera = Camera.main;
+                if (mover.pickMask.value == 0)
+                    mover.pickMask = LayerMask.GetMask("Ground", "Hex");
+                mover.ReacquireOcc();
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
