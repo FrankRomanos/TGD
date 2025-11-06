@@ -5,6 +5,7 @@ using System.Linq;
 using TGD.CoreV2;
 using TGD.HexBoard;
 using TGD.CoreV2.Rules;
+using TGD.DataV2;
 using UnityEngine;
 
 namespace TGD.CombatV2
@@ -1434,6 +1435,19 @@ namespace TGD.CombatV2
 
             Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
             RaiseUnitRuntimeChanged(runtime?.Unit);
+        }
+
+        public void RegisterSpawn(Unit unit, UnitFaction faction)
+        {
+            if (unit == null)
+                return;
+
+            bool isPlayer = faction == UnitFaction.Friendly;
+            var list = isPlayer ? _playerUnits : _enemyUnits;
+            if (!list.Contains(unit))
+                list.Add(unit);
+
+            EnsureRuntime(unit, isPlayer);
         }
 
         public bool IsPlayerUnit(Unit unit) => unit != null && _playerUnits.Contains(unit);

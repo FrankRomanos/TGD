@@ -6,7 +6,6 @@ namespace TGD.CombatV2.Integration
 {
     [DefaultExecutionOrder(-500)]
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(HexBoardTestDriver))]
     public sealed class PlayerOccupancyBridge : MonoBehaviour, IActorOccupancyBridge
     {
         public HexOccupancyService occupancyService;
@@ -15,6 +14,8 @@ namespace TGD.CombatV2.Integration
         public bool autoMirrorDebug = false;
 
         HexBoardTestDriver _driver;
+        UnitRuntimeContext _ctx;
+        UnitGridAdapter _componentAdapter;
         HexOccupancy _occ;
         IGridActor _actor;
         bool _placed;
@@ -28,8 +29,15 @@ namespace TGD.CombatV2.Integration
         void Awake()
         {
             _driver = GetComponent<HexBoardTestDriver>();
+            _ctx = GetComponent<UnitRuntimeContext>();
+            _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
+
             if (!occupancyService)
                 occupancyService = GetComponent<HexOccupancyService>();
+
+            if (!occupancyService && _ctx != null)
+                occupancyService = _ctx.GetComponentInParent<HexOccupancyService>(true);
+
             if (!occupancyService && _driver != null)
             {
                 occupancyService = _driver.GetComponentInParent<HexOccupancyService>(true);
@@ -42,10 +50,23 @@ namespace TGD.CombatV2.Integration
             }
 
             _occ = occupancyService ? occupancyService.Get() : null;
-            if (_occ == null && _driver != null && _driver.authoring?.Layout != null)
-                _occ = new HexOccupancy(_driver.authoring.Layout);
+            if (_occ == null)
+            {
+                var layout = ResolveLayout();
+                if (layout != null)
+                    _occ = new HexOccupancy(layout);
+            }
 
             _actor = CreateActorAdapter();
+        }
+
+        HexBoardLayout ResolveLayout()
+        {
+            if (occupancyService != null && occupancyService.authoring != null)
+                return occupancyService.authoring.Layout;
+            if (_driver != null && _driver.authoring != null)
+                return _driver.authoring.Layout;
+            return null;
         }
 
         void Start() => EnsurePlacedNow();
@@ -67,13 +88,13 @@ namespace TGD.CombatV2.Integration
             if (!autoMirrorDebug)
                 return;
 
-            if (_driver != null && _driver.IsReady && _placed && _driver.UnitRef != null)
+            var unit = ResolveUnit();
+            if (unit != null && _placed)
             {
                 var anchor = _actor.Anchor;
-                var unitRef = _driver.UnitRef;
-                if (!unitRef.Position.Equals(anchor))
+                if (!unit.Position.Equals(anchor))
                 {
-                    Debug.LogWarning($"[Occ] Drift detected: driver={unitRef.Position} occ={anchor}. Auto-mirror.", this);
+                    Debug.LogWarning($"[Occ] Drift detected: unit={unit.Position} occ={anchor}. Auto-mirror.", this);
                     MirrorDriver(anchor, _actor.Facing);
                 }
             }
@@ -91,7 +112,22 @@ namespace TGD.CombatV2.Integration
             }
         }
 
-        public bool IsReady => _driver && _driver.IsReady && _occ != null && _actor != null;
+        public bool IsReady
+        {
+            get
+            {
+                if (_occ == null || _actor == null)
+                    return false;
+
+                if (_componentAdapter != null)
+                    return _componentAdapter.Unit != null;
+
+                if (_driver != null)
+                    return _driver.IsReady && _driver.UnitRef != null;
+
+                return false;
+            }
+        }
 
         public object Actor => _actor;
 
@@ -100,12 +136,16 @@ namespace TGD.CombatV2.Integration
             _driver?.EnsureInit();
             if (_occ == null && occupancyService)
                 _occ = occupancyService.Get();
+
+            if (_actor == null)
+                _actor = CreateActorAdapter();
+
             if (!IsReady)
                 return false;
             if (_placed)
                 return true;
 
-            var unitRef = _driver != null ? _driver.UnitRef : null;
+            var unitRef = ResolveUnit();
             if (unitRef != null)
             {
                 _actor.Anchor = unitRef.Position;
@@ -177,17 +217,51 @@ namespace TGD.CombatV2.Integration
             return false;
         }
 
+        Unit ResolveUnit()
+        {
+            if (_ctx != null && _ctx.boundUnit != null)
+            {
+                if (_componentAdapter != null && _componentAdapter.Unit != _ctx.boundUnit)
+                    _componentAdapter.Unit = _ctx.boundUnit;
+                return _ctx.boundUnit;
+            }
+
+            if (_componentAdapter != null && _componentAdapter.Unit != null)
+                return _componentAdapter.Unit;
+
+            if (_driver != null && _driver.IsReady)
+                return _driver.UnitRef;
+
+            return null;
+        }
+
         IGridActor CreateActorAdapter()
         {
+            if (_componentAdapter != null)
+            {
+                var unit = ResolveUnit();
+                if (_componentAdapter.Unit == null && unit != null)
+                    _componentAdapter.Unit = unit;
+                return _componentAdapter;
+            }
+
             var fp = overrideFootprint ? overrideFootprint : CreateSingle();
             return new BridgeActor(_driver, fp);
         }
 
         string IdLabel()
         {
-            if (_actor != null)
+            var unit = ResolveUnit();
+            if (unit != null && !string.IsNullOrEmpty(unit.Id))
+                return unit.Id;
+
+            if (_actor != null && !string.IsNullOrEmpty(_actor.Id))
                 return _actor.Id;
-            return _driver != null && !string.IsNullOrEmpty(_driver.unitId) ? _driver.unitId : "Player";
+
+            if (_driver != null && !string.IsNullOrEmpty(_driver.unitId))
+                return _driver.unitId;
+
+            return "Unit";
         }
 
         sealed class BridgeActor : IGridActor
@@ -228,17 +302,24 @@ namespace TGD.CombatV2.Integration
 
         void MirrorDriver(Hex anchor, Facing4 facing)
         {
-            if (_driver == null || !_driver.IsReady || _driver.UnitRef == null)
-                return;
+            var unit = ResolveUnit();
+            if (unit != null)
+            {
+                unit.Position = anchor;
+                unit.Facing = facing;
+            }
 
-            var unit = _driver.UnitRef;
-            unit.Position = anchor;
-            unit.Facing = facing;
+            if (_driver != null && _driver.IsReady && _driver.UnitRef != null)
+            {
+                var driverUnit = _driver.UnitRef;
+                driverUnit.Position = anchor;
+                driverUnit.Facing = facing;
 
-            if (_driver.Map != null)
-                _driver.Map.Set(unit, anchor);
+                if (_driver.Map != null)
+                    _driver.Map.Set(driverUnit, anchor);
 
-            _driver.SyncView();
+                _driver.SyncView();
+            }
 
             if (debugLog)
                 Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
