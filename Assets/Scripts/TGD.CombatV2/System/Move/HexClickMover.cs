@@ -326,6 +326,36 @@ namespace TGD.CombatV2
         // —— 每次进入/确认前，刷新一次“起点状态”（以后也可挂接技能/buff 刷新）——
         void RefreshStateForAim() { }
 
+        void DumpReadiness()
+        {
+#if UNITY_EDITOR
+            var missing = new List<string>();
+            if (!authoring)
+                missing.Add(nameof(authoring));
+            else if (authoring.Layout == null)
+                missing.Add("authoring.Layout");
+            if (!tiler)
+                missing.Add(nameof(tiler));
+            if (!driver)
+                missing.Add(nameof(driver));
+            else if (!driver.IsReady)
+                missing.Add("driver.IsReady");
+            if (_playerBridge == null)
+                missing.Add("playerBridge");
+            if (_bridge == null)
+                missing.Add("bridge");
+            if (occupancyService == null)
+                missing.Add(nameof(occupancyService));
+            if (_occ == null)
+                missing.Add("_occ");
+            if (SelfActor == null)
+                missing.Add("SelfActor");
+
+            if (missing.Count > 0)
+                Debug.LogWarning($"[HexClickMover] Not ready. Missing: {string.Join(", ", missing)}", this);
+#endif
+        }
+
         public bool TryPrecheckAim(out string reason, bool raiseHud = true)
         {
             EnsureTurnTimeInited();
@@ -334,6 +364,7 @@ namespace TGD.CombatV2
             _bridge?.EnsurePlacedNow();
             if (authoring == null || driver == null || !driver.IsReady || _occ == null || _bridge == null || SelfActor == null)
             {
+                DumpReadiness();
                 if (raiseHud)
                     HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
                 reason = "(not-ready)";

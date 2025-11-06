@@ -585,6 +585,39 @@ namespace TGD.CombatV2
 
         bool IsReady => authoring?.Layout != null && driver != null && driver.IsReady && _occ != null && _bridge != null && SelfActor != null;
 
+        void DumpReadiness()
+        {
+#if UNITY_EDITOR
+            if (IsReady)
+                return;
+
+            var missing = new List<string>();
+            if (!authoring)
+                missing.Add(nameof(authoring));
+            else if (authoring.Layout == null)
+                missing.Add("authoring.Layout");
+            if (!tiler)
+                missing.Add(nameof(tiler));
+            if (!driver)
+                missing.Add(nameof(driver));
+            else if (!driver.IsReady)
+                missing.Add("driver.IsReady");
+            if (_bridge == null)
+                missing.Add("bridge");
+            if (_playerBridge == null)
+                missing.Add("playerBridge");
+            if (occupancyService == null)
+                missing.Add(nameof(occupancyService));
+            if (_occ == null)
+                missing.Add("_occ");
+            if (SelfActor == null)
+                missing.Add("SelfActor");
+
+            if (missing.Count > 0)
+                Debug.LogWarning($"[AttackControllerV2] Not ready. Missing: {string.Join(", ", missing)}", this);
+#endif
+        }
+
         void RaiseRejected(Unit unit, AttackRejectReasonV2 reason, string message)
         {
             AttackEventsV2.RaiseRejected(unit, reason, message);
@@ -595,6 +628,7 @@ namespace TGD.CombatV2
             EnsureTurnTimeInited();
             if (!IsReady)
             {
+                DumpReadiness();
                 if (raiseHud)
                     RaiseRejected(driver ? driver.UnitRef : null, AttackRejectReasonV2.NotReady, "Not ready.");
                 reason = "(not-ready)";

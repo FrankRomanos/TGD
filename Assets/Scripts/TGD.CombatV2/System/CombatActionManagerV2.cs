@@ -808,7 +808,38 @@ namespace TGD.CombatV2
 
         IActionToolV2 SelectTool(string id)
         {
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            if (_activeCtx != null)
+            {
+                var ctxGo = _activeCtx.gameObject;
+                if (ctxGo != null)
+                {
+                    var scopedTools = ctxGo.GetComponentsInChildren<IActionToolV2>(true);
+                    for (int i = 0; i < scopedTools.Length; i++)
+                    {
+                        var scoped = scopedTools[i];
+                        if (scoped != null && scoped.Id == id)
+                            return scoped;
+                    }
+                }
+            }
+
             if (!_toolsById.TryGetValue(id, out var list) || list == null)
+                return null;
+
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                var candidate = list[i];
+                if (candidate == null || (candidate is MonoBehaviour behaviour && behaviour == null))
+                {
+                    list.RemoveAt(i);
+                    continue;
+                }
+            }
+
+            if (list.Count == 0)
                 return null;
 
             if (useFactoryMode)
@@ -820,12 +851,12 @@ namespace TGD.CombatV2
                         return tool;
                 }
 
-                return list.Count > 0 ? list[0] : null;
+                return list[0];
             }
 
             foreach (var tool in list)
             {
-                if (ResolveUnit(tool) == _currentUnit)
+                if (tool != null && ResolveUnit(tool) == _currentUnit)
                     return tool;
             }
 

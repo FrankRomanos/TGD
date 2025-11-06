@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using TGD.CombatV2;
+using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
 using TGD.HexBoard;
@@ -310,6 +311,34 @@ namespace TGD.LevelV2
             if (go == null)
                 return;
 
+            var resolvedTurnManager = turnManager != null ? turnManager : FindObjectOfType<TurnManagerV2>(true);
+            var resolvedCam = cam != null ? cam : FindObjectOfType<CombatActionManagerV2>(true);
+            var resolvedAuthoring = board != null ? board.authoring : null;
+            if (resolvedAuthoring == null && resolvedCam != null)
+                resolvedAuthoring = resolvedCam.authoring;
+            if (resolvedAuthoring == null)
+                resolvedAuthoring = FindObjectOfType<HexBoardAuthoringLite>(true);
+
+            var resolvedTiler = resolvedCam != null ? resolvedCam.tiler : null;
+            if (resolvedTiler == null && resolvedAuthoring != null)
+                resolvedTiler = resolvedAuthoring.GetComponentInChildren<HexBoardTiler>(true);
+            if (resolvedTiler == null)
+                resolvedTiler = FindObjectOfType<HexBoardTiler>(true);
+
+            DefaultTargetValidator resolvedValidator = null;
+            if (resolvedCam != null)
+                resolvedValidator = resolvedCam.GetComponentInChildren<DefaultTargetValidator>(true);
+            if (resolvedValidator == null && resolvedAuthoring != null)
+                resolvedValidator = resolvedAuthoring.GetComponentInChildren<DefaultTargetValidator>(true);
+            if (resolvedValidator == null)
+                resolvedValidator = FindObjectOfType<DefaultTargetValidator>(true);
+
+            var resolvedOccupancy = board != null ? board : null;
+            if (resolvedOccupancy == null && resolvedTurnManager != null)
+                resolvedOccupancy = resolvedTurnManager.occupancyService;
+            if (resolvedOccupancy == null)
+                resolvedOccupancy = FindObjectOfType<HexOccupancyService>(true);
+
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
             {
@@ -317,7 +346,15 @@ namespace TGD.LevelV2
                     continue;
 
                 mover.ctx = context;
-                mover.AttachTurnManager(turnManager);
+                mover.AttachTurnManager(resolvedTurnManager);
+                if (!mover.authoring)
+                    mover.authoring = resolvedAuthoring;
+                if (!mover.tiler)
+                    mover.tiler = resolvedTiler;
+                if (!mover.targetValidator)
+                    mover.targetValidator = resolvedValidator;
+                if (!mover.occupancyService)
+                    mover.occupancyService = resolvedOccupancy;
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -341,7 +378,16 @@ namespace TGD.LevelV2
                     continue;
 
                 attack.ctx = context;
-                attack.AttachTurnManager(turnManager);
+                attack.turnManager = resolvedTurnManager;
+                attack.AttachTurnManager(resolvedTurnManager);
+                if (!attack.authoring)
+                    attack.authoring = resolvedAuthoring;
+                if (!attack.tiler)
+                    attack.tiler = resolvedTiler;
+                if (!attack.targetValidator)
+                    attack.targetValidator = resolvedValidator;
+                if (!attack.occupancyService)
+                    attack.occupancyService = resolvedOccupancy;
             }
 
             var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
