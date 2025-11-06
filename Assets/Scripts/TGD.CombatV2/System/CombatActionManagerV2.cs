@@ -810,7 +810,7 @@ namespace TGD.CombatV2
         {
             if (string.IsNullOrEmpty(id))
                 return null;
-
+            PruneDeadTools();  
             if (_activeCtx != null)
             {
                 var ctxGo = _activeCtx.gameObject;
@@ -4004,7 +4004,21 @@ namespace TGD.CombatV2
 
             sink.StartSeconds(key, seconds);
         }
-
+        void PruneDeadTools()
+        {
+            if (_toolsById == null) return;
+            foreach (var kv in _toolsById)
+            {
+                var list = kv.Value;
+                if (list == null) continue;
+                // 去掉已销毁引用（Unity 的假 null，用 (Object)o == null 判断）
+                list.RemoveAll(t =>
+                {
+                    var mb = t as UnityEngine.Object;
+                    return mb == null;
+                });
+            }
+        }
 
     }
 }

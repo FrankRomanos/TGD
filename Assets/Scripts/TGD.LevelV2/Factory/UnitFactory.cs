@@ -1,10 +1,11 @@
 ﻿using System.Collections.Generic;
-using UnityEngine;
 using TGD.CombatV2;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
 using TGD.HexBoard;
+using UnityEngine;
 
 namespace TGD.LevelV2
 {
@@ -330,7 +331,11 @@ namespace TGD.LevelV2
             var resolvedOccupancy = board
                                     ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
                                     ?? FindOne<HexOccupancyService>();
-
+            // 1) 拿“角色自己的桥”和“真实视图锚点”
+            var ownerBridge = context ? context.GetComponentInParent<PlayerOccupancyBridge>(true) : null;
+            var view = go.GetComponentInChildren<Animator>(true)?.transform
+                    ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
+                    ?? go.transform;
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
             {
@@ -347,6 +352,9 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
+                mover.bridgeOverride = ownerBridge;  // ★ 强制用角色桥
+                mover.viewOverride = view;         // ★ 强制用角色视图
+                mover.driver = null;         // ★ 切断旧脚手架引用
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -361,6 +369,7 @@ namespace TGD.LevelV2
                     moveCost.cooldownHub = hub;
                 moveCost.ctx = context;
                 moveCost.turnManager = turnManager;
+
             }
 
             var attacks = go.GetComponentsInChildren<AttackControllerV2>(true);
@@ -372,6 +381,7 @@ namespace TGD.LevelV2
                 attack.ctx = context;
                 attack.turnManager = resolvedTurnManager;
                 attack.AttachTurnManager(resolvedTurnManager);
+                attack.driver = null;                // ← 新增：禁用旧依赖
                 if (!attack.authoring)
                     attack.authoring = resolvedAuthoring;
                 if (!attack.tiler)
@@ -380,6 +390,10 @@ namespace TGD.LevelV2
                     attack.targetValidator = resolvedValidator;
                 if (!attack.occupancyService)
                     attack.occupancyService = resolvedOccupancy;
+
+                attack.bridgeOverride = ownerBridge;    // ★
+                attack.viewOverride = view;           // ★
+                attack.driver = null;           // ★
             }
 
             var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
