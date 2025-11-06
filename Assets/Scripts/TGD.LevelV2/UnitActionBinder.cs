@@ -1,9 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using TGD.CombatV2;
 using TGD.CoreV2;
-using TGD.CoreV2.Rules;
 using TGD.DataV2;
 using UnityEngine;
 
