@@ -25,7 +25,8 @@ namespace TGD.DataV2
                 unitId = blueprint.unitId,
                 displayName = blueprint.displayName,
                 faction = blueprint.faction,
-                stats = new StatsV2()
+                stats = new StatsV2(),
+                avatar = blueprint.avatar
             };
 
             var sourceStats = blueprint.baseStats ?? new StatsV2();

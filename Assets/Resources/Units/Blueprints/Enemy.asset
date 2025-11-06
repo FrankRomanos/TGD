@@ -66,6 +66,7 @@ MonoBehaviour:
     ThreatAddPct: 0
     ShredAddPct: 0
   basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
+  avatar: {fileID: 21300000, guid: a1e6105a96e58834abd9d2945a3b6863, type: 3}
   abilities:
   - actionId: Move
     learned: 1
