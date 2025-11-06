@@ -51,6 +51,7 @@ namespace TGD.CoreV2
         List<string> _learnedActions = new List<string>();
 
         public IReadOnlyList<string> LearnedActions => _learnedActions;
+        public Unit boundUnit; // TurnManagerV2.Bind(unit, ctx) 时顺手写入
 
         public void SetLearnedActions(IEnumerable<string> actions)
         {

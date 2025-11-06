@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -214,11 +214,17 @@ namespace TGD.CombatV2
         public void Bind(Unit unit, UnitRuntimeContext context)
         {
             if (unit == null || context == null) return;
+
+            // ✅ 关键：把“我是谁”写回去，供工具用
+            context.boundUnit = unit;
+
             _contextByUnit[unit] = context;
             _unitByContext[context] = unit;
+
             RegisterContext(context);
             if (context.cooldownHub != null && context.cooldownHub.secStore != null)
                 RegisterCooldownStore(context.cooldownHub.secStore);
+
             if (_runtimeByUnit.TryGetValue(unit, out var runtime))
                 runtime.Bind(context);
         }

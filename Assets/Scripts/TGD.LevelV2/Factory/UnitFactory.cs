@@ -308,36 +308,28 @@ namespace TGD.LevelV2
 
         void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub)
         {
-            if (go == null)
-                return;
+            if (go == null) return;
 
-            var resolvedTurnManager = turnManager != null ? turnManager : FindObjectOfType<TurnManagerV2>(true);
-            var resolvedCam = cam != null ? cam : FindObjectOfType<CombatActionManagerV2>(true);
+            var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
+            var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
+
             var resolvedAuthoring = board != null ? board.authoring : null;
             if (resolvedAuthoring == null && resolvedCam != null)
                 resolvedAuthoring = resolvedCam.authoring;
             if (resolvedAuthoring == null)
-                resolvedAuthoring = FindObjectOfType<HexBoardAuthoringLite>(true);
+                resolvedAuthoring = FindOne<HexBoardAuthoringLite>();
 
-            var resolvedTiler = resolvedCam != null ? resolvedCam.tiler : null;
-            if (resolvedTiler == null && resolvedAuthoring != null)
-                resolvedTiler = resolvedAuthoring.GetComponentInChildren<HexBoardTiler>(true);
-            if (resolvedTiler == null)
-                resolvedTiler = FindObjectOfType<HexBoardTiler>(true);
+            var resolvedTiler = (resolvedCam != null ? resolvedCam.tiler : null)
+                                ?? (resolvedAuthoring != null ? resolvedAuthoring.GetComponentInChildren<HexBoardTiler>(true) : null)
+                                ?? FindOne<HexBoardTiler>();
 
-            DefaultTargetValidator resolvedValidator = null;
-            if (resolvedCam != null)
-                resolvedValidator = resolvedCam.GetComponentInChildren<DefaultTargetValidator>(true);
-            if (resolvedValidator == null && resolvedAuthoring != null)
-                resolvedValidator = resolvedAuthoring.GetComponentInChildren<DefaultTargetValidator>(true);
-            if (resolvedValidator == null)
-                resolvedValidator = FindObjectOfType<DefaultTargetValidator>(true);
+            var resolvedValidator = (resolvedCam != null ? resolvedCam.GetComponentInChildren<DefaultTargetValidator>(true) : null)
+                                    ?? (resolvedAuthoring != null ? resolvedAuthoring.GetComponentInChildren<DefaultTargetValidator>(true) : null)
+                                    ?? FindOne<DefaultTargetValidator>();
 
-            var resolvedOccupancy = board != null ? board : null;
-            if (resolvedOccupancy == null && resolvedTurnManager != null)
-                resolvedOccupancy = resolvedTurnManager.occupancyService;
-            if (resolvedOccupancy == null)
-                resolvedOccupancy = FindObjectOfType<HexOccupancyService>(true);
+            var resolvedOccupancy = board
+                                    ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
+                                    ?? FindOne<HexOccupancyService>();
 
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
@@ -448,6 +440,14 @@ namespace TGD.LevelV2
                 binder.SetAvatar(avatar);
                 return;
             }
+        }
+        static T FindOne<T>() where T : UnityEngine.Object
+        {
+#if UNITY_2023_1_OR_NEWER
+            return UnityEngine.Object.FindFirstObjectByType<T>(UnityEngine.FindObjectsInactive.Include);
+#else
+    return UnityEngine.Object.FindObjectOfType<T>(true);
+#endif
         }
     }
 }
