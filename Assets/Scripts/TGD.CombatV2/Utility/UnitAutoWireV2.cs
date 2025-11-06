@@ -148,15 +148,15 @@ namespace TGD.CombatV2
         bool AutoWireHudAndAnim()
         {
             var driver = ResolveDriver();
-            if (driver == null)
-                return false;
-
             bool changed = false;
 
             var hudListeners = GetComponentsInChildren<ActionHudMessageListenerTMP>(true);
             foreach (var hud in hudListeners)
             {
-                if (hud != null && hud.driver == null)
+                if (hud == null)
+                    continue;
+
+                if (driver != null && hud.driver == null)
                 {
                     hud.driver = driver;
                     changed = true;
@@ -166,19 +166,30 @@ namespace TGD.CombatV2
             var animDrivers = GetComponentsInChildren<AttackAnimDriver>(true);
             foreach (var anim in animDrivers)
             {
-                if (anim != null && anim.driver == null)
+                if (anim == null)
+                    continue;
+
+                if (context != null && anim.ctx == null)
                 {
-                    anim.driver = driver;
+                    anim.ctx = context;
                     changed = true;
+                }
+
+                if (driver != null && driver.UnitRef != null)
+                {
+                    anim.BindUnit(driver.UnitRef);
                 }
             }
 
             var moveAnimListeners = GetComponentsInChildren<AttackMoveAnimListener>(true);
             foreach (var listener in moveAnimListeners)
             {
-                if (listener != null && listener.driver == null)
+                if (listener == null)
+                    continue;
+
+                if (context != null && listener.ctx == null)
                 {
-                    listener.driver = driver;
+                    listener.ctx = context;
                     changed = true;
                 }
             }

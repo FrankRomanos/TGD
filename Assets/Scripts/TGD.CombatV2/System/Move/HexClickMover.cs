@@ -61,12 +61,17 @@ namespace TGD.CombatV2
         {
             get
             {
-                if (ctx != null && ctx.boundUnit != null) return ctx.boundUnit;
-                return driver != null ? driver.UnitRef : null;
+                if (ctx != null && ctx.boundUnit != null)
+                    return ctx.boundUnit;
+                return null;
             }
         }
         Unit ResolveSelfUnit()
-            => UnitRuntimeBindingUtil.ResolveUnit(ctx, driver);
+        {
+            if (ctx != null && ctx.boundUnit != null)
+                return ctx.boundUnit;
+            return null;
+        }
 
         Transform ResolveSelfView()
             => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);

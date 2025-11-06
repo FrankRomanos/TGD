@@ -229,6 +229,27 @@ namespace TGD.CombatV2
                 runtime.Bind(context);
         }
 
+        public void RegisterPlayerUnit(Unit unit, UnitRuntimeContext context = null)
+            => RegisterUnitInternal(unit, context, true);
+
+        public void RegisterEnemyUnit(Unit unit, UnitRuntimeContext context = null)
+            => RegisterUnitInternal(unit, context, false);
+
+        void RegisterUnitInternal(Unit unit, UnitRuntimeContext context, bool isPlayer)
+        {
+            if (unit == null)
+                return;
+
+            var list = isPlayer ? _playerUnits : _enemyUnits;
+            if (!list.Contains(unit))
+                list.Add(unit);
+
+            if (context != null)
+                Bind(unit, context);
+
+            EnsureRuntime(unit, isPlayer);
+        }
+
         public void RegisterPhaseStartGate(Func<bool, IEnumerator> gate)
         {
             if (gate == null)
