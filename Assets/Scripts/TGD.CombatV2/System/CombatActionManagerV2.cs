@@ -31,6 +31,9 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
         public HexBoardTestDriver unitDriver;
 
+        [Header("Factory Mode")]
+        public bool useFactoryMode = false;
+
         public event Action<Unit> ChainFocusChanged;
 
         [SerializeField]
@@ -98,6 +101,8 @@ namespace TGD.CombatV2
         readonly Dictionary<UnitRuntimeContext, AttackControllerV2> _attackControllerCache = new();
         bool _ownsGateHub;
         int _bonusPlanDepth = -1;
+        Unit _activeUnit;
+        UnitRuntimeContext _activeCtx;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -613,6 +618,12 @@ namespace TGD.CombatV2
             {
                 turnManager.TurnStarted += OnTurnStarted;
                 turnManager.SideEnded += OnSideEnded;
+                if (useFactoryMode)
+                {
+                    turnManager.TurnStarted += HandleFactoryTurnStarted;
+                    turnManager.TurnEnded += HandleFactoryTurnEnded;
+                    SetActiveUnit(turnManager.ActiveUnit);
+                }
             }
             if (registerAsGateHub && TryClaimGateHub())
             {
@@ -629,6 +640,11 @@ namespace TGD.CombatV2
         {
             if (turnManager != null)
             {
+                if (useFactoryMode)
+                {
+                    turnManager.TurnStarted -= HandleFactoryTurnStarted;
+                    turnManager.TurnEnded -= HandleFactoryTurnEnded;
+                }
                 turnManager.TurnStarted -= OnTurnStarted;
                 turnManager.SideEnded -= OnSideEnded;
             }
@@ -647,6 +663,8 @@ namespace TGD.CombatV2
                 turnManager.UnregisterTurnStartGate(HandleTurnStartGate);
             }
             ChainCursor?.Clear();
+            if (useFactoryMode)
+                SetActiveUnit(null);
         }
 
         bool TryClaimGateHub()
@@ -665,6 +683,100 @@ namespace TGD.CombatV2
         {
             if (ReferenceEquals(s_gateHubInstance, this))
                 s_gateHubInstance = null;
+        }
+
+        void HandleFactoryTurnStarted(Unit unit)
+        {
+            if (!useFactoryMode)
+                return;
+
+            SetActiveUnit(unit);
+        }
+
+        void HandleFactoryTurnEnded(Unit unit)
+        {
+            if (!useFactoryMode)
+                return;
+
+            if (unit != null && unit == _activeUnit)
+                SetActiveUnit(null);
+        }
+
+        public void SetActiveUnit(Unit unit)
+        {
+            if (!useFactoryMode)
+                return;
+
+            if (_activeUnit == unit)
+                return;
+
+            _activeUnit = unit;
+            _activeCtx = unit != null && turnManager != null ? turnManager.GetContext(unit) : null;
+
+            RebindToolsFor(_activeCtx);
+            FocusCameraOn(unit);
+        }
+
+        public void RebindToolsFor(UnitRuntimeContext context)
+        {
+            if (!useFactoryMode)
+                return;
+
+            HashSet<string> learned = null;
+            if (context != null && context.LearnedActions != null)
+                learned = new HashSet<string>(context.LearnedActions, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var pair in _toolsById)
+            {
+                bool enabled = learned != null && learned.Contains(pair.Key);
+                var list = pair.Value;
+                if (list == null)
+                    continue;
+
+                foreach (var tool in list)
+                {
+                    if (tool is MonoBehaviour behaviour && behaviour != null)
+                        behaviour.enabled = enabled;
+                }
+            }
+        }
+
+        public bool PlayerCanActNow()
+        {
+            if (!useFactoryMode)
+                return true;
+
+            if (!isActiveAndEnabled)
+                return false;
+
+            if (_activeUnit == null || _activeCtx == null || turnManager == null)
+                return false;
+
+            if (!IsEffectivePlayerPhase(_activeUnit))
+                return false;
+
+            if (IsPendingEndTurnFor(_activeUnit))
+                return false;
+
+            return true;
+        }
+
+        public void FocusCameraOn(Unit unit)
+        {
+            if (!useFactoryMode)
+                return;
+
+            if (unit == null || _activeCtx == null)
+                return;
+
+            var cam = pickCamera != null ? pickCamera : Camera.main;
+            if (cam == null)
+                return;
+
+            var target = _activeCtx.transform != null ? _activeCtx.transform.position : Vector3.zero;
+            var delta = target - cam.transform.position;
+            if (delta.sqrMagnitude > 0.01f)
+                cam.transform.rotation = Quaternion.LookRotation(delta.normalized, Vector3.up);
         }
 
         void OnTurnStarted(Unit unit)
@@ -704,6 +816,9 @@ namespace TGD.CombatV2
 
         void HandleIdleKeybind(KeyCode key, string toolId)
         {
+            if (!PlayerCanActNow())
+                return;
+
             if (key == KeyCode.None || string.IsNullOrEmpty(toolId))
                 return;
 
@@ -713,6 +828,9 @@ namespace TGD.CombatV2
 
         void TryRequestIdleAction(string toolId)
         {
+            if (!PlayerCanActNow())
+                return;
+
             if (_pendingEndTurn)
                 return;
 
@@ -757,6 +875,12 @@ namespace TGD.CombatV2
 
         void Update()
         {
+            if (_pendingEndTurn)
+                TryFinalizeEndTurn();
+
+            if (!PlayerCanActNow())
+                return;
+
             if (_phase == Phase.Idle && !IsInputSuppressed && !_pendingEndTurn)
             {
                 HandleIdleKeybind(keyMoveAim, "Move");
@@ -785,9 +909,6 @@ namespace TGD.CombatV2
                 if (Input.GetMouseButtonDown(0)) Confirm();
                 if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) Cancel(true);
             }
-
-            if (_pendingEndTurn)
-                TryFinalizeEndTurn();
         }
 
         bool HasPendingEndTurn => _pendingEndTurn && _pendingEndTurnUnit != null;
@@ -1002,6 +1123,9 @@ namespace TGD.CombatV2
 
         public void RequestAim(string toolId)
         {
+            if (!PlayerCanActNow())
+                return;
+
             if (_pendingEndTurn)
                 return;
 
@@ -1013,7 +1137,7 @@ namespace TGD.CombatV2
                 return;
             if (IsExecuting || IsAnyToolBusy()) return;
 
-            var unit = ResolveUnit(tool);
+            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(tool);
             if (_currentUnit != null && unit != _currentUnit)
                 return;
 
@@ -1036,6 +1160,9 @@ namespace TGD.CombatV2
 
         public void Cancel(bool userInitiated = false)
         {
+            if (userInitiated && !PlayerCanActNow())
+                return;
+
             if (_phase != Phase.Aiming || _activeTool == null)
                 return;
 
@@ -1044,10 +1171,13 @@ namespace TGD.CombatV2
 
         public void Confirm()
         {
+            if (!PlayerCanActNow())
+                return;
+
             if (_phase != Phase.Aiming || _activeTool == null)
                 return;
 
-            var unit = ResolveUnit(_activeTool);
+            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(_activeTool);
             var hex = _hover ?? PickHexUnderMouse();
 
             StartCoroutine(ConfirmRoutine(_activeTool, unit, hex));
@@ -1055,6 +1185,9 @@ namespace TGD.CombatV2
 
         public bool TryAutoExecuteAction(string toolId, Hex target)
         {
+            if (!PlayerCanActNow())
+                return false;
+
             if (_pendingEndTurn)
                 return false;
 
@@ -1071,7 +1204,7 @@ namespace TGD.CombatV2
             if (IsExecuting || IsAnyToolBusy())
                 return false;
 
-            var unit = ResolveUnit(tool);
+            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(tool);
             if (_currentUnit != null && unit != _currentUnit)
                 return false;
 
