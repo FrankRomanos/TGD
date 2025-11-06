@@ -1,4 +1,6 @@
 ﻿// File: TGD.CoreV2/UnitRuntimeContext.cs
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2.Rules;
 
@@ -44,6 +46,31 @@ namespace TGD.CoreV2
         [Header("Runtime State")]
         [SerializeField]
         MoveRateManager _moveRates = new MoveRateManager();
+
+        [SerializeField]
+        List<string> _learnedActions = new List<string>();
+
+        public IReadOnlyList<string> LearnedActions => _learnedActions;
+
+        public void SetLearnedActions(IEnumerable<string> actions)
+        {
+            _learnedActions.Clear();
+            if (actions == null)
+                return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var action in actions)
+            {
+                if (string.IsNullOrWhiteSpace(action))
+                    continue;
+
+                var trimmed = action.Trim();
+                if (!seen.Add(trimmed))
+                    continue;
+
+                _learnedActions.Add(trimmed);
+            }
+        }
 
         public MoveRateManager MoveRates
         {

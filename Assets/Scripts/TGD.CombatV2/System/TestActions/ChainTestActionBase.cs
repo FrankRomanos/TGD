@@ -6,10 +6,13 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public abstract class ChainTestActionBase : MonoBehaviour, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2
+    public abstract class ChainTestActionBase : MonoBehaviour, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext
     {
         [Header("Owner")]
         public HexBoardTestDriver driver;
+
+        protected UnitRuntimeContext ctx;
+        protected TurnManagerV2 turnManager;
 
         [Header("Targeting")]
         public TargetMode targetMode = TargetMode.AnyClick;
@@ -156,6 +159,12 @@ namespace TGD.CombatV2
             }
 
             return validator.Check(unit, hex, GetTargetingSpec());
+        }
+
+        public virtual void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
+        {
+            ctx = context;
+            turnManager = tm;
         }
     }
 }
