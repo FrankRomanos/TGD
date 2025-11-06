@@ -564,7 +564,15 @@ namespace TGD.CombatV2
         void OnDestroy()
         {
             UpdateBridgeSubscription(null);
-            AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;   // ← 新增
+            AttackEventsV2.AttackStrikeFired -= OnAttackStrikeFired;
+            AttackEventsV2.AttackAnimationEnded -= OnAttackAnimationEnded;
+            AttackEventsV2.AttackMoveFinished -= OnAttackMoveFinished;
+            if (_boundTurnManager != null)
+            {
+                _boundTurnManager.TurnStarted -= OnTurnStarted;
+                _boundTurnManager.SideEnded -= OnSideEnded;
+                _boundTurnManager = null;
+            }
         }
 
         void HandleAnchorChanged(Hex anchor, int version)
