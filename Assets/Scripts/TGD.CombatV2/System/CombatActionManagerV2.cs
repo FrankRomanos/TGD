@@ -330,6 +330,28 @@ namespace TGD.CombatV2
             context?.RuleLedger?.TryDiscardCost(preDeduct.actionId, preDeduct.chainDepth);
         }
 
+        void RestorePreDeduct(Unit unit, PreDeduct preDeduct, ITurnBudget budget)
+        {
+            DiscardRuleCostOverride(unit, preDeduct);
+
+            if (!preDeduct.valid)
+                return;
+
+            if (budget != null && preDeduct.secs > 0)
+                budget.RefundTime(preDeduct.secs);
+
+            if (IsBonusTurnFor(unit) && preDeduct.bonusSecs > 0)
+            {
+                int before = _bonusTurn.remaining;
+                int after = Mathf.Min(_bonusTurn.cap, before + preDeduct.bonusSecs);
+                if (after != before)
+                {
+                    _bonusTurn.remaining = after;
+                    NotifyBonusTurnStateChanged();
+                }
+            }
+        }
+
         void ClearPlanStack(Unit unit)
         {
             if (_planStack.Count == 0)
@@ -883,8 +905,8 @@ namespace TGD.CombatV2
             if (_pendingEndTurn)
                 return;
 
-            var tool = SelectTool(toolId);
-            if (tool == null)
+            var selected = SelectTool(toolId);
+            if (!TryResolveAliveTool(selected, out var tool))
                 return;
 
             if (!CanActivateAtIdle(tool))
@@ -895,7 +917,7 @@ namespace TGD.CombatV2
 
         bool CanActivateAtIdle(IActionToolV2 tool)
         {
-            if (tool == null)
+            if (!TryResolveAliveTool(tool, out tool))
                 return false;
             var owner = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(tool);
 
@@ -948,11 +970,14 @@ namespace TGD.CombatV2
 
             if (_phase == Phase.Aiming)
             {
+                if (!TryGetActiveTool(out var activeTool))
+                    return;
+
                 var h = PickHexUnderMouse();
                 if (h.HasValue && (!_hover.HasValue || !_hover.Value.Equals(h.Value)))
                 {
                     _hover = h;
-                    _activeTool?.OnHover(h.Value);
+                    activeTool.OnHover(h.Value);
                 }
 
                 if (Input.GetMouseButtonDown(0)) Confirm();
@@ -1161,13 +1186,29 @@ namespace TGD.CombatV2
 
         Unit ResolveUnit(IActionToolV2 tool)
         {
-            if (tool is HexClickMover mover && mover != null && mover.driver != null)
-                return mover.driver.UnitRef;
-            if (tool is AttackControllerV2 attack && attack != null && attack.driver != null)
-                return attack.driver.UnitRef;
+            if (tool is HexClickMover mover && mover != null)
+            {
+                if (mover.ctx != null && mover.ctx.boundUnit != null)
+                    return mover.ctx.boundUnit;
+                if (mover.driver != null)
+                    return mover.driver.UnitRef;
+            }
+
+            if (tool is AttackControllerV2 attack && attack != null)
+            {
+                if (attack.ctx != null && attack.ctx.boundUnit != null)
+                    return attack.ctx.boundUnit;
+                if (attack.driver != null)
+                    return attack.driver.UnitRef;
+            }
+
             if (tool is ChainTestActionBase chain && chain != null)
                 return chain.ResolveUnit();
-            return unitDriver != null ? unitDriver.UnitRef : null;
+
+            if (unitDriver != null)
+                return unitDriver.UnitRef;
+
+            return null;
         }
 
         public void RequestAim(string toolId)
@@ -1181,7 +1222,7 @@ namespace TGD.CombatV2
             if (_phase != Phase.Idle) return;
 
             var tool = SelectTool(toolId);
-            if (tool == null) return;
+            if (!TryResolveAliveTool(tool, out tool)) return;
             if (!CanActivateAtIdle(tool))
                 return;
             if (IsExecuting || IsAnyToolBusy()) return;
@@ -1197,12 +1238,14 @@ namespace TGD.CombatV2
                 return;
             }
 
-            if (_activeTool != null)
-                CleanupAfterAbort(_activeTool, false);
+            if (TryResolveAliveTool(_activeTool, out var existing))
+                CleanupAfterAbort(existing, false);
+            else if (_activeTool != null)
+                HandleLostActiveTool();
 
             _activeTool = tool;
             _hover = null;
-            _activeTool.OnEnterAim();
+            tool.OnEnterAim();
             _phase = Phase.Aiming;
             ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
         }
@@ -1212,10 +1255,13 @@ namespace TGD.CombatV2
             if (userInitiated && !PlayerCanActNow())
                 return;
 
-            if (_phase != Phase.Aiming || _activeTool == null)
+            if (_phase != Phase.Aiming)
                 return;
 
-            CleanupAfterAbort(_activeTool, userInitiated);
+            if (!TryGetActiveTool(out var activeTool))
+                return;
+
+            CleanupAfterAbort(activeTool, userInitiated);
         }
 
         public void Confirm()
@@ -1223,13 +1269,16 @@ namespace TGD.CombatV2
             if (!PlayerCanActNow())
                 return;
 
-            if (_phase != Phase.Aiming || _activeTool == null)
+            if (_phase != Phase.Aiming)
                 return;
 
-            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(_activeTool);
+            if (!TryGetActiveTool(out var activeTool))
+                return;
+
+            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(activeTool);
             var hex = _hover ?? PickHexUnderMouse();
 
-            StartCoroutine(ConfirmRoutine(_activeTool, unit, hex));
+            StartCoroutine(ConfirmRoutine(activeTool, unit, hex));
         }
 
         public bool TryAutoExecuteAction(string toolId, Hex target)
@@ -1244,7 +1293,7 @@ namespace TGD.CombatV2
                 return false;
 
             var tool = SelectTool(toolId);
-            if (tool == null)
+            if (!TryResolveAliveTool(tool, out tool))
                 return false;
 
             if (!CanActivateAtIdle(tool))
@@ -1264,23 +1313,27 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            if (_activeTool != null)
-                CleanupAfterAbort(_activeTool, false);
+            if (TryResolveAliveTool(_activeTool, out var existing))
+                CleanupAfterAbort(existing, false);
+            else if (_activeTool != null)
+                HandleLostActiveTool();
 
             _activeTool = tool;
             _hover = target;
-            _activeTool.OnEnterAim();
+            tool.OnEnterAim();
             _phase = Phase.Aiming;
             ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
 
-            StartCoroutine(ConfirmRoutine(_activeTool, unit, target));
+            StartCoroutine(ConfirmRoutine(tool, unit, target));
             return true;
         }
 
         void TryHideAllAimUI()
         {
-            if (_activeTool != null)
-                _activeTool.OnExitAim();
+            if (TryResolveAliveTool(_activeTool, out var active))
+                active.OnExitAim();
+            else if (_activeTool != null)
+                _activeTool = null;
 
             foreach (var mb in tools)
             {
@@ -1619,9 +1672,23 @@ namespace TGD.CombatV2
                 int energyBefore = resources != null ? resources.Get("Energy") : 0;
                 ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteBegin", $"(budgetBefore={budgetBefore}, energyBefore={energyBefore})");
 
+                if (!TryResolveAliveTool(tool, out tool))
+                {
+                    HandleToolDestroyedDuringExecution(unit, plan, budget, "toolDestroyed");
+                    yield break;
+                }
+
                 var routine = tool.OnConfirm(plan.target);
                 if (routine != null)
+                {
                     yield return StartCoroutine(routine);
+
+                    if (!TryResolveAliveTool(tool, out tool))
+                    {
+                        HandleToolDestroyedDuringExecution(unit, plan, budget, "toolDestroyed");
+                        yield break;
+                    }
+                }
 
                 var report = BuildExecReport(tool, out var exec);
                 if (!report.valid || exec == null)
@@ -1647,6 +1714,28 @@ namespace TGD.CombatV2
             }
         }
 
+        void HandleToolDestroyedDuringExecution(Unit unit, ActionPlan plan, ITurnBudget budget, string reason)
+        {
+            PreDeduct popped = default;
+            if (_planStack.Count > 0)
+                popped = _planStack.Pop();
+
+            RestorePreDeduct(unit, popped, budget);
+
+            string suffix = string.IsNullOrEmpty(reason) ? string.Empty : $"(reason={reason})";
+            ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteAbort", suffix);
+
+            var ctx = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
+            CAM.RaiseActionCancelled(ctx, plan.kind, string.IsNullOrEmpty(reason) ? "toolDestroyed" : reason);
+
+            TryHideAllAimUI();
+            _activeTool = null;
+            _hover = null;
+            _phase = Phase.Idle;
+
+            TryFinalizeEndTurn();
+        }
+
         IEnumerator Resolve(IActionToolV2 tool, Unit unit, ActionPlan plan, IActionExecReportV2 exec, ExecReportData report, ITurnBudget budget, IResourcePool resources)
         {
             int used = report.TotalPlanned;
@@ -1661,7 +1750,10 @@ namespace TGD.CombatV2
 
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveBegin", $"(used={used}, refunded={refunded}, net={net}, energyMove={energyMove}, energyAtk={energyAtk}, energyAction={energyAction}{reasonSuffix})");
 
-            if (tool is IActionResolveEffect resolveEffect)
+            IActionToolV2 aliveTool = TryResolveAliveTool(tool, out var usableTool) ? usableTool : null;
+            string toolId = aliveTool != null ? aliveTool.Id : plan.kind;
+
+            if (aliveTool is IActionResolveEffect resolveEffect)
             {
                 try
                 {
@@ -1737,10 +1829,10 @@ namespace TGD.CombatV2
 
             var derivedQueue = new List<DerivedQueuedAction>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
-            bool shouldDerived = ShouldRunDerivedWindow(unit, tool);
+            bool shouldDerived = ShouldRunDerivedWindow(unit, aliveTool);
             bool skipDerived = shouldDerived && _pendingEndTurn && IsPendingEndTurnFor(unit);
             if (shouldDerived && !skipDerived)
-                yield return RunDerivedWindow(unit, tool, plan, report, budget, resources, cooldowns, derivedQueue);
+                yield return RunDerivedWindow(unit, aliveTool, plan, report, budget, resources, cooldowns, derivedQueue);
             else
             {
                 if (shouldDerived && skipDerived)
@@ -1753,7 +1845,7 @@ namespace TGD.CombatV2
             ActionPhaseLogger.Log(unit, plan.kind, "W4_ResolveEnd", $"(budgetAfter={budgetAfter}, energyAfter={energyAfter})");
 
             var resolvedContext = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
-            CAM.RaiseActionResolved(resolvedContext, tool != null ? tool.Id : null);
+            CAM.RaiseActionResolved(resolvedContext, toolId);
 
             exec.Consume();
             _activeTool = null;
@@ -1947,11 +2039,12 @@ namespace TGD.CombatV2
         {
             if (tool == null) return;
 
-            var unit = ResolveUnit(tool);
+            bool alive = TryResolveAliveTool(tool, out var usable);
+            Unit unit = alive ? ResolveUnit(usable) : null;
 
-            if (logCancel && _phase == Phase.Aiming)
+            if (logCancel && _phase == Phase.Aiming && alive)
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
+                ActionPhaseLogger.Log(unit, usable.Id, "W1_AimCancel");
             }
 
             TryHideAllAimUI();
@@ -2194,9 +2287,9 @@ namespace TGD.CombatV2
 
             foreach (var pair in _toolsById)
             {
-                foreach (var tool in pair.Value)
+                foreach (var candidate in pair.Value)
                 {
-                    if (tool == null)
+                    if (!TryResolveAliveTool(candidate, out var tool))
                         continue;
 
                     var owner = ResolveUnit(tool);
@@ -2564,10 +2657,11 @@ namespace TGD.CombatV2
             for (int i = 0; i < options.Count; i++)
             {
                 var option = options[i];
-                string id = option.tool != null ? option.tool.Id : string.Empty;
+                bool hasTool = TryResolveAliveTool(option.tool, out var tool);
+                string id = hasTool ? tool.Id : string.Empty;
                 string name = string.IsNullOrEmpty(id) ? "?" : id;
                 string meta = FormatChainOptionMeta(option);
-                var icon = ResolveChainOptionIcon(option.tool);
+                var icon = ResolveChainOptionIcon(hasTool ? tool : null);
 
                 bool startsGroup = false;
                 string groupLabel = null;
@@ -2593,7 +2687,7 @@ namespace TGD.CombatV2
                     meta,
                     icon,
                     option.key,
-                    option.tool != null,
+                    hasTool,
                     startsGroup,
                     groupLabel));
             }
@@ -2846,9 +2940,10 @@ namespace TGD.CombatV2
                             handledInput = true;
 
                             string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
+                            var optionId = TryResolveAliveTool(option.tool, out var optTool) ? optTool.Id : "?";
                             string selectSuffix = option.owner != null && option.owner != unit
-                                ? $"(id={option.tool.Id}, owner={ownerLabel}, kind={option.kind}, secs={option.secs}, energy={option.energy})"
-                                : $"(id={option.tool.Id}, kind={option.kind}, secs={option.secs}, energy={option.energy})";
+                                ? $"(id={optionId}, owner={ownerLabel}, kind={option.kind}, secs={option.secs}, energy={option.energy})"
+                                : $"(id={optionId}, kind={option.kind}, secs={option.secs}, energy={option.energy})";
                             ActionPhaseLogger.Log(unit, basePlan.kind, $"{label} Select", selectSuffix);
 
                             ChainQueueOutcome outcome = default;
@@ -2889,10 +2984,10 @@ namespace TGD.CombatV2
                                 yield break;
                             }
 
-                            if (outcome.tool != null)
+                            if (TryResolveAliveTool(outcome.tool, out var pendingTool))
                             {
                                 pendingSet ??= new HashSet<IActionToolV2>();
-                                pendingSet.Add(outcome.tool);
+                                pendingSet.Add(pendingTool);
                             }
 
                             if (option.owner != null)
@@ -3192,7 +3287,8 @@ namespace TGD.CombatV2
                             if (selectedIndex >= 0 && selectedIndex < options.Count)
                             {
                                 var option = options[selectedIndex];
-                                Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
+                                var optionId = TryResolveAliveTool(option.tool, out var optTool) ? optTool.Id : "?";
+                                Log($"[Derived] Select(id={optionId}, kind={option.kind})");
                                 ChainQueueOutcome outcome = default;
                                 yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
 
@@ -3228,7 +3324,8 @@ namespace TGD.CombatV2
                         if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
                         {
                             handled = true;
-                            Log($"[Derived] Select(id={option.tool.Id}, kind={option.kind})");
+                            var optionId = TryResolveAliveTool(option.tool, out var optTool) ? optTool.Id : "?";
+                            Log($"[Derived] Select(id={optionId}, kind={option.kind})");
                             ChainQueueOutcome outcome = default;
                             yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
 
@@ -3270,7 +3367,7 @@ namespace TGD.CombatV2
         IEnumerator TryQueueDerivedSelection(ChainOption option, Unit unit, string baseId, ITurnBudget budget, IResourcePool resources, List<DerivedQueuedAction> derivedQueue, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
-            if (tool == null)
+            if (!TryResolveAliveTool(tool, out tool))
             {
                 onComplete?.Invoke(default);
                 yield break;
@@ -3279,8 +3376,16 @@ namespace TGD.CombatV2
             Hex selectedTarget = Hex.Zero;
             bool targetChosen = true;
 
+            string toolId = tool.Id;
+
+            if (!TryResolveAliveTool(tool, out tool))
+            {
+                onComplete?.Invoke(default);
+                yield break;
+            }
+
             tool.OnEnterAim();
-            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+            ActionPhaseLogger.Log(unit, toolId, "W1_AimBegin");
 
             if (tool is ChainTestActionBase chainTool)
             {
@@ -3295,8 +3400,16 @@ namespace TGD.CombatV2
                     if (_pendingEndTurn)
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel", "(reason=EndTurn)");
-                        tool.OnExitAim();
+                        ActionPhaseLogger.Log(unit, toolId, "W1_AimCancel", "(reason=EndTurn)");
+                        if (TryResolveAliveTool(tool, out tool))
+                            tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                        yield break;
+                    }
+
+                    if (!TryResolveAliveTool(tool, out tool))
+                    {
+                        cursor?.Clear();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
@@ -3316,13 +3429,13 @@ namespace TGD.CombatV2
                             if (check.ok)
                             {
                                 selectedTarget = hover.Value;
-                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetOk", $"(id={tool.Id}, hex={hover.Value})");
+                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetOk", $"(id={toolId}, hex={hover.Value})");
                                 targetChosen = true;
                                 awaitingSelection = false;
                             }
                             else
                             {
-                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
+                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={check.reason})");
                             }
                         }
                     }
@@ -3338,8 +3451,9 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(unit, tool.Id, "W1_AimCancel");
-                        tool.OnExitAim();
+                        ActionPhaseLogger.Log(unit, toolId, "W1_AimCancel");
+                        if (TryResolveAliveTool(tool, out tool))
+                            tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
@@ -3351,17 +3465,24 @@ namespace TGD.CombatV2
 
                 if (!targetChosen)
                 {
-                    tool.OnExitAim();
+                    if (TryResolveAliveTool(tool, out tool))
+                        tool.OnExitAim();
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
             }
 
+            if (!TryResolveAliveTool(tool, out tool))
+            {
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                yield break;
+            }
+
             tool.OnExitAim();
             ChainCursor?.Clear();
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmStart");
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PrecheckOk");
+            ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(unit, toolId, "W2_PrecheckOk");
 
             if (!targetChosen)
             {
@@ -3379,8 +3500,8 @@ namespace TGD.CombatV2
 
                 if (fail != null)
                 {
-                    ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={fail})");
-                    ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={fail})");
+                    ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckFail", $"(reason={fail})");
+                    ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmAbort", $"(reason={fail})");
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
@@ -3389,13 +3510,13 @@ namespace TGD.CombatV2
 
             if (failReason != null)
             {
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckFail", $"(reason={failReason})");
-                ActionPhaseLogger.Log(unit, tool.Id, "W2_ConfirmAbort", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmAbort", $"(reason={failReason})");
                 onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, tool.Id, "W2_PreDeductCheckOk");
+            ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckOk");
             TryStartCooldownIfAny(tool, unit, cooldowns, 1);
 
             int timeBefore = budget != null ? budget.Remaining : 0;
@@ -3414,7 +3535,7 @@ namespace TGD.CombatV2
                 energyMove = option.energy,
                 energyAtk = 0,
                 valid = true,
-                actionId = tool.Id,
+                actionId = toolId,
                 chainDepth = 1,
                 ruleOverride = false
             };
@@ -3434,7 +3555,7 @@ namespace TGD.CombatV2
 
             var actionPlan = new ActionPlan
             {
-                kind = tool.Id,
+                kind = toolId,
                 target = selectedTarget,
                 cost = planCost,
                 chainDepth = 1
@@ -3453,17 +3574,19 @@ namespace TGD.CombatV2
 
             ChainCursor?.Clear();
 
-            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = option.tool });
+            onComplete?.Invoke(new ChainQueueOutcome { queued = true, cancel = false, tool = tool });
         }
 
         IEnumerator TryQueueChainSelection(ChainOption option, Unit baseUnit, string baseKind, string stageLabel, int chainDepth, List<ChainQueuedAction> pendingActions, Action<ChainQueueOutcome> onComplete)
         {
             var tool = option.tool;
-            if (tool == null)
+            if (!TryResolveAliveTool(tool, out tool))
             {
                 onComplete?.Invoke(default);
                 yield break;
             }
+
+            string toolId = tool.Id;
 
             Hex selectedTarget = Hex.Zero;
             bool targetChosen = true;
@@ -3472,8 +3595,14 @@ namespace TGD.CombatV2
             if (owner == null)
                 owner = ResolveUnit(tool);
 
+            if (!TryResolveAliveTool(tool, out tool))
+            {
+                onComplete?.Invoke(default);
+                yield break;
+            }
+
             tool.OnEnterAim();
-            ActionPhaseLogger.Log(owner, tool.Id, "W1_AimBegin");
+            ActionPhaseLogger.Log(owner, toolId, "W1_AimBegin");
 
             if (tool is ChainTestActionBase chainTool)
             {
@@ -3488,8 +3617,16 @@ namespace TGD.CombatV2
                     if (_pendingEndTurn)
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(owner, tool.Id, "W1_AimCancel", "(reason=EndTurn)");
-                        tool.OnExitAim();
+                        ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=EndTurn)");
+                        if (TryResolveAliveTool(tool, out tool))
+                            tool.OnExitAim();
+                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                        yield break;
+                    }
+
+                    if (!TryResolveAliveTool(tool, out tool))
+                    {
+                        cursor?.Clear();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
@@ -3509,13 +3646,13 @@ namespace TGD.CombatV2
                             if (check.ok)
                             {
                                 selectedTarget = hover.Value;
-                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetOk", $"(id={tool.Id}, hex={hover.Value})");
+                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetOk", $"(id={toolId}, hex={hover.Value})");
                                 targetChosen = true;
                                 awaitingSelection = false;
                             }
                             else
                             {
-                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={tool.Id}, reason={check.reason})");
+                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
                             }
                         }
                     }
@@ -3531,8 +3668,9 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(owner, tool.Id, "W1_AimCancel");
-                        tool.OnExitAim();
+                        ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel");
+                        if (TryResolveAliveTool(tool, out tool))
+                            tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                         yield break;
                     }
@@ -3548,6 +3686,12 @@ namespace TGD.CombatV2
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
+            }
+
+            if (!TryResolveAliveTool(tool, out tool))
+            {
+                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                yield break;
             }
 
             tool.OnExitAim();
@@ -4004,6 +4148,50 @@ namespace TGD.CombatV2
 
             sink.StartSeconds(key, seconds);
         }
+
+        static bool TryResolveAliveTool(IActionToolV2 candidate, out IActionToolV2 tool)
+        {
+            if (candidate == null)
+            {
+                tool = null;
+                return false;
+            }
+
+            if (candidate is UnityEngine.Object unityObj && unityObj == null)
+            {
+                tool = null;
+                return false;
+            }
+
+            tool = candidate;
+            return true;
+        }
+
+        bool TryGetActiveTool(out IActionToolV2 tool)
+        {
+            if (TryResolveAliveTool(_activeTool, out tool))
+                return true;
+
+            if (_activeTool != null)
+                HandleLostActiveTool();
+
+            tool = null;
+            return false;
+        }
+
+        void HandleLostActiveTool()
+        {
+            TryHideAllAimUI();
+            _activeTool = null;
+            _hover = null;
+            if (_phase == Phase.Aiming)
+            {
+                _phase = Phase.Idle;
+                ClearPlanStack(null);
+                TryFinalizeEndTurn();
+            }
+        }
+
         void PruneDeadTools()
         {
             if (_toolsById == null) return;
