@@ -1158,14 +1158,13 @@ namespace TGD.CombatV2
             var layout = authoring != null ? authoring.Layout : null;
             var startAnchor = CurrentAnchor;
             var actor = SelfActor;
+            Facing4 finalFacing = actor != null ? actor.Facing : Facing4.PlusQ;
+            Facing4 originalFacing = finalFacing;
             if (actor == null)
             {
-                HandleApproachAbort();
+                HandleApproachAbort(originalFacing, view, hexSpace);
                 yield break;
             }
-
-            Facing4 finalFacing = actor.Facing;
-            Facing4 originalFacing = finalFacing;
 
             if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
             {
@@ -1173,7 +1172,7 @@ namespace TGD.CombatV2
                 preview = BuildPreview(preview.targetHex, true, preview.targetCheck);
                 if (preview == null || !preview.valid)
                 {
-                    HandleApproachAbort();
+                    HandleApproachAbort(originalFacing, view, hexSpace);
                     yield break;
                 }
                 _planAnchorVersion = _playerBridge.AnchorVersion;
@@ -1196,7 +1195,7 @@ namespace TGD.CombatV2
                 int range = Mathf.Max(1, ResolveMeleeRange());
                 if (!TryFindMeleePath(startAnchor, preview.targetHex, range, passability, out _, out executionPath))
                 {
-                    HandleApproachAbort();
+                    HandleApproachAbort(originalFacing, view, hexSpace);
                     yield break;
                 }
             }
@@ -1204,7 +1203,7 @@ namespace TGD.CombatV2
             {
                 if (IsBlockedForMove(preview.targetHex, startAnchor, preview.targetHex, passability))
                 {
-                    HandleApproachAbort();
+                    HandleApproachAbort(originalFacing, view, hexSpace);
                     yield break;
                 }
 
@@ -1212,14 +1211,14 @@ namespace TGD.CombatV2
                     cell => IsBlockedForMove(cell, startAnchor, preview.targetHex, passability));
                 if (executionPath == null || executionPath.Count == 0)
                 {
-                    HandleApproachAbort();
+                    HandleApproachAbort(originalFacing, view, hexSpace);
                     yield break;
                 }
             }
 
             if (executionPath == null || executionPath.Count == 0)
             {
-                HandleApproachAbort();
+                HandleApproachAbort(originalFacing, view, hexSpace);
                 yield break;
             }
 
@@ -1490,7 +1489,7 @@ namespace TGD.CombatV2
                 _planAnchorVersion = -1;
             }
 
-            void HandleApproachAbort()
+            void HandleApproachAbort(Facing4 fallbackFacing, Transform abortView, HexSpace abortSpace)
             {
                 if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                     RefundMoveEnergy(moveEnergyPaid);
@@ -1512,10 +1511,10 @@ namespace TGD.CombatV2
                 var abortActor = SelfActor;
                 var abortFacing = abortActor != null ? abortActor.Facing : Facing4.PlusQ;
 
-                if (!CommitThroughBridge(startAnchor, abortAnchor, abortFacing, view, hexSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
+                if (!CommitThroughBridge(startAnchor, abortAnchor, abortFacing, abortView, abortSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
                 {
                     if (SelfActor != null)
-                        SelfActor.Facing = originalFacing;
+                        SelfActor.Facing = fallbackFacing;
                     return;
                 }
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, CurrentAnchor);
