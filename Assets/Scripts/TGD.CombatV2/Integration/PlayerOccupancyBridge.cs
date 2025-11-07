@@ -98,14 +98,26 @@ namespace TGD.CombatV2.Integration
         {
             if (!Application.isPlaying)
                 return;
+        }
 
-            if (_occ != null && _actor != null && _placed)
-            {
-                _occ.Remove(_actor);
-                _placed = false;
-                if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
-            }
+        void OnDestroy()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            ReleasePlacement();
+        }
+
+        void ReleasePlacement()
+        {
+            if (_occ == null || _actor == null || !_placed)
+                return;
+
+            _occ.Remove(_actor);
+            _occ.TempClearForOwner(_actor);
+            _placed = false;
+            if (debugLog)
+                Debug.Log($"[Occ] Remove {IdLabel()}", this);
         }
 
         public bool IsReady

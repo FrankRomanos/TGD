@@ -1293,7 +1293,7 @@ namespace TGD.CombatV2
 
                     _bridge?.MoveCommit(startAnchor, finalFacing);
                     UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1402,7 +1402,7 @@ namespace TGD.CombatV2
                 _bridge?.MoveCommit(lastPosition, finalFacing);
                 UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -1511,7 +1511,7 @@ namespace TGD.CombatV2
 
                 _bridge?.MoveCommit(abortAnchor, abortFacing);
                 UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
-                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
+                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, CurrentAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
@@ -2008,25 +2008,20 @@ namespace TGD.CombatV2
 
         void RefreshOccupancy()
         {
-            if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge != null)
-            {
+            TryResolveBridge();
+            var playerBridge = _playerBridge ?? (_bridge as PlayerOccupancyBridge);
+            if (playerBridge != null)
                 playerBridge.EnsurePlacedNow();
-                var bridgeService = playerBridge.occupancyService;
-                if (bridgeService != null)
-                {
-                    if (occupancyService == null)
-                        occupancyService = bridgeService;
-                    _occ = bridgeService.Get();
-                    return;
-                }
-            }
             else
-            {
                 _bridge?.EnsurePlacedNow();
-            }
 
-            if (occupancyService != null)
-                _occ = occupancyService.Get();
+            var bridgeService = playerBridge != null ? playerBridge.occupancyService : null;
+            var resolvedService = bridgeService ?? turnManager?.occupancyService ?? occupancyService;
+
+            if (resolvedService != null && !ReferenceEquals(occupancyService, resolvedService))
+                occupancyService = resolvedService;
+
+            _occ = occupancyService != null ? occupancyService.Get() : null;
         }
 
         PlayerOccupancyBridge ResolvePlayerBridge()
