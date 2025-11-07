@@ -6,6 +6,7 @@ using UnityEngine;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
+using TGD.DataV2;
 using TGD.HexBoard;
 
 namespace TGD.CombatV2
@@ -85,7 +86,7 @@ namespace TGD.CombatV2
         Phase _phase = Phase.Idle;
         public bool IsExecuting => _phase == Phase.Executing;
 
-        readonly Dictionary<string, List<IActionToolV2>> _toolsById = new();
+        readonly Dictionary<string, List<IActionToolV2>> _toolsById = new(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<IActionToolV2, DestroySubscription> _destroySubscriptions = new();
         IActionToolV2 _activeTool;
         Unit _currentUnit;
@@ -1006,11 +1007,11 @@ namespace TGD.CombatV2
             if (grants != null && grants.Count > 0)
             {
                 string key = (tool as ICooldownKeyProvider)?.CooldownKey;
-                if (!string.IsNullOrEmpty(key) && grants.Contains(key))
+                if (IsSkillGrantedIncludingDerived(grants, key))
                     return true;
 
                 string idValue = tool.Id;
-                if (!string.IsNullOrEmpty(idValue) && grants.Contains(idValue))
+                if (IsSkillGrantedIncludingDerived(grants, idValue))
                     return true;
 
                 return false;
@@ -1043,8 +1044,12 @@ namespace TGD.CombatV2
                 }
             }
 
-            if (!_toolsById.TryGetValue(id, out var list) || list == null)
-                return null;
+            if (!_toolsById.TryGetValue(id, out var list) || list == null || list.Count == 0)
+            {
+                list = ResolveToolsForId(id);
+                if (list == null || list.Count == 0)
+                    return null;
+            }
 
             for (int i = list.Count - 1; i >= 0; i--)
             {
@@ -3405,13 +3410,23 @@ namespace TGD.CombatV2
                 if (string.IsNullOrEmpty(id))
                     continue;
 
-                if (!_toolsById.TryGetValue(id, out var toolsForId))
+                var toolsForId = EnsureToolsForId(unit, id);
+                if (toolsForId == null)
                     continue;
 
                 for (int j = 0; j < toolsForId.Count; j++)
                 {
-                    var tool = toolsForId[j];
-                    if (tool == null)
+                    var candidate = toolsForId[j];
+                    if (candidate == null)
+                        continue;
+
+                    if (candidate is SkillDefinitionActionTool defTool && defTool.Definition == null)
+                        TryAssignDefinitionFromIndex(defTool, id);
+
+                    if (candidate is MonoBehaviour behaviour && !Dead(behaviour) && !behaviour.isActiveAndEnabled)
+                        behaviour.enabled = true;
+
+                    if (!TryResolveAliveTool(candidate, out var tool))
                         continue;
 
                     if (tool.Kind != ActionKind.Derived)
@@ -4437,6 +4452,179 @@ namespace TGD.CombatV2
 
             tool = candidate;
             return true;
+        }
+
+        List<IActionToolV2> ResolveToolsForId(string id)
+        {
+            var normalized = NormalizeSkillId(id);
+            if (string.IsNullOrEmpty(normalized))
+                return null;
+
+            if (_activeCtx != null)
+            {
+                var list = EnsureToolsFromContext(_activeCtx, normalized);
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+
+            if (_currentUnit != null)
+            {
+                var ctx = ResolveContext(_currentUnit);
+                var list = EnsureToolsFromContext(ctx, normalized);
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+
+            if (useFactoryMode && _activeUnit != null)
+            {
+                var list = EnsureToolsForId(_activeUnit, normalized);
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+
+            if (_toolsById.TryGetValue(normalized, out var existing) && existing != null && existing.Count > 0)
+                return existing;
+
+            return null;
+        }
+
+        List<IActionToolV2> EnsureToolsForId(Unit unit, string id)
+        {
+            var normalized = NormalizeSkillId(id);
+            if (string.IsNullOrEmpty(normalized))
+                return null;
+
+            if (_toolsById.TryGetValue(normalized, out var list) && list != null && list.Count > 0)
+                return list;
+
+            UnitRuntimeContext context = null;
+            if (unit != null)
+                context = ResolveContext(unit);
+            if (context == null)
+                context = _activeCtx;
+            if (context == null)
+                return null;
+
+            var resolved = EnsureToolsFromContext(context, normalized);
+            if (resolved != null && resolved.Count > 0)
+                return resolved;
+
+            if (_toolsById.TryGetValue(normalized, out var finalList) && finalList != null && finalList.Count > 0)
+                return finalList;
+
+            return null;
+        }
+
+        List<IActionToolV2> EnsureToolsFromContext(UnitRuntimeContext context, string id)
+        {
+            if (context == null)
+                return null;
+
+            var normalized = NormalizeSkillId(id);
+            if (string.IsNullOrEmpty(normalized))
+                return null;
+
+            var behaviours = context.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                var behaviour = behaviours[i];
+                if (behaviour == null)
+                    continue;
+
+                if (behaviour is IActionToolV2 tool)
+                {
+                    var toolId = NormalizeSkillId(tool.Id);
+                    if (!string.Equals(toolId, normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (behaviour is SkillDefinitionActionTool defTool && TryAssignDefinitionFromIndex(defTool, normalized))
+                            toolId = NormalizeSkillId(defTool.Id);
+                    }
+
+                    if (string.Equals(toolId, normalized, StringComparison.OrdinalIgnoreCase))
+                        RegisterTool(tool);
+                }
+            }
+
+            if (_toolsById.TryGetValue(normalized, out var list) && list != null && list.Count > 0)
+                return list;
+
+            return null;
+        }
+
+        bool TryAssignDefinitionFromIndex(SkillDefinitionActionTool tool, string skillId)
+        {
+            if (tool == null)
+                return false;
+
+            var index = ResolveSkillIndex();
+            if (index == null)
+                return false;
+
+            var normalized = NormalizeSkillId(skillId);
+            if (string.IsNullOrEmpty(normalized))
+                return false;
+
+            if (!index.TryGet(normalized, out var info) || info.definition == null)
+                return false;
+
+            if (!ReferenceEquals(tool.Definition, info.definition))
+                tool.SetDefinition(info.definition);
+
+            return true;
+        }
+
+        SkillIndex ResolveSkillIndex()
+        {
+            if (rulebook is ActionRulebook soRulebook && soRulebook.skillIndex != null)
+                return soRulebook.skillIndex;
+
+            return null;
+        }
+
+        static string NormalizeSkillId(string skillId)
+        {
+            return string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
+        }
+
+        bool IsSkillGrantedIncludingDerived(HashSet<string> grants, string skillId)
+        {
+            if (grants == null || grants.Count == 0)
+                return true;
+
+            var normalized = NormalizeSkillId(skillId);
+            if (string.IsNullOrEmpty(normalized))
+                return false;
+
+            if (grants.Contains(normalized))
+                return true;
+
+            var index = ResolveSkillIndex();
+            if (index == null)
+                return false;
+
+            return IsDerivedFromGranted(index, normalized, grants, 0);
+        }
+
+        bool IsDerivedFromGranted(SkillIndex index, string skillId, HashSet<string> grants, int depth)
+        {
+            if (index == null || string.IsNullOrEmpty(skillId) || depth > 8)
+                return false;
+
+            if (!index.TryGet(skillId, out var info) || info.definition == null)
+                return false;
+
+            var definition = info.definition;
+            if (definition.ActionKind != ActionKind.Derived)
+                return false;
+
+            var baseId = NormalizeSkillId(definition.DerivedFromSkillId);
+            if (string.IsNullOrEmpty(baseId))
+                return false;
+
+            if (grants.Contains(baseId))
+                return true;
+
+            return IsDerivedFromGranted(index, baseId, grants, depth + 1);
         }
 
         bool TryGetActiveTool(out IActionToolV2 tool)
