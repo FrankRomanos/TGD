@@ -192,6 +192,30 @@ namespace TGD.CombatV2
         Transform ResolveSelfView()
             => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
 
+        IGridActor ResolveBridgeActor()
+        {
+            if (_playerBridge != null && _playerBridge.Actor is IGridActor playerActor)
+                return playerActor;
+            if (_bridge != null && _bridge.Actor is IGridActor bridgeActor)
+                return bridgeActor;
+            return null;
+        }
+
+        void EnsureBridgePlaced()
+        {
+            if (_playerBridge != null)
+                _playerBridge.EnsurePlacedNow();
+            else
+                _bridge?.EnsurePlacedNow();
+        }
+
+        bool CommitToBridge(Hex anchor, Facing4 facing)
+        {
+            if (_playerBridge != null)
+                return _playerBridge.MoveCommit(anchor, facing);
+            return _bridge != null && _bridge.MoveCommit(anchor, facing);
+        }
+
         void ClearExecReport()
         {
             _reportUsedSeconds = 0;
@@ -461,6 +485,10 @@ namespace TGD.CombatV2
         {
             get
             {
+                var bridgeActor = ResolveBridgeActor();
+                if (bridgeActor != null)
+                    return bridgeActor;
+
                 var unit = ResolveSelfUnit();
                 return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
             }
@@ -470,6 +498,13 @@ namespace TGD.CombatV2
         {
             get
             {
+                if (_playerBridge != null && _playerBridge.IsReady)
+                    return _playerBridge.CurrentAnchor;
+
+                var bridgeActor = ResolveBridgeActor();
+                if (bridgeActor != null && !bridgeActor.Anchor.Equals(Hex.Zero))
+                    return bridgeActor.Anchor;
+
                 var unit = ResolveSelfUnit();
                 return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
             }
@@ -1291,9 +1326,9 @@ namespace TGD.CombatV2
                         finalFacing = nf;
                     }
 
-                    _bridge?.MoveCommit(startAnchor, finalFacing);
+                    CommitToBridge(startAnchor, finalFacing);
                     UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1399,10 +1434,10 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                _bridge?.MoveCommit(lastPosition, finalFacing);
+                CommitToBridge(lastPosition, finalFacing);
                 UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -1509,9 +1544,9 @@ namespace TGD.CombatV2
                 var abortAnchor = CurrentAnchor;
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
-                _bridge?.MoveCommit(abortAnchor, abortFacing);
+                CommitToBridge(abortAnchor, abortFacing);
                 UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
-                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
+                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, CurrentAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
@@ -1971,7 +2006,7 @@ namespace TGD.CombatV2
         void ClearTempReservations(string reason, bool logAlways = false)
         {
             int tracked = _tempReservedThisAction.Count;
-            int occCleared = (_occ != null && _bridge != null && SelfActor != null) ? _occ.TempClearForOwner(SelfActor) : 0;
+            int occCleared = (_occ != null && SelfActor != null) ? _occ.TempClearForOwner(SelfActor) : 0;
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
             if (logAlways || count > 0)
@@ -2008,22 +2043,21 @@ namespace TGD.CombatV2
 
         void RefreshOccupancy()
         {
-            if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge != null)
+            if (_playerBridge != null)
             {
-                playerBridge.EnsurePlacedNow();
-                var bridgeService = playerBridge.occupancyService;
-                if (bridgeService != null)
+                _playerBridge.EnsurePlacedNow();
+                if (_playerBridge.occupancyService != null)
                 {
-                    if (occupancyService == null)
-                        occupancyService = bridgeService;
-                    _occ = bridgeService.Get();
+                    occupancyService = _playerBridge.occupancyService;
+                    _occ = occupancyService.Get();
                     return;
                 }
             }
-            else
-            {
-                _bridge?.EnsurePlacedNow();
-            }
+
+            EnsureBridgePlaced();
+
+            if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService != null)
+                occupancyService = _playerBridge.occupancyService;
 
             if (occupancyService != null)
                 _occ = occupancyService.Get();
@@ -2086,11 +2120,11 @@ namespace TGD.CombatV2
                 if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
             }
 
-            // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的
-            if (occupancyService == null)
-                occupancyService = (turnManager?.occupancyService)
-                                   ?? (_playerBridge?.occupancyService)
-                                   ?? occupancyService;
+            // 2) 占位服务：桥优先，确保统一真相源
+            if (_playerBridge != null && _playerBridge.occupancyService != null)
+                occupancyService = _playerBridge.occupancyService;
+            else if (occupancyService == null && turnManager?.occupancyService != null)
+                occupancyService = turnManager.occupancyService;
 
             RefreshOccupancy();
 

@@ -99,13 +99,15 @@ namespace TGD.CombatV2.Integration
             if (!Application.isPlaying)
                 return;
 
-            if (_occ != null && _actor != null && _placed)
-            {
-                _occ.Remove(_actor);
-                _placed = false;
-                if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
-            }
+            // 不要在 Disable 阶段清空占位，保持“唯一真相源”持续有效。
+        }
+
+        void OnDestroy()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            ReleaseOccupancy("Destroy");
         }
 
         public bool IsReady
@@ -380,6 +382,19 @@ namespace TGD.CombatV2.Integration
             MirrorDriver(anchor, facing);
             RaiseAnchorChanged(anchor);
             return true;
+        }
+
+        void ReleaseOccupancy(string reason)
+        {
+            if (_occ == null || _actor == null || !_placed)
+                return;
+
+            _occ.Remove(_actor);
+            _occ.TempClearForOwner(_actor);
+            _placed = false;
+
+            if (debugLog)
+                Debug.Log($"[Occ] Remove {IdLabel()} ({reason})", this);
         }
     }
 }
