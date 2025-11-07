@@ -1293,7 +1293,7 @@ namespace TGD.CombatV2
 
                     _bridge?.MoveCommit(startAnchor, finalFacing);
                     UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1402,7 +1402,7 @@ namespace TGD.CombatV2
                 _bridge?.MoveCommit(lastPosition, finalFacing);
                 UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
