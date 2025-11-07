@@ -91,6 +91,11 @@ namespace TGD.CombatV2
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
+        Hex _cachedAnchor = Hex.Zero;
+        int _cachedAnchorVersion = -1;
+        bool _hasCachedAnchor;
+        Facing4 _cachedFacing = Facing4.PlusQ;
+        bool _hasCachedFacing;
         IStickyMoveSource _sticky;
 
         float MoveRateMin => ctx != null ? ctx.MoveRateMin : MoveRateRules.DefaultMin;
@@ -461,8 +466,13 @@ namespace TGD.CombatV2
         {
             get
             {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
+                if (_playerBridge != null && _playerBridge.Actor is IGridActor playerActor && playerActor != null)
+                    return playerActor;
+
+                if (_bridge != null && _bridge.Actor is IGridActor actor && actor != null)
+                    return actor;
+
+                return null;
             }
         }
 
@@ -470,8 +480,55 @@ namespace TGD.CombatV2
         {
             get
             {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
+                if (_playerBridge != null && _playerBridge.IsReady)
+                {
+                    if (_cachedAnchorVersion != _playerBridge.AnchorVersion || !_hasCachedAnchor)
+                    {
+                        _cachedAnchor = _playerBridge.CurrentAnchor;
+                        _cachedAnchorVersion = _playerBridge.AnchorVersion;
+                        _hasCachedAnchor = true;
+                    }
+                    return _cachedAnchor;
+                }
+
+                var actor = SelfActor;
+                if (actor != null)
+                {
+                    if (!_hasCachedAnchor || !_cachedAnchor.Equals(actor.Anchor))
+                    {
+                        _cachedAnchor = actor.Anchor;
+                        _hasCachedAnchor = true;
+                    }
+                    return _cachedAnchor;
+                }
+
+                return _hasCachedAnchor ? _cachedAnchor : Hex.Zero;
+            }
+        }
+
+        Facing4 CurrentFacing
+        {
+            get
+            {
+                var actor = SelfActor;
+                if (actor != null)
+                {
+                    if (!_hasCachedFacing || _cachedFacing != actor.Facing)
+                    {
+                        _cachedFacing = actor.Facing;
+                        _hasCachedFacing = true;
+                    }
+                    return _cachedFacing;
+                }
+
+                if (_playerBridge != null && _playerBridge.Actor is IGridActor bridgeActor && bridgeActor != null)
+                {
+                    _cachedFacing = bridgeActor.Facing;
+                    _hasCachedFacing = true;
+                    return _cachedFacing;
+                }
+
+                return _hasCachedFacing ? _cachedFacing : Facing4.PlusQ;
             }
         }
 
@@ -599,8 +656,39 @@ namespace TGD.CombatV2
             base.OnDestroy();
         }
 
+        void RefreshCachedTransform()
+        {
+            var actor = SelfActor;
+            if (actor != null)
+            {
+                _cachedAnchor = actor.Anchor;
+                _hasCachedAnchor = true;
+                _cachedFacing = actor.Facing;
+                _hasCachedFacing = true;
+                if (_playerBridge != null)
+                    _cachedAnchorVersion = _playerBridge.AnchorVersion;
+            }
+        }
+
+        Hex ResolveAnchorForEvent(Hex fallback)
+        {
+            var anchor = CurrentAnchor;
+            if (!_hasCachedAnchor || anchor.Equals(Hex.Zero))
+                return fallback;
+            return anchor;
+        }
+
         void HandleAnchorChanged(Hex anchor, int version)
         {
+            _cachedAnchor = anchor;
+            _cachedAnchorVersion = version;
+            _hasCachedAnchor = true;
+            var actor = SelfActor;
+            if (actor != null)
+            {
+                _cachedFacing = actor.Facing;
+                _hasCachedFacing = true;
+            }
             _previewDirty = true;
             _previewAnchorVersion = -1;
             _planAnchorVersion = -1;
@@ -1189,7 +1277,7 @@ namespace TGD.CombatV2
             RefreshOccupancy();
 
             var startAnchor = CurrentAnchor;
-            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            Facing4 finalFacing = CurrentFacing;
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
@@ -1292,8 +1380,14 @@ namespace TGD.CombatV2
                     }
 
                     _bridge?.MoveCommit(startAnchor, finalFacing);
+                    _cachedAnchor = startAnchor;
+                    _hasCachedAnchor = true;
+                    if (_playerBridge != null)
+                        _cachedAnchorVersion = _playerBridge.AnchorVersion;
+                    _cachedFacing = finalFacing;
+                    _hasCachedFacing = true;
                     UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, ResolveAnchorForEvent(startAnchor));
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1400,9 +1494,15 @@ namespace TGD.CombatV2
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
                 _bridge?.MoveCommit(lastPosition, finalFacing);
+                _cachedAnchor = lastPosition;
+                _hasCachedAnchor = true;
+                if (_playerBridge != null)
+                    _cachedAnchorVersion = _playerBridge.AnchorVersion;
+                _cachedFacing = finalFacing;
+                _hasCachedFacing = true;
                 UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, ResolveAnchorForEvent(lastPosition));
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -2017,6 +2117,7 @@ namespace TGD.CombatV2
                     if (occupancyService == null)
                         occupancyService = bridgeService;
                     _occ = bridgeService.Get();
+                    RefreshCachedTransform();
                     return;
                 }
             }
@@ -2027,6 +2128,8 @@ namespace TGD.CombatV2
 
             if (occupancyService != null)
                 _occ = occupancyService.Get();
+
+            RefreshCachedTransform();
         }
 
         PlayerOccupancyBridge ResolvePlayerBridge()
@@ -2086,6 +2189,11 @@ namespace TGD.CombatV2
                 if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
             }
 
+            if (_playerBridge != null)
+                _playerBridge.EnsurePlacedNow();
+            else
+                _bridge?.EnsurePlacedNow();
+
             // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的
             if (occupancyService == null)
                 occupancyService = (turnManager?.occupancyService)
@@ -2094,10 +2202,13 @@ namespace TGD.CombatV2
 
             RefreshOccupancy();
 
+            var unit = ResolveSelfUnit();
+            var actor = SelfActor;
+
             return authoring?.Layout != null
-                && ResolveSelfUnit() != null
+                && unit != null
                 && _occ != null
-                && SelfActor != null;
+                && actor != null;
         }
 
         void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
