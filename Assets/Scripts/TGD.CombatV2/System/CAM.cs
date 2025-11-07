@@ -7,19 +7,19 @@ namespace TGD.CombatV2
         public static event System.Action<UnitRuntimeContext, string> ActionResolved;
         public static event System.Action<UnitRuntimeContext, string> ActionCancelled;
 
-        internal static void RaiseActionResolved(UnitRuntimeContext context, string actionId)
-            => ActionResolved?.Invoke(context, actionId);
+        internal static void RaiseActionResolved(UnitRuntimeContext context, string skillId)
+            => ActionResolved?.Invoke(context, skillId);
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        static void LogCancel(UnitRuntimeContext ctx, string actionId, string reason)
+        static void LogCancel(UnitRuntimeContext ctx, string skillId, string reason)
         {
-            ActionPhaseLogger.Log($"[Rules] Cancel actionId={actionId} ({reason})");
+            ActionPhaseLogger.Log($"[Rules] Cancel skillId={skillId} ({reason})");
         }
 
-        internal static void RaiseActionCancelled(UnitRuntimeContext ctx, string actionId, string reason = null)
+        internal static void RaiseActionCancelled(UnitRuntimeContext ctx, string skillId, string reason = null)
         {
-            LogCancel(ctx, actionId, reason ?? "unknown");
-            try { ActionCancelled?.Invoke(ctx, actionId ?? string.Empty); }
+            LogCancel(ctx, skillId, reason ?? "unknown");
+            try { ActionCancelled?.Invoke(ctx, skillId ?? string.Empty); }
             catch { /* 避免监听器异常影响主流程 */ }
         }
     }

@@ -31,7 +31,7 @@ MonoBehaviour:
       fallbackSteps: 3
       stepsCap: 12
       refundThresholdSeconds: 0.8
-      actionId: Move
+      skillId: Move
       keepDeg: 45
       turnDeg: 135
       turnSpeedDegPerSec: 720

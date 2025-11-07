@@ -7,8 +7,8 @@ namespace TGD.PlayV2
     [DisallowMultipleComponent]
     public sealed class ReduceCooldownOnCast : MonoBehaviour
     {
-        public string triggerActionId = "SK_A";
-        public string targetActionId = "SK_B";
+        public string triggerSkillId = "SK_A";
+        public string targetSkillId = "SK_B";
         public int reduceSeconds = 6;
 
         UnitRuntimeContext _ctx;
@@ -24,27 +24,27 @@ namespace TGD.PlayV2
             CAM.ActionResolved -= OnResolved;
         }
 
-        void OnResolved(UnitRuntimeContext casterCtx, string actionId)
+        void OnResolved(UnitRuntimeContext casterCtx, string skillId)
         {
             if (_ctx == null || casterCtx != _ctx)
                 return;
-            if (!Matches(triggerActionId, actionId))
+            if (!Matches(triggerSkillId, skillId))
                 return;
 
             var hub = _ctx.cooldownHub;
             if (hub == null || hub.secStore == null)
                 return;
-            if (string.IsNullOrEmpty(targetActionId))
+            if (string.IsNullOrEmpty(targetSkillId))
                 return;
 
-            int before = hub.secStore.SecondsLeft(targetActionId);
+            int before = hub.secStore.SecondsLeft(targetSkillId);
             int delta = Mathf.Max(0, reduceSeconds);
             int after = Mathf.Max(0, before - delta);
             if (after == before)
                 return;
 
-            hub.secStore.StartSeconds(targetActionId, after);
-            ActionPhaseLogger.Log($"[Rules] CD reduce: {targetActionId} {before}->{after} (Cast {triggerActionId})");
+            hub.secStore.StartSeconds(targetSkillId, after);
+            ActionPhaseLogger.Log($"[Rules] CD reduce: {targetSkillId} {before}->{after} (Cast {triggerSkillId})");
         }
 
         internal static bool Matches(string pattern, string value)

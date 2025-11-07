@@ -40,8 +40,8 @@ namespace TGD.CoreV2
         public float fallbackMoveTurnSpeedDegPerSec = MoveProfileRules.DefaultTurnSpeedDegPerSec;
         [Tooltip("当 stats 为空时用于测试的默认移动冷却（秒）")]
         public float fallbackMoveCooldownSeconds = MoveProfileRules.DefaultCooldownSeconds;
-        [Tooltip("当 stats 为空时用于测试的默认移动 ActionId")]
-        public string fallbackMoveActionId = MoveProfileRules.DefaultActionId;
+        [Tooltip("当 stats 为空时用于测试的默认移动 SkillId")]
+        public string fallbackMoveSkillId = MoveProfileRules.DefaultSkillId;
 
         [Header("Runtime State")]
         [SerializeField]
@@ -51,7 +51,7 @@ namespace TGD.CoreV2
         List<string> _learnedActions = new List<string>();
 
         public IReadOnlyList<string> LearnedActions => _learnedActions;
-        public readonly HashSet<string> GrantedActionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> GrantedSkillIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public Unit boundUnit; // TurnManagerV2.Bind(unit, ctx) 时顺手写入
 
         public void SetLearnedActions(IEnumerable<string> actions)
@@ -76,7 +76,7 @@ namespace TGD.CoreV2
 
         public void SetGrantedActions(IEnumerable<string> actions)
         {
-            GrantedActionIds.Clear();
+            GrantedSkillIds.Clear();
             if (actions == null)
                 return;
 
@@ -85,7 +85,7 @@ namespace TGD.CoreV2
                 if (string.IsNullOrWhiteSpace(action))
                     continue;
 
-                GrantedActionIds.Add(action.Trim());
+                GrantedSkillIds.Add(action.Trim());
             }
         }
 
@@ -220,15 +220,15 @@ namespace TGD.CoreV2
         public float MoveCooldownSeconds => stats != null
             ? MoveProfileRules.ResolveCooldownSeconds(stats)
             : Mathf.Max(0f, fallbackMoveCooldownSeconds);
-        public string MoveActionId
+        public string MoveSkillId
         {
             get
             {
                 if (stats != null)
-                    return MoveProfileRules.ResolveActionId(stats);
-                return string.IsNullOrWhiteSpace(fallbackMoveActionId)
-                    ? MoveProfileRules.DefaultActionId
-                    : fallbackMoveActionId.Trim();
+                    return MoveProfileRules.ResolveSkillId(stats);
+                return string.IsNullOrWhiteSpace(fallbackMoveSkillId)
+                    ? MoveProfileRules.DefaultSkillId
+                    : fallbackMoveSkillId.Trim();
             }
         }
         // —— 能量 ——
@@ -276,8 +276,8 @@ namespace TGD.CoreV2
             fallbackMoveKeepDeg = Mathf.Repeat(Mathf.Max(0f, fallbackMoveKeepDeg), 360f);
             fallbackMoveTurnDeg = Mathf.Repeat(Mathf.Max(0f, fallbackMoveTurnDeg), 360f);
             fallbackMoveTurnSpeedDegPerSec = Mathf.Max(0f, fallbackMoveTurnSpeedDegPerSec);
-            if (string.IsNullOrWhiteSpace(fallbackMoveActionId))
-                fallbackMoveActionId = MoveProfileRules.DefaultActionId;
+            if (string.IsNullOrWhiteSpace(fallbackMoveSkillId))
+                fallbackMoveSkillId = MoveProfileRules.DefaultSkillId;
             if (_rules == null)
                 _rules = new UnitRuleSet();
         }

@@ -139,7 +139,7 @@ namespace TGD.CombatV2
             public int energyAtk;
             public bool valid;
             public int bonusSecs;
-            public string actionId;
+            public string skillId;
             public int chainDepth;
             public bool ruleOverride;
         }
@@ -331,11 +331,11 @@ namespace TGD.CombatV2
             if (!preDeduct.ruleOverride)
                 return;
 
-            if (string.IsNullOrEmpty(preDeduct.actionId))
+            if (string.IsNullOrEmpty(preDeduct.skillId))
                 return;
 
             var context = (turnManager != null && unit != null) ? turnManager.GetContext(unit) : null;
-            context?.RuleLedger?.TryDiscardCost(preDeduct.actionId, preDeduct.chainDepth);
+            context?.RuleLedger?.TryDiscardCost(preDeduct.skillId, preDeduct.chainDepth);
         }
 
         void RestorePreDeduct(Unit unit, PreDeduct preDeduct, ITurnBudget budget)
@@ -1002,7 +1002,7 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            var grants = ctx?.GrantedActionIds;
+            var grants = ctx?.GrantedSkillIds;
             if (grants != null && grants.Count > 0)
             {
                 string key = (tool as ICooldownKeyProvider)?.CooldownKey;
@@ -1257,7 +1257,7 @@ namespace TGD.CombatV2
             }
         }
 
-        IEnumerator RunSustainedBonusTurns(int capSeconds, string actionId)
+        IEnumerator RunSustainedBonusTurns(int capSeconds, string skillId)
         {
             if (turnManager == null)
                 yield break;
@@ -1295,7 +1295,7 @@ namespace TGD.CombatV2
                     if (unit == null)
                         continue;
 
-                    BeginBonusTurn(unit, capSeconds, actionId);
+                    BeginBonusTurn(unit, capSeconds, skillId);
 
                     string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                     Debug.Log($"[Turn] Idle BonusT({unitLabel}) cap={capSeconds}", this);
@@ -1647,7 +1647,7 @@ namespace TGD.CombatV2
 
                     var ctx2 = RulesAdapter.BuildContext(
                         context,
-                        actionId: tool.Id,
+                        skillId: tool.Id,
                         kind: tool.Kind,
                         chainDepth: _chainDepth,
                         comboIndex: GetAttackComboCount(unit),
@@ -1699,7 +1699,7 @@ namespace TGD.CombatV2
                         var ledger = context.RuleLedger;
                         ledger?.RecordCost(new RuleCostApplication
                         {
-                            actionId = tool.Id,
+                            skillId = tool.Id,
                             chainDepth = actionPlan.chainDepth,
                             originalMoveSecs = originalMoveSecs,
                             originalAtkSecs = originalAtkSecs,
@@ -1757,7 +1757,7 @@ namespace TGD.CombatV2
                     energyMove = cost.moveEnergy,
                     energyAtk = cost.atkEnergy,
                     valid = true,
-                    actionId = tool.Id,
+                    skillId = tool.Id,
                     chainDepth = actionPlan.chainDepth,
                     ruleOverride = ruleCostOverridden
                 };
@@ -3792,7 +3792,7 @@ namespace TGD.CombatV2
                 energyMove = option.energy,
                 energyAtk = 0,
                 valid = true,
-                actionId = toolId,
+                skillId = toolId,
                 chainDepth = 1,
                 ruleOverride = false
             };
@@ -3992,7 +3992,7 @@ namespace TGD.CombatV2
                 energyMove = option.energy,
                 energyAtk = 0,
                 valid = true,
-                actionId = tool.Id,
+                skillId = tool.Id,
                 chainDepth = chainDepth,
                 ruleOverride = false
             };
@@ -4385,7 +4385,7 @@ namespace TGD.CombatV2
 
                 var ctx2 = RulesAdapter.BuildContext(
                     context,
-                    actionId: key,
+                    skillId: key,
                     kind: tool.Kind,
                     chainDepth: _chainDepth,
                     comboIndex: GetAttackComboCount(unit),

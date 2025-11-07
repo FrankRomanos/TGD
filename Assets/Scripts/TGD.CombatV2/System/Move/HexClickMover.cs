@@ -17,7 +17,7 @@ namespace TGD.CombatV2
     {
         [SerializeField]
         [Tooltip("Action identifier used when registering with CombatActionManagerV2.")]
-        string actionId = MoveProfileRules.DefaultActionId;
+        string skillId = MoveProfileRules.DefaultSkillId;
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
@@ -51,7 +51,7 @@ namespace TGD.CombatV2
         [SerializeField, Tooltip("当前剩余回合秒数（运行时）")]
         int _turnSecondsLeft = -1;
         int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
-        public string CooldownKey => ResolveMoveActionId();
+        public string CooldownKey => ResolveMoveSkillId();
         void EnsureTurnTimeInited()
         {
             if (!ManageTurnTimeLocally) return;
@@ -194,17 +194,17 @@ namespace TGD.CombatV2
         public float ResolveMoveCooldownSeconds()
             => ctx != null ? ctx.MoveCooldownSeconds : MoveProfileRules.DefaultCooldownSeconds;
 
-        string ResolveConfiguredActionId()
-            => string.IsNullOrEmpty(actionId) ? MoveProfileRules.DefaultActionId : actionId.Trim();
+        string ResolveConfiguredSkillId()
+            => string.IsNullOrEmpty(skillId) ? MoveProfileRules.DefaultSkillId : skillId.Trim();
 
-        public string ResolveMoveActionId()
-            => ctx != null ? ctx.MoveActionId : ResolveConfiguredActionId();
+        public string ResolveMoveSkillId()
+            => ctx != null ? ctx.MoveSkillId : ResolveConfiguredSkillId();
 
         MoveCostSpec BuildCostSpec()
         {
             return new MoveCostSpec
             {
-                actionId = ResolveMoveActionId(),
+                skillId = ResolveMoveSkillId(),
                 energyPerSecond = Mathf.Max(0, ResolveMoveEnergyPerSecond()),
                 cooldownSeconds = Mathf.Max(0f, ResolveMoveCooldownSeconds())
             };
@@ -246,7 +246,7 @@ namespace TGD.CombatV2
 
         string _hudMsg;
         float _hudMsgUntil;
-        public string Id => ResolveMoveActionId();
+        public string Id => ResolveMoveSkillId();
         public ActionKind Kind => ActionKind.Standard;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;

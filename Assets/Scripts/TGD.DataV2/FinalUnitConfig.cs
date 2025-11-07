@@ -24,7 +24,7 @@ namespace TGD.DataV2
         [Serializable]
         public struct LearnedAbility
         {
-            public string actionId;
+            public string skillId;
             public int initialCooldownSeconds;
         }
     }

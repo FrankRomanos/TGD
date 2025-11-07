@@ -9,7 +9,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "Reaction40";
+            skillId = "Reaction40";
             timeCostSeconds = 2;
             energyCost = 40;
             targetMode = TargetMode.EnemyOrGround;

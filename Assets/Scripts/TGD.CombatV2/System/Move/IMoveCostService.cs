@@ -4,7 +4,7 @@ namespace TGD.CombatV2
 {
     public struct MoveCostSpec
     {
-        public string actionId;
+        public string skillId;
         public int energyPerSecond;
         public float cooldownSeconds;
     }

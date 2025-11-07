@@ -31,7 +31,7 @@ MonoBehaviour:
       fallbackSteps: 3
       stepsCap: 12
       refundThresholdSeconds: 0.8
-      actionId: Move
+      skillId: Move
       keepDeg: 45
       turnDeg: 135
       turnSpeedDegPerSec: 720
@@ -68,21 +68,21 @@ MonoBehaviour:
   basePrefab: {fileID: 6350957915083591713, guid: 99584da8cd1fb4f4cba8ba48af0c2a02, type: 3}
   avatar: {fileID: 21300000, guid: d365a3010aedb1d4a8c3abe28a1f36fa, type: 3}
   abilities:
-  - actionId: Move
+  - skillId: Move
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Attack
+  - skillId: Attack
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Reaction40
+  - skillId: Reaction40
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Reaction20
+  - skillId: Reaction20
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Free10
+  - skillId: Free10
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: DerivedAfterAttack
+  - skillId: DerivedAfterAttack
     learned: 1
     initialCooldownSeconds: 0

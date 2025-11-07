@@ -16,16 +16,16 @@ namespace TGD.CombatV2
         public UnitRuntimeContext ctx;
 
         [Header("Options")]
-        public string actionIdOverride = ""; // 留空则用单位配置里的移动 ActionId
+        public string skillIdOverride = ""; // 留空则用单位配置里的移动 SkillId
 
         CooldownStoreSecV2 Store => cooldownHub != null ? cooldownHub.secStore : null;
         string Key(in MoveCostSpec spec)
         {
-            if (!string.IsNullOrEmpty(actionIdOverride))
-                return actionIdOverride;
-            if (!string.IsNullOrWhiteSpace(spec.actionId))
-                return spec.actionId.Trim();
-            return MoveProfileRules.DefaultActionId;
+            if (!string.IsNullOrEmpty(skillIdOverride))
+                return skillIdOverride;
+            if (!string.IsNullOrWhiteSpace(spec.skillId))
+                return spec.skillId.Trim();
+            return MoveProfileRules.DefaultSkillId;
         }
 
         Unit ResolveUnit(Unit unit)

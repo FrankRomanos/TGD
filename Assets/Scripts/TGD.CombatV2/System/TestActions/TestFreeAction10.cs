@@ -9,7 +9,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "Free10";
+            skillId = "Free10";
             timeCostSeconds = 0;
             energyCost = 10;
             targetMode = TargetMode.AnyClick;

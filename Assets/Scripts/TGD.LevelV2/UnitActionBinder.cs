@@ -18,13 +18,13 @@ namespace TGD.LevelV2
         [Serializable]
         public struct ActionAvailability
         {
-            public string actionId;
+            public string skillId;
             public bool unlocked;
             public int initialCooldownSeconds;
 
-            public ActionAvailability(string actionId, bool unlocked, int initialCooldownSeconds)
+            public ActionAvailability(string skillId, bool unlocked, int initialCooldownSeconds)
             {
-                this.actionId = string.IsNullOrWhiteSpace(actionId) ? string.Empty : actionId.Trim();
+                this.skillId = string.IsNullOrWhiteSpace(skillId) ? string.Empty : skillId.Trim();
                 this.unlocked = unlocked;
                 this.initialCooldownSeconds = Mathf.Max(0, initialCooldownSeconds);
             }
@@ -71,19 +71,19 @@ namespace TGD.LevelV2
 
             var abilityLookup = BuildAbilityLookup(learnedList);
 
-            string moveActionId = DetermineMoveActionId(go, ctx);
-            bool hasMove = abilityLookup.ContainsKey(moveActionId);
+            string moveSkillId = DetermineMoveSkillId(go, ctx);
+            bool hasMove = abilityLookup.ContainsKey(moveSkillId);
             ConfigureMovers(go, hasMove);
 
-            string attackActionId = DetermineAttackActionId(go);
-            bool hasAttack = abilityLookup.ContainsKey(attackActionId);
+            string attackSkillId = DetermineAttackSkillId(go);
+            bool hasAttack = abilityLookup.ContainsKey(attackSkillId);
             ConfigureAttackers(go, hasAttack);
 
-            var availabilities = BuildAvailabilities(learnedList, moveActionId, hasMove, attackActionId, hasAttack, abilityLookup);
+            var availabilities = BuildAvailabilities(learnedList, moveSkillId, hasMove, attackSkillId, hasAttack, abilityLookup);
 
             ctx?.SetLearnedActions(availabilities
-                .Where(a => a.unlocked && !string.IsNullOrWhiteSpace(a.actionId))
-                .Select(a => a.actionId));
+                .Where(a => a.unlocked && !string.IsNullOrWhiteSpace(a.skillId))
+                .Select(a => a.skillId));
             BroadcastToProviders(go, availabilities);
 
             LogActions(go, availabilities);
@@ -98,7 +98,7 @@ namespace TGD.LevelV2
 
             foreach (var ability in learned)
             {
-                var id = NormalizeActionId(ability.actionId);
+                var id = NormalizeSkillId(ability.skillId);
                 if (string.IsNullOrEmpty(id))
                     continue;
                 if (!lookup.ContainsKey(id))
@@ -110,40 +110,40 @@ namespace TGD.LevelV2
 
         static List<ActionAvailability> BuildAvailabilities(
             List<FinalUnitConfig.LearnedAbility> learned,
-            string moveActionId,
+            string moveSkillId,
             bool hasMove,
-            string attackActionId,
+            string attackSkillId,
             bool hasAttack,
             Dictionary<string, FinalUnitConfig.LearnedAbility> lookup)
         {
             var list = new List<ActionAvailability>();
 
-            if (!string.IsNullOrEmpty(moveActionId))
+            if (!string.IsNullOrEmpty(moveSkillId))
             {
-                int cooldown = lookup.TryGetValue(moveActionId, out var entry)
+                int cooldown = lookup.TryGetValue(moveSkillId, out var entry)
                     ? Mathf.Max(0, entry.initialCooldownSeconds)
                     : 0;
-                list.Add(new ActionAvailability(moveActionId, hasMove, cooldown));
+                list.Add(new ActionAvailability(moveSkillId, hasMove, cooldown));
             }
 
-            if (!string.IsNullOrEmpty(attackActionId))
+            if (!string.IsNullOrEmpty(attackSkillId))
             {
-                int cooldown = lookup.TryGetValue(attackActionId, out var entry)
+                int cooldown = lookup.TryGetValue(attackSkillId, out var entry)
                     ? Mathf.Max(0, entry.initialCooldownSeconds)
                     : 0;
-                list.Add(new ActionAvailability(attackActionId, hasAttack, cooldown));
+                list.Add(new ActionAvailability(attackSkillId, hasAttack, cooldown));
             }
 
             if (learned != null)
             {
                 foreach (var ability in learned)
                 {
-                    var id = NormalizeActionId(ability.actionId);
+                    var id = NormalizeSkillId(ability.skillId);
                     if (string.IsNullOrEmpty(id))
                         continue;
-                    if (!string.IsNullOrEmpty(moveActionId) && string.Equals(id, moveActionId, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(moveSkillId) && string.Equals(id, moveSkillId, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    if (!string.IsNullOrEmpty(attackActionId) && string.Equals(id, attackActionId, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(attackSkillId) && string.Equals(id, attackSkillId, StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     list.Add(new ActionAvailability(id, true, Mathf.Max(0, ability.initialCooldownSeconds)));
@@ -221,7 +221,7 @@ namespace TGD.LevelV2
                 var entry = actions[i];
                 if (i > 0)
                     sb.Append(", ");
-                sb.Append(entry.actionId);
+                sb.Append(entry.skillId);
                 sb.Append(entry.unlocked ? "[on]" : "[off]");
                 sb.Append(" cd=");
                 sb.Append(entry.initialCooldownSeconds);
@@ -230,14 +230,14 @@ namespace TGD.LevelV2
             Debug.Log($"[ActionBinder] {go.name} actions -> {sb}");
         }
 
-        static string NormalizeActionId(string actionId)
+        static string NormalizeSkillId(string skillId)
         {
-            return string.IsNullOrWhiteSpace(actionId) ? null : actionId.Trim();
+            return string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
         }
 
-        static string DetermineMoveActionId(GameObject go, UnitRuntimeContext ctx)
+        static string DetermineMoveSkillId(GameObject go, UnitRuntimeContext ctx)
         {
-            var fromContext = NormalizeActionId(ctx != null ? ctx.MoveActionId : null);
+            var fromContext = NormalizeSkillId(ctx != null ? ctx.MoveSkillId : null);
             if (!string.IsNullOrEmpty(fromContext))
                 return fromContext;
 
@@ -246,29 +246,29 @@ namespace TGD.LevelV2
                 var mover = go.GetComponentInChildren<HexClickMover>(true);
                 if (mover != null)
                 {
-                    var fromMover = NormalizeActionId(mover.ResolveMoveActionId());
+                    var fromMover = NormalizeSkillId(mover.ResolveMoveSkillId());
                     if (!string.IsNullOrEmpty(fromMover))
                         return fromMover;
                 }
             }
 
-            return MoveProfileRules.DefaultActionId;
+            return MoveProfileRules.DefaultSkillId;
         }
 
-        static string DetermineAttackActionId(GameObject go)
+        static string DetermineAttackSkillId(GameObject go)
         {
             if (go != null)
             {
                 var attack = go.GetComponentInChildren<AttackControllerV2>(true);
                 if (attack != null)
                 {
-                    var resolved = NormalizeActionId(attack.Id);
+                    var resolved = NormalizeSkillId(attack.Id);
                     if (!string.IsNullOrEmpty(resolved))
                         return resolved;
                 }
             }
 
-            return AttackProfileRules.DefaultActionId;
+            return AttackProfileRules.DefaultSkillId;
         }
     }
 }

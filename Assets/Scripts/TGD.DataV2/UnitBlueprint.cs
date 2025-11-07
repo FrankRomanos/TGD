@@ -34,7 +34,7 @@ namespace TGD.DataV2
         [Serializable]
         public struct AbilitySlot
         {
-            public string actionId;
+            public string skillId;
             public bool learned;
             [Min(0)]
             public int initialCooldownSeconds;

@@ -132,16 +132,16 @@ namespace TGD.CombatV2
 
         public bool AllowFriendlyInsertions() => allowFriendlyInsertions;
 
-        public IReadOnlyList<string> AllowedDerivedActions(string baseActionId)
+        public IReadOnlyList<string> AllowedDerivedActions(string baseSkillId)
         {
-            if (string.IsNullOrEmpty(baseActionId) || derivedRules == null || derivedRules.Length == 0)
+            if (string.IsNullOrEmpty(baseSkillId) || derivedRules == null || derivedRules.Length == 0)
                 return s_emptyIds;
 
             s_idScratch.Clear();
             for (int i = 0; i < derivedRules.Length; i++)
             {
                 var rule = derivedRules[i];
-                if (!string.IsNullOrEmpty(rule.sourceId) && string.Equals(rule.sourceId, baseActionId, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(rule.sourceId) && string.Equals(rule.sourceId, baseSkillId, StringComparison.OrdinalIgnoreCase))
                 {
                     if (rule.derivedIds != null)
                     {

@@ -20,7 +20,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "FullRoundTest";
+            skillId = "FullRoundTest";
             timeCostSeconds = 0;
             energyCost = 0;
             targetMode = TargetMode.AnyClick;

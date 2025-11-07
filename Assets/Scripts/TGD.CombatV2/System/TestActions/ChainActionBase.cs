@@ -23,7 +23,7 @@ namespace TGD.CombatV2
         public Color hoverInvalidColor = new(1f, 0.3f, 0.3f, 0.7f);
 
         [Header("Config")]
-        public string actionId = "ChainTest";
+        public string skillId = "ChainTest";
         [Min(0)] public int timeCostSeconds = 0;
         [Min(0)] public int energyCost = 0;
 
@@ -41,12 +41,12 @@ namespace TGD.CombatV2
         protected DefaultTargetValidator _validator;
         protected TargetingSpec _spec;
 
-        public string Id => actionId;
+        public string Id => skillId;
         public abstract ActionKind Kind { get; }
 
         public virtual Sprite Icon => icon;
 
-        public virtual string CooldownId => actionId;
+        public virtual string CooldownId => skillId;
         public virtual int CooldownSeconds => Mathf.Max(0, cooldownSeconds);
 
         protected virtual void Awake()
