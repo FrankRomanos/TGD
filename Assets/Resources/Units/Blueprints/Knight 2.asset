@@ -65,7 +65,7 @@ MonoBehaviour:
     DamageReducePct: 0
     ThreatAddPct: 0
     ShredAddPct: 0
-  basePrefab: {fileID: 6350957915083591713, guid: 99584da8cd1fb4f4cba8ba48af0c2a02, type: 3}
+  basePrefab: {fileID: 7556338074851262492, guid: 23af31beb198d5049bd9533c0221ebce, type: 3}
   avatar: {fileID: 21300000, guid: b7e97bd106c50ff42a95f0ea64807e33, type: 3}
   abilities:
   - skillId: Move
