@@ -107,11 +107,17 @@ namespace TGD.LevelV2
             PlaceTransform(go.transform, spawnHex);
 
             var adapter = EnsureGridAdapter(go, unit);
+            var occSvc = ResolveOccupancyService();
+            var bridge = BindOccAtSpawn(go, context, ref adapter, occSvc, spawnHex, unit.Facing);
+
+            if (occupancyService == null && occSvc != null)
+                occupancyService = occSvc;
+
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
             var resolvedSkillIndex = ResolveSkillIndex();
             var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit, resolvedSkillIndex);
 
-            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager, spawnHex, unit.Facing);
+            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager, occSvc, bridge);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
@@ -373,7 +379,6 @@ namespace TGD.LevelV2
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
                 mover.viewOverride = view;
-                mover.driver = null;
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -534,26 +539,17 @@ namespace TGD.LevelV2
             UnitFaction faction,
             UnitGridAdapter adapter,
             TurnManagerV2 resolvedTurnManager,
-            Hex spawn,
-            Facing4 facing)
+            HexOccupancyService occSvc,
+            PlayerOccupancyBridge bridge)
         {
             if (go == null)
                 return;
 
-            var occSvc = ResolveOccupancyService();
-            if (occSvc != null)
-                Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
-
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
             if (adapter == null)
-                adapter = EnsureGridAdapter(go, bound);
-            else if (adapter.Unit == null && bound != null)
-                adapter.Unit = bound;
-
-            WireOccupancyBinding(go, context, ref adapter, occSvc, spawn, facing);
-
-            if (occupancyService == null && occSvc != null)
-                occupancyService = occSvc;
+                Debug.LogWarning($"[Factory] Missing UnitGridAdapter for {bound?.Id ?? go.name}.", go);
+            if (bridge == null)
+                Debug.LogWarning($"[Factory] Missing PlayerOccupancyBridge for {bound?.Id ?? go.name}.", go);
 
             var tm = resolvedTurnManager != null ? resolvedTurnManager : turnManager;
 
@@ -561,15 +557,16 @@ namespace TGD.LevelV2
             {
                 bool isFriendly = faction == UnitFaction.Friendly;
                 tm.RegisterSpawn(bound, isFriendly);
-                bool isEnemy = tm.IsEnemyUnit(bound);
-                bool isPlayer = tm.IsPlayerUnit(bound);
-                Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
+                if (isFriendly)
+                    tm.RegisterPlayerUnit(bound, context);
+                else
+                    tm.RegisterEnemyUnit(bound, context);
             }
 
             EnsureDefaultValidatorInjected(occSvc, tm);
         }
-
-        PlayerOccupancyBridge WireOccupancyBinding(
+ 
+        PlayerOccupancyBridge BindOccAtSpawn(
             GameObject go,
             UnitRuntimeContext ctx,
             ref UnitGridAdapter adapter,
@@ -615,8 +612,8 @@ namespace TGD.LevelV2
 
                 if (occSvc != null && mover.occupancyService == null)
                     mover.occupancyService = occSvc;
-                if (bridge != null && mover.bridgeOverride == null)
-                    mover.bridgeOverride = bridge;
+                if (bridge != null && mover._playerBridge == null)
+                    mover._playerBridge = bridge;
             }
 
             foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
