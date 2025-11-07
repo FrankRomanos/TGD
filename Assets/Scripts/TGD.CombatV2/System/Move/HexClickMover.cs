@@ -239,7 +239,7 @@ namespace TGD.CombatV2
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
-                             // === HUD 提示（可选）===
+        // === HUD 提示（可选）===
         [Header("HUD")]
         public bool showHudMessage = true;
         public float hudSeconds = 1.6f;
@@ -555,18 +555,7 @@ namespace TGD.CombatV2
             if (!targetValidator)
                 targetValidator = GetComponentInParent<DefaultTargetValidator>(true);
 
-            _playerBridge = ResolvePlayerBridge();
-            if (_playerBridge != null)
-                _bridge = _playerBridge;
-
-            if (_bridge == null && bridgeOverride != null)
-                _bridge = bridgeOverride;
-
-            if (_bridge == null && ctx != null)
-                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
-
-            if (_bridge == null)
-                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+            TryResolveBridge();
 
 #if UNITY_EDITOR
             var bridges = GetComponentsInParent<PlayerOccupancyBridge>(true);
@@ -631,6 +620,7 @@ namespace TGD.CombatV2
         protected override void OnEnable()
         {
             base.OnEnable();
+            TryResolveBridge();
             EnsureBound();
         }
 
@@ -1154,6 +1144,7 @@ namespace TGD.CombatV2
         }
         bool EnsureBound()
         {
+            TryResolveBridge();
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))
                 _playerBridge = desiredBridge;
@@ -1166,9 +1157,7 @@ namespace TGD.CombatV2
             }
             else if (_bridge == null)
             {
-                if (bridgeOverride != null)
-                    _bridge = bridgeOverride;
-                else if (ctx != null)
+                if (ctx != null)
                     _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
 
                 if (_bridge == null)
@@ -1195,6 +1184,42 @@ namespace TGD.CombatV2
 
         PlayerOccupancyBridge ResolvePlayerBridge()
             => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
+
+        void TryResolveBridge()
+        {
+            var desired = ResolvePlayerBridge();
+            if (!ReferenceEquals(_playerBridge, desired))
+                _playerBridge = desired;
+
+            if (bridgeOverride != null && _bridge != bridgeOverride)
+                _bridge = bridgeOverride;
+
+            if (_bridge == null && desired != null)
+                _bridge = desired;
+
+            if (_bridge == null)
+            {
+                var local = GetComponent<PlayerOccupancyBridge>();
+                if (local != null)
+                    _bridge = local;
+            }
+
+            if (_bridge == null)
+            {
+                var parentBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (parentBridge != null)
+                    _bridge = parentBridge;
+            }
+
+            if (_bridge == null && ctx != null)
+                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_bridge == null)
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_playerBridge == null)
+                _playerBridge = _bridge as PlayerOccupancyBridge;
+        }
 
         void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
         {

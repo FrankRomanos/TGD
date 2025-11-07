@@ -481,16 +481,7 @@ namespace TGD.CombatV2
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
             _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
-            _playerBridge = ResolvePlayerBridge();
-
-            if (_playerBridge != null)
-                _bridge = _playerBridge;
-
-            if (_bridge == null && ctx != null)
-                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
-
-            if (_bridge == null)
-                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+            TryResolveBridge();
 
             if (!targetValidator)
                 targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
@@ -544,6 +535,7 @@ namespace TGD.CombatV2
                 return;
 
             base.OnEnable();
+            TryResolveBridge();
             EnsureBound();
             ClearPendingAttack();
             AttachTurnManager(turnManager);
@@ -554,7 +546,7 @@ namespace TGD.CombatV2
         {
             tiler?.EnsureBuilt();
 
-            if (authoring?.Layout == null) 
+            if (authoring?.Layout == null)
             {
                 enabled = false;
                 return;
@@ -895,12 +887,12 @@ namespace TGD.CombatV2
                 _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
             }
 
-                if (!UseTurnManager && ManageTurnTimeLocally)
-                {
-                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
-                    if (attackPlanned)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
-                }
+            if (!UseTurnManager && ManageTurnTimeLocally)
+            {
+                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
+                if (attackPlanned)
+                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
+            }
 
             _currentPreview = null;
             _hover = null;
@@ -945,7 +937,7 @@ namespace TGD.CombatV2
             var (mapped, message) = MapAttackReject(reason);
             if (debugLog)
                 // Phase logging handled by CombatActionManagerV2.
-            RaiseRejected(unit, mapped, message);
+                RaiseRejected(unit, mapped, message);
         }
 
         internal void HandleConfirmAbort(Unit unit, string reason)
@@ -1706,11 +1698,17 @@ namespace TGD.CombatV2
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
             if (passability != null && passability.IsBlocked(cell)) return true;
-            if (passability == null && _occ != null && SelfActor != null)
+            if (_occ == null)
+                return false;
+
+            var actor = SelfActor;
+            if (passability == null)
             {
-                if (!_occ.CanPlaceIgnoringTemp(SelfActor, cell, SelfActor.Facing, ignore: SelfActor))
-                    return true;
+                if (actor != null)
+                    return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
+                return _occ.IsBlocked(cell);
             }
+
             return false;
         }
 
@@ -2034,8 +2032,45 @@ namespace TGD.CombatV2
         PlayerOccupancyBridge ResolvePlayerBridge()
             => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
 
+        void TryResolveBridge()
+        {
+            var desired = ResolvePlayerBridge();
+            if (!ReferenceEquals(_playerBridge, desired))
+                _playerBridge = desired;
+
+            if (bridgeOverride != null && _bridge != bridgeOverride)
+                _bridge = bridgeOverride;
+
+            if (_bridge == null && desired != null)
+                _bridge = desired;
+
+            if (_bridge == null)
+            {
+                var local = GetComponent<PlayerOccupancyBridge>();
+                if (local != null)
+                    _bridge = local;
+            }
+
+            if (_bridge == null)
+            {
+                var parentBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (parentBridge != null)
+                    _bridge = parentBridge;
+            }
+
+            if (_bridge == null && ctx != null)
+                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_bridge == null)
+                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+
+            if (_playerBridge == null)
+                _playerBridge = _bridge as PlayerOccupancyBridge;
+        }
+
         bool EnsureBound()
         {
+            TryResolveBridge();
             // 1) 桥优先：bridgeOverride → ctx 体系 → 父链
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))
