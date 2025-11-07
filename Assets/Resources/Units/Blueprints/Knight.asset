@@ -74,6 +74,15 @@ MonoBehaviour:
   - actionId: Attack
     learned: 1
     initialCooldownSeconds: 0
-  - actionId: Skill001
+  - actionId: Reaction40
     learned: 1
-    initialCooldownSeconds: 24
+    initialCooldownSeconds: 0
+  - actionId: Reaction20
+    learned: 1
+    initialCooldownSeconds: 0
+  - actionId: Free10
+    learned: 1
+    initialCooldownSeconds: 0
+  - actionId: DerivedAfterAttack
+    learned: 1
+    initialCooldownSeconds: 0
