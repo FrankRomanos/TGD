@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
@@ -1397,10 +1398,13 @@ namespace TGD.CombatV2
         {
             if (tool is HexClickMover mover && mover != null)
             {
-                if (mover.ctx != null && mover.ctx.boundUnit != null)
-                    return mover.ctx.boundUnit;
-                if (mover.driver != null)
-                    return mover.driver.UnitRef;
+                var ctx = mover.ctx != null ? mover.ctx : mover.GetComponent<UnitRuntimeContext>();
+                if (ctx != null && ctx.boundUnit != null)
+                    return ctx.boundUnit;
+
+                var bridge = mover._playerBridge != null ? mover._playerBridge : mover.GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (bridge != null && bridge.Actor is UnitGridAdapter adapter && adapter.Unit != null)
+                    return adapter.Unit;
             }
 
             if (tool is AttackControllerV2 attack && attack != null)

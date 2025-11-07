@@ -373,7 +373,6 @@ namespace TGD.LevelV2
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
                 mover.viewOverride = view;
-                mover.driver = null;
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -615,8 +614,8 @@ namespace TGD.LevelV2
 
                 if (occSvc != null && mover.occupancyService == null)
                     mover.occupancyService = occSvc;
-                if (bridge != null && mover.bridgeOverride == null)
-                    mover.bridgeOverride = bridge;
+                if (bridge != null)
+                    mover._playerBridge = bridge;
             }
 
             foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
@@ -626,7 +625,7 @@ namespace TGD.LevelV2
 
                 if (occSvc != null && attack.occupancyService == null)
                     attack.occupancyService = occSvc;
-                if (bridge != null && attack.bridgeOverride == null)
+                if (bridge != null)
                     attack.bridgeOverride = bridge;
             }
 
