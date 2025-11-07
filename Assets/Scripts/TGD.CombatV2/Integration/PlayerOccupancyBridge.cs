@@ -128,22 +128,7 @@ namespace TGD.CombatV2.Integration
             }
         }
 
-        public bool IsReady
-        {
-            get
-            {
-                if (_occ == null || _actor == null)
-                    return false;
-
-                if (_componentAdapter != null)
-                    return _componentAdapter.Unit != null;
-
-                if (_driver != null)
-                    return _driver.IsReady && _driver.UnitRef != null;
-
-                return false;
-            }
-        }
+        public bool IsReady => occupancyService != null && _actor != null;
 
         public object Actor => _actor;
 

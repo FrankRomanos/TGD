@@ -532,13 +532,14 @@ namespace TGD.CombatV2
         {
             tiler?.EnsureBuilt();
 
-            if (authoring?.Layout == null) 
+            if (authoring?.Layout == null)
             {
                 enabled = false;
                 return;
             }
 
             if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
+            EnsureBound();
             RefreshOccupancy();
         }
 
@@ -1287,7 +1288,7 @@ namespace TGD.CombatV2
                         finalFacing = nf;
                     }
 
-                    if (!CommitThroughBridge(startAnchor, startAnchor, finalFacing, view, hexSpace, $"AttackStay {unit?.Id ?? name}->{startAnchor}"))
+                    if (!CommitViaBridge(startAnchor, startAnchor, finalFacing, view, hexSpace, $"AttackStay {unit?.Id ?? name}->{startAnchor}"))
                     {
                         finalFacing = originalFacing;
                         if (SelfActor != null)
@@ -1395,7 +1396,7 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                if (!CommitThroughBridge(startAnchor, lastPosition, finalFacing, view, hexSpace, $"AttackMove {unit?.Id ?? name}->{lastPosition}"))
+                if (!CommitViaBridge(startAnchor, lastPosition, finalFacing, view, hexSpace, $"AttackMove {unit?.Id ?? name}->{lastPosition}"))
                 {
                     finalFacing = originalFacing;
                     if (SelfActor != null)
@@ -1511,7 +1512,7 @@ namespace TGD.CombatV2
                 var abortActor = SelfActor;
                 var abortFacing = abortActor != null ? abortActor.Facing : Facing4.PlusQ;
 
-                if (!CommitThroughBridge(startAnchor, abortAnchor, abortFacing, abortView, abortSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
+                if (!CommitViaBridge(startAnchor, abortAnchor, abortFacing, abortView, abortSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
                 {
                     if (SelfActor != null)
                         SelfActor.Facing = fallbackFacing;
@@ -1717,7 +1718,7 @@ namespace TGD.CombatV2
             return _occ.IsBlocked(cell);
         }
 
-        bool CommitThroughBridge(Hex startAnchor, Hex targetAnchor, Facing4 facing, Transform view, HexSpace hexSpace, string label)
+        bool CommitViaBridge(Hex startAnchor, Hex targetAnchor, Facing4 facing, Transform view, HexSpace hexSpace, string label)
         {
             if (_bridge == null)
                 return true;
