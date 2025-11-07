@@ -582,15 +582,25 @@ namespace TGD.CombatV2
             if (Dead(mb))
                 return;
 
-            switch (mb)
+            if (mb is ICursorUser cursorUser)
             {
-                case AttackControllerV2 attack:
-                    attack.SetCursorHighlighter(EnsureAimHighlighter());
-                    break;
-                case ChainTestActionBase chainTool:
-                    chainTool.SetCursorHighlighter(EnsureChainHighlighter());
-                    break;
+                var highlighter = mb is ChainActionBase ? EnsureChainHighlighter() : EnsureAimHighlighter();
+                cursorUser.SetCursorHighlighter(highlighter);
             }
+        }
+
+        void EnterAimForTool(IActionToolV2 tool)
+        {
+            if (tool == null)
+                return;
+
+            if (tool is ICursorUser cursorUser)
+            {
+                var highlighter = tool is ChainActionBase ? EnsureChainHighlighter() : EnsureAimHighlighter();
+                cursorUser.SetCursorHighlighter(highlighter);
+            }
+
+            tool.OnEnterAim();
         }
 
         public void RegisterTool(IActionToolV2 tool)
@@ -963,11 +973,50 @@ namespace TGD.CombatV2
             Debug.Log($"[Attack] ComboReset T{turnManager.CurrentPhaseIndex}({phaseLabel}) AttackCombo Reset!", this);
         }
 
+        UnitRuntimeContext ResolveContext(Unit unit)
+        {
+            if (unit != null && turnManager != null)
+                return turnManager.GetContext(unit);
+            return _activeCtx;
+        }
+
+        bool IsToolGrantedForContext(UnitRuntimeContext ctx, IActionToolV2 tool)
+        {
+            if (tool == null)
+                return false;
+
+            if (tool is MonoBehaviour behaviour)
+            {
+                if (Dead(behaviour) || !behaviour.isActiveAndEnabled)
+                    return false;
+            }
+            else if (tool is UnityEngine.Object unityObj && Dead(unityObj))
+            {
+                return false;
+            }
+
+            var grants = ctx?.GrantedActionIds;
+            if (grants != null && grants.Count > 0)
+            {
+                string key = (tool as ICooldownKeyProvider)?.CooldownKey;
+                if (!string.IsNullOrEmpty(key) && grants.Contains(key))
+                    return true;
+
+                string idValue = tool.Id;
+                if (!string.IsNullOrEmpty(idValue) && grants.Contains(idValue))
+                    return true;
+
+                return false;
+            }
+
+            return true;
+        }
+
         IActionToolV2 SelectTool(string id)
         {
             if (string.IsNullOrEmpty(id))
                 return null;
-            PruneDeadTools();  
+            PruneDeadTools();
             if (_activeCtx != null)
             {
                 var ctxGo = _activeCtx.gameObject;
@@ -978,7 +1027,11 @@ namespace TGD.CombatV2
                     {
                         var scoped = scopedTools[i];
                         if (scoped != null && scoped.Id == id)
+                        {
+                            if (!IsToolGrantedForContext(_activeCtx, scoped))
+                                continue;
                             return scoped;
+                        }
                     }
                 }
             }
@@ -1010,16 +1063,19 @@ namespace TGD.CombatV2
                 for (int i = 0; i < list.Count; i++)
                 {
                     var tool = list[i];
+                    if (!IsToolGrantedForContext(_activeCtx, tool))
+                        continue;
+
                     if (tool is MonoBehaviour behaviour && !Dead(behaviour) && behaviour.isActiveAndEnabled)
                         return tool;
                 }
 
-                return list[0];
+                return null;
             }
 
             foreach (var tool in list)
             {
-                if (tool != null && ResolveUnit(tool) == _currentUnit)
+                if (tool != null && ResolveUnit(tool) == _currentUnit && IsToolGrantedForContext(ResolveContext(_currentUnit), tool))
                     return tool;
             }
 
@@ -1343,7 +1399,7 @@ namespace TGD.CombatV2
                     return attack.driver.UnitRef;
             }
 
-            if (tool is ChainTestActionBase chain && chain != null)
+            if (tool is ChainActionBase chain && chain != null)
                 return chain.ResolveUnit();
 
             if (unitDriver != null)
@@ -1386,7 +1442,7 @@ namespace TGD.CombatV2
 
             _activeTool = tool;
             _hover = null;
-            tool.OnEnterAim();
+            EnterAimForTool(tool);
             _phase = Phase.Aiming;
             ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
         }
@@ -1461,7 +1517,7 @@ namespace TGD.CombatV2
 
             _activeTool = tool;
             _hover = target;
-            tool.OnEnterAim();
+            EnterAimForTool(tool);
             _phase = Phase.Aiming;
             ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
 
@@ -2478,6 +2534,9 @@ namespace TGD.CombatV2
                         continue;
                     if (allowFriendlyInsertion && owner == null)
                         continue;
+                    var ownerCtx = ResolveContext(owner);
+                    if (!IsToolGrantedForContext(ownerCtx, tool))
+                        continue;
                     if (allowFriendlyInsertion && isEnemyPhase)
                     {
                         if (turnManager == null || owner == null || !turnManager.IsPlayerUnit(owner))
@@ -2697,7 +2756,7 @@ namespace TGD.CombatV2
 
         Sprite ResolveChainOptionIcon(IActionToolV2 tool)
         {
-            if (tool is ChainTestActionBase chainTool && chainTool != null)
+            if (tool is ChainActionBase chainTool && chainTool != null)
                 return chainTool.Icon;
 
             return null;
@@ -3347,6 +3406,10 @@ namespace TGD.CombatV2
                     if (owner != unit)
                         continue;
 
+                    var ownerCtx = ResolveContext(owner);
+                    if (!IsToolGrantedForContext(ownerCtx, tool))
+                        continue;
+
                     var cost = GetBaselineCost(tool);
                     if (!cost.valid)
                         continue;
@@ -3563,10 +3626,10 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            tool.OnEnterAim();
+            EnterAimForTool(tool);
             ActionPhaseLogger.Log(unit, toolId, "W1_AimBegin");
 
-            if (tool is ChainTestActionBase chainTool)
+            if (tool is ChainActionBase chainTool)
             {
                 bool awaitingSelection = true;
                 targetChosen = false;
@@ -3780,10 +3843,10 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            tool.OnEnterAim();
+            EnterAimForTool(tool);
             ActionPhaseLogger.Log(owner, toolId, "W1_AimBegin");
 
-            if (tool is ChainTestActionBase chainTool)
+            if (tool is ChainActionBase chainTool)
             {
                 bool awaitingSelection = true;
                 targetChosen = false;
@@ -4274,7 +4337,7 @@ namespace TGD.CombatV2
         {
             if (tool is ICooldownKeyProvider p && !string.IsNullOrEmpty(p.CooldownKey))
                 return p.CooldownKey;
-            if (tool is ChainTestActionBase chain && !string.IsNullOrEmpty(chain.CooldownId))
+            if (tool is ChainActionBase chain && !string.IsNullOrEmpty(chain.CooldownId))
                 return chain.CooldownId;
             return tool?.Id; // 兜底
         }
@@ -4343,7 +4406,15 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            if (candidate is UnityEngine.Object unityObj && Dead(unityObj))
+            if (candidate is MonoBehaviour behaviour)
+            {
+                if (Dead(behaviour) || !behaviour.isActiveAndEnabled)
+                {
+                    tool = null;
+                    return false;
+                }
+            }
+            else if (candidate is UnityEngine.Object unityObj && Dead(unityObj))
             {
                 tool = null;
                 return false;

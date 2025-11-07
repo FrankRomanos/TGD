@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using TGD.CombatV2;
 using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
@@ -31,6 +32,7 @@ namespace TGD.LevelV2
         readonly List<Unit> _enemies = new();
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
+        DefaultTargetValidator _sharedValidator;
 
         sealed class SpawnRecord
         {
@@ -89,18 +91,24 @@ namespace TGD.LevelV2
                 Position = spawnHex
             };
 
+            if (context != null && context.boundUnit == null)
+                context.boundUnit = unit;
+
             go.name = $"{ResolveDisplayName(final, unitId)} ({final.faction})";
             PlaceTransform(go.transform, spawnHex);
 
-            var adapter = RegisterOccupancy(unit, spawnHex, unit.Facing);
+            var adapter = EnsureGridAdapter(go, unit);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
-            WireActionComponents(go, context, cooldownHub, unit);
+            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit);
+
+            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             UnitActionBinder.Bind(go, context, final.abilities, cam);
+            ApplyAbilityLoadout(go, context, final.abilities);
 
             MaybeAutoStartBattle();
             return unit;
@@ -275,18 +283,6 @@ namespace TGD.LevelV2
             target.position = position;
         }
 
-        UnitGridAdapter RegisterOccupancy(Unit unit, Hex spawnHex, Facing4 facing)
-        {
-            var occ = ResolveOccupancy();
-            if (occ == null)
-                return null;
-
-            var adapter = new UnitGridAdapter(unit, null);
-            if (!occ.TryPlace(adapter, spawnHex, facing))
-                Debug.LogWarning($"[Factory] Occupancy blocked for {unit.Id} at {spawnHex}", this);
-            return adapter;
-        }
-
         HexOccupancy ResolveOccupancy()
         {
             HexOccupancyService service = board;
@@ -298,21 +294,17 @@ namespace TGD.LevelV2
         void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction)
         {
             if (turnManager != null && unit != null)
-            {
-                if (faction == UnitFaction.Friendly)
-                    turnManager.RegisterPlayerUnit(unit, context);
-                else
-                    turnManager.RegisterEnemyUnit(unit, context);
-            }
+                turnManager.Bind(unit, context);
 
             var list = faction == UnitFaction.Friendly ? _friendlies : _enemies;
             if (!list.Contains(unit))
                 list.Add(unit);
         }
 
-        void WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
+        TurnManagerV2 WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
         {
-            if (go == null) return;
+            if (go == null)
+                return turnManager;
 
             var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
             var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
@@ -330,15 +322,18 @@ namespace TGD.LevelV2
             var resolvedValidator = (resolvedCam != null ? resolvedCam.GetComponentInChildren<DefaultTargetValidator>(true) : null)
                                     ?? (resolvedAuthoring != null ? resolvedAuthoring.GetComponentInChildren<DefaultTargetValidator>(true) : null)
                                     ?? FindOne<DefaultTargetValidator>();
+            if (resolvedValidator != null && _sharedValidator == null)
+                _sharedValidator = resolvedValidator;
 
             var resolvedOccupancy = board
                                     ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
                                     ?? FindOne<HexOccupancyService>();
-            // 1) 拿“角色自己的桥”和“真实视图锚点”
+
             var ownerBridge = context ? context.GetComponentInParent<PlayerOccupancyBridge>(true) : null;
             var view = go.GetComponentInChildren<Animator>(true)?.transform
                     ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
                     ?? go.transform;
+
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
             {
@@ -355,9 +350,9 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
-                mover.bridgeOverride = ownerBridge;  // ★ 强制用角色桥
-                mover.viewOverride = view;         // ★ 强制用角色视图
-                mover.driver = null;         // ★ 切断旧脚手架引用
+                mover.bridgeOverride = ownerBridge;
+                mover.viewOverride = view;
+                mover.driver = null;
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -372,7 +367,6 @@ namespace TGD.LevelV2
                     moveCost.cooldownHub = hub;
                 moveCost.ctx = context;
                 moveCost.turnManager = turnManager;
-
             }
 
             var attacks = go.GetComponentsInChildren<AttackControllerV2>(true);
@@ -384,7 +378,7 @@ namespace TGD.LevelV2
                 attack.ctx = context;
                 attack.turnManager = resolvedTurnManager;
                 attack.AttachTurnManager(resolvedTurnManager);
-                attack.driver = null;                // ← 新增：禁用旧依赖
+                attack.driver = null;
                 if (!attack.authoring)
                     attack.authoring = resolvedAuthoring;
                 if (!attack.tiler)
@@ -394,8 +388,8 @@ namespace TGD.LevelV2
                 if (!attack.occupancyService)
                     attack.occupancyService = resolvedOccupancy;
 
-                attack.bridgeOverride = ownerBridge;    // ★
-                attack.viewOverride = view;           // ★
+                attack.bridgeOverride = ownerBridge;
+                attack.viewOverride = view;
             }
 
             var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
@@ -420,7 +414,7 @@ namespace TGD.LevelV2
                     listener.ctx = context;
             }
 
-            var chainActions = go.GetComponentsInChildren<ChainTestActionBase>(true);
+            var chainActions = go.GetComponentsInChildren<ChainActionBase>(true);
             foreach (var chain in chainActions)
             {
                 if (chain == null)
@@ -467,6 +461,109 @@ namespace TGD.LevelV2
                 if (turnManager != null)
                     status.AttachTurnManager(turnManager);
             }
+
+            return resolvedTurnManager;
+        }
+
+        HexOccupancyService ResolveOccupancyService()
+        {
+            if (turnManager != null && turnManager.occupancyService != null)
+                return turnManager.occupancyService;
+            if (board != null)
+                return board;
+            return FindOne<HexOccupancyService>();
+        }
+
+        static UnitGridAdapter EnsureGridAdapter(GameObject go, Unit unit)
+        {
+            if (go == null)
+                return null;
+
+            var adapter = go.GetComponent<UnitGridAdapter>() ?? go.AddComponent<UnitGridAdapter>();
+            if (unit != null)
+                adapter.Unit = unit;
+            return adapter;
+        }
+
+        void FinalizeOccupancyChain(GameObject go, UnitRuntimeContext context, Unit unit, UnitFaction faction, UnitGridAdapter adapter, TurnManagerV2 resolvedTurnManager)
+        {
+            if (go == null)
+                return;
+
+            var occSvc = ResolveOccupancyService();
+            if (occSvc != null)
+                Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
+
+            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            bridge.occupancyService = occSvc;
+
+            foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
+            {
+                if (mover != null)
+                    mover.occupancyService = occSvc;
+            }
+
+            foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+            {
+                if (attack != null)
+                    attack.occupancyService = occSvc;
+            }
+
+            var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
+            if (adapter == null)
+                adapter = EnsureGridAdapter(go, bound);
+            else if (adapter.Unit == null && bound != null)
+                adapter.Unit = bound;
+
+            var tm = resolvedTurnManager != null ? resolvedTurnManager : turnManager;
+
+            if (tm != null && bound != null)
+            {
+                bool isFriendly = faction == UnitFaction.Friendly;
+                tm.RegisterSpawn(bound, isFriendly);
+                bool isEnemy = tm.IsEnemyUnit(bound);
+                bool isPlayer = tm.IsPlayerUnit(bound);
+                Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
+            }
+
+            if (!bridge.EnsurePlacedNow())
+                Debug.LogWarning($"[Factory] Failed to place {unit?.Id ?? go.name} on occupancy grid.", this);
+
+            EnsureDefaultValidatorInjected(occSvc, tm);
+        }
+
+        static void ApplyAbilityLoadout(GameObject go, UnitRuntimeContext context, IEnumerable<FinalUnitConfig.LearnedAbility> abilities)
+        {
+            if (go == null)
+                return;
+
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Move",
+                "Attack"
+            };
+
+            if (abilities != null)
+            {
+                foreach (var ability in abilities)
+                {
+                    if (string.IsNullOrWhiteSpace(ability.actionId))
+                        continue;
+                    allowed.Add(ability.actionId.Trim());
+                }
+            }
+
+            context?.SetGrantedActions(allowed);
+
+            var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (var behaviour in behaviours)
+            {
+                if (behaviour is IActionToolV2 tool)
+                {
+                    bool enable = allowed.Contains(tool.Id);
+                    behaviour.enabled = enable;
+                }
+            }
         }
 
         void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar)
@@ -505,6 +602,31 @@ namespace TGD.LevelV2
                 binder.SetAvatar(avatar);
                 return;
             }
+        }
+
+        void EnsureDefaultValidatorInjected(HexOccupancyService occSvc, TurnManagerV2 tm)
+        {
+            if (tm == null)
+                tm = turnManager;
+
+            if (occSvc == null)
+                occSvc = ResolveOccupancyService();
+
+            var validator = _sharedValidator != null ? _sharedValidator : FindOne<DefaultTargetValidator>();
+            if (validator == null)
+                return;
+
+            _sharedValidator = validator;
+
+            HexEnvironmentSystem env = null;
+            if (occSvc != null)
+            {
+                env = occSvc.GetComponent<HexEnvironmentSystem>();
+                if (!env && occSvc.authoring != null)
+                    env = occSvc.authoring.GetComponent<HexEnvironmentSystem>() ?? occSvc.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+            }
+
+            validator.InjectServices(tm, occSvc, env);
         }
         static T FindOne<T>() where T : UnityEngine.Object
         {

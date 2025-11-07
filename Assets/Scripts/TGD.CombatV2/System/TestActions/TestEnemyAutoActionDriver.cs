@@ -10,7 +10,7 @@ namespace TGD.CombatV2
     {
         public CombatActionManagerV2 actionManager;
         public TurnManagerV2 turnManager;
-        public ChainTestActionBase action;
+        public ChainActionBase action;
         public HexBoardTestDriver driver;
         [Tooltip("Optional delay before auto confirming after idle (seconds).")]
         public float confirmDelaySeconds = 0f;
@@ -22,7 +22,7 @@ namespace TGD.CombatV2
             if (driver == null)
                 driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (action == null)
-                action = GetComponent<ChainTestActionBase>();
+                action = GetComponent<ChainActionBase>();
             if (actionManager == null)
                 actionManager = FindFirstObjectByType<CombatActionManagerV2>();
             if (turnManager == null)
