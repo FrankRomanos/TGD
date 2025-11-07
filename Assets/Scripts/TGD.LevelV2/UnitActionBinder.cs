@@ -162,8 +162,6 @@ namespace TGD.LevelV2
                     continue;
 
                 mover.enabled = hasMove;
-                if (!hasMove)
-                    mover.driver = null;
             }
         }
 
