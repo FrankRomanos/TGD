@@ -4,7 +4,7 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public sealed class TestEnemyStandardAction : ChainTestActionBase, IActionResolveEffect
+    public sealed class TestEnemyStandardAction : ChainActionBase, IActionResolveEffect
     {
         [SerializeField]
         string resolveLog = "test chain";

@@ -3,7 +3,7 @@ using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
 {
-    public sealed class TestReactionAction20 : ChainTestActionBase
+    public sealed class TestReactionAction20 : ChainActionBase
     {
         public override ActionKind Kind => ActionKind.Reaction;
 

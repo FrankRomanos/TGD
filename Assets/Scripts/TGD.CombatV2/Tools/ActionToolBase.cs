@@ -8,7 +8,7 @@ namespace TGD.CombatV2
 
         protected virtual void OnEnable()
         {
-            if (_subscribed)
+            if (!Application.isPlaying || _subscribed)
                 return;
 
             HookEvents(true);
@@ -17,7 +17,7 @@ namespace TGD.CombatV2
 
         protected virtual void OnDisable()
         {
-            if (!_subscribed)
+            if (!Application.isPlaying || !_subscribed)
                 return;
 
             HookEvents(false);
@@ -26,6 +26,9 @@ namespace TGD.CombatV2
 
         protected virtual void OnDestroy()
         {
+            if (!Application.isPlaying)
+                return;
+
             if (_subscribed)
             {
                 HookEvents(false);
