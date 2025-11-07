@@ -107,8 +107,8 @@ namespace TGD.LevelV2
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
-            UnitActionBinder.Bind(go, context, final.abilities, cam);
-            ApplyAbilityLoadout(go, context, final.abilities);
+            var availabilities = UnitActionBinder.Bind(go, context, final.abilities);
+            ApplyAbilityLoadout(go, context, availabilities, cam);
 
             MaybeAutoStartBattle();
             return unit;
@@ -532,39 +532,57 @@ namespace TGD.LevelV2
             EnsureDefaultValidatorInjected(occSvc, tm);
         }
 
-        static void ApplyAbilityLoadout(GameObject go, UnitRuntimeContext context, IEnumerable<FinalUnitConfig.LearnedAbility> abilities)
+        static void ApplyAbilityLoadout(
+            GameObject go,
+            UnitRuntimeContext context,
+            IReadOnlyList<UnitActionBinder.ActionAvailability> availabilities,
+            CombatActionManagerV2 cam)
         {
             if (go == null)
                 return;
 
-            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "Move",
-                "Attack"
-            };
+            var granted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unlocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (abilities != null)
+            if (availabilities != null)
             {
-                foreach (var ability in abilities)
+                for (int i = 0; i < availabilities.Count; i++)
                 {
-                    if (string.IsNullOrWhiteSpace(ability.actionId))
+                    var entry = availabilities[i];
+                    var id = NormalizeActionId(entry.actionId);
+                    if (string.IsNullOrEmpty(id))
                         continue;
-                    allowed.Add(ability.actionId.Trim());
+
+                    granted.Add(id);
+                    if (entry.unlocked)
+                        unlocked.Add(id);
                 }
             }
 
-            context?.SetGrantedActions(allowed);
+            context?.SetGrantedActions(granted);
 
             var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
             foreach (var behaviour in behaviours)
             {
                 if (behaviour is IActionToolV2 tool)
                 {
-                    bool enable = allowed.Contains(tool.Id);
+                    var id = NormalizeActionId(tool.Id);
+                    bool enable = !string.IsNullOrEmpty(id) && unlocked.Contains(id);
                     behaviour.enabled = enable;
+
+                    if (cam != null)
+                    {
+                        if (!string.IsNullOrEmpty(id) && granted.Contains(id))
+                            cam.RegisterTool(tool);
+                        else
+                            cam.UnregisterTool(tool);
+                    }
                 }
             }
         }
+
+        static string NormalizeActionId(string actionId)
+            => string.IsNullOrWhiteSpace(actionId) ? null : actionId.Trim();
 
         void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar)
         {

@@ -17,7 +17,11 @@ namespace TGD.CombatV2
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
 
-        public string Id => "Attack";
+        [SerializeField]
+        [Tooltip("Action identifier used when registering with CombatActionManagerV2.")]
+        string actionId = AttackProfileRules.DefaultActionId;
+
+        public string Id => ResolveActionId();
         public ActionKind Kind => ActionKind.Standard;
 
         [Header("Bridge (optional)")]
@@ -68,7 +72,14 @@ namespace TGD.CombatV2
 
         TargetSelectionCursor _cursor;
         TargetSelectionCursor Cursor => _cursor;
-        public string CooldownKey => AttackProfileRules.DefaultActionId;
+        public string CooldownKey => ResolveActionId();
+
+        string ResolveActionId()
+        {
+            if (string.IsNullOrEmpty(actionId))
+                return AttackProfileRules.DefaultActionId;
+            return actionId.Trim();
+        }
         public void SetCursorHighlighter(IHexHighlighter highlighter)
         {
             _cursor = highlighter != null ? new TargetSelectionCursor(highlighter) : null;
@@ -319,7 +330,7 @@ namespace TGD.CombatV2
                 {
                     var ruleCtx = RulesAdapter.BuildContext(
                         ctx,
-                        actionId: AttackProfileRules.DefaultActionId,
+                        actionId: ResolveActionId(),
                         kind: Kind,
                         chainDepth: 0,
                         comboIndex: comboIndex,
@@ -1364,8 +1375,7 @@ namespace TGD.CombatV2
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
                         var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
-                        CAM.RaiseActionCancelled(cancelCtx, AttackProfileRules.DefaultActionId, "RolledBack");
-                        CAM.RaiseActionCancelled(cancelCtx, "Attack", "RolledBack");
+                        CAM.RaiseActionCancelled(cancelCtx, ResolveActionId(), "RolledBack");
                         AttackEventsV2.RaiseMiss(unit, "Attack cancelled (slowed).");
                     }
 
