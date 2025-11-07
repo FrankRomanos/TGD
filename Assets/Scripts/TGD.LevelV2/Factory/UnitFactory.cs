@@ -16,7 +16,10 @@ namespace TGD.LevelV2
         [Header("Deps (assign in Inspector)")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 cam;
-        public HexOccupancyService board;
+        [SerializeField]
+        HexOccupancyService occupancyService;
+        [SerializeField]
+        FootprintShape defaultFootprint;
         public Transform unitRoot;
 
         [Header("Prefab Source")]
@@ -37,6 +40,7 @@ namespace TGD.LevelV2
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
         DefaultTargetValidator _sharedValidator;
+        bool _loggedMissingSkillIndex;
 
         sealed class SpawnRecord
         {
@@ -58,7 +62,8 @@ namespace TGD.LevelV2
                 return null;
             }
 
-            var final = UnitComposeService.Compose(blueprint, skillIndex);
+            var resolvedSkillIndex = ResolveSkillIndex();
+            var final = UnitComposeService.Compose(blueprint, resolvedSkillIndex);
             final.faction = faction;
 
             // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
@@ -103,7 +108,8 @@ namespace TGD.LevelV2
 
             var adapter = EnsureGridAdapter(go, unit);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
-            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit);
+            var resolvedSkillIndex = ResolveSkillIndex();
+            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit, resolvedSkillIndex);
 
             FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager);
 
@@ -112,7 +118,7 @@ namespace TGD.LevelV2
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             var availabilities = UnitActionBinder.Bind(go, context, final.abilities);
-            ApplyAbilityLoadout(go, context, availabilities, cam, skillIndex);
+            ApplyAbilityLoadout(go, context, availabilities, cam, resolvedSkillIndex);
 
             MaybeAutoStartBattle();
             return unit;
@@ -275,9 +281,9 @@ namespace TGD.LevelV2
             {
                 position = space.HexToWorld(spawnHex);
             }
-            else if (board != null && board.authoring != null && board.authoring.Layout != null)
+            else if (occupancyService != null && occupancyService.authoring != null && occupancyService.authoring.Layout != null)
             {
-                position = board.authoring.Layout.World(spawnHex, board.authoring.y);
+                position = occupancyService.authoring.Layout.World(spawnHex, occupancyService.authoring.y);
             }
             else
             {
@@ -289,7 +295,7 @@ namespace TGD.LevelV2
 
         HexOccupancy ResolveOccupancy()
         {
-            HexOccupancyService service = board;
+            HexOccupancyService service = occupancyService;
             if (service == null && turnManager != null)
                 service = turnManager.occupancyService;
             return service != null ? service.Get() : null;
@@ -305,7 +311,12 @@ namespace TGD.LevelV2
                 list.Add(unit);
         }
 
-        TurnManagerV2 WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
+        TurnManagerV2 WireActionComponents(
+            GameObject go,
+            UnitRuntimeContext context,
+            CooldownHubV2 hub,
+            Unit unit,
+            SkillIndex resolvedSkillIndex)
         {
             if (go == null)
                 return turnManager;
@@ -313,15 +324,15 @@ namespace TGD.LevelV2
             var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
             var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
 
-            if (resolvedCam != null && resolvedCam.rulebook != null && skillIndex != null)
+            if (resolvedCam != null && resolvedCam.rulebook != null && resolvedSkillIndex != null)
             {
                 if (resolvedCam.rulebook.includeSkillIndexDerivedLinks && resolvedCam.rulebook.skillIndex == null)
                 {
-                    resolvedCam.rulebook.skillIndex = skillIndex;
+                    resolvedCam.rulebook.skillIndex = resolvedSkillIndex;
                 }
             }
 
-            var resolvedAuthoring = board != null ? board.authoring : null;
+            var resolvedAuthoring = occupancyService != null ? occupancyService.authoring : null;
             if (resolvedAuthoring == null && resolvedCam != null)
                 resolvedAuthoring = resolvedCam.authoring;
             if (resolvedAuthoring == null)
@@ -337,7 +348,7 @@ namespace TGD.LevelV2
             if (resolvedValidator != null && _sharedValidator == null)
                 _sharedValidator = resolvedValidator;
 
-            var resolvedOccupancy = board
+            var resolvedOccupancy = occupancyService
                                     ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
                                     ?? FindOne<HexOccupancyService>();
 
@@ -362,7 +373,8 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
-                mover.bridgeOverride = ownerBridge;
+                if (ownerBridge != null)
+                    mover.bridgeOverride = ownerBridge;
                 mover.viewOverride = view;
                 mover.driver = null;
             }
@@ -400,7 +412,8 @@ namespace TGD.LevelV2
                 if (!attack.occupancyService)
                     attack.occupancyService = resolvedOccupancy;
 
-                attack.bridgeOverride = ownerBridge;
+                if (ownerBridge != null)
+                    attack.bridgeOverride = ownerBridge;
                 attack.viewOverride = view;
             }
 
@@ -477,12 +490,35 @@ namespace TGD.LevelV2
             return resolvedTurnManager;
         }
 
+        SkillIndex ResolveSkillIndex()
+        {
+            if (skillIndex != null)
+                return skillIndex;
+
+            const string resourcePath = "Units/Blueprints/SkillIndex";
+            var loaded = Resources.Load<SkillIndex>(resourcePath);
+            if (loaded != null)
+            {
+                skillIndex = loaded;
+                _loggedMissingSkillIndex = false;
+                return skillIndex;
+            }
+
+            if (!_loggedMissingSkillIndex)
+            {
+                Debug.LogWarning($"[Factory] SkillIndex not assigned and default resource '{resourcePath}' missing.", this);
+                _loggedMissingSkillIndex = true;
+            }
+
+            return null;
+        }
+
         HexOccupancyService ResolveOccupancyService()
         {
+            if (occupancyService != null)
+                return occupancyService;
             if (turnManager != null && turnManager.occupancyService != null)
                 return turnManager.occupancyService;
-            if (board != null)
-                return board;
             return FindOne<HexOccupancyService>();
         }
 
@@ -507,18 +543,31 @@ namespace TGD.LevelV2
                 Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
 
             var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            if (occupancyService == null && occSvc != null)
+                occupancyService = occSvc;
+
             bridge.occupancyService = occSvc;
+            if (bridge.overrideFootprint == null && defaultFootprint != null)
+                bridge.overrideFootprint = defaultFootprint;
 
             foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
             {
                 if (mover != null)
+                {
                     mover.occupancyService = occSvc;
+                    if (mover.bridgeOverride == null)
+                        mover.bridgeOverride = bridge;
+                }
             }
 
             foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
             {
                 if (attack != null)
+                {
                     attack.occupancyService = occSvc;
+                    if (attack.bridgeOverride == null)
+                        attack.bridgeOverride = bridge;
+                }
             }
 
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
@@ -608,8 +657,24 @@ namespace TGD.LevelV2
             if (tools == null || tools.Length == 0)
                 return;
 
+            if (availabilities == null || availabilities.Count == 0)
+                return;
+
             var map = new Dictionary<string, SkillDefinitionActionTool>(StringComparer.OrdinalIgnoreCase);
-            var unassigned = new List<SkillDefinitionActionTool>();
+            var pool = new List<SkillDefinitionActionTool>();
+            var poolSet = new HashSet<SkillDefinitionActionTool>();
+
+            void AddToPool(SkillDefinitionActionTool candidate)
+            {
+                if (candidate != null && poolSet.Add(candidate))
+                    pool.Add(candidate);
+            }
+
+            void RemoveFromPool(SkillDefinitionActionTool candidate)
+            {
+                if (candidate != null && poolSet.Remove(candidate))
+                    pool.Remove(candidate);
+            }
 
             for (int i = 0; i < tools.Length; i++)
             {
@@ -617,22 +682,17 @@ namespace TGD.LevelV2
                 if (tool == null)
                     continue;
 
-                var key = NormalizeSkillId(tool.Id);
-                if (string.IsNullOrEmpty(key) && tool.Definition != null)
-                    key = NormalizeSkillId(tool.Definition.Id);
+                var definitionId = NormalizeSkillId(tool.Definition != null ? tool.Definition.Id : null);
+                if (!string.IsNullOrEmpty(definitionId) && !map.ContainsKey(definitionId))
+                    map[definitionId] = tool;
 
-                if (!string.IsNullOrEmpty(key) && !map.ContainsKey(key))
-                {
-                    map[key] = tool;
-                }
-                else
-                {
-                    unassigned.Add(tool);
-                }
+                var explicitId = NormalizeSkillId(tool.Id);
+                if (!string.IsNullOrEmpty(explicitId) && !map.ContainsKey(explicitId))
+                    map[explicitId] = tool;
+
+                if (string.IsNullOrEmpty(definitionId))
+                    AddToPool(tool);
             }
-
-            if (availabilities == null || availabilities.Count == 0)
-                return;
 
             var assignedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -642,22 +702,30 @@ namespace TGD.LevelV2
                 var id = NormalizeSkillId(entry.skillId);
                 if (string.IsNullOrEmpty(id))
                     continue;
+                if (!assignedIds.Add(id))
+                    continue;
 
-                if (!map.TryGetValue(id, out var tool) || tool == null)
+                SkillDefinitionActionTool tool = null;
+                if (map.TryGetValue(id, out var existing) && existing != null)
+                    tool = existing;
+
+                if (tool == null)
                 {
-                    if (unassigned.Count == 0)
+                    if (pool.Count == 0)
                     {
                         Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
                         continue;
                     }
 
-                    tool = unassigned[0];
-                    unassigned.RemoveAt(0);
-                    map[id] = tool;
+                    int lastIndex = pool.Count - 1;
+                    tool = pool[lastIndex];
+                    pool.RemoveAt(lastIndex);
+                    poolSet.Remove(tool);
                 }
-
-                if (!assignedIds.Add(id))
-                    continue;
+                else
+                {
+                    RemoveFromPool(tool);
+                }
 
                 if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
                 {
@@ -668,6 +736,8 @@ namespace TGD.LevelV2
                 {
                     Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
                 }
+
+                map[id] = tool;
             }
         }
 
