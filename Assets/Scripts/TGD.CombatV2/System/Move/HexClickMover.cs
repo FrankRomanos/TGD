@@ -1,6 +1,7 @@
 ﻿// File: TGD.HexBoard/HexClickMover.cs
 using System.Collections;
 using System.Collections.Generic;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -107,12 +108,16 @@ namespace TGD.CombatV2
         {
             get
             {
-                var actor = PB ? PB.Actor as IGridActor : null;
-                if (actor != null)
-                    return actor;
+                var bridge = PB;
+                if (bridge != null)
+                {
+                    bridge.EnsurePlacedNow();
+                    if (bridge.Actor is IGridActor bridged && bridged != null)
+                        return bridged;
+                }
 
-                var u = ctx != null ? ctx.boundUnit : null;
-                if (u != null && _occ != null && _occ.TryGetActor(u.Position, out var occActor) && occActor != null)
+                var unit = OwnerUnit;
+                if (unit != null && _occ != null && _occ.TryGetActor(unit.Position, out var occActor) && occActor != null)
                     return occActor;
 
                 return null;
@@ -123,15 +128,20 @@ namespace TGD.CombatV2
         {
             get
             {
-                if (PB && PB.IsReady)
-                    return PB.CurrentAnchor;
+                var bridge = PB;
+                if (bridge != null)
+                {
+                    bridge.EnsurePlacedNow();
+                    if (bridge.IsReady)
+                        return bridge.CurrentAnchor;
+                }
 
                 var actor = SelfActor;
                 if (actor != null)
                     return actor.Anchor;
 
-                var u = ctx != null ? ctx.boundUnit : null;
-                return u != null ? u.Position : Hex.Zero;
+                var unit = OwnerUnit;
+                return unit != null ? unit.Position : Hex.Zero;
             }
         }
 

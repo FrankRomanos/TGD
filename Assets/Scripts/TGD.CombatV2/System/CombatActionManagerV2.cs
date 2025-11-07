@@ -1409,10 +1409,16 @@ namespace TGD.CombatV2
 
             if (tool is AttackControllerV2 attack && attack != null)
             {
-                if (attack.ctx != null && attack.ctx.boundUnit != null)
-                    return attack.ctx.boundUnit;
-                if (attack.driver != null)
-                    return attack.driver.UnitRef;
+                var attackCtx = attack.ctx != null ? attack.ctx : attack.GetComponent<UnitRuntimeContext>();
+                if (attackCtx != null && attackCtx.boundUnit != null)
+                    return attackCtx.boundUnit;
+
+                var bridge = attack.bridgeOverride != null
+                    ? attack.bridgeOverride
+                    : attack.GetComponentInParent<PlayerOccupancyBridge>(true);
+
+                if (bridge != null && bridge.Actor is UnitGridAdapter adapter && adapter.Unit != null)
+                    return adapter.Unit;
             }
 
             if (tool is ChainActionBase chain && chain != null)
