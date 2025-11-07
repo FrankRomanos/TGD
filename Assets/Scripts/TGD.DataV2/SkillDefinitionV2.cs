@@ -37,6 +37,21 @@ namespace TGD.DataV2
         Passive
     }
 
+    /// <summary>
+    /// Where to resolve the authoritative cost data for a skill.
+    /// </summary>
+    public enum SkillCostAuthority
+    {
+        /// <summary>Use the serialized values on the definition.</summary>
+        Definition = 0,
+
+        /// <summary>Use the owning unit's <see cref="TGD.CoreV2.AttackProfileV2"/>.</summary>
+        AttackProfile = 1,
+
+        /// <summary>Use the owning unit's <see cref="TGD.CoreV2.MoveProfileV2"/>.</summary>
+        MoveProfile = 2
+    }
+
     [CreateAssetMenu(menuName = "TGD/Skills/SkillDefinitionV2", fileName = "SkillDefinitionV2")]
     public sealed class SkillDefinitionV2 : ScriptableObject
     {
@@ -65,6 +80,10 @@ namespace TGD.DataV2
         [Tooltip("Legal target rule resolved by DefaultTargetValidator.")]
         private SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick;
 
+        [SerializeField]
+        [Tooltip("Source of truth for time/energy costs. Attack & Move defer to their profiles.")]
+        private SkillCostAuthority costAuthority = SkillCostAuthority.Definition;
+
         [SerializeField, Min(0)]
         [Tooltip("Time cost in seconds resolved at confirm (W2).")]
         private int timeCostSeconds = 0;
@@ -79,6 +98,7 @@ namespace TGD.DataV2
         public Sprite Icon => icon;
         public SkillDefinitionActionKind ActionKind => actionKind;
         public SkillDefinitionTargetRule TargetRule => targetRule;
+        public SkillCostAuthority CostAuthority => costAuthority;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
 
@@ -87,7 +107,7 @@ namespace TGD.DataV2
 
         public bool TryGetCosts(out int seconds, out int energy)
         {
-            if (!IsActive)
+            if (!IsActive || costAuthority != SkillCostAuthority.Definition)
             {
                 seconds = 0;
                 energy = 0;
@@ -111,7 +131,7 @@ namespace TGD.DataV2
         {
             id = Normalize(id);
             displayName = string.IsNullOrWhiteSpace(displayName) ? id : displayName.Trim();
-            if (kind == SkillKind.Passive)
+            if (kind == SkillKind.Passive || costAuthority != SkillCostAuthority.Definition)
             {
                 timeCostSeconds = 0;
                 energyCost = 0;
@@ -123,6 +143,7 @@ namespace TGD.DataV2
             SkillKind kind = SkillKind.Active,
             SkillDefinitionActionKind actionKind = SkillDefinitionActionKind.Standard,
             SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick,
+            SkillCostAuthority costAuthority = SkillCostAuthority.Definition,
             int timeCostSeconds = 0,
             int energyCost = 0,
             string displayName = null,
@@ -132,8 +153,17 @@ namespace TGD.DataV2
             this.kind = kind;
             this.actionKind = actionKind;
             this.targetRule = targetRule;
-            this.timeCostSeconds = Mathf.Max(0, timeCostSeconds);
-            this.energyCost = Mathf.Max(0, energyCost);
+            this.costAuthority = costAuthority;
+            if (this.kind == SkillKind.Passive || this.costAuthority != SkillCostAuthority.Definition)
+            {
+                this.timeCostSeconds = 0;
+                this.energyCost = 0;
+            }
+            else
+            {
+                this.timeCostSeconds = Mathf.Max(0, timeCostSeconds);
+                this.energyCost = Mathf.Max(0, energyCost);
+            }
             this.displayName = string.IsNullOrWhiteSpace(displayName) ? this.id : displayName.Trim();
             this.icon = icon;
         }
