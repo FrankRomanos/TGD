@@ -13,17 +13,9 @@ MonoBehaviour:
   m_Name: ActionCooldownCatalog
   m_EditorClassIdentifier: 
   entries:
-  - key: Reaction20
+  - key: Reaction001
     seconds: 12
-  - key: Reaction40
+  - key: Reaction002
     seconds: 18
-  - key: Reaction20(2P)
-    seconds: 6
-  - key: Reaction40(2P)
-    seconds: 24
-  - key: FullRoundTest
+  - key: Free
     seconds: 60
-  - key: Free10
-    seconds: 60
-  - key: Free10(2P)
-    seconds: 36

@@ -23,7 +23,7 @@ namespace TGD.CombatV2
             skillId = "FullRoundTest";
             timeCostSeconds = 0;
             energyCost = 0;
-            targetMode = TargetMode.AnyClick;
+            targetRule = TargetRule.AnyClick;
             cooldownSeconds = 18;
             rounds = 2;
             immediateLog = "[Test] FullRound Immediate";

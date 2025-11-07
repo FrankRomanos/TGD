@@ -75,5 +75,7 @@ namespace TGD.DataV2
             if (_map != null && _map.TryGetValue(key, out var v)) return Mathf.Max(0, v);
             return 0;
         }
+
+        // 冷却目录是唯一真相源：不允许运行时写回。
     }
 }

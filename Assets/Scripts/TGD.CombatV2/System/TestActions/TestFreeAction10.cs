@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
@@ -12,7 +13,7 @@ namespace TGD.CombatV2
             skillId = "Free10";
             timeCostSeconds = 0;
             energyCost = 10;
-            targetMode = TargetMode.AnyClick;
+            targetRule = TargetRule.AnyClick;
             cooldownSeconds = 6;
         }
     }

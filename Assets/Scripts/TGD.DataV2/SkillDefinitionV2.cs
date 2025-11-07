@@ -1,36 +1,10 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 
 namespace TGD.DataV2
 {
-    /// <summary>
-    /// Skill taxonomy used for authoring. Mirrors CombatV2.ActionKind without introducing a dependency.
-    /// </summary>
-    public enum SkillDefinitionActionKind
-    {
-        Standard = 0,
-        Reaction = 1,
-        Derived = 2,
-        FullRound = 3,
-        Sustained = 4,
-        Free = 5
-    }
-
-    /// <summary>
-    /// Targeting options aligned with CombatV2.Targeting.TargetMode without a compile-time dependency.
-    /// </summary>
-    public enum SkillDefinitionTargetRule
-    {
-        AnyClick = 0,
-        GroundOnly = 1,
-        EnemyOnly = 2,
-        AllyOnly = 3,
-        SelfOnly = 4,
-        EnemyOrGround = 5,
-        AllyOrGround = 6,
-        AnyUnit = 7
-    }
-
     public enum SkillKind
     {
         Active,
@@ -74,11 +48,11 @@ namespace TGD.DataV2
         [Header("Active Skill Settings")]
         [SerializeField]
         [Tooltip("Combat action category consumed by CAM + ActionRuleBook.")]
-        private SkillDefinitionActionKind actionKind = SkillDefinitionActionKind.Standard;
+        private ActionKind actionKind = ActionKind.Standard;
 
         [SerializeField]
         [Tooltip("Legal target rule resolved by DefaultTargetValidator.")]
-        private SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick;
+        private TargetRule targetRule = TargetRule.AnyClick;
 
         [SerializeField]
         [Tooltip("Source of truth for time/energy costs. Attack & Move defer to their profiles.")]
@@ -92,15 +66,53 @@ namespace TGD.DataV2
         [Tooltip("Energy cost resolved at confirm (W2).")]
         private int energyCost = 0;
 
+        [SerializeField]
+        [Tooltip("Maximum targeting distance in hexes. -1 for unlimited.")]
+        private int maxRangeHexes = -1;
+
+        [SerializeField]
+        [Tooltip("Cooldown catalog key. Empty defaults to Id.")]
+        private string cooldownKey = string.Empty;
+
+        [SerializeField]
+        [Tooltip("For derived actions: the base skill identifier this action follows.")]
+        private string derivedFromSkillId = string.Empty;
+
+        [SerializeField, Min(1)]
+        [Tooltip("For full-round actions: number of rounds before the resolution triggers.")]
+        private int fullRoundRounds = 1;
+
+        [SerializeField]
+        [Tooltip("Optional log lines printed during W2/confirm stage.")]
+        private string[] confirmLogs = Array.Empty<string>();
+
+        [SerializeField]
+        [Tooltip("Optional log lines printed during W4/resolve stage.")]
+        private string[] resolveLogs = Array.Empty<string>();
+
         public string Id => Normalize(id);
         public SkillKind Kind => kind;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName.Trim();
         public Sprite Icon => icon;
-        public SkillDefinitionActionKind ActionKind => actionKind;
-        public SkillDefinitionTargetRule TargetRule => targetRule;
+        public ActionKind ActionKind => actionKind;
+        public TargetRule TargetRule => targetRule;
         public SkillCostAuthority CostAuthority => costAuthority;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
+        public int MaxRangeHexes => Mathf.Max(-1, maxRangeHexes);
+        public string CooldownKey
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(cooldownKey))
+                    return Id;
+                return Normalize(cooldownKey);
+            }
+        }
+        public string DerivedFromSkillId => actionKind == ActionKind.Derived ? Normalize(derivedFromSkillId) : string.Empty;
+        public int FullRoundRounds => Mathf.Max(1, fullRoundRounds);
+        public IReadOnlyList<string> ConfirmLogs => confirmLogs ?? Array.Empty<string>();
+        public IReadOnlyList<string> ResolveLogs => resolveLogs ?? Array.Empty<string>();
 
         public bool IsActive => kind == SkillKind.Active;
         public bool IsPassive => kind == SkillKind.Passive;
@@ -131,23 +143,39 @@ namespace TGD.DataV2
         {
             id = Normalize(id);
             displayName = string.IsNullOrWhiteSpace(displayName) ? id : displayName.Trim();
+            maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
+            fullRoundRounds = Mathf.Max(1, fullRoundRounds);
+            cooldownKey = Normalize(cooldownKey);
+            if (kind == SkillKind.Active && string.IsNullOrEmpty(cooldownKey))
+                cooldownKey = id;
             if (kind == SkillKind.Passive || costAuthority != SkillCostAuthority.Definition)
             {
                 timeCostSeconds = 0;
                 energyCost = 0;
             }
+            derivedFromSkillId = actionKind == ActionKind.Derived ? Normalize(derivedFromSkillId) : string.Empty;
+            if (confirmLogs == null)
+                confirmLogs = Array.Empty<string>();
+            if (resolveLogs == null)
+                resolveLogs = Array.Empty<string>();
         }
 
         public void EditorInitialize(
             string id,
             SkillKind kind = SkillKind.Active,
-            SkillDefinitionActionKind actionKind = SkillDefinitionActionKind.Standard,
-            SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick,
+            ActionKind actionKind = ActionKind.Standard,
+            TargetRule targetRule = TargetRule.AnyClick,
             SkillCostAuthority costAuthority = SkillCostAuthority.Definition,
             int timeCostSeconds = 0,
             int energyCost = 0,
             string displayName = null,
-            Sprite icon = null)
+            Sprite icon = null,
+            int maxRangeHexes = -1,
+            string cooldownKey = null,
+            string derivedFromSkillId = null,
+            int fullRoundRounds = 1,
+            IEnumerable<string> confirmLogs = null,
+            IEnumerable<string> resolveLogs = null)
         {
             this.id = Normalize(id);
             this.kind = kind;
@@ -166,6 +194,16 @@ namespace TGD.DataV2
             }
             this.displayName = string.IsNullOrWhiteSpace(displayName) ? this.id : displayName.Trim();
             this.icon = icon;
+            this.maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
+            this.cooldownKey = Normalize(cooldownKey);
+            if (this.kind == SkillKind.Active && string.IsNullOrEmpty(this.cooldownKey))
+                this.cooldownKey = this.id;
+            this.derivedFromSkillId = actionKind == ActionKind.Derived
+                ? Normalize(derivedFromSkillId)
+                : string.Empty;
+            this.fullRoundRounds = Mathf.Max(1, fullRoundRounds);
+            this.confirmLogs = confirmLogs != null ? new List<string>(confirmLogs).ToArray() : Array.Empty<string>();
+            this.resolveLogs = resolveLogs != null ? new List<string>(resolveLogs).ToArray() : Array.Empty<string>();
         }
 #endif
     }

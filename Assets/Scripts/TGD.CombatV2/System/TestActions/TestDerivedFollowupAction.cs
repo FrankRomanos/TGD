@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.CombatV2.Targeting;
 
 namespace TGD.CombatV2
@@ -12,7 +13,7 @@ namespace TGD.CombatV2
             skillId = "DerivedAfterDerived";
             timeCostSeconds = 1;
             energyCost = 10;
-            targetMode = TargetMode.EnemyOrGround;
+            targetRule = TargetRule.EnemyOrGround;
             cooldownSeconds = 8;
         }
     }

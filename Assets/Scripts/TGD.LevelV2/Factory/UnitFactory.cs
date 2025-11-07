@@ -23,6 +23,10 @@ namespace TGD.LevelV2
         [Tooltip("Optional default prefab to instantiate when spawning units.")]
         public GameObject defaultPrefab;
 
+        [Header("Data")]
+        [Tooltip("Optional catalog used to validate skills when composing units.")]
+        public SkillIndex skillIndex;
+
         [Header("Battle Control")]
         [Tooltip("Automatically call StartBattle after at least one unit is spawned.")]
         public bool autoStartBattle;
@@ -54,7 +58,7 @@ namespace TGD.LevelV2
                 return null;
             }
 
-            var final = UnitComposeService.Compose(blueprint);
+            var final = UnitComposeService.Compose(blueprint, skillIndex);
             final.faction = faction;
 
             // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
@@ -108,7 +112,7 @@ namespace TGD.LevelV2
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             var availabilities = UnitActionBinder.Bind(go, context, final.abilities);
-            ApplyAbilityLoadout(go, context, availabilities, cam);
+            ApplyAbilityLoadout(go, context, availabilities, cam, skillIndex);
 
             MaybeAutoStartBattle();
             return unit;
@@ -308,6 +312,14 @@ namespace TGD.LevelV2
 
             var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
             var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
+
+            if (resolvedCam != null && resolvedCam.rulebook != null && skillIndex != null)
+            {
+                if (resolvedCam.rulebook.includeSkillIndexDerivedLinks && resolvedCam.rulebook.skillIndex == null)
+                {
+                    resolvedCam.rulebook.skillIndex = skillIndex;
+                }
+            }
 
             var resolvedAuthoring = board != null ? board.authoring : null;
             if (resolvedAuthoring == null && resolvedCam != null)
@@ -536,13 +548,16 @@ namespace TGD.LevelV2
             GameObject go,
             UnitRuntimeContext context,
             IReadOnlyList<UnitActionBinder.ActionAvailability> availabilities,
-            CombatActionManagerV2 cam)
+            CombatActionManagerV2 cam,
+            SkillIndex skillIndex)
         {
             if (go == null)
                 return;
 
             var granted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var unlocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            AssignSkillDefinitions(go, availabilities, skillIndex);
 
             if (availabilities != null)
             {
@@ -577,6 +592,81 @@ namespace TGD.LevelV2
                         else
                             cam.UnregisterTool(tool);
                     }
+                }
+            }
+        }
+
+        static void AssignSkillDefinitions(
+            GameObject go,
+            IReadOnlyList<UnitActionBinder.ActionAvailability> availabilities,
+            SkillIndex skillIndex)
+        {
+            if (go == null)
+                return;
+
+            var tools = go.GetComponentsInChildren<SkillDefinitionActionTool>(true);
+            if (tools == null || tools.Length == 0)
+                return;
+
+            var map = new Dictionary<string, SkillDefinitionActionTool>(StringComparer.OrdinalIgnoreCase);
+            var unassigned = new List<SkillDefinitionActionTool>();
+
+            for (int i = 0; i < tools.Length; i++)
+            {
+                var tool = tools[i];
+                if (tool == null)
+                    continue;
+
+                var key = NormalizeSkillId(tool.Id);
+                if (string.IsNullOrEmpty(key) && tool.Definition != null)
+                    key = NormalizeSkillId(tool.Definition.Id);
+
+                if (!string.IsNullOrEmpty(key) && !map.ContainsKey(key))
+                {
+                    map[key] = tool;
+                }
+                else
+                {
+                    unassigned.Add(tool);
+                }
+            }
+
+            if (availabilities == null || availabilities.Count == 0)
+                return;
+
+            var assignedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < availabilities.Count; i++)
+            {
+                var entry = availabilities[i];
+                var id = NormalizeSkillId(entry.skillId);
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
+                if (!map.TryGetValue(id, out var tool) || tool == null)
+                {
+                    if (unassigned.Count == 0)
+                    {
+                        Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
+                        continue;
+                    }
+
+                    tool = unassigned[0];
+                    unassigned.RemoveAt(0);
+                    map[id] = tool;
+                }
+
+                if (!assignedIds.Add(id))
+                    continue;
+
+                if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
+                {
+                    if (!ReferenceEquals(tool.Definition, info.definition))
+                        tool.SetDefinition(info.definition);
+                }
+                else if (tool.Definition == null || !string.Equals(tool.Definition.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
                 }
             }
         }

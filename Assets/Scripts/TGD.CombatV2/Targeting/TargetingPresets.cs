@@ -1,12 +1,14 @@
+using TGD.CoreV2;
+
 namespace TGD.CombatV2.Targeting
 {
     public static class TargetingPresets
     {
-        public static TargetingSpec For(TargetMode mode, int maxRange = -1)
+        public static TargetingSpec For(TargetRule rule, int maxRange = -1)
         {
-            switch (mode)
+            switch (rule)
             {
-                case TargetMode.GroundOnly:
+                case TargetRule.GroundOnly:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Empty,
@@ -16,7 +18,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = false,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.EnemyOnly:
+                case TargetRule.EnemyOnly:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Enemy,
@@ -26,7 +28,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = true,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.AllyOnly:
+                case TargetRule.AllyOnly:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Ally,
@@ -36,7 +38,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = true,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.SelfOnly:
+                case TargetRule.SelfOnly:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Self,
@@ -46,7 +48,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = false,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.EnemyOrGround:
+                case TargetRule.EnemyOrGround:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Enemy | TargetOccupantMask.Empty,
@@ -56,7 +58,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = false,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.AllyOrGround:
+                case TargetRule.AllyOrGround:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Ally | TargetOccupantMask.Empty,
@@ -66,7 +68,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = false,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.AnyUnit:
+                case TargetRule.AnyUnit:
                     return new TargetingSpec
                     {
                         occupant = TargetOccupantMask.Ally | TargetOccupantMask.Enemy | TargetOccupantMask.Self,
@@ -76,7 +78,7 @@ namespace TGD.CombatV2.Targeting
                         requireOccupied = true,
                         maxRangeHexes = maxRange
                     };
-                case TargetMode.AnyClick:
+                case TargetRule.AnyClick:
                 default:
                     return new TargetingSpec
                     {
