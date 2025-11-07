@@ -54,6 +54,7 @@ namespace TGD.LevelV2
             public HexEnvironmentSystem environment;
             public Transform view;
             public SkillIndex skillIndex;
+            public Camera pickCamera;
         }
 
         sealed class SpawnRecord
@@ -346,6 +347,12 @@ namespace TGD.LevelV2
             if (shared.cam != null && cam == null)
                 cam = shared.cam;
 
+            if (shared.cam != null && shared.cam.pickCamera != null)
+                shared.pickCamera = shared.cam.pickCamera;
+
+            if (shared.pickCamera == null)
+                shared.pickCamera = Camera.main;
+
             if (shared.cam != null && shared.cam.rulebook != null && shared.skillIndex != null)
             {
                 if (shared.cam.rulebook.includeSkillIndexDerivedLinks)
@@ -392,6 +399,10 @@ namespace TGD.LevelV2
                 shared.environment = shared.authoring.GetComponent<HexEnvironmentSystem>()
                                      ?? shared.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
             }
+            if (shared.environment == null && shared.turnManager != null)
+                shared.environment = shared.turnManager.environment;
+            if (shared.environment == null)
+                shared.environment = FindOne<HexEnvironmentSystem>();
 
             shared.view = go != null
                 ? go.GetComponentInChildren<Animator>(true)?.transform
@@ -423,6 +434,37 @@ namespace TGD.LevelV2
             var resolvedOccupancy = shared.occupancy;
             var resolvedEnv = shared.environment;
             var view = shared.view ?? go.transform;
+            var resolvedCamera = shared.pickCamera != null ? shared.pickCamera : Camera.main;
+            shared.pickCamera = resolvedCamera;
+            if (resolvedEnv == null)
+            {
+                resolvedEnv = FindOne<HexEnvironmentSystem>();
+                if (resolvedEnv != null)
+                    shared.environment = resolvedEnv;
+            }
+
+            var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
+            MoveRateStatusRuntime primaryStatus = statuses != null && statuses.Length > 0 ? statuses[0] : null;
+
+            MoveRateStatusRuntime ResolveStatusFor(Component owner)
+            {
+                if (owner == null)
+                    return primaryStatus;
+
+                var fromSelf = owner.GetComponent<MoveRateStatusRuntime>();
+                if (fromSelf != null)
+                    return fromSelf;
+
+                var fromParent = owner.GetComponentInParent<MoveRateStatusRuntime>(true);
+                if (fromParent != null)
+                    return fromParent;
+
+                var fromChildren = owner.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                if (fromChildren != null)
+                    return fromChildren;
+
+                return primaryStatus;
+            }
 
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
@@ -437,7 +479,18 @@ namespace TGD.LevelV2
                 mover.targetValidator = resolvedValidator;
                 mover.occupancyService = resolvedOccupancy;
                 mover.env = resolvedEnv;
+                mover.status = ResolveStatusFor(mover);
+                mover.stickySource = mover.status != null
+                    ? mover.status
+                    : (resolvedEnv != null ? resolvedEnv : null);
                 mover.viewOverride = view;
+                mover.pickCamera = resolvedCamera;
+                if (resolvedCam != null)
+                {
+                    mover.pickMask = resolvedCam.pickMask;
+                    mover.pickPlaneY = resolvedCam.pickPlaneY;
+                    mover.rayMaxDistance = resolvedCam.rayMaxDistance;
+                }
                 mover.driver = null;
                 mover.bridgeOverride = null;
             }
@@ -468,6 +521,10 @@ namespace TGD.LevelV2
                 attack.targetValidator = resolvedValidator;
                 attack.occupancyService = resolvedOccupancy;
                 attack.env = resolvedEnv;
+                attack.status = ResolveStatusFor(attack);
+                attack.stickySource = attack.status != null
+                    ? attack.status
+                    : (resolvedEnv != null ? resolvedEnv : null);
                 attack.viewOverride = view;
                 attack.driver = null;
                 attack.bridgeOverride = null;
@@ -525,7 +582,6 @@ namespace TGD.LevelV2
                 driver.turnManager = resolvedTurnManager;
             }
 
-            var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
             foreach (var status in statuses)
             {
                 if (status == null)
@@ -573,6 +629,8 @@ namespace TGD.LevelV2
             if (shared.authoring == null && occSvc != null)
                 shared.authoring = occSvc.authoring;
 
+            var resolvedEnv = shared.environment;
+
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
             if (adapter == null)
                 adapter = EnsureGridAdapter(go, bound);
@@ -610,6 +668,21 @@ namespace TGD.LevelV2
 
                     mover.bridgeOverride = bridge;
                     mover.occupancyService = occSvc;
+                    if (resolvedEnv != null)
+                    {
+                        mover.env = resolvedEnv;
+                        if (mover.status == null)
+                        {
+                            mover.status = mover.GetComponent<MoveRateStatusRuntime>()
+                                          ?? mover.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                          ?? mover.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                        }
+
+                        if (mover.status != null)
+                            mover.stickySource = mover.status;
+                        else
+                            mover.stickySource = resolvedEnv;
+                    }
                 }
 
                 foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
@@ -619,6 +692,21 @@ namespace TGD.LevelV2
 
                     attack.bridgeOverride = bridge;
                     attack.occupancyService = occSvc;
+                    if (resolvedEnv != null)
+                    {
+                        attack.env = resolvedEnv;
+                        if (attack.status == null)
+                        {
+                            attack.status = attack.GetComponent<MoveRateStatusRuntime>()
+                                            ?? attack.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                            ?? attack.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                        }
+
+                        if (attack.status != null)
+                            attack.stickySource = attack.status;
+                        else
+                            attack.stickySource = resolvedEnv;
+                    }
                 }
             }
 
@@ -900,6 +988,12 @@ namespace TGD.LevelV2
 
             if (env == null && shared.authoring != null)
                 env = shared.authoring.GetComponent<HexEnvironmentSystem>() ?? shared.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+
+            if (env == null && shared.turnManager != null)
+                env = shared.turnManager.environment;
+
+            if (env == null)
+                env = FindOne<HexEnvironmentSystem>();
 
             validator.InjectServices(tm, occSvc, env);
         }
