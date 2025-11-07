@@ -80,3 +80,9 @@ MonoBehaviour:
   - skillId: DerivedAfterDerived
     learned: 1
     initialCooldownSeconds: 0
+  - skillId: Reaction001
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: Free
+    learned: 1
+    initialCooldownSeconds: 0

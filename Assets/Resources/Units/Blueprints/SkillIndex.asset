@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9d9e3f343d0249bb900129f239ca71a6, type: 3}
   m_Name: SkillIndex
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   entries:
   - definition: {fileID: 11400000, guid: ecf54a441b724131aa060245aa09b797, type: 2}
     displayName: Move
@@ -20,13 +20,13 @@ MonoBehaviour:
     displayName: Attack
     icon: {fileID: 21300000, guid: d7cc2af5daea9e649b2816a8979883eb, type: 3}
   - definition: {fileID: 11400000, guid: bf53f183214c418a965fc43569d0a49c, type: 2}
-    displayName: Reaction40
+    displayName: Reaction002
     icon: {fileID: 0}
   - definition: {fileID: 11400000, guid: b707f99761494c5f8f04f88617ca5d6b, type: 2}
-    displayName: Reaction20
+    displayName: Reaction001
     icon: {fileID: 0}
   - definition: {fileID: 11400000, guid: 866554fba4f04b7a99b1e7b251faa895, type: 2}
-    displayName: Free10
+    displayName: Free
     icon: {fileID: 0}
   - definition: {fileID: 11400000, guid: c1d44995f98743c4b557d18c443df347, type: 2}
     displayName: FullRoundTest

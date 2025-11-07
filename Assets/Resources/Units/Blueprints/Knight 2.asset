@@ -74,3 +74,6 @@ MonoBehaviour:
   - skillId: Attack
     learned: 1
     initialCooldownSeconds: 0
+  - skillId: FullRoundTest
+    learned: 1
+    initialCooldownSeconds: 0
