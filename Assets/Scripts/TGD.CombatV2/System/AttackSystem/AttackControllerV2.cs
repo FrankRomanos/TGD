@@ -457,23 +457,9 @@ namespace TGD.CombatV2
             public string rejectMessage;
         }
 
-        IGridActor SelfActor
-        {
-            get
-            {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-            }
-        }
+        IGridActor SelfActor => (_bridge as PlayerOccupancyBridge)?.Actor as IGridActor;
 
-        Hex CurrentAnchor
-        {
-            get
-            {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
-            }
-        }
+        Hex CurrentAnchor => (_bridge as PlayerOccupancyBridge)?.CurrentAnchor ?? Hex.Zero;
 
         void Awake()
         {
@@ -1081,7 +1067,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, SelfActor)))
+                if (IsBlockedForMove(target, start, target, passability))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -1190,6 +1176,7 @@ namespace TGD.CombatV2
 
             var startAnchor = CurrentAnchor;
             Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            Facing4 originalFacing = finalFacing;
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
@@ -1204,8 +1191,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if ((passability != null && passability.IsBlocked(preview.targetHex)) ||
-                    (passability == null && _occ != null && _occ.IsBlocked(preview.targetHex, SelfActor)))
+                if (IsBlockedForMove(preview.targetHex, startAnchor, preview.targetHex, passability))
                 {
                     HandleApproachAbort();
                     yield break;
@@ -1291,8 +1277,15 @@ namespace TGD.CombatV2
                         finalFacing = nf;
                     }
 
-                    _bridge?.MoveCommit(startAnchor, finalFacing);
-                    UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
+                    if (!CommitThroughBridge(startAnchor, startAnchor, finalFacing, view, hexSpace, $"AttackStay {unit?.Id ?? name}->{startAnchor}"))
+                    {
+                        finalFacing = originalFacing;
+                        if (unit != null)
+                            unit.Facing = originalFacing;
+                        if (SelfActor != null)
+                            SelfActor.Facing = originalFacing;
+                        yield break;
+                    }
                     AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
 
                     if (attackPlanned)
@@ -1334,12 +1327,7 @@ namespace TGD.CombatV2
                     var from = reached[i - 1];
                     var to = reached[i];
 
-                    if (passability != null && passability.IsBlocked(to))
-                    {
-                        stoppedByExternal = true;
-                        break;
-                    }
-                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
+                    if (IsBlockedForMove(to, startAnchor, preview.landingHex, passability))
                     {
                         stoppedByExternal = true;
                         break;
@@ -1399,8 +1387,15 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                _bridge?.MoveCommit(lastPosition, finalFacing);
-                UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
+                if (!CommitThroughBridge(startAnchor, lastPosition, finalFacing, view, hexSpace, $"AttackMove {unit?.Id ?? name}->{lastPosition}"))
+                {
+                    finalFacing = originalFacing;
+                    if (unit != null)
+                        unit.Facing = originalFacing;
+                    if (SelfActor != null)
+                        SelfActor.Facing = originalFacing;
+                    yield break;
+                }
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
@@ -1509,8 +1504,14 @@ namespace TGD.CombatV2
                 var abortAnchor = CurrentAnchor;
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
-                _bridge?.MoveCommit(abortAnchor, abortFacing);
-                UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
+                if (!CommitThroughBridge(startAnchor, abortAnchor, abortFacing, view, hexSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
+                {
+                    if (abortUnit != null)
+                        abortUnit.Facing = originalFacing;
+                    if (SelfActor != null)
+                        SelfActor.Facing = originalFacing;
+                    return;
+                }
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
@@ -1697,19 +1698,42 @@ namespace TGD.CombatV2
             if (cell.Equals(start)) return false;
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
-            if (passability != null && passability.IsBlocked(cell)) return true;
+
+            if (passability != null)
+                return passability.IsBlocked(cell);
+
             if (_occ == null)
-                return false;
+                return true;
 
             var actor = SelfActor;
-            if (passability == null)
+            if (actor != null)
+                return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
+
+            return _occ.IsBlocked(cell);
+        }
+
+        bool CommitThroughBridge(Hex startAnchor, Hex targetAnchor, Facing4 facing, Transform view, HexSpace hexSpace, string label)
+        {
+            if (_bridge == null)
+                return true;
+
+            bool ok = _bridge.MoveCommit(targetAnchor, facing);
+
+            if (_playerBridge != null)
             {
-                if (actor != null)
-                    return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
-                return _occ.IsBlocked(cell);
+                var svc = occupancyService != null ? occupancyService : _playerBridge.occupancyService;
+                PlayerOccupancyBridge.AuditOccupancy(svc, _playerBridge, label);
             }
 
-            return false;
+            if (!ok)
+            {
+                Debug.LogError($"[Occ] MoveCommit FAILED: {ResolveSelfUnit()?.Id} from={startAnchor} to={targetAnchor}", this);
+                if (view != null && hexSpace != null)
+                    view.position = hexSpace.HexToWorld(startAnchor, y);
+                return false;
+            }
+
+            return true;
         }
 
         bool TryFindMeleePath(Hex start, Hex target, int range, IPassability passability, out Hex landing, out List<Hex> bestPath)

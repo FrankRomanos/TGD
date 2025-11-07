@@ -80,14 +80,7 @@ namespace TGD.CombatV2
         Transform ResolveSelfView()
             => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
 
-        Hex CurrentAnchor
-        {
-            get
-            {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
-            }
-        }
+        Hex CurrentAnchor => (_bridge as PlayerOccupancyBridge)?.CurrentAnchor ?? Hex.Zero;
 
 
         public void AttachTurnManager(TurnManagerV2 tm)
@@ -531,14 +524,7 @@ namespace TGD.CombatV2
             }
         }
 
-        IGridActor SelfActor
-        {
-            get
-            {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-            }
-        }
+        IGridActor SelfActor => (_bridge as PlayerOccupancyBridge)?.Actor as IGridActor;
 
         void Awake()
         {
@@ -791,14 +777,8 @@ namespace TGD.CombatV2
             {
                 if (layout != null && !layout.Contains(cell)) return true;
 
-                if (blockByUnits)
-                {
-                    if (passability != null && passability.IsBlocked(cell))
-                        return true;
-
-                    if (passability == null && (_occ == null || !_occ.CanPlaceIgnoringTemp(SelfActor, cell, SelfActor != null ? SelfActor.Facing : unit.Facing, ignore: SelfActor)))
-                        return true;
-                }
+                if (blockByUnits && IsCellBlockedForMove(cell, passability))
+                    return true;
 
                 if (physicsBlocker != null && physicsBlocker(cell)) return true;
                 if (env != null && env.IsPit(cell)) return true;
@@ -1016,6 +996,7 @@ namespace TGD.CombatV2
                 }
 
                 var view = ResolveSelfView();
+                var startFacing = OwnerUnit != null ? OwnerUnit.Facing : Facing4.PlusQ;
                 _moving = true;
 
                 // 起步朝向
@@ -1051,10 +1032,7 @@ namespace TGD.CombatV2
                     var from = reached[i - 1];
                     var to = reached[i];
 
-                    if (passability != null && passability.IsBlocked(to))
-                    { stoppedByExternal = true; break; }
-
-                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
+                    if (IsCellBlockedForMove(to, passability))
                     { stoppedByExternal = true; break; }
 
                     if (env != null && env.IsPit(to))
@@ -1081,7 +1059,16 @@ namespace TGD.CombatV2
                         yield return null;
                     }
 
-                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : unit.Facing);
+                    var commitFacing = SelfActor != null ? SelfActor.Facing : unit.Facing;
+                    if (!CommitThroughBridge(startAnchor, to, commitFacing, view, hexSpace, $"MoveStep {unitLabel}->{to}"))
+                    {
+                        if (OwnerUnit != null)
+                            OwnerUnit.Facing = startFacing;
+                        if (SelfActor != null)
+                            SelfActor.Facing = startFacing;
+                        _moving = false;
+                        yield break;
+                    }
 
                     if (_sticky != null && status != null &&
                         _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
@@ -1091,13 +1078,6 @@ namespace TGD.CombatV2
                         LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                     }
 
-                    // 预览地图/真实地图：driver 可能没有，跳过即可
-                    if (driver != null && driver.Map != null)
-                    {
-                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                    }
-
-                    unit.Position = to;
                     if (driver != null) driver.SyncView();
                 }
 
@@ -1105,8 +1085,15 @@ namespace TGD.CombatV2
                 {
                     var finalAnchor = CurrentAnchor;
                     var finalFacing = SelfActor != null ? SelfActor.Facing : OwnerUnit.Facing;
-                    _bridge?.MoveCommit(finalAnchor, finalFacing);
-                    UnitRuntimeBindingUtil.SyncUnit(OwnerUnit, finalAnchor, finalFacing);
+                    if (!CommitThroughBridge(startAnchor, finalAnchor, finalFacing, view, hexSpace, $"MoveFinish {unitLabel}->{finalAnchor}"))
+                    {
+                        if (OwnerUnit != null)
+                            OwnerUnit.Facing = startFacing;
+                        if (SelfActor != null)
+                            SelfActor.Facing = startFacing;
+                        _moving = false;
+                        yield break;
+                    }
                 }
 
                 _moving = false;
@@ -1174,7 +1161,7 @@ namespace TGD.CombatV2
                 _occ = occupancyService.Get();
 
             var unit = ResolveSelfUnit();
-            var actor = UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
+            var actor = SelfActor;
 
             return authoring?.Layout != null
                 && unit != null
@@ -1239,6 +1226,45 @@ namespace TGD.CombatV2
                 desired.AnchorChanged += HandleAnchorChanged;
                 _boundPlayerBridge = desired;
             }
+        }
+
+        bool IsCellBlockedForMove(Hex cell, IPassability passability)
+        {
+            if (passability != null)
+                return passability.IsBlocked(cell);
+
+            if (_occ == null)
+                return true;
+
+            var actor = SelfActor;
+            if (actor != null)
+                return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
+
+            return _occ.IsBlocked(cell);
+        }
+
+        bool CommitThroughBridge(Hex startAnchor, Hex targetAnchor, Facing4 facing, Transform view, HexSpace hexSpace, string label)
+        {
+            if (_bridge == null)
+                return true;
+
+            bool ok = _bridge.MoveCommit(targetAnchor, facing);
+
+            if (_playerBridge != null)
+            {
+                var svc = occupancyService != null ? occupancyService : _playerBridge.occupancyService;
+                PlayerOccupancyBridge.AuditOccupancy(svc, _playerBridge, label);
+            }
+
+            if (!ok)
+            {
+                Debug.LogError($"[Occ] MoveCommit FAILED: {ResolveSelfUnit()?.Id} from={startAnchor} to={targetAnchor}", this);
+                if (view != null && hexSpace != null)
+                    view.position = hexSpace.HexToWorld(startAnchor, y);
+                return false;
+            }
+
+            return true;
         }
     }
 }

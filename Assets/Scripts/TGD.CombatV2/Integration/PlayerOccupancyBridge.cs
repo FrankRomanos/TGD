@@ -94,7 +94,27 @@ namespace TGD.CombatV2.Integration
 #endif
         }
 
+        void OnEnable()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            EnsureOccupancyBacking();
+            EnsureActorBinding();
+            EnsurePlacedNow();
+        }
+
         void OnDisable()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            // Disable 生命周期不再卸占，保持锚点稳定。
+            if (_placed && _actor != null)
+                MirrorDriver(_actor.Anchor, _actor.Facing);
+        }
+
+        void OnDestroy()
         {
             if (!Application.isPlaying)
                 return;
@@ -104,7 +124,7 @@ namespace TGD.CombatV2.Integration
                 _occ.Remove(_actor);
                 _placed = false;
                 if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
+                    Debug.Log($"[Occ] Destroy Remove {IdLabel()}", this);
             }
         }
 
@@ -354,6 +374,9 @@ namespace TGD.CombatV2.Integration
                         _componentAdapter.Unit = unit;
                 }
 
+                if (_actor != null && _actor != _componentAdapter)
+                    Debug.LogError($"[Occ] Duplicate adapters on {name}!", this);
+
                 _actor = _componentAdapter;
             }
             else if (_actor == null)
@@ -380,6 +403,21 @@ namespace TGD.CombatV2.Integration
             MirrorDriver(anchor, facing);
             RaiseAnchorChanged(anchor);
             return true;
+        }
+
+        public static void AuditOccupancy(HexOccupancyService svc, PlayerOccupancyBridge br, string label)
+        {
+            var occ = svc ? svc.Get() : null;
+            var actor = br?.Actor as IGridActor;
+            if (occ == null || actor == null)
+            {
+                Debug.LogWarning($"[Audit] {label} miss occ/actor");
+                return;
+            }
+
+            var anchor = actor.Anchor;
+            bool ownerOk = occ.TryGetActor(anchor, out var owner) && ReferenceEquals(owner, actor);
+            Debug.Log($"[Audit] {label} anchor={anchor} ownerOK={ownerOk}");
         }
     }
 }
