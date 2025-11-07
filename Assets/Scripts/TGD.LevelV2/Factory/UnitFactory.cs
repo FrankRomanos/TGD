@@ -373,7 +373,8 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
-                mover.bridgeOverride = ownerBridge;
+                if (ownerBridge != null)
+                    mover.bridgeOverride = ownerBridge;
                 mover.viewOverride = view;
                 mover.driver = null;
             }
@@ -411,7 +412,8 @@ namespace TGD.LevelV2
                 if (!attack.occupancyService)
                     attack.occupancyService = resolvedOccupancy;
 
-                attack.bridgeOverride = ownerBridge;
+                if (ownerBridge != null)
+                    attack.bridgeOverride = ownerBridge;
                 attack.viewOverride = view;
             }
 
@@ -551,13 +553,21 @@ namespace TGD.LevelV2
             foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
             {
                 if (mover != null)
+                {
                     mover.occupancyService = occSvc;
+                    if (mover.bridgeOverride == null)
+                        mover.bridgeOverride = bridge;
+                }
             }
 
             foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
             {
                 if (attack != null)
+                {
                     attack.occupancyService = occSvc;
+                    if (attack.bridgeOverride == null)
+                        attack.bridgeOverride = bridge;
+                }
             }
 
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
