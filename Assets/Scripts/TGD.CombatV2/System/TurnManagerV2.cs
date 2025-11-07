@@ -207,7 +207,7 @@ namespace TGD.CombatV2
             public int roundsRemaining;
             public int totalRounds;
             public IFullRoundActionTool tool;
-            public string actionId;
+            public string skillId;
             public FullRoundQueuedPlan plan;
         }
 
@@ -426,11 +426,11 @@ namespace TGD.CombatV2
             return _fullRoundStates.TryGetValue(unit, out var state) && state != null;
         }
 
-        public bool TryGetFullRoundInfo(Unit unit, out int roundsRemaining, out int totalRounds, out string actionId)
+        public bool TryGetFullRoundInfo(Unit unit, out int roundsRemaining, out int totalRounds, out string skillId)
         {
             roundsRemaining = 0;
             totalRounds = 0;
-            actionId = null;
+            skillId = null;
 
             if (unit == null)
                 return false;
@@ -439,7 +439,7 @@ namespace TGD.CombatV2
             {
                 roundsRemaining = Mathf.Max(0, state.roundsRemaining);
                 totalRounds = Mathf.Max(0, state.totalRounds);
-                actionId = state.actionId;
+                skillId = state.skillId;
                 return true;
             }
 
@@ -492,7 +492,7 @@ namespace TGD.CombatV2
             return true;
         }
 
-        public void RegisterFullRound(Unit unit, int rounds, string actionId, IFullRoundActionTool tool, FullRoundQueuedPlan plan)
+        public void RegisterFullRound(Unit unit, int rounds, string skillId, IFullRoundActionTool tool, FullRoundQueuedPlan plan)
         {
             if (unit == null || rounds <= 0)
                 return;
@@ -502,12 +502,12 @@ namespace TGD.CombatV2
                 roundsRemaining = rounds,
                 totalRounds = rounds,
                 tool = tool,
-                actionId = actionId,
+                skillId = skillId,
                 plan = plan
             };
 
             _fullRoundStates[unit] = state;
-            Debug.Log($"[FullRound] Queue U={FormatUnitLabel(unit)} id={actionId} rounds={rounds}", this);
+            Debug.Log($"[FullRound] Queue U={FormatUnitLabel(unit)} id={skillId} rounds={rounds}", this);
         }
         public void EndTurn(Unit unit)
         {
@@ -808,18 +808,18 @@ namespace TGD.CombatV2
 
             if (state.roundsRemaining > 0)
             {
-                Debug.Log($"[FullRound] Skip T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId} reason=fullround roundsLeft={state.roundsRemaining}", this);
+                Debug.Log($"[FullRound] Skip T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.skillId} reason=fullround roundsLeft={state.roundsRemaining}", this);
                 StartCoroutine(AutoSkipTurn(runtime.Unit));
                 return true;
             }
 
             var plan = state.plan;
-            Debug.Log($"[FullRound] ResolveBegin T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId} roundsTotal={state.totalRounds}", this);
+            Debug.Log($"[FullRound] ResolveBegin T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.skillId} roundsTotal={state.totalRounds}", this);
 
             if (plan.valid)
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", $"(budgetBefore={plan.budgetBefore}, energyBefore={plan.energyBefore})");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W3_ExecuteBegin", $"(budgetBefore={plan.budgetBefore}, energyBefore={plan.energyBefore})");
             else
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteBegin", "(deferred)");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W3_ExecuteBegin", "(deferred)");
 
             try
             {
@@ -830,21 +830,21 @@ namespace TGD.CombatV2
                 Debug.LogException(ex, this);
             }
 
-            ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W3_ExecuteEnd");
+            ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W3_ExecuteEnd");
 
             if (plan.valid)
             {
                 int energyAction = plan.TotalEnergy;
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", $"(used={plan.plannedSeconds}, refunded=0, net={plan.NetSeconds}, energyMove={plan.plannedMoveEnergy}, energyAtk={plan.plannedAttackEnergy}, energyAction={energyAction})");
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd", $"(budgetAfter={plan.budgetAfter}, energyAfter={plan.energyAfter})");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W4_ResolveBegin", $"(used={plan.plannedSeconds}, refunded=0, net={plan.NetSeconds}, energyMove={plan.plannedMoveEnergy}, energyAtk={plan.plannedAttackEnergy}, energyAction={energyAction})");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W4_ResolveEnd", $"(budgetAfter={plan.budgetAfter}, energyAfter={plan.energyAfter})");
             }
             else
             {
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveBegin", "(deferred)");
-                ActionPhaseLogger.Log(runtime.Unit, state.actionId, "W4_ResolveEnd");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W4_ResolveBegin", "(deferred)");
+                ActionPhaseLogger.Log(runtime.Unit, state.skillId, "W4_ResolveEnd");
             }
 
-            Debug.Log($"[FullRound] ResolveEnd T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.actionId}", this);
+            Debug.Log($"[FullRound] ResolveEnd T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} id={state.skillId}", this);
             _fullRoundStates.Remove(runtime.Unit);
             return false;
         }
@@ -1355,7 +1355,7 @@ namespace TGD.CombatV2
             var context = runtime.Context;
             var set = context != null ? context.Rules : null;
 
-            // ✅ 逐技能调用规则（不要再用全局 actionId=null 的一次性调用）
+            // ✅ 逐技能调用规则（不要再用全局 skillId=null 的一次性调用）
             var entries = store.Entries.ToList();
             List<string> details = new();
 
@@ -1376,7 +1376,7 @@ namespace TGD.CombatV2
                 {
                     var rulesCtx = RulesAdapter.BuildContext(
                         context,
-                        actionId: skillId,             // ✅ 关键：把技能ID传给规则层，才能命中前缀/等过滤
+                        skillId: skillId,             // ✅ 关键：把技能ID传给规则层，才能命中前缀/等过滤
                         kind: ActionKind.Free,
                         chainDepth: 0,
                         comboIndex: 0,

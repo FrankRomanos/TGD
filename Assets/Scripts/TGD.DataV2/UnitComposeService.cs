@@ -14,8 +14,8 @@ namespace TGD.DataV2
         /// Build a <see cref="FinalUnitConfig"/> from the provided blueprint.
         /// </summary>
         /// <param name="blueprint">Source blueprint.</param>
-        /// <param name="actionCatalog">Optional catalog used to validate actions and infer cooldown rules.</param>
-        public static FinalUnitConfig Compose(UnitBlueprint blueprint, ActionCatalog actionCatalog = null)
+        /// <param name="skillIndex">Optional index used to validate skills and infer cooldown rules.</param>
+        public static FinalUnitConfig Compose(UnitBlueprint blueprint, SkillIndex skillIndex = null)
         {
             if (blueprint == null)
                 throw new ArgumentNullException(nameof(blueprint));
@@ -43,25 +43,20 @@ namespace TGD.DataV2
                 {
                     if (!slot.learned)
                         continue;
-                    if (string.IsNullOrWhiteSpace(slot.actionId))
+                    if (string.IsNullOrWhiteSpace(slot.skillId))
                         continue;
 
-                    if (actionCatalog != null && !actionCatalog.Contains(slot.actionId))
+                    if (skillIndex != null && !skillIndex.Contains(slot.skillId))
                     {
-                        Debug.LogWarning($"[UnitCompose] ActionId not found in catalog: {slot.actionId}");
+                        Debug.LogWarning($"[UnitCompose] SkillId not found in index: {slot.skillId}");
                         continue;
                     }
 
                     var ability = new FinalUnitConfig.LearnedAbility
                     {
-                        actionId = slot.actionId,
+                        skillId = slot.skillId,
                         initialCooldownSeconds = Mathf.Max(0, slot.initialCooldownSeconds)
                     };
-
-                    if (actionCatalog != null && actionCatalog.IsNoCooldown(slot.actionId))
-                    {
-                        ability.initialCooldownSeconds = 0;
-                    }
 
                     config.abilities.Add(ability);
                 }
@@ -93,38 +88,42 @@ namespace TGD.DataV2
                 {
                     new UnitBlueprint.AbilitySlot
                     {
-                        actionId = "ActionA",
+                        skillId = "ActionA",
                         learned = true,
                         initialCooldownSeconds = 6
                     },
                     new UnitBlueprint.AbilitySlot
                     {
-                        actionId = "ActionB",
+                        skillId = "ActionB",
                         learned = false,
                         initialCooldownSeconds = 3
                     },
                     new UnitBlueprint.AbilitySlot
                     {
-                        actionId = "ActionC",
+                        skillId = "ActionC",
                         learned = true,
                         initialCooldownSeconds = 4
                     }
                 };
 
-                var catalog = ScriptableObject.CreateInstance<ActionCatalog>();
-                catalog.entries.Add(new ActionCatalog.Entry
+                var skillA = ScriptableObject.CreateInstance<SkillDefinitionV2>();
+                skillA.EditorInitialize("ActionA", displayName: "Action A");
+
+                var skillC = ScriptableObject.CreateInstance<SkillDefinitionV2>();
+                skillC.EditorInitialize("ActionC", displayName: "Action C");
+
+                var catalog = ScriptableObject.CreateInstance<SkillIndex>();
+                catalog.entries.Add(new SkillIndex.Entry
                 {
-                    actionId = "ActionA",
+                    definition = skillA,
                     displayName = "Action A",
-                    icon = null,
-                    noCooldown = false
+                    icon = null
                 });
-                catalog.entries.Add(new ActionCatalog.Entry
+                catalog.entries.Add(new SkillIndex.Entry
                 {
-                    actionId = "ActionC",
+                    definition = skillC,
                     displayName = "Action C",
-                    icon = null,
-                    noCooldown = true
+                    icon = null
                 });
 
                 var config = UnitComposeService.Compose(blueprint, catalog);
@@ -132,15 +131,17 @@ namespace TGD.DataV2
                 Assert.AreEqual(5, config.stats.MaxEnergy);
                 Assert.AreEqual(config.stats.MaxEnergy, config.stats.Energy);
                 Assert.AreEqual(2, config.abilities.Count);
-                Assert.AreEqual("ActionA", config.abilities[0].actionId);
+                Assert.AreEqual("ActionA", config.abilities[0].skillId);
                 Assert.AreEqual(6, config.abilities[0].initialCooldownSeconds);
-                Assert.AreEqual("ActionC", config.abilities[1].actionId);
-                Assert.AreEqual(0, config.abilities[1].initialCooldownSeconds);
+                Assert.AreEqual("ActionC", config.abilities[1].skillId);
+                Assert.AreEqual(4, config.abilities[1].initialCooldownSeconds);
 
                 Debug.Log("[UnitCompose] Smoke test passed.");
 
                 ScriptableObject.DestroyImmediate(blueprint);
                 ScriptableObject.DestroyImmediate(catalog);
+                ScriptableObject.DestroyImmediate(skillA);
+                ScriptableObject.DestroyImmediate(skillC);
             }
         }
     }

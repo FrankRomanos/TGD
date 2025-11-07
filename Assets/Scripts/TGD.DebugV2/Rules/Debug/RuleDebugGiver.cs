@@ -47,7 +47,7 @@ namespace TGD.DebugV2
         bool _pendingEditorApply = false;
         struct PendingVoucherUsage
         {
-            public string actionId;
+            public string skillId;
             public bool freeTime;
             public bool freeEnergy;
         }
@@ -109,8 +109,8 @@ namespace TGD.DebugV2
             {
                 var voucher = new DebugCostVoucher();
                 voucher.Initialize(this, firstCostFreeTime, firstCostFreeEnergy);
-                if (firstCostIsPrefix) voucher.filter.actionIdStartsWith = firstCostFilter;
-                else voucher.filter.actionIdEquals = firstCostFilter;
+                if (firstCostIsPrefix) voucher.filter.skillIdStartsWith = firstCostFilter;
+                else voucher.filter.skillIdEquals = firstCostFilter;
                 ruleSet.Add(voucher);
                 _activeModifiers.Add(voucher);
             }
@@ -121,7 +121,7 @@ namespace TGD.DebugV2
                 var scaler = new DebugCooldownScaler();
                 // 若 TMV2 还是“全局 tick”，不要设置 action 过滤，否则匹配不上
                 // 如果已经是 per-key tick，再打开这一行：
-                // scaler.filter.actionIdStartsWith = cooldownActionPrefix;
+                // scaler.filter.skillIdStartsWith = cooldownActionPrefix;
                 ruleSet.Add(scaler);
                 _activeModifiers.Add(scaler);
             }
@@ -181,18 +181,18 @@ namespace TGD.DebugV2
                 _energyChargesRemaining = Mathf.Max(0, _energyChargesRemaining - 1);
         }
 
-        void HandleActionResolved(UnitRuntimeContext casterCtx, string actionId)
+        void HandleActionResolved(UnitRuntimeContext casterCtx, string skillId)
         {
             if (!_ctx || casterCtx != _ctx)
                 return;
 
-            if (string.IsNullOrEmpty(actionId))
-                actionId = string.Empty;
+            if (string.IsNullOrEmpty(skillId))
+                skillId = string.Empty;
 
             for (int i = 0; i < _pendingVoucherUsage.Count; i++)
             {
                 var pending = _pendingVoucherUsage[i];
-                if (!string.Equals(pending.actionId, actionId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(pending.skillId, skillId, StringComparison.OrdinalIgnoreCase))
                     continue;
                 ConsumeCharges(pending.freeTime, pending.freeEnergy);
                 _pendingVoucherUsage.RemoveAt(i);
@@ -200,15 +200,15 @@ namespace TGD.DebugV2
             }
         }
 
-        void HandleActionCancelled(UnitRuntimeContext casterCtx, string actionId)
+        void HandleActionCancelled(UnitRuntimeContext casterCtx, string skillId)
         {
             if (!_ctx || casterCtx != _ctx)
                 return;
 
-            CancelPendingLocal(actionId);
+            CancelPendingLocal(skillId);
         }
 
-        internal bool TryRegisterVoucherUsage(string actionId, bool wantsTime, bool wantsEnergy, out bool applyTime, out bool applyEnergy)
+        internal bool TryRegisterVoucherUsage(string skillId, bool wantsTime, bool wantsEnergy, out bool applyTime, out bool applyEnergy)
         {
             applyTime = wantsTime && ChargesAvailable(_timeChargesRemaining);
             applyEnergy = wantsEnergy && ChargesAvailable(_energyChargesRemaining);
@@ -216,13 +216,13 @@ namespace TGD.DebugV2
             if (!applyTime && !applyEnergy)
                 return false;
 
-            if (string.IsNullOrEmpty(actionId))
-                actionId = string.Empty;
+            if (string.IsNullOrEmpty(skillId))
+                skillId = string.Empty;
 
-            _pendingVoucherUsage.RemoveAll(p => string.Equals(p.actionId, actionId, StringComparison.OrdinalIgnoreCase));
+            _pendingVoucherUsage.RemoveAll(p => string.Equals(p.skillId, skillId, StringComparison.OrdinalIgnoreCase));
             _pendingVoucherUsage.Add(new PendingVoucherUsage
             {
-                actionId = actionId,
+                skillId = skillId,
                 freeTime = applyTime,
                 freeEnergy = applyEnergy
             });
@@ -230,39 +230,39 @@ namespace TGD.DebugV2
             return true;
         }
 
-        internal void CancelPendingLocal(string actionId)
+        internal void CancelPendingLocal(string skillId)
         {
-            if (string.IsNullOrEmpty(actionId))
-                actionId = string.Empty;
+            if (string.IsNullOrEmpty(skillId))
+                skillId = string.Empty;
 
             for (int i = _pendingVoucherUsage.Count - 1; i >= 0; --i)
             {
                 var pending = _pendingVoucherUsage[i];
-                if (!string.Equals(pending.actionId, actionId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(pending.skillId, skillId, StringComparison.OrdinalIgnoreCase))
                     continue;
                 _pendingVoucherUsage.RemoveAt(i);
             }
         }
 
-        internal bool IsAttackAction(string actionId)
+        internal bool IsAttackAction(string skillId)
         {
-            if (string.IsNullOrEmpty(actionId))
+            if (string.IsNullOrEmpty(skillId))
                 return false;
-            return string.Equals(actionId, AttackProfileRules.DefaultActionId, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(actionId, "Attack", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(skillId, AttackProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(skillId, "Attack", StringComparison.OrdinalIgnoreCase);
         }
 
-        internal bool IsMoveAction(string actionId)
+        internal bool IsMoveAction(string skillId)
         {
-            if (string.IsNullOrEmpty(actionId))
+            if (string.IsNullOrEmpty(skillId))
                 return false;
             if (_ctx != null)
             {
-                var moveId = _ctx.MoveActionId;
-                if (!string.IsNullOrEmpty(moveId) && string.Equals(actionId, moveId, StringComparison.OrdinalIgnoreCase))
+                var moveId = _ctx.MoveSkillId;
+                if (!string.IsNullOrEmpty(moveId) && string.Equals(skillId, moveId, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
-            return string.Equals(actionId, MoveProfileRules.DefaultActionId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(skillId, MoveProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase);
         }
 
         void ConfigureListeners()
@@ -285,8 +285,8 @@ namespace TGD.DebugV2
                 if (reduceListener)
                 {
                     reduceListener.enabled = true;
-                    reduceListener.triggerActionId = reduceTriggerId;
-                    reduceListener.targetActionId = reduceTargetId;
+                    reduceListener.triggerSkillId = reduceTriggerId;
+                    reduceListener.targetSkillId = reduceTargetId;
                     reduceListener.reduceSeconds = reduceSeconds;
                 }
             }
@@ -304,8 +304,8 @@ namespace TGD.DebugV2
                 if (refreshListener)
                 {
                     refreshListener.enabled = true;
-                    refreshListener.triggerActionId = refreshTriggerId;
-                    refreshListener.targetActionId = refreshTargetId;
+                    refreshListener.triggerSkillId = refreshTriggerId;
+                    refreshListener.targetSkillId = refreshTargetId;
                 }
             }
             else
@@ -368,11 +368,11 @@ namespace TGD.DebugV2
                 if (_owner == null)
                     return;
 
-                if (!_owner.TryRegisterVoucherUsage(ctx.actionId, _freeTime, _freeEnergy, out bool applyTime, out bool applyEnergy))
+                if (!_owner.TryRegisterVoucherUsage(ctx.skillId, _freeTime, _freeEnergy, out bool applyTime, out bool applyEnergy))
                     return;
 
-                bool isAttack = _owner.IsAttackAction(ctx.actionId);
-                bool isMove = _owner.IsMoveAction(ctx.actionId);
+                bool isAttack = _owner.IsAttackAction(ctx.skillId);
+                bool isMove = _owner.IsMoveAction(ctx.skillId);
 
                 if (applyTime)
                 {

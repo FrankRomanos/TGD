@@ -9,7 +9,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "DerivedAfterAttack";
+            skillId = "DerivedAfterAttack";
             timeCostSeconds = 1;
             energyCost = 15;
             targetMode = TargetMode.EnemyOrGround;

@@ -40,7 +40,7 @@ namespace TGD.CoreV2
         [Tooltip("Turn speed in degrees per second.")]
         [Min(0f)]
         public float turnSpeedDegPerSec = AttackProfileRules.DefaultTurnSpeedDegPerSec;
-        public const string DefaultActionId = "Attack";
+        public const string DefaultSkillId = "Attack";
         public void CopyFrom(AttackProfileV2 source)
         {
             if (source == null)
@@ -81,7 +81,7 @@ namespace TGD.CoreV2
         public const int DefaultSeconds = 2;
         public const int DefaultEnergyCost = 20;
         public const int MaxEnergyCost = 9999;
-        public const string DefaultActionId = "Attack";
+        public const string DefaultSkillId = "Attack";
         public const float DefaultRefundThresholdSeconds = 0.8f;
         public const float DefaultFreeMoveCutoffSeconds = 0.2f;
         public const int MinMeleeRange = 1;

@@ -25,7 +25,7 @@ namespace TGD.CombatV2
         /// </summary>
         public static RuleContext BuildContext(
             UnitRuntimeContext uctx,
-            string actionId,
+            string skillId,
             ActionKind kind,
             int chainDepth,
             int comboIndex,
@@ -48,7 +48,7 @@ namespace TGD.CombatV2
             IReadOnlyList<string> tags = null; // 你以后给 UCTX 加 Tags 再填
 
             return new RuleContext(
-                unitKey, faction, actionId, kind.ToRulesKind(),
+                unitKey, faction, skillId, kind.ToRulesKind(),
                 chainDepth, comboIndex, planSecs, planEnergy,
                 stats, tags
             );

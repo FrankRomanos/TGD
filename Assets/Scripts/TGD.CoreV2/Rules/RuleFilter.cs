@@ -18,8 +18,8 @@ namespace TGD.CoreV2.Rules
     public sealed class RuleFilter
     {
         public KindMask kinds = KindMask.Any;
-        public string actionIdEquals;
-        public string actionIdStartsWith;
+        public string skillIdEquals;
+        public string skillIdStartsWith;
         public string[] requireTags;
         public bool onlyFriendly;
         public bool onlyEnemy;
@@ -28,8 +28,8 @@ namespace TGD.CoreV2.Rules
         {
             if ((kinds & MaskOf(ctx.kind)) == 0) return false;
 
-            if (!string.IsNullOrEmpty(actionIdEquals) && actionIdEquals != ctx.actionId) return false;
-            if (!string.IsNullOrEmpty(actionIdStartsWith) && (ctx.actionId == null || !ctx.actionId.StartsWith(actionIdStartsWith))) return false;
+            if (!string.IsNullOrEmpty(skillIdEquals) && skillIdEquals != ctx.skillId) return false;
+            if (!string.IsNullOrEmpty(skillIdStartsWith) && (ctx.skillId == null || !ctx.skillId.StartsWith(skillIdStartsWith))) return false;
 
             if (onlyFriendly && ctx.faction != "Friendly") return false;
             if (onlyEnemy && ctx.faction != "Enemy") return false;

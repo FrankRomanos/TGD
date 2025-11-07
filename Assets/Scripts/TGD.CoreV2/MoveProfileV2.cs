@@ -34,7 +34,7 @@ namespace TGD.CoreV2
         public float refundThresholdSeconds = MoveProfileRules.DefaultRefundThresholdSeconds;
 
         [Tooltip("Action identifier used when reporting move costs to resource systems.")]
-        public string actionId = MoveProfileRules.DefaultActionId;
+        public string skillId = MoveProfileRules.DefaultSkillId;
 
         [Tooltip("Facing change preserved without turning (degrees).")]
         [Range(0f, 360f)]
@@ -58,7 +58,7 @@ namespace TGD.CoreV2
                 fallbackSteps = MoveProfileRules.DefaultFallbackSteps;
                 stepsCap = MoveProfileRules.DefaultStepsCap;
                 refundThresholdSeconds = MoveProfileRules.DefaultRefundThresholdSeconds;
-                actionId = MoveProfileRules.DefaultActionId;
+                skillId = MoveProfileRules.DefaultSkillId;
                 keepDeg = MoveProfileRules.DefaultKeepDeg;
                 turnDeg = MoveProfileRules.DefaultTurnDeg;
                 turnSpeedDegPerSec = MoveProfileRules.DefaultTurnSpeedDegPerSec;
@@ -71,7 +71,7 @@ namespace TGD.CoreV2
             fallbackSteps = source.fallbackSteps;
             stepsCap = source.stepsCap;
             refundThresholdSeconds = source.refundThresholdSeconds;
-            actionId = source.actionId;
+            skillId = source.skillId;
             keepDeg = source.keepDeg;
             turnDeg = source.turnDeg;
             turnSpeedDegPerSec = source.turnSpeedDegPerSec;
@@ -89,8 +89,8 @@ namespace TGD.CoreV2
             keepDeg = Mathf.Repeat(Mathf.Max(0f, keepDeg), 360f);
             turnDeg = Mathf.Repeat(Mathf.Max(0f, turnDeg), 360f);
             turnSpeedDegPerSec = Mathf.Max(0f, turnSpeedDegPerSec);
-            if (string.IsNullOrWhiteSpace(actionId))
-                actionId = MoveProfileRules.DefaultActionId;
+            if (string.IsNullOrWhiteSpace(skillId))
+                skillId = MoveProfileRules.DefaultSkillId;
         }
     }
 
@@ -115,7 +115,7 @@ namespace TGD.CoreV2
 
         public const float DefaultRefundThresholdSeconds = 0.8f;
 
-        public const string DefaultActionId = "Move";
+        public const string DefaultSkillId = "Move";
 
         public const float DefaultKeepDeg = 45f;
         public const float DefaultTurnDeg = 135f;
@@ -163,12 +163,12 @@ namespace TGD.CoreV2
             return Mathf.Clamp(stats.MoveProfile.refundThresholdSeconds, 0.01f, 1f);
         }
 
-        public static string ResolveActionId(StatsV2 stats)
+        public static string ResolveSkillId(StatsV2 stats)
         {
             if (stats?.MoveProfile == null)
-                return DefaultActionId;
-            var id = stats.MoveProfile.actionId;
-            return string.IsNullOrWhiteSpace(id) ? DefaultActionId : id.Trim();
+                return DefaultSkillId;
+            var id = stats.MoveProfile.skillId;
+            return string.IsNullOrWhiteSpace(id) ? DefaultSkillId : id.Trim();
         }
 
         public static float ResolveKeepDeg(StatsV2 stats)

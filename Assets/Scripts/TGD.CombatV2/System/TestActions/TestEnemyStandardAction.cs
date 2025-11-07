@@ -13,7 +13,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "EnemyTestStandard";
+            skillId = "EnemyTestStandard";
             timeCostSeconds = 1;
             energyCost = 0;
             targetMode = TargetMode.SelfOnly;

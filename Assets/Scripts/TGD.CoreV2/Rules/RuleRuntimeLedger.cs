@@ -5,7 +5,7 @@ namespace TGD.CoreV2.Rules
 {
     public struct RuleCostApplication
     {
-        public string actionId;
+        public string skillId;
         public int chainDepth;
         public int originalMoveSecs;
         public int originalAtkSecs;
@@ -34,12 +34,12 @@ namespace TGD.CoreV2.Rules
             _costApplications.Add(application);
         }
 
-        public bool TryConsumeCost(string actionId, int chainDepth, out RuleCostApplication application)
+        public bool TryConsumeCost(string skillId, int chainDepth, out RuleCostApplication application)
         {
             for (int i = 0; i < _costApplications.Count; i++)
             {
                 var entry = _costApplications[i];
-                if (Matches(entry, actionId, chainDepth))
+                if (Matches(entry, skillId, chainDepth))
                 {
                     application = entry;
                     _costApplications.RemoveAt(i);
@@ -51,11 +51,11 @@ namespace TGD.CoreV2.Rules
             return false;
         }
 
-        public bool TryDiscardCost(string actionId, int chainDepth)
+        public bool TryDiscardCost(string skillId, int chainDepth)
         {
             for (int i = 0; i < _costApplications.Count; i++)
             {
-                if (Matches(_costApplications[i], actionId, chainDepth))
+                if (Matches(_costApplications[i], skillId, chainDepth))
                 {
                     _costApplications.RemoveAt(i);
                     return true;
@@ -69,9 +69,9 @@ namespace TGD.CoreV2.Rules
             _costApplications.Clear();
         }
 
-        static bool Matches(in RuleCostApplication entry, string actionId, int chainDepth)
+        static bool Matches(in RuleCostApplication entry, string skillId, int chainDepth)
         {
-            if (!string.Equals(entry.actionId, actionId, StringComparison.Ordinal))
+            if (!string.Equals(entry.skillId, skillId, StringComparison.Ordinal))
                 return false;
             return entry.chainDepth == chainDepth;
         }

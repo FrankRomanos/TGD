@@ -40,6 +40,6 @@ namespace TGD.CombatV2
         /// <summary>
         /// 指定基础动作在 W4.5 可派生的动作 ID 列表。
         /// </summary>
-        IReadOnlyList<string> AllowedDerivedActions(string baseActionId);
+        IReadOnlyList<string> AllowedDerivedActions(string baseSkillId);
     }
 }

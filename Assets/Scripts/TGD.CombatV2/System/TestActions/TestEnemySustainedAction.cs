@@ -14,7 +14,7 @@ namespace TGD.CombatV2
 
         void Reset()
         {
-            actionId = "EnemyTestSustained";
+            skillId = "EnemyTestSustained";
             timeCostSeconds = 4;
             energyCost = 0;
             targetMode = TargetMode.AnyClick;

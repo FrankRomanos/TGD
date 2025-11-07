@@ -229,9 +229,9 @@ namespace TGD.LevelV2
 
             foreach (var ability in abilities)
             {
-                if (string.IsNullOrWhiteSpace(ability.actionId))
+                if (string.IsNullOrWhiteSpace(ability.skillId))
                     continue;
-                hub.secStore.StartSeconds(ability.actionId.Trim(), Mathf.Max(0, ability.initialCooldownSeconds));
+                hub.secStore.StartSeconds(ability.skillId.Trim(), Mathf.Max(0, ability.initialCooldownSeconds));
             }
         }
 
@@ -549,7 +549,7 @@ namespace TGD.LevelV2
                 for (int i = 0; i < availabilities.Count; i++)
                 {
                     var entry = availabilities[i];
-                    var id = NormalizeActionId(entry.actionId);
+                    var id = NormalizeSkillId(entry.skillId);
                     if (string.IsNullOrEmpty(id))
                         continue;
 
@@ -566,7 +566,7 @@ namespace TGD.LevelV2
             {
                 if (behaviour is IActionToolV2 tool)
                 {
-                    var id = NormalizeActionId(tool.Id);
+                    var id = NormalizeSkillId(tool.Id);
                     bool enable = !string.IsNullOrEmpty(id) && unlocked.Contains(id);
                     behaviour.enabled = enable;
 
@@ -581,8 +581,8 @@ namespace TGD.LevelV2
             }
         }
 
-        static string NormalizeActionId(string actionId)
-            => string.IsNullOrWhiteSpace(actionId) ? null : actionId.Trim();
+        static string NormalizeSkillId(string skillId)
+            => string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
 
         void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar)
         {
