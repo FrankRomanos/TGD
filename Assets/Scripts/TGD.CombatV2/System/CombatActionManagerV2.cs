@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
@@ -1397,18 +1398,37 @@ namespace TGD.CombatV2
         {
             if (tool is HexClickMover mover && mover != null)
             {
-                if (mover.ctx != null && mover.ctx.boundUnit != null)
-                    return mover.ctx.boundUnit;
-                if (mover.driver != null)
-                    return mover.driver.UnitRef;
+                var ctx = mover.ctx != null ? mover.ctx : mover.GetComponent<UnitRuntimeContext>();
+                if (ctx != null && ctx.boundUnit != null)
+                    return ctx.boundUnit;
+
+                var bridge = mover._playerBridge != null ? mover._playerBridge : mover.GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (bridge != null && bridge.Actor is UnitGridAdapter adapter && adapter.Unit != null)
+                    return adapter.Unit;
             }
 
             if (tool is AttackControllerV2 attack && attack != null)
             {
-                if (attack.ctx != null && attack.ctx.boundUnit != null)
-                    return attack.ctx.boundUnit;
-                if (attack.driver != null)
-                    return attack.driver.UnitRef;
+                var ctx = attack.ctx != null ? attack.ctx : attack.GetComponent<UnitRuntimeContext>();
+                if (ctx != null && ctx.boundUnit != null)
+                    return ctx.boundUnit;
+
+                var bridge = UnitRuntimeBindingUtil.ResolvePlayerBridge(attack, ctx, attack.bridgeOverride, null);
+                if (bridge != null)
+                {
+                    if (bridge.Actor is UnitGridAdapter adapter && adapter.Unit != null)
+                        return adapter.Unit;
+
+                    var occSvc = bridge.occupancyService;
+                    var occ = occSvc != null ? occSvc.Get() : null;
+                    if (occ != null)
+                    {
+                        var unit = ctx != null ? ctx.boundUnit : null;
+                        var anchor = UnitRuntimeBindingUtil.ResolveAnchor(unit, occ, bridge);
+                        if (occ.TryGetActor(anchor, out var occActor) && occActor is UnitGridAdapter occAdapter && occAdapter.Unit != null)
+                            return occAdapter.Unit;
+                    }
+                }
             }
 
             if (tool is ChainActionBase chain && chain != null)

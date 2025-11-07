@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Collections.Generic;
+using TGD.CombatV2.Integration;
 using TGD.HexBoard;
 using UnityEngine;
 using TGD.CoreV2;
@@ -49,8 +50,20 @@ namespace TGD.CombatV2
 
         bool IsThisUnit(Unit u)
         {
-            // 比较 mover/driver 的 UnitRef 是否一致
-            return mover != null && mover.driver != null && ReferenceEquals(u, mover.driver.UnitRef);
+            if (u == null || mover == null)
+                return false;
+
+            var ctx = mover.ctx != null ? mover.ctx : mover.GetComponent<UnitRuntimeContext>();
+            var unit = ctx != null ? ctx.boundUnit : null;
+
+            if (unit == null)
+            {
+                var bridge = mover._playerBridge != null ? mover._playerBridge : mover.GetComponentInParent<PlayerOccupancyBridge>(true);
+                if (bridge != null && bridge.Actor is UnitGridAdapter adapter)
+                    unit = adapter.Unit;
+            }
+
+            return unit != null && ReferenceEquals(u, unit);
         }
 
         void OnMoveStarted(Unit u, List<Hex> path)
