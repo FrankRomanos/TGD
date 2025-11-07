@@ -639,8 +639,24 @@ namespace TGD.LevelV2
             if (tools == null || tools.Length == 0)
                 return;
 
+            if (availabilities == null || availabilities.Count == 0)
+                return;
+
             var map = new Dictionary<string, SkillDefinitionActionTool>(StringComparer.OrdinalIgnoreCase);
-            var unassigned = new List<SkillDefinitionActionTool>();
+            var pool = new List<SkillDefinitionActionTool>();
+            var poolSet = new HashSet<SkillDefinitionActionTool>();
+
+            void AddToPool(SkillDefinitionActionTool candidate)
+            {
+                if (candidate != null && poolSet.Add(candidate))
+                    pool.Add(candidate);
+            }
+
+            void RemoveFromPool(SkillDefinitionActionTool candidate)
+            {
+                if (candidate != null && poolSet.Remove(candidate))
+                    pool.Remove(candidate);
+            }
 
             for (int i = 0; i < tools.Length; i++)
             {
@@ -648,22 +664,17 @@ namespace TGD.LevelV2
                 if (tool == null)
                     continue;
 
-                var key = NormalizeSkillId(tool.Id);
-                if (string.IsNullOrEmpty(key) && tool.Definition != null)
-                    key = NormalizeSkillId(tool.Definition.Id);
+                var definitionId = NormalizeSkillId(tool.Definition != null ? tool.Definition.Id : null);
+                if (!string.IsNullOrEmpty(definitionId) && !map.ContainsKey(definitionId))
+                    map[definitionId] = tool;
 
-                if (!string.IsNullOrEmpty(key) && !map.ContainsKey(key))
-                {
-                    map[key] = tool;
-                }
-                else
-                {
-                    unassigned.Add(tool);
-                }
+                var explicitId = NormalizeSkillId(tool.Id);
+                if (!string.IsNullOrEmpty(explicitId) && !map.ContainsKey(explicitId))
+                    map[explicitId] = tool;
+
+                if (string.IsNullOrEmpty(definitionId))
+                    AddToPool(tool);
             }
-
-            if (availabilities == null || availabilities.Count == 0)
-                return;
 
             var assignedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -673,22 +684,30 @@ namespace TGD.LevelV2
                 var id = NormalizeSkillId(entry.skillId);
                 if (string.IsNullOrEmpty(id))
                     continue;
+                if (!assignedIds.Add(id))
+                    continue;
 
-                if (!map.TryGetValue(id, out var tool) || tool == null)
+                SkillDefinitionActionTool tool = null;
+                if (map.TryGetValue(id, out var existing) && existing != null)
+                    tool = existing;
+
+                if (tool == null)
                 {
-                    if (unassigned.Count == 0)
+                    if (pool.Count == 0)
                     {
                         Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
                         continue;
                     }
 
-                    tool = unassigned[0];
-                    unassigned.RemoveAt(0);
-                    map[id] = tool;
+                    int lastIndex = pool.Count - 1;
+                    tool = pool[lastIndex];
+                    pool.RemoveAt(lastIndex);
+                    poolSet.Remove(tool);
                 }
-
-                if (!assignedIds.Add(id))
-                    continue;
+                else
+                {
+                    RemoveFromPool(tool);
+                }
 
                 if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
                 {
@@ -699,6 +718,8 @@ namespace TGD.LevelV2
                 {
                     Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
                 }
+
+                map[id] = tool;
             }
         }
 
