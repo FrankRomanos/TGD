@@ -25,3 +25,11 @@ MonoBehaviour:
     displayName: Skill001
     icon: {fileID: 0}
     noCooldown: 0
+  - actionId: Reaction40
+    displayName: Reaction40
+    icon: {fileID: 0}
+    noCooldown: 0
+  - actionId: FullRoundTest
+    displayName: FullRound
+    icon: {fileID: 0}
+    noCooldown: 0
