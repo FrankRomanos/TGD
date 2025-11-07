@@ -1157,7 +1157,14 @@ namespace TGD.CombatV2
             var hexSpace = HexSpace.Instance;
             var layout = authoring != null ? authoring.Layout : null;
             var startAnchor = CurrentAnchor;
-            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            var actor = SelfActor;
+            if (actor == null)
+            {
+                HandleApproachAbort();
+                yield break;
+            }
+
+            Facing4 finalFacing = actor.Facing;
             Facing4 originalFacing = finalFacing;
 
             if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
@@ -1171,7 +1178,7 @@ namespace TGD.CombatV2
                 }
                 _planAnchorVersion = _playerBridge.AnchorVersion;
                 startAnchor = CurrentAnchor;
-                finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+                finalFacing = actor.Facing;
                 originalFacing = finalFacing;
             }
 
@@ -1181,7 +1188,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
+            var passability = PassabilityFactory.ForApproach(_occ, actor, startAnchor);
 
             List<Hex> executionPath = null;
             if (preview.targetIsEnemy)
@@ -1284,13 +1291,11 @@ namespace TGD.CombatV2
                     if (!CommitThroughBridge(startAnchor, startAnchor, finalFacing, view, hexSpace, $"AttackStay {unit?.Id ?? name}->{startAnchor}"))
                     {
                         finalFacing = originalFacing;
-                        if (unit != null)
-                            unit.Facing = originalFacing;
                         if (SelfActor != null)
                             SelfActor.Facing = originalFacing;
                         yield break;
                     }
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1394,14 +1399,12 @@ namespace TGD.CombatV2
                 if (!CommitThroughBridge(startAnchor, lastPosition, finalFacing, view, hexSpace, $"AttackMove {unit?.Id ?? name}->{lastPosition}"))
                 {
                     finalFacing = originalFacing;
-                    if (unit != null)
-                        unit.Facing = originalFacing;
                     if (SelfActor != null)
                         SelfActor.Facing = originalFacing;
                     yield break;
                 }
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -1506,17 +1509,16 @@ namespace TGD.CombatV2
 
                 var abortUnit = ResolveSelfUnit();
                 var abortAnchor = CurrentAnchor;
-                var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
+                var abortActor = SelfActor;
+                var abortFacing = abortActor != null ? abortActor.Facing : Facing4.PlusQ;
 
                 if (!CommitThroughBridge(startAnchor, abortAnchor, abortFacing, view, hexSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
                 {
-                    if (abortUnit != null)
-                        abortUnit.Facing = originalFacing;
                     if (SelfActor != null)
                         SelfActor.Facing = originalFacing;
                     return;
                 }
-                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
+                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, CurrentAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
