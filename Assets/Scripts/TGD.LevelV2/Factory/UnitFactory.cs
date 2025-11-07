@@ -16,7 +16,10 @@ namespace TGD.LevelV2
         [Header("Deps (assign in Inspector)")]
         public TurnManagerV2 turnManager;
         public CombatActionManagerV2 cam;
-        public HexOccupancyService board;
+        [SerializeField]
+        HexOccupancyService occupancyService;
+        [SerializeField]
+        FootprintShape defaultFootprint;
         public Transform unitRoot;
 
         [Header("Prefab Source")]
@@ -278,9 +281,9 @@ namespace TGD.LevelV2
             {
                 position = space.HexToWorld(spawnHex);
             }
-            else if (board != null && board.authoring != null && board.authoring.Layout != null)
+            else if (occupancyService != null && occupancyService.authoring != null && occupancyService.authoring.Layout != null)
             {
-                position = board.authoring.Layout.World(spawnHex, board.authoring.y);
+                position = occupancyService.authoring.Layout.World(spawnHex, occupancyService.authoring.y);
             }
             else
             {
@@ -292,7 +295,7 @@ namespace TGD.LevelV2
 
         HexOccupancy ResolveOccupancy()
         {
-            HexOccupancyService service = board;
+            HexOccupancyService service = occupancyService;
             if (service == null && turnManager != null)
                 service = turnManager.occupancyService;
             return service != null ? service.Get() : null;
@@ -329,7 +332,7 @@ namespace TGD.LevelV2
                 }
             }
 
-            var resolvedAuthoring = board != null ? board.authoring : null;
+            var resolvedAuthoring = occupancyService != null ? occupancyService.authoring : null;
             if (resolvedAuthoring == null && resolvedCam != null)
                 resolvedAuthoring = resolvedCam.authoring;
             if (resolvedAuthoring == null)
@@ -345,7 +348,7 @@ namespace TGD.LevelV2
             if (resolvedValidator != null && _sharedValidator == null)
                 _sharedValidator = resolvedValidator;
 
-            var resolvedOccupancy = board
+            var resolvedOccupancy = occupancyService
                                     ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
                                     ?? FindOne<HexOccupancyService>();
 
@@ -510,10 +513,10 @@ namespace TGD.LevelV2
 
         HexOccupancyService ResolveOccupancyService()
         {
+            if (occupancyService != null)
+                return occupancyService;
             if (turnManager != null && turnManager.occupancyService != null)
                 return turnManager.occupancyService;
-            if (board != null)
-                return board;
             return FindOne<HexOccupancyService>();
         }
 
@@ -538,7 +541,12 @@ namespace TGD.LevelV2
                 Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
 
             var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            if (occupancyService == null && occSvc != null)
+                occupancyService = occSvc;
+
             bridge.occupancyService = occSvc;
+            if (bridge.overrideFootprint == null && defaultFootprint != null)
+                bridge.overrideFootprint = defaultFootprint;
 
             foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
             {
