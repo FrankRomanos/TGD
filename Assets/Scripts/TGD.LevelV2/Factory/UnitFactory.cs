@@ -37,6 +37,7 @@ namespace TGD.LevelV2
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
         DefaultTargetValidator _sharedValidator;
+        bool _loggedMissingSkillIndex;
 
         sealed class SpawnRecord
         {
@@ -58,7 +59,8 @@ namespace TGD.LevelV2
                 return null;
             }
 
-            var final = UnitComposeService.Compose(blueprint, skillIndex);
+            var resolvedSkillIndex = ResolveSkillIndex();
+            var final = UnitComposeService.Compose(blueprint, resolvedSkillIndex);
             final.faction = faction;
 
             // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
@@ -103,7 +105,8 @@ namespace TGD.LevelV2
 
             var adapter = EnsureGridAdapter(go, unit);
             RegisterTurnSystems(unit, context, cooldownHub, final.faction);
-            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit);
+            var resolvedSkillIndex = ResolveSkillIndex();
+            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit, resolvedSkillIndex);
 
             FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager);
 
@@ -112,7 +115,7 @@ namespace TGD.LevelV2
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             var availabilities = UnitActionBinder.Bind(go, context, final.abilities);
-            ApplyAbilityLoadout(go, context, availabilities, cam, skillIndex);
+            ApplyAbilityLoadout(go, context, availabilities, cam, resolvedSkillIndex);
 
             MaybeAutoStartBattle();
             return unit;
@@ -305,7 +308,12 @@ namespace TGD.LevelV2
                 list.Add(unit);
         }
 
-        TurnManagerV2 WireActionComponents(GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, Unit unit)
+        TurnManagerV2 WireActionComponents(
+            GameObject go,
+            UnitRuntimeContext context,
+            CooldownHubV2 hub,
+            Unit unit,
+            SkillIndex resolvedSkillIndex)
         {
             if (go == null)
                 return turnManager;
@@ -313,11 +321,11 @@ namespace TGD.LevelV2
             var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
             var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
 
-            if (resolvedCam != null && resolvedCam.rulebook != null && skillIndex != null)
+            if (resolvedCam != null && resolvedCam.rulebook != null && resolvedSkillIndex != null)
             {
                 if (resolvedCam.rulebook.includeSkillIndexDerivedLinks && resolvedCam.rulebook.skillIndex == null)
                 {
-                    resolvedCam.rulebook.skillIndex = skillIndex;
+                    resolvedCam.rulebook.skillIndex = resolvedSkillIndex;
                 }
             }
 
@@ -475,6 +483,29 @@ namespace TGD.LevelV2
             }
 
             return resolvedTurnManager;
+        }
+
+        SkillIndex ResolveSkillIndex()
+        {
+            if (skillIndex != null)
+                return skillIndex;
+
+            const string resourcePath = "Units/Blueprints/SkillIndex";
+            var loaded = Resources.Load<SkillIndex>(resourcePath);
+            if (loaded != null)
+            {
+                skillIndex = loaded;
+                _loggedMissingSkillIndex = false;
+                return skillIndex;
+            }
+
+            if (!_loggedMissingSkillIndex)
+            {
+                Debug.LogWarning($"[Factory] SkillIndex not assigned and default resource '{resourcePath}' missing.", this);
+                _loggedMissingSkillIndex = true;
+            }
+
+            return null;
         }
 
         HexOccupancyService ResolveOccupancyService()
