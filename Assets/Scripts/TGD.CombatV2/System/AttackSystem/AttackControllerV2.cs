@@ -1150,6 +1150,15 @@ namespace TGD.CombatV2
                 yield break;
 
             ClearTempReservations("PreAction");
+            RefreshOccupancy();
+
+            var unit = ResolveSelfUnit();
+            var view = ResolveSelfView();
+            var hexSpace = HexSpace.Instance;
+            var layout = authoring != null ? authoring.Layout : null;
+            var startAnchor = CurrentAnchor;
+            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            Facing4 originalFacing = finalFacing;
 
             if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
             {
@@ -1161,22 +1170,17 @@ namespace TGD.CombatV2
                     yield break;
                 }
                 _planAnchorVersion = _playerBridge.AnchorVersion;
+                startAnchor = CurrentAnchor;
+                finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+                originalFacing = finalFacing;
             }
 
-            var layout = authoring.Layout;
-            var hexSpace = HexSpace.Instance;
             if (hexSpace == null)
             {
                 Debug.LogWarning("[AttackControllerV2] HexSpace instance is missing.", this);
                 yield break;
             }
-            var unit = ResolveSelfUnit();
-            var view = ResolveSelfView();
-            RefreshOccupancy();
 
-            var startAnchor = CurrentAnchor;
-            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
-            Facing4 originalFacing = finalFacing;
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
@@ -1265,7 +1269,7 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                     }
 
-                    if (attackPlanned && authoring?.Layout != null && view != null)
+                    if (attackPlanned && layout != null && view != null)
                     {
                         var fromW = hexSpace.HexToWorld(startAnchor, y);
                         var toW = hexSpace.HexToWorld(preview.targetHex, y);
@@ -2062,7 +2066,7 @@ namespace TGD.CombatV2
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && _bridge != bridgeOverride)
+            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)
