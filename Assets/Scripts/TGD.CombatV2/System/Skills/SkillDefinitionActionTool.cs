@@ -18,40 +18,34 @@ namespace TGD.CombatV2
 
         [SerializeField]
         [Tooltip("Fallback targeting rule used when no definition is assigned.")]
-        private SkillDefinitionTargetRule fallbackTargetRule = SkillDefinitionTargetRule.AnyClick;
+        private TargetRule fallbackTargetRule = TargetRule.AnyClick;
 
         int _preparedSeconds;
 
         public SkillDefinitionV2 Definition => definition;
 
-        public override ActionKind Kind
-        {
-            get
-            {
-                return ConvertKind(definition != null ? definition.ActionKind : SkillDefinitionActionKind.Standard);
-            }
-        }
+        public override ActionKind Kind => definition != null ? definition.ActionKind : ActionKind.Standard;
 
         void Reset()
         {
-            ApplyDefinition(false);
+            ApplyDefinition();
         }
 
         protected override void Awake()
         {
             base.Awake();
-            ApplyDefinition(true);
+            ApplyDefinition();
         }
 
         void OnValidate()
         {
-            ApplyDefinition(false);
+            ApplyDefinition();
         }
 
         public void SetDefinition(SkillDefinitionV2 value)
         {
             definition = value;
-            ApplyDefinition(true);
+            ApplyDefinition();
         }
 
         public override Sprite Icon
@@ -64,7 +58,22 @@ namespace TGD.CombatV2
             }
         }
 
-        void ApplyDefinition(bool registerCooldown)
+        public override string CooldownId
+        {
+            get
+            {
+                if (definition != null)
+                {
+                    string key = definition.CooldownKey;
+                    if (!string.IsNullOrEmpty(key))
+                        return key;
+                }
+
+                return base.CooldownId;
+            }
+        }
+
+        void ApplyDefinition()
         {
             if (definition == null)
             {
@@ -72,7 +81,7 @@ namespace TGD.CombatV2
                 icon = null;
                 timeCostSeconds = 0;
                 energyCost = 0;
-                targetMode = ConvertTargetRule(fallbackTargetRule);
+                targetRule = fallbackTargetRule;
                 maxRangeHexes = -1;
                 cooldownSeconds = 0;
                 return;
@@ -80,48 +89,26 @@ namespace TGD.CombatV2
 
             skillId = definition.Id;
             icon = definition.Icon;
-            targetMode = ConvertTargetRule(definition.TargetRule);
+            targetRule = definition.TargetRule;
             maxRangeHexes = definition.MaxRangeHexes;
 
             var cost = EvaluateCosts();
             timeCostSeconds = cost.seconds;
             energyCost = cost.energy;
-            cooldownSeconds = definition.CooldownSeconds;
-
-            if (registerCooldown)
-            {
-                var catalog = ActionCooldownCatalog.Instance;
-                if (catalog != null)
-                    catalog.RegisterSeconds(skillId, definition.CooldownSeconds);
-            }
+            cooldownSeconds = ResolveCatalogCooldown();
         }
 
-        static ActionKind ConvertKind(SkillDefinitionActionKind kind)
+        int ResolveCatalogCooldown()
         {
-            return kind switch
-            {
-                SkillDefinitionActionKind.Reaction => ActionKind.Reaction,
-                SkillDefinitionActionKind.Derived => ActionKind.Derived,
-                SkillDefinitionActionKind.FullRound => ActionKind.FullRound,
-                SkillDefinitionActionKind.Sustained => ActionKind.Sustained,
-                SkillDefinitionActionKind.Free => ActionKind.Free,
-                _ => ActionKind.Standard,
-            };
-        }
+            if (definition == null)
+                return 0;
 
-        static TargetMode ConvertTargetRule(SkillDefinitionTargetRule rule)
-        {
-            return rule switch
-            {
-                SkillDefinitionTargetRule.GroundOnly => TargetMode.GroundOnly,
-                SkillDefinitionTargetRule.EnemyOnly => TargetMode.EnemyOnly,
-                SkillDefinitionTargetRule.AllyOnly => TargetMode.AllyOnly,
-                SkillDefinitionTargetRule.SelfOnly => TargetMode.SelfOnly,
-                SkillDefinitionTargetRule.EnemyOrGround => TargetMode.EnemyOrGround,
-                SkillDefinitionTargetRule.AllyOrGround => TargetMode.AllyOrGround,
-                SkillDefinitionTargetRule.AnyUnit => TargetMode.AnyUnit,
-                _ => TargetMode.AnyClick,
-            };
+            string key = definition.CooldownKey;
+            if (string.IsNullOrEmpty(key))
+                return 0;
+
+            var catalog = ActionCooldownCatalog.Instance;
+            return catalog != null ? catalog.GetSeconds(key) : 0;
         }
 
         (int seconds, int energy) EvaluateCosts()
@@ -151,7 +138,7 @@ namespace TGD.CombatV2
 
         public override IEnumerator OnConfirm(Hex hex)
         {
-            ApplyDefinition(true);
+            ApplyDefinition();
 
             var cost = EvaluateCosts();
             timeCostSeconds = cost.seconds;
@@ -165,7 +152,7 @@ namespace TGD.CombatV2
 
         bool IActionCostPreviewV2.TryPeekCost(out int seconds, out int energy)
         {
-            ApplyDefinition(false);
+            ApplyDefinition();
             var cost = EvaluateCosts();
             seconds = cost.seconds;
             energy = cost.energy;

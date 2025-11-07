@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.DataV2;
 
 namespace TGD.CombatV2

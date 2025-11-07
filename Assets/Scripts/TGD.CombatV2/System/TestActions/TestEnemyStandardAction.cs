@@ -16,7 +16,7 @@ namespace TGD.CombatV2
             skillId = "EnemyTestStandard";
             timeCostSeconds = 1;
             energyCost = 0;
-            targetMode = TargetMode.SelfOnly;
+            targetRule = TargetRule.SelfOnly;
             cooldownSeconds = 0;
         }
 

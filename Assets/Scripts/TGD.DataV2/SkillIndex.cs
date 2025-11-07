@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2;
 
 namespace TGD.DataV2
 {
@@ -117,7 +118,7 @@ namespace TGD.DataV2
             if (definition == null)
                 return;
 
-            if (definition.ActionKind != SkillDefinitionActionKind.Derived)
+            if (definition.ActionKind != ActionKind.Derived)
                 return;
 
             string sourceId = definition.DerivedFromSkillId;

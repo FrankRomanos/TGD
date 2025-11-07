@@ -1,8 +1,8 @@
 using System.Collections;
 using UnityEngine;
+using TGD.CoreV2;
 using TGD.CombatV2.Targeting;
 using TGD.HexBoard;
-using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
@@ -15,7 +15,7 @@ namespace TGD.CombatV2
         protected TurnManagerV2 turnManager;
 
         [Header("Targeting")]
-        public TargetMode targetMode = TargetMode.AnyClick;
+        public TargetRule targetRule = TargetRule.AnyClick;
         public int maxRangeHexes = -1;
         public DefaultTargetValidator targetValidator;
         public HexBoardTiler tiler;
@@ -167,7 +167,7 @@ namespace TGD.CombatV2
 
         public virtual TargetingSpec GetTargetingSpec()
         {
-            return TargetingPresets.For(targetMode, maxRangeHexes);
+            return TargetingPresets.For(targetRule, maxRangeHexes);
         }
 
         public virtual TargetCheckResult ValidateTarget(Unit unit, Hex hex)

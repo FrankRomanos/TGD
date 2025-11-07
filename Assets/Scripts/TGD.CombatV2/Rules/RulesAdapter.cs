@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
 using UnityEngine;                 // 为了 uctx.GetInstanceID()
@@ -7,17 +7,6 @@ namespace TGD.CombatV2
 {
     public static class RulesAdapter
     {
-        public static RulesActionKind ToRulesKind(this ActionKind k) => k switch
-        {
-            ActionKind.Standard => RulesActionKind.Standard,
-            ActionKind.Reaction => RulesActionKind.Reaction,
-            ActionKind.Derived => RulesActionKind.Derived,
-            ActionKind.FullRound => RulesActionKind.FullRound,
-            ActionKind.Sustained => RulesActionKind.Sustained,
-            ActionKind.Free => RulesActionKind.Free,
-            _ => RulesActionKind.Standard
-        };
-
         /// <summary>
         /// 统一在 Combat 侧把运行时信息打包成 RuleContext。
         /// - unitIdHint: 可传蓝图里的 unitId（如果你此时拿得到）；传 null 也可以。
@@ -48,7 +37,7 @@ namespace TGD.CombatV2
             IReadOnlyList<string> tags = null; // 你以后给 UCTX 加 Tags 再填
 
             return new RuleContext(
-                unitKey, faction, skillId, kind.ToRulesKind(),
+                unitKey, faction, skillId, kind,
                 chainDepth, comboIndex, planSecs, planEnergy,
                 stats, tags
             );

@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 
 namespace TGD.CoreV2.Rules
 {
@@ -42,14 +42,14 @@ namespace TGD.CoreV2.Rules
             return true;
         }
 
-        static KindMask MaskOf(RulesActionKind kind) => kind switch
+        static KindMask MaskOf(ActionKind kind) => kind switch
         {
-            RulesActionKind.Standard => KindMask.Standard,
-            RulesActionKind.Reaction => KindMask.Reaction,
-            RulesActionKind.Derived => KindMask.Derived,
-            RulesActionKind.FullRound => KindMask.FullRound,
-            RulesActionKind.Sustained => KindMask.Sustained,
-            RulesActionKind.Free => KindMask.Free,
+            ActionKind.Standard => KindMask.Standard,
+            ActionKind.Reaction => KindMask.Reaction,
+            ActionKind.Derived => KindMask.Derived,
+            ActionKind.FullRound => KindMask.FullRound,
+            ActionKind.Sustained => KindMask.Sustained,
+            ActionKind.Free => KindMask.Free,
             _ => KindMask.Any
         };
     }

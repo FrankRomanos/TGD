@@ -17,7 +17,7 @@ namespace TGD.CombatV2
             skillId = "EnemyTestSustained";
             timeCostSeconds = 4;
             energyCost = 0;
-            targetMode = TargetMode.AnyClick;
+            targetRule = TargetRule.AnyClick;
             cooldownSeconds = 0;
         }
 

@@ -1,6 +1,6 @@
-namespace TGD.CombatV2.Targeting
+namespace TGD.CoreV2
 {
-    public enum TargetMode
+    public enum TargetRule
     {
         AnyClick,
         GroundOnly,

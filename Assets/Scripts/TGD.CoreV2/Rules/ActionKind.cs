@@ -1,4 +1,4 @@
-namespace TGD.CombatV2
+namespace TGD.CoreV2
 {
     public enum ActionKind
     {
