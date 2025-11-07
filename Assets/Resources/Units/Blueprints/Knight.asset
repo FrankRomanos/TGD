@@ -20,7 +20,7 @@ MonoBehaviour:
     Attack: 10
     Stamina: 0
     Armor: 0
-    Speed: 0
+    Speed: 4
     MoveRate: 4
     MoveRateMin: 1
     MoveRateMax: 14
@@ -46,8 +46,8 @@ MonoBehaviour:
       turnSpeedDegPerSec: 720
     MaxHP: 100
     HP: 100
-    MaxEnergy: 100
-    Energy: 100
+    MaxEnergy: 200
+    Energy: 200
     EnergyRegenPer2s: 10
     Strength: 0
     Agility: 0

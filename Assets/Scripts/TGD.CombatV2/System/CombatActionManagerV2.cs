@@ -40,8 +40,9 @@ namespace TGD.CombatV2
         [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
         bool registerAsGateHub = true;
 
-        [Header("Tools (drag any components that implement IActionToolV2)")]
-        public List<MonoBehaviour> tools = new();
+        [Header("Tools (managed automatically by UnitFactory)")]
+        [SerializeField, HideInInspector]
+        List<MonoBehaviour> tools = new();
 
         [Header("Keybinds")]
         public KeyCode keyMoveAim = KeyCode.V;

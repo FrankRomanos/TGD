@@ -57,14 +57,12 @@ namespace TGD.LevelV2
             }
         }
 
-        public static void Bind(GameObject go, UnitRuntimeContext ctx, IEnumerable<FinalUnitConfig.LearnedAbility> learned, CombatActionManagerV2 cam)
+        public static IReadOnlyList<ActionAvailability> Bind(GameObject go, UnitRuntimeContext ctx, IEnumerable<FinalUnitConfig.LearnedAbility> learned)
         {
-            _ = cam;
-
             if (go == null)
             {
                 Debug.LogWarning("[ActionBinder] Cannot bind actions without a GameObject.");
-                return;
+                return Array.Empty<ActionAvailability>();
             }
 
             var learnedList = learned != null
@@ -73,12 +71,11 @@ namespace TGD.LevelV2
 
             var abilityLookup = BuildAbilityLookup(learnedList);
 
-            string moveActionId = NormalizeActionId(ctx != null ? ctx.MoveActionId : MoveProfileRules.DefaultActionId)
-                ?? MoveProfileRules.DefaultActionId;
+            string moveActionId = DetermineMoveActionId(go, ctx);
             bool hasMove = abilityLookup.ContainsKey(moveActionId);
             ConfigureMovers(go, hasMove);
 
-            string attackActionId = AttackProfileRules.DefaultActionId;
+            string attackActionId = DetermineAttackActionId(go);
             bool hasAttack = abilityLookup.ContainsKey(attackActionId);
             ConfigureAttackers(go, hasAttack);
 
@@ -90,6 +87,7 @@ namespace TGD.LevelV2
             BroadcastToProviders(go, availabilities);
 
             LogActions(go, availabilities);
+            return availabilities;
         }
 
         static Dictionary<string, FinalUnitConfig.LearnedAbility> BuildAbilityLookup(List<FinalUnitConfig.LearnedAbility> learned)
@@ -235,6 +233,42 @@ namespace TGD.LevelV2
         static string NormalizeActionId(string actionId)
         {
             return string.IsNullOrWhiteSpace(actionId) ? null : actionId.Trim();
+        }
+
+        static string DetermineMoveActionId(GameObject go, UnitRuntimeContext ctx)
+        {
+            var fromContext = NormalizeActionId(ctx != null ? ctx.MoveActionId : null);
+            if (!string.IsNullOrEmpty(fromContext))
+                return fromContext;
+
+            if (go != null)
+            {
+                var mover = go.GetComponentInChildren<HexClickMover>(true);
+                if (mover != null)
+                {
+                    var fromMover = NormalizeActionId(mover.ResolveMoveActionId());
+                    if (!string.IsNullOrEmpty(fromMover))
+                        return fromMover;
+                }
+            }
+
+            return MoveProfileRules.DefaultActionId;
+        }
+
+        static string DetermineAttackActionId(GameObject go)
+        {
+            if (go != null)
+            {
+                var attack = go.GetComponentInChildren<AttackControllerV2>(true);
+                if (attack != null)
+                {
+                    var resolved = NormalizeActionId(attack.Id);
+                    if (!string.IsNullOrEmpty(resolved))
+                        return resolved;
+                }
+            }
+
+            return AttackProfileRules.DefaultActionId;
         }
     }
 }

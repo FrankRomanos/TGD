@@ -15,6 +15,10 @@ namespace TGD.CombatV2
     /// </summary>
     public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
+        [SerializeField]
+        [Tooltip("Action identifier used when registering with CombatActionManagerV2.")]
+        string actionId = MoveProfileRules.DefaultActionId;
+
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
         public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
@@ -190,8 +194,11 @@ namespace TGD.CombatV2
         public float ResolveMoveCooldownSeconds()
             => ctx != null ? ctx.MoveCooldownSeconds : MoveProfileRules.DefaultCooldownSeconds;
 
+        string ResolveConfiguredActionId()
+            => string.IsNullOrEmpty(actionId) ? MoveProfileRules.DefaultActionId : actionId.Trim();
+
         public string ResolveMoveActionId()
-            => ctx != null ? ctx.MoveActionId : MoveProfileRules.DefaultActionId;
+            => ctx != null ? ctx.MoveActionId : ResolveConfiguredActionId();
 
         MoveCostSpec BuildCostSpec()
         {
@@ -239,7 +246,7 @@ namespace TGD.CombatV2
 
         string _hudMsg;
         float _hudMsgUntil;
-        public string Id => "Move";
+        public string Id => ResolveMoveActionId();
         public ActionKind Kind => ActionKind.Standard;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
