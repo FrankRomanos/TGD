@@ -1397,10 +1397,8 @@ namespace TGD.CombatV2
         {
             if (tool is HexClickMover mover && mover != null)
             {
-                if (mover.ctx != null && mover.ctx.boundUnit != null)
-                    return mover.ctx.boundUnit;
-                if (mover.driver != null)
-                    return mover.driver.UnitRef;
+                if (mover.OwnerUnit != null)
+                    return mover.OwnerUnit;
             }
 
             if (tool is AttackControllerV2 attack && attack != null)
