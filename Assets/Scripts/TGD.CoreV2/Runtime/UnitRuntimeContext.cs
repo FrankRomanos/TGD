@@ -51,6 +51,7 @@ namespace TGD.CoreV2
         List<string> _learnedActions = new List<string>();
 
         public IReadOnlyList<string> LearnedActions => _learnedActions;
+        public readonly HashSet<string> GrantedActionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public Unit boundUnit; // TurnManagerV2.Bind(unit, ctx) 时顺手写入
 
         public void SetLearnedActions(IEnumerable<string> actions)
@@ -70,6 +71,21 @@ namespace TGD.CoreV2
                     continue;
 
                 _learnedActions.Add(trimmed);
+            }
+        }
+
+        public void SetGrantedActions(IEnumerable<string> actions)
+        {
+            GrantedActionIds.Clear();
+            if (actions == null)
+                return;
+
+            foreach (var action in actions)
+            {
+                if (string.IsNullOrWhiteSpace(action))
+                    continue;
+
+                GrantedActionIds.Add(action.Trim());
             }
         }
 

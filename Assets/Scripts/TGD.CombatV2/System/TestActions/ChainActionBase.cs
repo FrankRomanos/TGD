@@ -6,7 +6,7 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public abstract class ChainTestActionBase : ActionToolBase, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext
+    public abstract class ChainActionBase : ActionToolBase, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext, ICursorUser
     {
         [Header("Owner")]
         public HexBoardTestDriver driver;
@@ -38,6 +38,8 @@ namespace TGD.CombatV2
         int _energyUsed;
         Hex? _lastTarget;
         TargetSelectionCursor _cursor;
+        protected DefaultTargetValidator _validator;
+        protected TargetingSpec _spec;
 
         public string Id => actionId;
         public abstract ActionKind Kind { get; }
@@ -63,12 +65,8 @@ namespace TGD.CombatV2
                 }
             }
 
-            if (!targetValidator)
-            {
-                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
-                if (!targetValidator && driver != null)
-                    targetValidator = driver.GetComponentInParent<DefaultTargetValidator>(true);
-            }
+            if (!_validator)
+                _validator = ResolveValidator();
         }
 
         protected override void HookEvents(bool bind)
@@ -86,8 +84,11 @@ namespace TGD.CombatV2
         {
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
+
+            _spec = GetTargetingSpec();
             Cursor?.Clear();
             _lastTarget = null;
+            AttackEventsV2.RaiseAimShown(ResolveUnit(), System.Array.Empty<Hex>());
         }
 
         public virtual void OnExitAim()
@@ -95,19 +96,30 @@ namespace TGD.CombatV2
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
             Cursor?.Clear();
+            AttackEventsV2.RaiseAimHidden();
         }
 
         public virtual void OnHover(Hex hex)
         {
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
+
             var cursor = Cursor;
             if (cursor == null)
                 return;
 
+            var validator = ResolveValidator();
+            var spec = _spec ?? GetTargetingSpec();
             var unit = ResolveUnit();
-            var check = ValidateTarget(unit, hex);
-            cursor.ShowSingle(hex, check.ok ? hoverValidColor : hoverInvalidColor);
+            var check = validator != null ? validator.Check(unit, hex, spec) : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly };
+
+            var color = check.ok && check.hit != HitKind.Ally ? hoverValidColor : hoverInvalidColor;
+            cursor.ShowSingle(hex, color);
+
+            if (check.ok && check.hit != HitKind.Ally)
+                AttackEventsV2.RaiseAimShown(unit, new[] { hex });
+            else
+                AttackEventsV2.RaiseAimShown(unit, System.Array.Empty<Hex>());
         }
 
         public virtual IEnumerator OnConfirm(Hex hex)
@@ -160,7 +172,8 @@ namespace TGD.CombatV2
 
         public virtual TargetCheckResult ValidateTarget(Unit unit, Hex hex)
         {
-            var validator = targetValidator;
+            var validator = ResolveValidator();
+            var spec = _spec ?? GetTargetingSpec();
             if (validator == null)
             {
                 return new TargetCheckResult
@@ -172,7 +185,7 @@ namespace TGD.CombatV2
                 };
             }
 
-            return validator.Check(unit, hex, GetTargetingSpec());
+            return validator.Check(unit, hex, spec);
         }
 
         public virtual void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
@@ -182,16 +195,37 @@ namespace TGD.CombatV2
 
             if (ctx != null)
             {
-                if (targetValidator == null)
-                    targetValidator = ctx.GetComponentInParent<DefaultTargetValidator>(true);
-                if (tiler == null)
+                if (!_validator)
+                    _validator = ctx.GetComponentInParent<DefaultTargetValidator>(true);
+                if (!tiler)
                     tiler = ctx.GetComponentInParent<HexBoardTiler>(true);
             }
 
-            if (targetValidator == null)
-                targetValidator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
-            if (tiler == null)
+            if (!_validator)
+                _validator = ResolveValidator();
+            if (_validator && targetValidator == null)
+                targetValidator = _validator;
+            if (!tiler)
                 tiler = GetComponentInParent<HexBoardTiler>(true);
+        }
+
+        protected DefaultTargetValidator ResolveValidator()
+        {
+            if (_validator)
+                return _validator;
+
+            if (targetValidator)
+            {
+                _validator = targetValidator;
+                return _validator;
+            }
+
+            _validator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
+            if (!_validator && driver != null)
+                _validator = driver.GetComponentInParent<DefaultTargetValidator>(true);
+            if (_validator && targetValidator == null)
+                targetValidator = _validator;
+            return _validator;
         }
     }
 }

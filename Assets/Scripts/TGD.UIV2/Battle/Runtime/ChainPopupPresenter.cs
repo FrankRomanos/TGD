@@ -93,6 +93,9 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            if (!Application.isPlaying)
+                return;
+
             EnsureDocument();
             HideImmediate();
         }
@@ -280,6 +283,8 @@ namespace TGD.UIV2.Battle
             if (_overlay == null)
                 return;
 
+            bool wasVisible = _visible;
+
             _overlay.style.display = DisplayStyle.Flex;
             if (_windowWrap != null)
                 _windowWrap.style.display = DisplayStyle.Flex;
@@ -309,7 +314,8 @@ namespace TGD.UIV2.Battle
 
             UpdateAnchorPosition();
             ChainPopupState.NotifyVisibility(true);
-            ChainPopupOpened?.Invoke();
+            if (!wasVisible)
+                ChainPopupOpened?.Invoke();
             Debug.Log($"[ChainPopup] OpenWindow() overlay={_overlay != null}, windowWrap={_windowWrap != null}");
         }
 

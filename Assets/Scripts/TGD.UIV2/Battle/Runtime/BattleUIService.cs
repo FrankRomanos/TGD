@@ -63,6 +63,9 @@ namespace TGD.UIV2.Battle
 
         void OnEnable()
         {
+            if (!Application.isPlaying)
+                return;
+
             // --- 懒加载依赖（防御）
             if (turnManager == null)
                 turnManager = AutoFind<TurnManagerV2>();
@@ -117,6 +120,9 @@ namespace TGD.UIV2.Battle
 
         void OnDisable()
         {
+            if (!Application.isPlaying)
+                return;
+
             // 1. 取消 gameplay -> UI 的订阅
             Unsubscribe();
             EndTurnLogForwarding();
@@ -147,6 +153,9 @@ namespace TGD.UIV2.Battle
 
         void OnDestroy()
         {
+            if (!Application.isPlaying)
+                return;
+
             // 理论上 OnDisable 已经清了所有事件。
             // 这里只是再防御一次，防止 Unity 某些极端销毁顺序下 OnDisable 没被调用。
             Unsubscribe();

@@ -2,6 +2,7 @@ using UnityEngine;
 using TGD.HexBoard;
 using TGD.HexBoard.Path;
 using TGD.CoreV2;
+using TGD.CombatV2;
 
 namespace TGD.CombatV2.Targeting
 {
@@ -11,58 +12,60 @@ namespace TGD.CombatV2.Targeting
         [Tooltip("正式占位层（只读）")]
         public HexOccupancyService occupancyService;
 
-        [Tooltip("简单敌人注册表（只读）")]
-        public TGD.CombatV2.SimpleEnemyRegistry enemyRegistry;
-
         [Tooltip("调试输出")]
         public bool debugLog;
 
         [Tooltip("环境阻挡查询（Pit 等）")]
         public HexEnvironmentSystem environment;
 
+        [Tooltip("TurnManagerV2 roster (只读)")]
+        public TurnManagerV2 turnManager;
+
         HexOccupancy _occ;
 
         void Awake()
         {
-            var driver = GetComponentInParent<HexBoardTestDriver>(true);
+            AutoWire();
+            RefreshOccupancy();
+        }
 
-            if (!occupancyService)
-            {
-                if (driver != null)
-                {
-                    if (driver.authoring != null)
-                    {
-                        occupancyService = driver.authoring.GetComponent<HexOccupancyService>();
-                        if (!occupancyService)
-                            occupancyService = driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-                    }
-
-                    if (!occupancyService)
-                        occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
-                }
-            }
-
+        void AutoWire()
+        {
             if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
-
-            _occ = occupancyService ? occupancyService.Get() : null;
 
             if (!environment)
             {
                 environment = GetComponentInParent<HexEnvironmentSystem>(true);
-                if (!environment && driver != null)
-                    environment = driver.GetComponentInParent<HexEnvironmentSystem>(true);
-            }
-
-            if (!environment && occupancyService != null)
-            {
-                environment = occupancyService.GetComponent<HexEnvironmentSystem>();
-                if (!environment && occupancyService.authoring != null)
+                if (!environment && occupancyService != null)
                 {
-                    environment = occupancyService.authoring.GetComponent<HexEnvironmentSystem>()
-                        ?? occupancyService.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+                    environment = occupancyService.GetComponent<HexEnvironmentSystem>();
+                    if (!environment && occupancyService.authoring != null)
+                    {
+                        environment = occupancyService.authoring.GetComponent<HexEnvironmentSystem>()
+                            ?? occupancyService.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+                    }
                 }
             }
+
+            if (!turnManager)
+                turnManager = GetComponentInParent<TurnManagerV2>(true);
+        }
+
+        public void InjectServices(TurnManagerV2 tm, HexOccupancyService occSvc, HexEnvironmentSystem env = null)
+        {
+            if (occSvc != null)
+                occupancyService = occSvc;
+            if (tm != null)
+                turnManager = tm;
+            if (env != null)
+                environment = env;
+            RefreshOccupancy();
+        }
+
+        void RefreshOccupancy()
+        {
+            _occ = occupancyService ? occupancyService.Get() : null;
         }
 
         public TargetCheckResult Check(Unit actor, Hex hex, TargetingSpec spec)
@@ -90,13 +93,12 @@ namespace TGD.CombatV2.Targeting
             if (spec == null)
                 return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoSpec");
 
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
+            if (_occ == null)
+                RefreshOccupancy();
 
             if (_occ == null)
                 return RejectEarly(TargetInvalidReason.Unknown, "[Probe] NoOccupancyService");
 
-            bool ignoreEnvironment = IsAnyClick(spec);
             bool allowsGround = AllowsGroundSelection(spec);
             // 1) 非障碍：遇到静态障碍或坑，立刻拒绝（早退）
             if (spec.terrain == TargetTerrainMask.NonObstacle)
@@ -109,7 +111,7 @@ namespace TGD.CombatV2.Targeting
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] Terrain=Pit");
             }
             // 2) 允许点地面但不是 AnyClick：同样早退拦住
-            else if (AllowsGroundSelection(spec) && !IsAnyClick(spec))
+            else if (allowsGround && !IsAnyClick(spec))
             {
                 var terrainPass = PassabilityFactory.StaticTerrainOnly(_occ);
                 if (terrainPass != null && terrainPass.IsBlocked(hex))
@@ -121,28 +123,8 @@ namespace TGD.CombatV2.Targeting
             _occ.TryGetActor(hex, out var actorAt);
             var unitAt = ResolveUnit(actorAt);
             bool isEmpty = actorAt == null;
-            bool enemyMarked = enemyRegistry != null && enemyRegistry.IsEnemyAt(hex, _occ);
 
-            HitKind hit = HitKind.None;
-            if (!isEmpty)
-            {
-                if (unitAt != null && actor != null && ReferenceEquals(unitAt, actor))
-                {
-                    hit = HitKind.Self;
-                }
-                else if (enemyRegistry != null && enemyRegistry.IsEnemyActor(actorAt))
-                {
-                    hit = HitKind.Enemy;
-                }
-                else
-                {
-                    hit = HitKind.Ally;
-                }
-            }
-            else if (enemyMarked)
-            {
-                hit = HitKind.Enemy;
-            }
+            HitKind hit = ClassifyHit(actor, actorAt, unitAt);
 
             bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
             bool allowEnemy = (spec.occupant & TargetOccupantMask.Enemy) != 0;
@@ -194,13 +176,7 @@ namespace TGD.CombatV2.Targeting
                     return Reject(TargetInvalidReason.OutOfRange, $"[Probe] OutOfRange({dist}>{spec.maxRangeHexes})");
             }
 
-            var plan = hit switch
-            {
-                HitKind.Enemy => PlanKind.MoveAndAttack,
-                HitKind.None => PlanKind.MoveOnly,
-                HitKind.Self => PlanKind.AttackOnly,
-                _ => PlanKind.None
-            };
+            var plan = ResolvePlan(hit);
 
             bool ok = plan != PlanKind.None;
             var res = new TargetCheckResult
@@ -244,6 +220,100 @@ namespace TGD.CombatV2.Targeting
             if (actor is UnitGridAdapter adapter)
                 return adapter.Unit;
             return null;
+        }
+
+        HitKind ClassifyHit(Unit self, IGridActor actorAt, Unit unitAt)
+        {
+            if (actorAt == null)
+                return HitKind.None;
+
+            if (unitAt != null)
+            {
+                if (self != null && ReferenceEquals(unitAt, self))
+                    return HitKind.Self;
+
+                if (IsEnemy(self, unitAt))
+                    return HitKind.Enemy;
+
+                if (IsAlly(self, unitAt))
+                    return HitKind.Ally;
+
+                // 未知阵营：暂时视作敌方，避免卡死
+                return HitKind.Enemy;
+            }
+
+            // 未能映射到 Unit：临时视作敌人，等待完整链路
+            return HitKind.Enemy;
+        }
+
+        PlanKind ResolvePlan(HitKind hit)
+        {
+            switch (hit)
+            {
+                case HitKind.Enemy:
+                    return PlanKind.MoveAndAttack;
+                case HitKind.None:
+                    return PlanKind.MoveOnly;
+                case HitKind.Self:
+                    return PlanKind.AttackOnly;
+                case HitKind.Ally:
+                    return PlanKind.None;
+                default:
+                    return PlanKind.None;
+            }
+        }
+
+        bool IsEnemy(Unit self, Unit other)
+        {
+            if (self == null || other == null)
+                return false;
+
+            if (ReferenceEquals(self, other))
+                return false;
+
+            if (turnManager == null)
+                return false;
+
+            bool selfPlayer = turnManager.IsPlayerUnit(self);
+            bool selfEnemy = turnManager.IsEnemyUnit(self);
+
+            if (selfPlayer)
+                return turnManager.IsEnemyUnit(other);
+
+            if (selfEnemy)
+                return turnManager.IsPlayerUnit(other);
+
+            // 自己没登记：按对方阵营兜底
+            if (turnManager.IsEnemyUnit(other))
+                return true;
+
+            return false;
+        }
+
+        bool IsAlly(Unit self, Unit other)
+        {
+            if (self == null || other == null)
+                return false;
+
+            if (ReferenceEquals(self, other))
+                return true;
+
+            if (turnManager == null)
+                return false;
+
+            bool selfPlayer = turnManager.IsPlayerUnit(self);
+            bool selfEnemy = turnManager.IsEnemyUnit(self);
+
+            if (selfPlayer)
+                return turnManager.IsPlayerUnit(other);
+
+            if (selfEnemy)
+                return turnManager.IsEnemyUnit(other);
+
+            if (!turnManager.IsEnemyUnit(other) && turnManager.IsPlayerUnit(other))
+                return true;
+
+            return false;
         }
     }
 }

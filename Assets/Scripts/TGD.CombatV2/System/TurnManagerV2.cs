@@ -1436,6 +1436,18 @@ namespace TGD.CombatV2
             RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 
+        public void RegisterSpawn(Unit unit, bool isPlayer)
+        {
+            if (unit == null)
+                return;
+
+            var list = isPlayer ? _playerUnits : _enemyUnits;
+            if (!list.Contains(unit))
+                list.Add(unit);
+
+            EnsureRuntime(unit, isPlayer);
+        }
+
         public bool IsPlayerUnit(Unit unit) => unit != null && _playerUnits.Contains(unit);
         public bool IsEnemyUnit(Unit unit) => unit != null && _enemyUnits.Contains(unit);
     }
