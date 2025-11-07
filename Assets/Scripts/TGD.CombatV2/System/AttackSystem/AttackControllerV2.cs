@@ -457,9 +457,23 @@ namespace TGD.CombatV2
             public string rejectMessage;
         }
 
-        IGridActor SelfActor => (_bridge as PlayerOccupancyBridge)?.Actor as IGridActor;
+        IGridActor SelfActor
+        {
+            get
+            {
+                var unit = ResolveSelfUnit();
+                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
+            }
+        }
 
-        Hex CurrentAnchor => (_bridge as PlayerOccupancyBridge)?.CurrentAnchor ?? Hex.Zero;
+        Hex CurrentAnchor
+        {
+            get
+            {
+                var unit = ResolveSelfUnit();
+                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
+            }
+        }
 
         void Awake()
         {
@@ -522,24 +536,23 @@ namespace TGD.CombatV2
 
             base.OnEnable();
             TryResolveBridge();
-            EnsureBound();
-            ClearPendingAttack();
             AttachTurnManager(turnManager);
             RefreshOccupancy();
+            EnsureBound();
+            ClearPendingAttack();
         }
 
         void Start()
         {
             tiler?.EnsureBuilt();
 
-            if (authoring?.Layout == null)
+            if (authoring?.Layout == null) 
             {
                 enabled = false;
                 return;
             }
 
             if (_bridge == null) _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-            EnsureBound();
             RefreshOccupancy();
         }
 
@@ -1151,21 +1164,6 @@ namespace TGD.CombatV2
                 yield break;
 
             ClearTempReservations("PreAction");
-            RefreshOccupancy();
-
-            var unit = ResolveSelfUnit();
-            var view = ResolveSelfView();
-            var hexSpace = HexSpace.Instance;
-            var layout = authoring != null ? authoring.Layout : null;
-            var startAnchor = CurrentAnchor;
-            var actor = SelfActor;
-            Facing4 finalFacing = actor != null ? actor.Facing : Facing4.PlusQ;
-            Facing4 originalFacing = finalFacing;
-            if (actor == null)
-            {
-                HandleApproachAbort(originalFacing, view, hexSpace);
-                yield break;
-            }
 
             if (_playerBridge != null && _planAnchorVersion != _playerBridge.AnchorVersion)
             {
@@ -1173,22 +1171,26 @@ namespace TGD.CombatV2
                 preview = BuildPreview(preview.targetHex, true, preview.targetCheck);
                 if (preview == null || !preview.valid)
                 {
-                    HandleApproachAbort(originalFacing, view, hexSpace);
+                    HandleApproachAbort();
                     yield break;
                 }
                 _planAnchorVersion = _playerBridge.AnchorVersion;
-                startAnchor = CurrentAnchor;
-                finalFacing = actor.Facing;
-                originalFacing = finalFacing;
             }
 
+            var layout = authoring.Layout;
+            var hexSpace = HexSpace.Instance;
             if (hexSpace == null)
             {
                 Debug.LogWarning("[AttackControllerV2] HexSpace instance is missing.", this);
                 yield break;
             }
+            var unit = ResolveSelfUnit();
+            var view = ResolveSelfView();
+            RefreshOccupancy();
 
-            var passability = PassabilityFactory.ForApproach(_occ, actor, startAnchor);
+            var startAnchor = CurrentAnchor;
+            Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
             if (preview.targetIsEnemy)
@@ -1196,7 +1198,7 @@ namespace TGD.CombatV2
                 int range = Mathf.Max(1, ResolveMeleeRange());
                 if (!TryFindMeleePath(startAnchor, preview.targetHex, range, passability, out _, out executionPath))
                 {
-                    HandleApproachAbort(originalFacing, view, hexSpace);
+                    HandleApproachAbort();
                     yield break;
                 }
             }
@@ -1204,7 +1206,7 @@ namespace TGD.CombatV2
             {
                 if (IsBlockedForMove(preview.targetHex, startAnchor, preview.targetHex, passability))
                 {
-                    HandleApproachAbort(originalFacing, view, hexSpace);
+                    HandleApproachAbort();
                     yield break;
                 }
 
@@ -1212,14 +1214,14 @@ namespace TGD.CombatV2
                     cell => IsBlockedForMove(cell, startAnchor, preview.targetHex, passability));
                 if (executionPath == null || executionPath.Count == 0)
                 {
-                    HandleApproachAbort(originalFacing, view, hexSpace);
+                    HandleApproachAbort();
                     yield break;
                 }
             }
 
             if (executionPath == null || executionPath.Count == 0)
             {
-                HandleApproachAbort(originalFacing, view, hexSpace);
+                HandleApproachAbort();
                 yield break;
             }
 
@@ -1276,7 +1278,7 @@ namespace TGD.CombatV2
                             _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
                     }
 
-                    if (attackPlanned && layout != null && view != null)
+                    if (attackPlanned && authoring?.Layout != null && view != null)
                     {
                         var fromW = hexSpace.HexToWorld(startAnchor, y);
                         var toW = hexSpace.HexToWorld(preview.targetHex, y);
@@ -1288,14 +1290,9 @@ namespace TGD.CombatV2
                         finalFacing = nf;
                     }
 
-                    if (!CommitViaBridge(startAnchor, startAnchor, finalFacing, view, hexSpace, $"AttackStay {unit?.Id ?? name}->{startAnchor}"))
-                    {
-                        finalFacing = originalFacing;
-                        if (SelfActor != null)
-                            SelfActor.Facing = originalFacing;
-                        yield break;
-                    }
-                    AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
+                    _bridge?.MoveCommit(startAnchor, finalFacing);
+                    UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
+                    AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
 
                     if (attackPlanned)
                         TriggerAttackAnimation(unit, preview.targetHex);
@@ -1336,7 +1333,7 @@ namespace TGD.CombatV2
                     var from = reached[i - 1];
                     var to = reached[i];
 
-                    if (IsBlockedForMove(to, startAnchor, preview.landingHex, passability))
+                    if (IsBlockedForMove(to, from, preview.targetHex, passability))
                     {
                         stoppedByExternal = true;
                         break;
@@ -1396,15 +1393,10 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                if (!CommitViaBridge(startAnchor, lastPosition, finalFacing, view, hexSpace, $"AttackMove {unit?.Id ?? name}->{lastPosition}"))
-                {
-                    finalFacing = originalFacing;
-                    if (SelfActor != null)
-                        SelfActor.Facing = originalFacing;
-                    yield break;
-                }
+                _bridge?.MoveCommit(lastPosition, finalFacing);
+                UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
-                AttackEventsV2.RaiseAttackMoveFinished(unit, CurrentAnchor);
+                AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
                 if (!UseTurnManager && ManageTurnTimeLocally)
                 {
@@ -1490,7 +1482,7 @@ namespace TGD.CombatV2
                 _planAnchorVersion = -1;
             }
 
-            void HandleApproachAbort(Facing4 fallbackFacing, Transform abortView, HexSpace abortSpace)
+            void HandleApproachAbort()
             {
                 if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
                     RefundMoveEnergy(moveEnergyPaid);
@@ -1509,16 +1501,11 @@ namespace TGD.CombatV2
 
                 var abortUnit = ResolveSelfUnit();
                 var abortAnchor = CurrentAnchor;
-                var abortActor = SelfActor;
-                var abortFacing = abortActor != null ? abortActor.Facing : Facing4.PlusQ;
+                var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
-                if (!CommitViaBridge(startAnchor, abortAnchor, abortFacing, abortView, abortSpace, $"AttackAbort {abortUnit?.Id ?? name}->{abortAnchor}"))
-                {
-                    if (SelfActor != null)
-                        SelfActor.Facing = fallbackFacing;
-                    return;
-                }
-                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, CurrentAnchor);
+                _bridge?.MoveCommit(abortAnchor, abortFacing);
+                UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
+                AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
                 int plannedAttack = attackPlanned ? Mathf.Max(0, attackSecsCharge) : 0;
                 SetExecReport(
@@ -1704,42 +1691,16 @@ namespace TGD.CombatV2
             if (cell.Equals(start)) return false;
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
-
-            if (passability != null)
-                return passability.IsBlocked(cell);
+            if (passability != null && passability.IsBlocked(cell)) return true;
 
             if (_occ == null)
-                return true;
+                return false;
 
             var actor = SelfActor;
             if (actor != null)
                 return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
 
             return _occ.IsBlocked(cell);
-        }
-
-        bool CommitViaBridge(Hex startAnchor, Hex targetAnchor, Facing4 facing, Transform view, HexSpace hexSpace, string label)
-        {
-            if (_bridge == null)
-                return true;
-
-            bool ok = _bridge.MoveCommit(targetAnchor, facing);
-
-            if (_playerBridge != null)
-            {
-                var svc = occupancyService != null ? occupancyService : _playerBridge.occupancyService;
-                PlayerOccupancyBridge.AuditOccupancy(svc, _playerBridge, label);
-            }
-
-            if (!ok)
-            {
-                Debug.LogError($"[Occ] MoveCommit FAILED: {ResolveSelfUnit()?.Id} from={startAnchor} to={targetAnchor}", this);
-                if (view != null && hexSpace != null)
-                    view.position = hexSpace.HexToWorld(startAnchor, y);
-                return false;
-            }
-
-            return true;
         }
 
         bool TryFindMeleePath(Hex start, Hex target, int range, IPassability passability, out Hex landing, out List<Hex> bestPath)
@@ -2059,9 +2020,6 @@ namespace TGD.CombatV2
                 _occ = occupancyService.Get();
         }
 
-        PlayerOccupancyBridge ResolvePlayerBridge()
-            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
-
         void TryResolveBridge()
         {
             var desired = ResolvePlayerBridge();
@@ -2098,9 +2056,11 @@ namespace TGD.CombatV2
                 _playerBridge = _bridge as PlayerOccupancyBridge;
         }
 
+        PlayerOccupancyBridge ResolvePlayerBridge()
+            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
+
         bool EnsureBound()
         {
-            TryResolveBridge();
             // 1) 桥优先：bridgeOverride → ctx 体系 → 父链
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))

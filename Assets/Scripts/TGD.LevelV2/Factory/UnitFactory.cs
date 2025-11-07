@@ -111,7 +111,7 @@ namespace TGD.LevelV2
             var resolvedSkillIndex = ResolveSkillIndex();
             var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit, resolvedSkillIndex);
 
-            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager, spawnHex, unit.Facing);
+            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
@@ -352,6 +352,7 @@ namespace TGD.LevelV2
                                     ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
                                     ?? FindOne<HexOccupancyService>();
 
+            var ownerBridge = context ? context.GetComponentInParent<PlayerOccupancyBridge>(true) : null;
             var view = go.GetComponentInChildren<Animator>(true)?.transform
                     ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
                     ?? go.transform;
@@ -372,6 +373,8 @@ namespace TGD.LevelV2
                     mover.targetValidator = resolvedValidator;
                 if (!mover.occupancyService)
                     mover.occupancyService = resolvedOccupancy;
+                if (ownerBridge != null)
+                    mover.bridgeOverride = ownerBridge;
                 mover.viewOverride = view;
                 mover.driver = null;
             }
@@ -408,6 +411,9 @@ namespace TGD.LevelV2
                     attack.targetValidator = resolvedValidator;
                 if (!attack.occupancyService)
                     attack.occupancyService = resolvedOccupancy;
+
+                if (ownerBridge != null)
+                    attack.bridgeOverride = ownerBridge;
                 attack.viewOverride = view;
             }
 
@@ -527,15 +533,57 @@ namespace TGD.LevelV2
             return adapter;
         }
 
-        void FinalizeOccupancyChain(
-            GameObject go,
-            UnitRuntimeContext context,
-            Unit unit,
-            UnitFaction faction,
-            UnitGridAdapter adapter,
-            TurnManagerV2 resolvedTurnManager,
-            Hex spawn,
-            Facing4 facing)
+        void WireOccupancyBinding(GameObject go, UnitRuntimeContext context, HexOccupancyService occSvc, Hex spawn, Facing4 facing)
+        {
+            if (go == null)
+                return;
+
+            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            if (bridge != null)
+            {
+                if (bridge.occupancyService == null && occSvc != null)
+                    bridge.occupancyService = occSvc;
+
+                if (bridge.overrideFootprint == null && defaultFootprint != null)
+                    bridge.overrideFootprint = defaultFootprint;
+            }
+
+            var adapter = go.GetComponent<UnitGridAdapter>() ?? go.AddComponent<UnitGridAdapter>();
+            if (context != null && context.boundUnit != null && adapter.Unit != context.boundUnit)
+                adapter.Unit = context.boundUnit;
+
+            if (bridge != null)
+            {
+                bridge.Bind(adapter);
+                bridge.PlaceImmediate(spawn, facing);
+            }
+
+            foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
+            {
+                if (mover == null)
+                    continue;
+
+                if (occSvc != null && mover.occupancyService == null)
+                    mover.occupancyService = occSvc;
+
+                if (bridge != null && mover.bridgeOverride == null)
+                    mover.bridgeOverride = bridge;
+            }
+
+            foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+            {
+                if (attack == null)
+                    continue;
+
+                if (occSvc != null && attack.occupancyService == null)
+                    attack.occupancyService = occSvc;
+
+                if (bridge != null && attack.bridgeOverride == null)
+                    attack.bridgeOverride = bridge;
+            }
+        }
+
+        void FinalizeOccupancyChain(GameObject go, UnitRuntimeContext context, Unit unit, UnitFaction faction, UnitGridAdapter adapter, TurnManagerV2 resolvedTurnManager)
         {
             if (go == null)
                 return;
@@ -544,21 +592,22 @@ namespace TGD.LevelV2
             if (occSvc != null)
                 Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
 
+            if (occupancyService == null && occSvc != null)
+                occupancyService = occSvc;
+
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
+            var spawnAnchor = bound != null ? bound.Position : Hex.Zero;
+            var spawnFacing = bound != null ? bound.Facing : Facing4.PlusQ;
+
+            WireOccupancyBinding(go, context, occSvc, spawnAnchor, spawnFacing);
+
+            var bridge = go.GetComponent<PlayerOccupancyBridge>();
+            if (bridge != null && bridge.overrideFootprint == null && defaultFootprint != null)
+                bridge.overrideFootprint = defaultFootprint;
             if (adapter == null)
                 adapter = EnsureGridAdapter(go, bound);
             else if (adapter.Unit == null && bound != null)
                 adapter.Unit = bound;
-
-            var bridge = BindOccupancyAtSpawn(go, context, ref adapter, occSvc, spawn, facing);
-
-            if (occupancyService == null)
-            {
-                if (occSvc != null)
-                    occupancyService = occSvc;
-                else if (bridge != null && bridge.occupancyService != null)
-                    occupancyService = bridge.occupancyService;
-            }
 
             var tm = resolvedTurnManager != null ? resolvedTurnManager : turnManager;
 
@@ -571,96 +620,10 @@ namespace TGD.LevelV2
                 Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
             }
 
+            if (bridge != null && !bridge.EnsurePlacedNow())
+                Debug.LogWarning($"[Factory] Failed to place {unit?.Id ?? go.name} on occupancy grid.", this);
+
             EnsureDefaultValidatorInjected(occSvc, tm);
-        }
-
-        PlayerOccupancyBridge BindOccupancyAtSpawn(
-            GameObject go,
-            UnitRuntimeContext ctx,
-            ref UnitGridAdapter adapter,
-            HexOccupancyService occSvc,
-            Hex spawn,
-            Facing4 facing)
-        {
-            if (go == null)
-                return null;
-
-            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
-            HexOccupancyService resolvedOccSvc = occSvc;
-
-            if (bridge != null)
-            {
-                if (resolvedOccSvc == null && bridge.occupancyService != null)
-                    resolvedOccSvc = bridge.occupancyService;
-                if (!bridge.occupancyService && resolvedOccSvc != null)
-                    bridge.occupancyService = resolvedOccSvc;
-                if (bridge.overrideFootprint == null && defaultFootprint != null)
-                    bridge.overrideFootprint = defaultFootprint;
-            }
-
-            if (adapter == null)
-                adapter = go.GetComponent<UnitGridAdapter>() ?? go.AddComponent<UnitGridAdapter>();
-
-            if (ctx == null)
-                ctx = go.GetComponent<UnitRuntimeContext>();
-
-            var bound = ctx != null ? ctx.boundUnit : null;
-            if (bound == null && adapter != null)
-                bound = adapter.Unit;
-
-            if (bound != null && adapter != null)
-                adapter.Unit = bound;
-
-            if (bridge != null && adapter != null)
-                bridge.Bind(adapter);
-
-            if (resolvedOccSvc != null)
-            {
-                foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
-                {
-                    if (mover == null)
-                        continue;
-                    if (mover.occupancyService == null)
-                        mover.occupancyService = resolvedOccSvc;
-                    if (bridge != null && mover.bridgeOverride == null)
-                        mover.bridgeOverride = bridge;
-                }
-
-                foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
-                {
-                    if (attack == null)
-                        continue;
-                    if (attack.occupancyService == null)
-                        attack.occupancyService = resolvedOccSvc;
-                    if (bridge != null && attack.bridgeOverride == null)
-                        attack.bridgeOverride = bridge;
-                }
-            }
-            else if (bridge != null)
-            {
-                foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
-                    if (mover != null && mover.bridgeOverride == null) mover.bridgeOverride = bridge;
-                foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
-                    if (attack != null && attack.bridgeOverride == null) attack.bridgeOverride = bridge;
-            }
-
-            var finalFace = facing;
-            if (bound != null)
-                finalFace = bound.Facing;
-
-            if (bridge != null)
-            {
-                bool placed = bridge.PlaceImmediate(spawn, finalFace);
-                if (!placed)
-                {
-                    Debug.LogWarning($"[Factory] Failed to immediately place {bound?.Id ?? go.name} at {spawn}.", go);
-                    bridge.EnsurePlacedNow();
-                }
-
-                PlayerOccupancyBridge.AuditOccupancy(resolvedOccSvc, bridge, $"Spawn {bound?.Id ?? go.name}");
-            }
-
-            return bridge;
         }
 
         static void ApplyAbilityLoadout(
