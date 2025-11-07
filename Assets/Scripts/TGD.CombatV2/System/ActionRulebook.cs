@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.DataV2;
 
 namespace TGD.CombatV2
 {
@@ -72,6 +73,13 @@ namespace TGD.CombatV2
         [Header("Derived Links")]
         public DerivedRule[] derivedRules = Array.Empty<DerivedRule>();
 
+        [Header("Skill Index Integration")]
+        [Tooltip("Optional index providing derived links from SkillDefinition assets.")]
+        public SkillIndex skillIndex;
+
+        [Tooltip("Merge derived links defined on SkillDefinitions into runtime rules.")]
+        public bool includeSkillIndexDerivedLinks = true;
+
         static readonly ActionKind[] s_freeOnly = { ActionKind.Free };
         static readonly ActionKind[] s_empty = Array.Empty<ActionKind>();
         static readonly List<ActionKind> s_scratch = new();
@@ -134,10 +142,25 @@ namespace TGD.CombatV2
 
         public IReadOnlyList<string> AllowedDerivedActions(string baseSkillId)
         {
-            if (string.IsNullOrEmpty(baseSkillId) || derivedRules == null || derivedRules.Length == 0)
-                return s_emptyIds;
-
             s_idScratch.Clear();
+
+            if (includeSkillIndexDerivedLinks && skillIndex != null)
+            {
+                var fromIndex = skillIndex.GetDerivedActionIds(baseSkillId);
+                if (fromIndex != null)
+                {
+                    for (int i = 0; i < fromIndex.Count; i++)
+                    {
+                        string id = fromIndex[i];
+                        if (!string.IsNullOrEmpty(id) && !s_idScratch.Contains(id))
+                            s_idScratch.Add(id);
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(baseSkillId) || derivedRules == null || derivedRules.Length == 0)
+                return s_idScratch.Count == 0 ? s_emptyIds : new List<string>(s_idScratch);
+
             for (int i = 0; i < derivedRules.Length; i++)
             {
                 var rule = derivedRules[i];
@@ -148,7 +171,7 @@ namespace TGD.CombatV2
                         for (int j = 0; j < rule.derivedIds.Length; j++)
                         {
                             string id = rule.derivedIds[j];
-                            if (!string.IsNullOrEmpty(id))
+                            if (!string.IsNullOrEmpty(id) && !s_idScratch.Contains(id))
                                 s_idScratch.Add(id);
                         }
                     }

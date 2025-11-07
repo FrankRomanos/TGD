@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace TGD.DataV2
@@ -92,6 +93,30 @@ namespace TGD.DataV2
         [Tooltip("Energy cost resolved at confirm (W2).")]
         private int energyCost = 0;
 
+        [SerializeField]
+        [Tooltip("Maximum targeting distance in hexes. -1 for unlimited.")]
+        private int maxRangeHexes = -1;
+
+        [SerializeField, Min(0)]
+        [Tooltip("Cooldown applied (seconds) once the action confirms in W2.")]
+        private int cooldownSeconds = 0;
+
+        [SerializeField]
+        [Tooltip("For derived actions: the base skill identifier this action follows.")]
+        private string derivedFromSkillId = string.Empty;
+
+        [SerializeField, Min(1)]
+        [Tooltip("For full-round actions: number of rounds before the resolution triggers.")]
+        private int fullRoundRounds = 1;
+
+        [SerializeField]
+        [Tooltip("Optional log lines printed during W2/confirm stage.")]
+        private string[] confirmLogs = Array.Empty<string>();
+
+        [SerializeField]
+        [Tooltip("Optional log lines printed during W4/resolve stage.")]
+        private string[] resolveLogs = Array.Empty<string>();
+
         public string Id => Normalize(id);
         public SkillKind Kind => kind;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName.Trim();
@@ -101,6 +126,12 @@ namespace TGD.DataV2
         public SkillCostAuthority CostAuthority => costAuthority;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
+        public int MaxRangeHexes => Mathf.Max(-1, maxRangeHexes);
+        public int CooldownSeconds => Mathf.Max(0, cooldownSeconds);
+        public string DerivedFromSkillId => actionKind == SkillDefinitionActionKind.Derived ? Normalize(derivedFromSkillId) : string.Empty;
+        public int FullRoundRounds => Mathf.Max(1, fullRoundRounds);
+        public IReadOnlyList<string> ConfirmLogs => confirmLogs ?? Array.Empty<string>();
+        public IReadOnlyList<string> ResolveLogs => resolveLogs ?? Array.Empty<string>();
 
         public bool IsActive => kind == SkillKind.Active;
         public bool IsPassive => kind == SkillKind.Passive;
@@ -131,11 +162,19 @@ namespace TGD.DataV2
         {
             id = Normalize(id);
             displayName = string.IsNullOrWhiteSpace(displayName) ? id : displayName.Trim();
+            maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
+            cooldownSeconds = Mathf.Max(0, cooldownSeconds);
+            fullRoundRounds = Mathf.Max(1, fullRoundRounds);
             if (kind == SkillKind.Passive || costAuthority != SkillCostAuthority.Definition)
             {
                 timeCostSeconds = 0;
                 energyCost = 0;
             }
+            derivedFromSkillId = actionKind == SkillDefinitionActionKind.Derived ? Normalize(derivedFromSkillId) : string.Empty;
+            if (confirmLogs == null)
+                confirmLogs = Array.Empty<string>();
+            if (resolveLogs == null)
+                resolveLogs = Array.Empty<string>();
         }
 
         public void EditorInitialize(
@@ -147,7 +186,13 @@ namespace TGD.DataV2
             int timeCostSeconds = 0,
             int energyCost = 0,
             string displayName = null,
-            Sprite icon = null)
+            Sprite icon = null,
+            int maxRangeHexes = -1,
+            int cooldownSeconds = 0,
+            string derivedFromSkillId = null,
+            int fullRoundRounds = 1,
+            IEnumerable<string> confirmLogs = null,
+            IEnumerable<string> resolveLogs = null)
         {
             this.id = Normalize(id);
             this.kind = kind;
@@ -166,6 +211,14 @@ namespace TGD.DataV2
             }
             this.displayName = string.IsNullOrWhiteSpace(displayName) ? this.id : displayName.Trim();
             this.icon = icon;
+            this.maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
+            this.cooldownSeconds = Mathf.Max(0, cooldownSeconds);
+            this.derivedFromSkillId = actionKind == SkillDefinitionActionKind.Derived
+                ? Normalize(derivedFromSkillId)
+                : string.Empty;
+            this.fullRoundRounds = Mathf.Max(1, fullRoundRounds);
+            this.confirmLogs = confirmLogs != null ? new List<string>(confirmLogs).ToArray() : Array.Empty<string>();
+            this.resolveLogs = resolveLogs != null ? new List<string>(resolveLogs).ToArray() : Array.Empty<string>();
         }
 #endif
     }

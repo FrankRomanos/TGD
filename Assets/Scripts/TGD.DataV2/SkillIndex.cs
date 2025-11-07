@@ -36,6 +36,7 @@ namespace TGD.DataV2
         public List<Entry> entries = new();
 
         private readonly Dictionary<string, SkillInfo> _map = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, HashSet<string>> _derivedMap = new(StringComparer.OrdinalIgnoreCase);
 
         public bool Contains(string id) => TryGet(id, out _);
 
@@ -60,6 +61,19 @@ namespace TGD.DataV2
             return _map.Values;
         }
 
+        public IReadOnlyList<string> GetDerivedActionIds(string baseSkillId)
+        {
+            if (string.IsNullOrWhiteSpace(baseSkillId))
+                return Array.Empty<string>();
+
+            Rebuild();
+
+            string key = Normalize(baseSkillId);
+            if (_derivedMap.TryGetValue(key, out var set) && set != null && set.Count > 0)
+                return new List<string>(set);
+            return Array.Empty<string>();
+        }
+
         private void OnEnable() => Rebuild();
 
 #if UNITY_EDITOR
@@ -69,6 +83,7 @@ namespace TGD.DataV2
         private void Rebuild()
         {
             _map.Clear();
+            _derivedMap.Clear();
 
             if (entries == null)
                 return;
@@ -89,10 +104,34 @@ namespace TGD.DataV2
 
                 var icon = entry.icon != null ? entry.icon : entry.definition.Icon;
                 _map[id] = new SkillInfo(entry.definition, display, icon);
+
+                TryRegisterDerivedLink(entry.definition);
             }
         }
 
         private static string Normalize(string id)
             => string.IsNullOrWhiteSpace(id) ? string.Empty : id.Trim();
+
+        void TryRegisterDerivedLink(SkillDefinitionV2 definition)
+        {
+            if (definition == null)
+                return;
+
+            if (definition.ActionKind != SkillDefinitionActionKind.Derived)
+                return;
+
+            string sourceId = definition.DerivedFromSkillId;
+            string derivedId = definition.Id;
+            if (string.IsNullOrEmpty(sourceId) || string.IsNullOrEmpty(derivedId))
+                return;
+
+            if (!_derivedMap.TryGetValue(sourceId, out var set) || set == null)
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _derivedMap[sourceId] = set;
+            }
+
+            set.Add(derivedId);
+        }
     }
 }

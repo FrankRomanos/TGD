@@ -75,5 +75,18 @@ namespace TGD.DataV2
             if (_map != null && _map.TryGetValue(key, out var v)) return Mathf.Max(0, v);
             return 0;
         }
+
+        public void RegisterSeconds(string key, int seconds)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return;
+
+            int clamped = Mathf.Max(0, seconds);
+
+            if (_map == null)
+                _map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            _map[key.Trim()] = clamped;
+        }
     }
 }

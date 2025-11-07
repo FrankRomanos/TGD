@@ -23,6 +23,10 @@ namespace TGD.LevelV2
         [Tooltip("Optional default prefab to instantiate when spawning units.")]
         public GameObject defaultPrefab;
 
+        [Header("Data")]
+        [Tooltip("Optional catalog used to validate skills when composing units.")]
+        public SkillIndex skillIndex;
+
         [Header("Battle Control")]
         [Tooltip("Automatically call StartBattle after at least one unit is spawned.")]
         public bool autoStartBattle;
@@ -54,7 +58,7 @@ namespace TGD.LevelV2
                 return null;
             }
 
-            var final = UnitComposeService.Compose(blueprint);
+            var final = UnitComposeService.Compose(blueprint, skillIndex);
             final.faction = faction;
 
             // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
