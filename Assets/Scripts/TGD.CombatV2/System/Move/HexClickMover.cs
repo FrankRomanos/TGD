@@ -239,7 +239,7 @@ namespace TGD.CombatV2
         bool _previewDirty = true;
         int _previewAnchorVersion = -1;
         int _planAnchorVersion = -1;
-                             // === HUD 提示（可选）===
+        // === HUD 提示（可选）===
         [Header("HUD")]
         public bool showHudMessage = true;
         public float hudSeconds = 1.6f;
@@ -583,7 +583,6 @@ namespace TGD.CombatV2
                 maxRangeHexes = -1
             };
             EnsureBound();
-            RefreshOccupancy();
         }
 
         void Start()
@@ -598,8 +597,6 @@ namespace TGD.CombatV2
                 return;
 
             EnsureBound();
-
-            RefreshOccupancy();
 
             if (occupancyService != null)
                 _occ = occupancyService.Get();
@@ -624,8 +621,6 @@ namespace TGD.CombatV2
         {
             base.OnEnable();
             TryResolveBridge();
-            AttachTurnManager(_turnManager);
-            RefreshOccupancy();
             EnsureBound();
         }
 
@@ -1059,16 +1054,8 @@ namespace TGD.CombatV2
                     if (passability != null && passability.IsBlocked(to))
                     { stoppedByExternal = true; break; }
 
-                    if (passability == null && _occ != null)
-                    {
-                        if (SelfActor != null)
-                        {
-                            if (!_occ.CanPlaceIgnoringTemp(SelfActor, to, SelfActor.Facing, ignore: SelfActor))
-                            { stoppedByExternal = true; break; }
-                        }
-                        else if (_occ.IsBlocked(to))
-                        { stoppedByExternal = true; break; }
-                    }
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
+                    { stoppedByExternal = true; break; }
 
                     if (env != null && env.IsPit(to))
                     {
@@ -1157,6 +1144,7 @@ namespace TGD.CombatV2
         }
         bool EnsureBound()
         {
+            TryResolveBridge();
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))
                 _playerBridge = desiredBridge;
@@ -1169,9 +1157,7 @@ namespace TGD.CombatV2
             }
             else if (_bridge == null)
             {
-                if (bridgeOverride != null)
-                    _bridge = bridgeOverride;
-                else if (ctx != null)
+                if (ctx != null)
                     _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
 
                 if (_bridge == null)
@@ -1205,7 +1191,7 @@ namespace TGD.CombatV2
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
+            if (bridgeOverride != null && _bridge != bridgeOverride)
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)
@@ -1233,15 +1219,6 @@ namespace TGD.CombatV2
 
             if (_playerBridge == null)
                 _playerBridge = _bridge as PlayerOccupancyBridge;
-        }
-
-        void RefreshOccupancy()
-        {
-            if (occupancyService == null)
-                occupancyService = (_turnManager?.occupancyService) ?? (_playerBridge?.occupancyService);
-
-            if (_occ == null && occupancyService != null)
-                _occ = occupancyService.Get();
         }
 
         void UpdateBridgeSubscription(PlayerOccupancyBridge desired)

@@ -536,17 +536,17 @@ namespace TGD.CombatV2
 
             base.OnEnable();
             TryResolveBridge();
-            AttachTurnManager(turnManager);
-            RefreshOccupancy();
             EnsureBound();
             ClearPendingAttack();
+            AttachTurnManager(turnManager);
+            RefreshOccupancy();
         }
 
         void Start()
         {
             tiler?.EnsureBuilt();
 
-            if (authoring?.Layout == null) 
+            if (authoring?.Layout == null)
             {
                 enabled = false;
                 return;
@@ -887,12 +887,12 @@ namespace TGD.CombatV2
                 _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
             }
 
-                if (!UseTurnManager && ManageTurnTimeLocally)
-                {
-                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
-                    if (attackPlanned)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
-                }
+            if (!UseTurnManager && ManageTurnTimeLocally)
+            {
+                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
+                if (attackPlanned)
+                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
+            }
 
             _currentPreview = null;
             _hover = null;
@@ -937,7 +937,7 @@ namespace TGD.CombatV2
             var (mapped, message) = MapAttackReject(reason);
             if (debugLog)
                 // Phase logging handled by CombatActionManagerV2.
-            RaiseRejected(unit, mapped, message);
+                RaiseRejected(unit, mapped, message);
         }
 
         internal void HandleConfirmAbort(Unit unit, string reason)
@@ -1081,7 +1081,7 @@ namespace TGD.CombatV2
             }
             else
             {
-                if (IsBlockedForMove(target, start, target, passability))
+                if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, SelfActor)))
                 {
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
@@ -1204,7 +1204,8 @@ namespace TGD.CombatV2
             }
             else
             {
-                if (IsBlockedForMove(preview.targetHex, startAnchor, preview.targetHex, passability))
+                if ((passability != null && passability.IsBlocked(preview.targetHex)) ||
+                    (passability == null && _occ != null && _occ.IsBlocked(preview.targetHex, SelfActor)))
                 {
                     HandleApproachAbort();
                     yield break;
@@ -1333,7 +1334,12 @@ namespace TGD.CombatV2
                     var from = reached[i - 1];
                     var to = reached[i];
 
-                    if (IsBlockedForMove(to, from, preview.targetHex, passability))
+                    if (passability != null && passability.IsBlocked(to))
+                    {
+                        stoppedByExternal = true;
+                        break;
+                    }
+                    if (passability == null && _occ != null && _occ.IsBlocked(to, SelfActor))
                     {
                         stoppedByExternal = true;
                         break;
@@ -1692,15 +1698,18 @@ namespace TGD.CombatV2
             if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
             if (passability != null && passability.IsBlocked(cell)) return true;
-
             if (_occ == null)
                 return false;
 
             var actor = SelfActor;
-            if (actor != null)
-                return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
+            if (passability == null)
+            {
+                if (actor != null)
+                    return !_occ.CanPlaceIgnoringTemp(actor, cell, actor.Facing, ignore: actor);
+                return _occ.IsBlocked(cell);
+            }
 
-            return _occ.IsBlocked(cell);
+            return false;
         }
 
         bool TryFindMeleePath(Hex start, Hex target, int range, IPassability passability, out Hex landing, out List<Hex> bestPath)
@@ -2020,13 +2029,16 @@ namespace TGD.CombatV2
                 _occ = occupancyService.Get();
         }
 
+        PlayerOccupancyBridge ResolvePlayerBridge()
+            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
+
         void TryResolveBridge()
         {
             var desired = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
+            if (bridgeOverride != null && _bridge != bridgeOverride)
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)
@@ -2056,11 +2068,9 @@ namespace TGD.CombatV2
                 _playerBridge = _bridge as PlayerOccupancyBridge;
         }
 
-        PlayerOccupancyBridge ResolvePlayerBridge()
-            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
-
         bool EnsureBound()
         {
+            TryResolveBridge();
             // 1) 桥优先：bridgeOverride → ctx 体系 → 父链
             var desiredBridge = ResolvePlayerBridge();
             if (!ReferenceEquals(_playerBridge, desiredBridge))

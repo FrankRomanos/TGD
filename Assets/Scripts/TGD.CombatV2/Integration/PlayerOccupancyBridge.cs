@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using TGD.HexBoard;
 using TGD.CoreV2;
 
@@ -202,68 +202,6 @@ namespace TGD.CombatV2.Integration
             return false;
         }
 
-        void EnsureOccupancyBacking()
-        {
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (_occ == null)
-            {
-                var layout = ResolveLayout();
-                if (layout != null)
-                    _occ = new HexOccupancy(layout);
-            }
-        }
-
-        void EnsureActorBinding(UnitGridAdapter explicitAdapter = null)
-        {
-            if (explicitAdapter != null)
-                _componentAdapter = explicitAdapter;
-
-            if (_componentAdapter == null)
-                _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
-
-            if (_componentAdapter != null)
-            {
-                if (overrideFootprint != null && _componentAdapter.Footprint == null)
-                    _componentAdapter.Footprint = overrideFootprint;
-
-                if (_componentAdapter.Unit == null)
-                {
-                    var unit = _ctx != null && _ctx.boundUnit != null ? _ctx.boundUnit : null;
-                    if (unit == null && _driver != null && _driver.IsReady)
-                        unit = _driver.UnitRef;
-                    if (unit != null)
-                        _componentAdapter.Unit = unit;
-                }
-
-                _actor = _componentAdapter;
-            }
-            else if (_actor == null)
-            {
-                _actor = CreateActorAdapter();
-            }
-        }
-
-        bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
-        {
-            _driver?.EnsureInit();
-            EnsureActorBinding(explicitAdapter);
-            EnsureOccupancyBacking();
-
-            if (!IsReady || _occ == null || _actor == null)
-                return false;
-
-            if (!_occ.TryPlace(_actor, anchor, facing))
-                return false;
-
-            _placed = true;
-            if (debugLog)
-                Debug.Log($"[Occ] Place {IdLabel()} at {anchor}", this);
-            MirrorDriver(anchor, facing);
-            RaiseAnchorChanged(anchor);
-            return true;
-        }
-
         Unit ResolveUnit()
         {
             if (_ctx != null && _ctx.boundUnit != null)
@@ -286,6 +224,8 @@ namespace TGD.CombatV2.Integration
         {
             if (_componentAdapter != null)
             {
+                if (overrideFootprint != null && _componentAdapter.Footprint == null)
+                    _componentAdapter.Footprint = overrideFootprint;
                 var unit = ResolveUnit();
                 if (_componentAdapter.Unit == null && unit != null)
                     _componentAdapter.Unit = unit;
@@ -378,6 +318,68 @@ namespace TGD.CombatV2.Integration
             shape.name = "PlayerFootprint_Single_Runtime";
             shape.offsets = new() { new L2(0, 0) };
             return shape;
+        }
+
+        void EnsureOccupancyBacking()
+        {
+            if (_occ == null && occupancyService)
+                _occ = occupancyService.Get();
+            if (_occ == null)
+            {
+                var layout = ResolveLayout();
+                if (layout != null)
+                    _occ = new HexOccupancy(layout);
+            }
+        }
+
+        void EnsureActorBinding(UnitGridAdapter explicitAdapter = null)
+        {
+            if (explicitAdapter != null)
+                _componentAdapter = explicitAdapter;
+
+            if (_componentAdapter == null)
+                _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
+
+            if (_componentAdapter != null)
+            {
+                if (overrideFootprint != null && _componentAdapter.Footprint == null)
+                    _componentAdapter.Footprint = overrideFootprint;
+
+                if (_componentAdapter.Unit == null)
+                {
+                    var unit = _ctx != null && _ctx.boundUnit != null ? _ctx.boundUnit : null;
+                    if (unit == null && _driver != null && _driver.IsReady)
+                        unit = _driver.UnitRef;
+                    if (unit != null)
+                        _componentAdapter.Unit = unit;
+                }
+
+                _actor = _componentAdapter;
+            }
+            else if (_actor == null)
+            {
+                _actor = CreateActorAdapter();
+            }
+        }
+
+        bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
+        {
+            _driver?.EnsureInit();
+            EnsureActorBinding(explicitAdapter);
+            EnsureOccupancyBacking();
+
+            if (!IsReady || _occ == null || _actor == null)
+                return false;
+
+            if (!_occ.TryPlace(_actor, anchor, facing))
+                return false;
+
+            _placed = true;
+            if (debugLog)
+                Debug.Log($"[Occ] Place {IdLabel()} at {anchor}", this);
+            MirrorDriver(anchor, facing);
+            RaiseAnchorChanged(anchor);
+            return true;
         }
     }
 }
