@@ -1,10 +1,36 @@
 using System;
-using TGD.CombatV2;
-using TGD.CombatV2.Targeting;
 using UnityEngine;
 
 namespace TGD.DataV2
 {
+    /// <summary>
+    /// Skill taxonomy used for authoring. Mirrors CombatV2.ActionKind without introducing a dependency.
+    /// </summary>
+    public enum SkillDefinitionActionKind
+    {
+        Standard = 0,
+        Reaction = 1,
+        Derived = 2,
+        FullRound = 3,
+        Sustained = 4,
+        Free = 5
+    }
+
+    /// <summary>
+    /// Targeting options aligned with CombatV2.Targeting.TargetMode without a compile-time dependency.
+    /// </summary>
+    public enum SkillDefinitionTargetRule
+    {
+        AnyClick = 0,
+        GroundOnly = 1,
+        EnemyOnly = 2,
+        AllyOnly = 3,
+        SelfOnly = 4,
+        EnemyOrGround = 5,
+        AllyOrGround = 6,
+        AnyUnit = 7
+    }
+
     public enum SkillKind
     {
         Active,
@@ -33,11 +59,11 @@ namespace TGD.DataV2
         [Header("Active Skill Settings")]
         [SerializeField]
         [Tooltip("Combat action category consumed by CAM + ActionRuleBook.")]
-        private ActionKind actionKind = ActionKind.Standard;
+        private SkillDefinitionActionKind actionKind = SkillDefinitionActionKind.Standard;
 
         [SerializeField]
         [Tooltip("Legal target rule resolved by DefaultTargetValidator.")]
-        private TargetMode targetRule = TargetMode.AnyClick;
+        private SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick;
 
         [SerializeField, Min(0)]
         [Tooltip("Time cost in seconds resolved at confirm (W2).")]
@@ -51,8 +77,8 @@ namespace TGD.DataV2
         public SkillKind Kind => kind;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName.Trim();
         public Sprite Icon => icon;
-        public ActionKind ActionKind => actionKind;
-        public TargetMode TargetRule => targetRule;
+        public SkillDefinitionActionKind ActionKind => actionKind;
+        public SkillDefinitionTargetRule TargetRule => targetRule;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
 
@@ -95,8 +121,8 @@ namespace TGD.DataV2
         public void EditorInitialize(
             string id,
             SkillKind kind = SkillKind.Active,
-            ActionKind actionKind = ActionKind.Standard,
-            TargetMode targetRule = TargetMode.AnyClick,
+            SkillDefinitionActionKind actionKind = SkillDefinitionActionKind.Standard,
+            SkillDefinitionTargetRule targetRule = SkillDefinitionTargetRule.AnyClick,
             int timeCostSeconds = 0,
             int energyCost = 0,
             string displayName = null,
