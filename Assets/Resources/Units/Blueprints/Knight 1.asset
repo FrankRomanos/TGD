@@ -77,6 +77,6 @@ MonoBehaviour:
   - skillId: Reaction001
     learned: 1
     initialCooldownSeconds: 0
-  - skillId: Free
+  - skillId: Free001
     learned: 1
     initialCooldownSeconds: 0
