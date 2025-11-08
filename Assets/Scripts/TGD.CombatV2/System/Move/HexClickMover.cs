@@ -1187,7 +1187,7 @@ namespace TGD.CombatV2
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && _bridge != bridgeOverride)
+            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)

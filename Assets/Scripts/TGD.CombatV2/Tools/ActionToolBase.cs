@@ -30,6 +30,8 @@ namespace TGD.CombatV2
 
         protected Unit OwnerUnit => ctx != null ? ctx.boundUnit : null;
 
+        protected Unit ResolveSelfUnit() => OwnerUnit;
+
         protected virtual void OnEnable()
         {
             if (!Application.isPlaying || _subscribed)
