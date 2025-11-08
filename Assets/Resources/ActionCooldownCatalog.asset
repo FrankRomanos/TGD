@@ -13,13 +13,7 @@ MonoBehaviour:
   m_Name: ActionCooldownCatalog
   m_EditorClassIdentifier: 
   entries:
-  - key: Reaction001
-    seconds: 12
-  - key: Reaction002
-    seconds: 18
-  - key: Free
-    seconds: 60
   - key: DerivedAttack
     seconds: 24
   - key: DerivedDerived
-    seconds: 24
+    seconds: 12

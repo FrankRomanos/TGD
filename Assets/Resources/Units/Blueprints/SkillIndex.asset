@@ -31,9 +31,3 @@ MonoBehaviour:
   - definition: {fileID: 11400000, guid: c1d44995f98743c4b557d18c443df347, type: 2}
     displayName: FullRoundTest
     icon: {fileID: 0}
-  - definition: {fileID: 11400000, guid: 2a44624ef4ed456fb0eedc47415fc1cb, type: 2}
-    displayName: DerivedAttack
-    icon: {fileID: 0}
-  - definition: {fileID: 11400000, guid: 8580dda1607c40ea9a4c1932f01fff83, type: 2}
-    displayName: DerivedDerived
-    icon: {fileID: 0}
