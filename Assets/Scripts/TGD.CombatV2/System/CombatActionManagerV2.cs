@@ -3420,9 +3420,6 @@ namespace TGD.CombatV2
                     if (candidate == null)
                         continue;
 
-                    if (candidate is SkillDefinitionActionTool defTool && defTool.Definition == null)
-                        TryAssignDefinitionFromIndex(defTool, id);
-
                     if (candidate is MonoBehaviour behaviour && !Dead(behaviour) && !behaviour.isActiveAndEnabled)
                         behaviour.enabled = true;
 
@@ -4534,12 +4531,6 @@ namespace TGD.CombatV2
                 if (behaviour is IActionToolV2 tool)
                 {
                     var toolId = NormalizeSkillId(tool.Id);
-                    if (!string.Equals(toolId, normalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (behaviour is SkillDefinitionActionTool defTool && TryAssignDefinitionFromIndex(defTool, normalized))
-                            toolId = NormalizeSkillId(defTool.Id);
-                    }
-
                     if (string.Equals(toolId, normalized, StringComparison.OrdinalIgnoreCase))
                         RegisterTool(tool);
                 }
@@ -4549,28 +4540,6 @@ namespace TGD.CombatV2
                 return list;
 
             return null;
-        }
-
-        bool TryAssignDefinitionFromIndex(SkillDefinitionActionTool tool, string skillId)
-        {
-            if (tool == null)
-                return false;
-
-            var index = ResolveSkillIndex();
-            if (index == null)
-                return false;
-
-            var normalized = NormalizeSkillId(skillId);
-            if (string.IsNullOrEmpty(normalized))
-                return false;
-
-            if (!index.TryGet(normalized, out var info) || info.definition == null)
-                return false;
-
-            if (!ReferenceEquals(tool.Definition, info.definition))
-                tool.SetDefinition(info.definition);
-
-            return true;
         }
 
         SkillIndex ResolveSkillIndex()

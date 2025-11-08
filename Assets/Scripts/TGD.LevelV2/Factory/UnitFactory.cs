@@ -39,7 +39,6 @@ namespace TGD.LevelV2
         readonly List<Unit> _enemies = new();
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
-        DefaultTargetValidator _sharedValidator;
         bool _loggedMissingSkillIndex;
 
         struct SharedRefs
@@ -377,14 +376,6 @@ namespace TGD.LevelV2
             if (shared.tiler == null)
                 shared.tiler = FindOne<HexBoardTiler>();
 
-            shared.validator = shared.cam != null ? shared.cam.GetComponentInChildren<DefaultTargetValidator>(true) : null;
-            if (shared.validator == null && shared.authoring != null)
-                shared.validator = shared.authoring.GetComponentInChildren<DefaultTargetValidator>(true);
-            if (shared.validator == null)
-                shared.validator = _sharedValidator != null ? _sharedValidator : FindOne<DefaultTargetValidator>();
-            if (shared.validator != null)
-                _sharedValidator = shared.validator;
-
             if (shared.occupancy != null)
             {
                 shared.environment = shared.occupancy.GetComponent<HexEnvironmentSystem>();
@@ -403,6 +394,8 @@ namespace TGD.LevelV2
                 shared.environment = shared.turnManager.environment;
             if (shared.environment == null)
                 shared.environment = FindOne<HexEnvironmentSystem>();
+
+            shared.validator = EnsureLocalTargetValidator(go, shared.turnManager ?? turnManager, shared.occupancy, shared.environment);
 
             shared.view = go != null
                 ? go.GetComponentInChildren<Animator>(true)?.transform
@@ -430,9 +423,9 @@ namespace TGD.LevelV2
 
             var resolvedAuthoring = shared.authoring;
             var resolvedTiler = shared.tiler;
-            var resolvedValidator = shared.validator;
             var resolvedOccupancy = shared.occupancy;
             var resolvedEnv = shared.environment;
+            var resolvedValidator = shared.validator;
             var view = shared.view ?? go.transform;
             var resolvedCamera = shared.pickCamera != null ? shared.pickCamera : Camera.main;
             shared.pickCamera = resolvedCamera;
@@ -442,6 +435,9 @@ namespace TGD.LevelV2
                 if (resolvedEnv != null)
                     shared.environment = resolvedEnv;
             }
+
+            resolvedValidator = EnsureLocalTargetValidator(go, resolvedTurnManager, resolvedOccupancy, resolvedEnv);
+            shared.validator = resolvedValidator;
 
             var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
             MoveRateStatusRuntime primaryStatus = statuses != null && statuses.Length > 0 ? statuses[0] : null;
@@ -739,7 +735,6 @@ namespace TGD.LevelV2
                 Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
             }
 
-            EnsureDefaultValidatorInjected(shared);
         }
 
         SkillIndex ResolveSkillIndex()
@@ -983,39 +978,19 @@ namespace TGD.LevelV2
             }
         }
 
-        void EnsureDefaultValidatorInjected(in SharedRefs shared)
+        static DefaultTargetValidator EnsureLocalTargetValidator(GameObject go, TurnManagerV2 tm, HexOccupancyService occupancy, HexEnvironmentSystem environment)
         {
-            var tm = shared.turnManager ?? turnManager;
-            if (tm == null)
-                tm = FindOne<TurnManagerV2>();
+            if (go == null)
+                return null;
 
-            var occSvc = shared.occupancy ?? ResolveOccupancyService();
-
-            var validator = shared.validator ?? _sharedValidator ?? FindOne<DefaultTargetValidator>();
+            var validator = go.GetComponent<DefaultTargetValidator>();
             if (validator == null)
-                return;
+                validator = go.AddComponent<DefaultTargetValidator>();
 
-            _sharedValidator = validator;
-
-            HexEnvironmentSystem env = shared.environment;
-            if (env == null && occSvc != null)
-            {
-                env = occSvc.GetComponent<HexEnvironmentSystem>();
-                if (env == null && occSvc.authoring != null)
-                    env = occSvc.authoring.GetComponent<HexEnvironmentSystem>() ?? occSvc.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
-            }
-
-            if (env == null && shared.authoring != null)
-                env = shared.authoring.GetComponent<HexEnvironmentSystem>() ?? shared.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
-
-            if (env == null && shared.turnManager != null)
-                env = shared.turnManager.environment;
-
-            if (env == null)
-                env = FindOne<HexEnvironmentSystem>();
-
-            validator.InjectServices(tm, occSvc, env);
+            validator.InjectServices(tm, occupancy, environment);
+            return validator;
         }
+
         static T FindOne<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER

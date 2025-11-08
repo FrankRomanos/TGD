@@ -4,43 +4,43 @@ using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    /// ÒÆ¶¯±»¾Ü¾øµÄÔ­Òò£¨¿É°´ÐèÔÙÀ©£©
+    /// Æ¶Ü¾Ô­ò£¨¿É°
     public enum MoveBlockReason
     {
         None,
-        NotReady,           // ×é¼þÎ´¾ÍÐ÷
-        Busy,               // ÕýÔÚÒÆ¶¯ÖÐ
-        NoConfig,           // Î´ÅäÖÃ MoveActionConfig
-        Entangled,          // ±»²øÈÆ/½û×ã
-        OnCooldown,         // ÀäÈ´ÖÐ
-        NotEnoughResource,  // ×ÊÔ´²»×ã
-        NoSteps,            // ±¾´Î¿É×ß²½ÊýÎª 0
-        PathBlocked,        // Ñ¡ÖÐ¸ñ²»¿É´ï/±»À¹
+        NotReady,           // Î´
+        Busy,               // Æ¶
+        NoConfig,           // Î´ MoveActionConfig
+        Entangled,          // /
+        OnCooldown,         // È´
+        NotEnoughResource,  // Ô´
+        NoSteps,            // Î¿ß²Îª 0
+        PathBlocked,        // Ñ¡Ð¸ñ²»¿É´/
         NoBudget
     }
 
-    /// µã»÷ÒÆ¶¯Ïà¹ØµÄÊÂ¼þ¡£ÄãÔÚ±ð´¦¶©ÔÄÕâÐ©ÊÂ¼þ£¬»æÖÆ×Ô¼ºµÄ UI ¼´¿É
+    /// Æ¶ØµÂ¼Ú±ð´¦¶Ð©Â¼Ô¼ UI 
     public static class HexMoveEvents
     {
-        // ÏÔÊ¾ / Òþ²Ø ¿É´ï·¶Î§
+        // Ê¾ /  É´ï·¶Î§
         public static event Action<Unit, IEnumerable<Hex>> RangeShown;
         public static event Action RangeHidden;
 
-        // ÒÆ¶¯¹ý³Ì
+        // Æ¶
         public static event Action<Unit, List<Hex>> MoveStarted;
         public static event Action<Unit, Hex, Hex, int, int> MoveStep; // (unit, from, to, stepIndex(1~n), total)
         public static event Action<Unit, Hex> MoveFinished;
-        // ¡ï ÐÂÔö£ºÊ±¼ä·µ»¹£¨±ÈÈç¼ÓËÙÀÛ¼Æ´ïµ½ãÐÖµ£¬+N Ãë£©
+        //  Ê±ä·µÛ¼Æ´ïµ½Öµ+N ë£©
         public static event Action<Unit, int> TimeRefunded;
 
-        // ¡ï ÐÂÔö£ºÃ»ÓÐ¸ü¶àÊ±¼ä£¨Ô¤ËãºÄ¾¡£©
+        //  Ã»Ð¸Ê±ä£¨Ô¤Ä¾
         public static event Action<Unit> NoMoreTime;
-        // ÐÂÔö£ºÃ¿²½ÊÓ¾õËÙ¶ÈÌáÊ¾£¨½âñî£¬Attack/Move ¶¼ÄÜ·¢£©
+        // Ã¿Ó¾Ù¶Ê¾î£¬Attack/Move Ü·
         public static event Action<Unit, float, float> StepSpeedHint;
-        // ±»¾Ü¾ø
+        // Ü¾
         public static event Action<Unit, MoveBlockReason, string> MoveRejected;
 
-        // ¡ª¡ª ¹© HexClickMover µ÷ÓÃµÄ·â×° ¡ª¡ª 
+        //   HexClickMover ÃµÄ·×°  
         internal static void RaiseRangeShown(Unit u, IEnumerable<Hex> cells) => RangeShown?.Invoke(u, cells);
         internal static void RaiseRangeHidden() => RangeHidden?.Invoke();
         internal static void RaiseMoveStarted(Unit u, List<Hex> path) => MoveStarted?.Invoke(u, path);
@@ -48,11 +48,24 @@ namespace TGD.CombatV2
         internal static void RaiseMoveFinished(Unit u, Hex end) => MoveFinished?.Invoke(u, end);
         internal static void RaiseRejected(Unit u, MoveBlockReason r, string msg) => MoveRejected?.Invoke(u, r, msg);
         internal static void RaiseTimeRefunded(Unit u, int seconds)
-    => TimeRefunded?.Invoke(u, seconds);
+            => TimeRefunded?.Invoke(u, seconds);
 
         internal static void RaiseNoMoreTime(Unit u)
             => NoMoreTime?.Invoke(u);
         internal static void RaiseStepSpeed(Unit u, float effMR, float baseMR) => StepSpeedHint?.Invoke(u, effMR, baseMR);
+
+        public static void Reset()
+        {
+            RangeShown = null;
+            RangeHidden = null;
+            MoveStarted = null;
+            MoveStep = null;
+            MoveFinished = null;
+            TimeRefunded = null;
+            NoMoreTime = null;
+            StepSpeedHint = null;
+            MoveRejected = null;
+        }
 
     }
 }

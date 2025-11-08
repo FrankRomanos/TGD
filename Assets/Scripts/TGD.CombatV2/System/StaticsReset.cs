@@ -8,6 +8,7 @@ namespace TGD.CombatV2
         static void ResetAll()
         {
             AttackEventsV2.Reset();
+            HexMoveEvents.Reset();
         }
     }
 }
