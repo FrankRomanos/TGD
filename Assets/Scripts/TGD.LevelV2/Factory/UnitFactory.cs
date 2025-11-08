@@ -509,6 +509,15 @@ namespace TGD.LevelV2
                 attack.RefreshFactoryInjection();
             }
 
+            var hudListeners = go.GetComponentsInChildren<ActionHudMessageListenerTMP>(true);
+            foreach (var hud in hudListeners)
+            {
+                if (hud == null)
+                    continue;
+
+                hud.BindContext(context, resolvedTurnManager);
+            }
+
             var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
             foreach (var animDriver in attackAnimDrivers)
             {
@@ -565,7 +574,7 @@ namespace TGD.LevelV2
                 if (status == null)
                     continue;
 
-                status.Attach(context, resolvedTurnManager);
+                status.BindContext(context, resolvedTurnManager);
             }
         }
 

@@ -1,5 +1,6 @@
-﻿using System.Collections;
+using System.Collections;
 using TMPro;
+using TGD.CoreV2;
 using TGD.HexBoard;
 using UnityEngine;
 using Unit = TGD.CoreV2.Unit;
@@ -12,7 +13,7 @@ namespace TGD.CombatV2
     /// 不依赖 UIV2 / 第三方插件。
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class ActionHudMessageListenerTMP : MonoBehaviour
+    public sealed class ActionHudMessageListenerTMP : MonoBehaviour, IBindContext
     {
         [Header("Targets")]
         public TMP_Text uiText;
@@ -23,7 +24,7 @@ namespace TGD.CombatV2
         public HudKind forcedKind = HudKind.Energy; // 运行时可在 Inspector 切换
 
         [Header("Filter")]
-        public HexBoardTestDriver driver;
+        [SerializeField] UnitRuntimeContext ctx;
         public bool requireUnitMatch = true;
 
         [Header("Sources")]
@@ -57,7 +58,7 @@ namespace TGD.CombatV2
         {
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
         }
 
         void Awake()
@@ -65,7 +66,7 @@ namespace TGD.CombatV2
             if (!uiText) uiText = GetComponentInChildren<TMP_Text>(true);
             if (!root && uiText) root = uiText.rectTransform;
             if (root) _canvasGroup = root.GetComponent<CanvasGroup>() ?? root.gameObject.AddComponent<CanvasGroup>();
-            if (!driver) driver = GetComponentInParent<HexBoardTestDriver>();
+            if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             SetVisible(false, true);
         }
 
@@ -108,7 +109,23 @@ namespace TGD.CombatV2
             if (root) root.localScale = Vector3.one;
         }
 
-        Unit UnitRef => driver ? driver.UnitRef : null;
+        public UnitRuntimeContext Context => ctx;
+        public Unit OwnerUnit => ctx != null ? ctx.boundUnit : null;
+
+        public void BindContext(UnitRuntimeContext context, TurnManagerV2 _)
+        {
+            ctx = context;
+        }
+
+#if UNITY_EDITOR
+        void OnValidate()
+        {
+            if (!ctx)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
+        }
+#endif
+
+        Unit UnitRef => OwnerUnit;
         bool Matches(Unit u) => !requireUnitMatch || (u != null && u == UnitRef);
 
         // ---------- events ----------
