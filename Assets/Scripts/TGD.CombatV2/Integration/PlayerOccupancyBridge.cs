@@ -99,6 +99,17 @@ namespace TGD.CombatV2.Integration
             if (!Application.isPlaying)
                 return;
 
+            // runtime 禁止在 Disable 时释放占位，否则会在重新启用时出现幽灵格子
+        }
+
+        void OnDestroy()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            if (_occ == null && occupancyService != null)
+                _occ = occupancyService.Get();
+
             if (_occ != null && _actor != null && _placed)
             {
                 _occ.Remove(_actor);
