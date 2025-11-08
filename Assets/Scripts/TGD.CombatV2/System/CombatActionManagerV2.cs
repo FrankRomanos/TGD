@@ -2487,6 +2487,8 @@ namespace TGD.CombatV2
                 var budgetFail = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
                 if (budgetFail != null)
                 {
+                    if (raiseHud)
+                        RaiseAimRejectHud(tool, unit ?? ResolveUnit(tool), budgetFail);
                     reason = budgetFail;
                     return false;
                 }
@@ -2494,6 +2496,8 @@ namespace TGD.CombatV2
                 var cooldowns = turnManager.GetCooldowns(unit);
                 if (!IsCooldownReadyForConfirm(tool, cooldowns))
                 {
+                    if (raiseHud)
+                        RaiseAimRejectHud(tool, unit ?? ResolveUnit(tool), "cooldown");
                     reason = "cooldown";
                     return false;
                 }
@@ -2505,6 +2509,50 @@ namespace TGD.CombatV2
             }
 
             return true;
+        }
+
+        void RaiseAimRejectHud(IActionToolV2 tool, Unit unit, string reason)
+        {
+            if (tool == null)
+                return;
+
+            switch (tool)
+            {
+                case HexClickMover:
+                    switch (reason)
+                    {
+                        case "lackTime":
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
+                            break;
+                        case "lackEnergy":
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                            break;
+                        case "cooldown":
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.OnCooldown, null);
+                            break;
+                        default:
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
+                            break;
+                    }
+                    break;
+                case AttackControllerV2:
+                    switch (reason)
+                    {
+                        case "lackTime":
+                            AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.CantMove, "No more time.");
+                            break;
+                        case "lackEnergy":
+                            AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                            break;
+                        case "cooldown":
+                            AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.OnCooldown, "Attack is on cooldown.");
+                            break;
+                        default:
+                            AttackEventsV2.RaiseRejected(unit, AttackRejectReasonV2.NotReady, null);
+                            break;
+                    }
+                    break;
+            }
         }
 
         PlannedCost GetBaselineCost(IActionToolV2 tool)

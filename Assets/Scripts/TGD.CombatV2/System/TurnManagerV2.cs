@@ -1066,13 +1066,23 @@ namespace TGD.CombatV2
         {
             if (runtime == null)
                 return;
-            var unit = runtime.UnitRef;
+            _allMoveRateStatuses.Add(runtime);
+            if (runtime.Context != null)
+                RegisterContext(runtime.Context);
+
+            RemoveMoveRateStatusMapping(runtime);
+
+            var unit = ResolveMoveRateStatusUnit(runtime);
             if (unit == null)
                 return;
-            _moveRateStatuses[unit] = runtime;
-            _allMoveRateStatuses.Add(runtime);
 
-            if (_contextByUnit.TryGetValue(unit, out var context) && context != null)
+            _moveRateStatuses[unit] = runtime;
+
+            if (runtime.Context != null)
+            {
+                _unitByContext[runtime.Context] = unit;
+            }
+            else if (_contextByUnit.TryGetValue(unit, out var context) && context != null)
             {
                 _unitByContext[context] = unit;
                 RegisterContext(context);
@@ -1083,12 +1093,44 @@ namespace TGD.CombatV2
         {
             if (runtime == null)
                 return;
-            var unit = runtime.UnitRef;
-            if (unit == null)
-                return;
-            if (_moveRateStatuses.TryGetValue(unit, out var existing) && existing == runtime)
-                _moveRateStatuses.Remove(unit);
+            RemoveMoveRateStatusMapping(runtime);
             _allMoveRateStatuses.Remove(runtime);
+        }
+
+        void RemoveMoveRateStatusMapping(MoveRateStatusRuntime runtime)
+        {
+            if (runtime == null)
+                return;
+
+            Unit removeKey = null;
+            foreach (var pair in _moveRateStatuses)
+            {
+                if (pair.Value == runtime)
+                {
+                    removeKey = pair.Key;
+                    break;
+                }
+            }
+
+            if (removeKey != null)
+                _moveRateStatuses.Remove(removeKey);
+        }
+
+        Unit ResolveMoveRateStatusUnit(MoveRateStatusRuntime runtime)
+        {
+            if (runtime == null)
+                return null;
+
+            var context = runtime.Context;
+            if (context != null)
+            {
+                if (context.boundUnit != null)
+                    return context.boundUnit;
+                if (_unitByContext.TryGetValue(context, out var mapped) && mapped != null)
+                    return mapped;
+            }
+
+            return runtime.OwnerUnit;
         }
 
         internal void RegisterContext(UnitRuntimeContext context)

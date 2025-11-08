@@ -1,7 +1,6 @@
 // File: TGD.CombatV2/Utility/UnitAutoWireV2.cs
 using UnityEngine;
 using TGD.CoreV2;
-using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
@@ -89,9 +88,9 @@ namespace TGD.CombatV2
                 if (status == null)
                     continue;
 
-                if (status.ctx != context || status.turnManager != turnManager)
+                if (status.Context != context || status.Manager != turnManager)
                 {
-                    status.Attach(context, turnManager);
+                    status.BindContext(context, turnManager);
                     changed = true;
                 }
             }
@@ -101,7 +100,6 @@ namespace TGD.CombatV2
 
         bool AutoWireHudAndAnim()
         {
-            var driver = ResolveDriver();
             bool changed = false;
 
             var hudListeners = GetComponentsInChildren<ActionHudMessageListenerTMP>(true);
@@ -110,9 +108,9 @@ namespace TGD.CombatV2
                 if (hud == null)
                     continue;
 
-                if (driver != null && hud.driver == null)
+                if (context != null && hud.Context != context)
                 {
-                    hud.driver = driver;
+                    hud.BindContext(context, turnManager);
                     changed = true;
                 }
             }
@@ -129,9 +127,9 @@ namespace TGD.CombatV2
                     changed = true;
                 }
 
-                if (driver != null && driver.UnitRef != null)
+                if (context != null && context.boundUnit != null)
                 {
-                    anim.BindUnit(driver.UnitRef);
+                    anim.BindUnit(context.boundUnit);
                 }
             }
 
@@ -151,7 +149,5 @@ namespace TGD.CombatV2
             return changed;
         }
 
-        HexBoardTestDriver ResolveDriver()
-            => GetComponentInParent<HexBoardTestDriver>();
     }
 }
