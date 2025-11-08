@@ -2110,15 +2110,27 @@ namespace TGD.CombatV2
 
                 if (routine != null)
                 {
-                    try
+                    while (true)
                     {
-                        yield return StartCoroutine(routine);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogException(ex, this);
-                        AbortAndRestore(unit, plan, budget, resources, "execException");
-                        yield break;
+                        bool moveNext;
+                        object yielded = null;
+                        try
+                        {
+                            moveNext = routine.MoveNext();
+                            if (moveNext)
+                                yielded = routine.Current;
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogException(ex, this);
+                            AbortAndRestore(unit, plan, budget, resources, "execException");
+                            yield break;
+                        }
+
+                        if (!moveNext)
+                            break;
+
+                        yield return yielded;
                     }
 
                     if (!TryResolveAliveTool(tool, out tool))
