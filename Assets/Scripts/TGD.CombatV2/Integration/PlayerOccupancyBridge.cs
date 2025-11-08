@@ -96,6 +96,11 @@ namespace TGD.CombatV2.Integration
             _actor = _componentAdapter;
         }
 
+        public void Bind(UnitGridAdapter adapter)
+        {
+            EnsureActorBinding(adapter);
+        }
+
         static HexOccupancyService FindSceneService()
         {
 #if UNITY_2023_1_OR_NEWER
