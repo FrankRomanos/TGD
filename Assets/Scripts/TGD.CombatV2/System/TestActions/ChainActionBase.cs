@@ -8,9 +8,6 @@ namespace TGD.CombatV2
 {
     public abstract class ChainActionBase : ActionToolBase, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext, ICursorUser
     {
-        [Header("Owner")]
-        public HexBoardTestDriver driver;
-
         protected UnitRuntimeContext ctx;
         protected TurnManagerV2 turnManager;
 
@@ -51,19 +48,11 @@ namespace TGD.CombatV2
 
         protected virtual void Awake()
         {
-            if (!driver)
-                driver = GetComponentInParent<HexBoardTestDriver>(true);
+            if (!ctx)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
 
             if (!tiler)
-            {
-                tiler = GetComponentInParent<HexBoardTiler>(true);
-                if (!tiler && driver != null)
-                {
-                    tiler = driver.authoring != null
-                        ? driver.authoring.GetComponent<HexBoardTiler>() ?? driver.authoring.GetComponentInParent<HexBoardTiler>(true)
-                        : driver.GetComponentInParent<HexBoardTiler>(true);
-                }
-            }
+                tiler = ResolveTiler();
 
             if (!_validator)
                 _validator = ResolveValidator();
@@ -160,9 +149,12 @@ namespace TGD.CombatV2
 
         public Unit ResolveUnit()
         {
-            if (ctx != null && ctx.boundUnit != null)
-                return ctx.boundUnit;
-            return driver != null ? driver.UnitRef : null;
+            var context = ctx != null ? ctx : GetComponentInParent<UnitRuntimeContext>(true);
+            if (ctx == null && context != null)
+                ctx = context;
+            if (context != null && context.boundUnit != null)
+                return context.boundUnit;
+            return null;
         }
 
         public virtual TargetingSpec GetTargetingSpec()
@@ -197,8 +189,6 @@ namespace TGD.CombatV2
             {
                 if (!_validator)
                     _validator = ctx.GetComponentInParent<DefaultTargetValidator>(true);
-                if (!tiler)
-                    tiler = ctx.GetComponentInParent<HexBoardTiler>(true);
             }
 
             if (!_validator)
@@ -206,7 +196,7 @@ namespace TGD.CombatV2
             if (_validator && targetValidator == null)
                 targetValidator = _validator;
             if (!tiler)
-                tiler = GetComponentInParent<HexBoardTiler>(true);
+                tiler = ResolveTiler();
         }
 
         protected DefaultTargetValidator ResolveValidator()
@@ -220,12 +210,48 @@ namespace TGD.CombatV2
                 return _validator;
             }
 
-            _validator = GetComponent<DefaultTargetValidator>() ?? GetComponentInParent<DefaultTargetValidator>(true);
-            if (!_validator && driver != null)
-                _validator = driver.GetComponentInParent<DefaultTargetValidator>(true);
+            if (ctx != null)
+            {
+                _validator = ctx.GetComponent<DefaultTargetValidator>()
+                    ?? ctx.GetComponentInChildren<DefaultTargetValidator>(true)
+                    ?? ctx.GetComponentInParent<DefaultTargetValidator>(true);
+                if (_validator)
+                {
+                    if (targetValidator == null)
+                        targetValidator = _validator;
+                    return _validator;
+                }
+            }
+
+            _validator = GetComponent<DefaultTargetValidator>()
+                ?? GetComponentInChildren<DefaultTargetValidator>(true)
+                ?? GetComponentInParent<DefaultTargetValidator>(true);
             if (_validator && targetValidator == null)
                 targetValidator = _validator;
             return _validator;
+        }
+
+        HexBoardTiler ResolveTiler()
+        {
+            if (tiler)
+                return tiler;
+
+            if (ctx != null)
+            {
+                var ctxTiler = ctx.GetComponent<HexBoardTiler>()
+                    ?? ctx.GetComponentInChildren<HexBoardTiler>(true)
+                    ?? ctx.GetComponentInParent<HexBoardTiler>(true);
+                if (ctxTiler)
+                {
+                    tiler = ctxTiler;
+                    return tiler;
+                }
+            }
+
+            var resolved = GetComponentInParent<HexBoardTiler>(true) ?? GetComponentInChildren<HexBoardTiler>(true);
+            if (resolved)
+                tiler = resolved;
+            return tiler;
         }
     }
 }
