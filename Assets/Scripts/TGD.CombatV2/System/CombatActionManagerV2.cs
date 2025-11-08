@@ -3419,7 +3419,6 @@ namespace TGD.CombatV2
                     var candidate = toolsForId[j];
                     if (candidate == null)
                         continue;
-
                     if (candidate is SkillDefinitionActionTool defTool && defTool.Definition == null)
                         TryAssignDefinitionFromIndex(defTool, id);
 
@@ -4539,7 +4538,6 @@ namespace TGD.CombatV2
                         if (behaviour is SkillDefinitionActionTool defTool && TryAssignDefinitionFromIndex(defTool, normalized))
                             toolId = NormalizeSkillId(defTool.Id);
                     }
-
                     if (string.Equals(toolId, normalized, StringComparison.OrdinalIgnoreCase))
                         RegisterTool(tool);
                 }
@@ -4550,7 +4548,6 @@ namespace TGD.CombatV2
 
             return null;
         }
-
         bool TryAssignDefinitionFromIndex(SkillDefinitionActionTool tool, string skillId)
         {
             if (tool == null)
@@ -4572,7 +4569,6 @@ namespace TGD.CombatV2
 
             return true;
         }
-
         SkillIndex ResolveSkillIndex()
         {
             if (rulebook is ActionRulebook soRulebook && soRulebook.skillIndex != null)
