@@ -613,7 +613,7 @@ namespace TGD.LevelV2
                 if (watcher == null)
                     continue;
 
-                watcher.Attach(context, resolvedEnv);
+                watcher.RefreshFactoryInjection(context, resolvedEnv);
             }
         }
 

@@ -18,10 +18,14 @@ namespace TGD.HexBoard
 
         public void Attach(UnitRuntimeContext context, HexEnvironmentSystem environment)
         {
-            if (context != null)
-                ctx = context;
-            env = environment != null ? environment : env;
+            ctx = context != null ? context : ResolveContext();
+            env = environment != null ? environment : ResolveEnvironment();
             ResetCache();
+        }
+
+        public void RefreshFactoryInjection(UnitRuntimeContext context = null, HexEnvironmentSystem environment = null)
+        {
+            Attach(context != null ? context : ctx, environment != null ? environment : env);
         }
 
         void OnEnable()
@@ -88,7 +92,9 @@ namespace TGD.HexBoard
             if (env != null)
                 return env;
 
-            env = GetComponent<HexEnvironmentSystem>() ?? GetComponentInParent<HexEnvironmentSystem>(true);
+            env = GetComponent<HexEnvironmentSystem>()
+                  ?? GetComponentInParent<HexEnvironmentSystem>(true)
+                  ?? HexEnvironmentSystem.FindInScene();
             return env;
         }
     }
