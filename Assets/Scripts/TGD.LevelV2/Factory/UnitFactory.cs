@@ -42,6 +42,20 @@ namespace TGD.LevelV2
         DefaultTargetValidator _sharedValidator;
         bool _loggedMissingSkillIndex;
 
+        struct SharedRefs
+        {
+            public TurnManagerV2 turnManager;
+            public CombatActionManagerV2 cam;
+            public HexOccupancyService occupancy;
+            public HexBoardAuthoringLite authoring;
+            public HexBoardTiler tiler;
+            public DefaultTargetValidator validator;
+            public HexEnvironmentSystem environment;
+            public Transform view;
+            public SkillIndex skillIndex;
+            public Camera pickCamera;
+        }
+
         sealed class SpawnRecord
         {
             public GameObject gameObject;
@@ -106,19 +120,22 @@ namespace TGD.LevelV2
             go.name = $"{ResolveDisplayName(final, unitId)} ({final.faction})";
             PlaceTransform(go.transform, spawnHex);
 
-            var adapter = EnsureGridAdapter(go, unit);
-            RegisterTurnSystems(unit, context, cooldownHub, final.faction);
             var resolvedSkillIndex = ResolveSkillIndex();
-            var resolvedTurnManager = WireActionComponents(go, context, cooldownHub, unit, resolvedSkillIndex);
+            var shared = ResolveShared(go, resolvedSkillIndex);
 
-            FinalizeOccupancyChain(go, context, unit, final.faction, adapter, resolvedTurnManager, spawnHex, unit.Facing);
+            RegisterTurnSystems(unit, context, cooldownHub, final.faction, shared.turnManager);
+
+            var adapter = EnsureGridAdapter(go, unit);
+            WireMovementAndAttack(go, context, cooldownHub, unit, ref shared);
+            WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, unit.Facing, ref shared);
+            WireHazardWatchers(go, context, ref shared);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
             var availabilities = UnitActionBinder.Bind(go, context, final.abilities);
-            ApplyAbilityLoadout(go, context, availabilities, cam, resolvedSkillIndex);
+            ApplyAbilityLoadout(go, context, availabilities, shared.cam, shared.skillIndex);
 
             MaybeAutoStartBattle();
             return unit;
@@ -301,60 +318,153 @@ namespace TGD.LevelV2
             return service != null ? service.Get() : null;
         }
 
-        void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction)
+        void RegisterTurnSystems(Unit unit, UnitRuntimeContext context, CooldownHubV2 hub, UnitFaction faction, TurnManagerV2 resolvedTurnManager)
         {
-            if (turnManager != null && unit != null)
-                turnManager.Bind(unit, context);
+            var tm = resolvedTurnManager ?? turnManager;
+            if (tm != null && unit != null)
+            {
+                tm.Bind(unit, context);
+                if (turnManager == null)
+                    turnManager = tm;
+            }
 
             var list = faction == UnitFaction.Friendly ? _friendlies : _enemies;
             if (!list.Contains(unit))
                 list.Add(unit);
         }
 
-        TurnManagerV2 WireActionComponents(
+        SharedRefs ResolveShared(GameObject go, SkillIndex resolvedSkillIndex)
+        {
+            var shared = new SharedRefs
+            {
+                skillIndex = resolvedSkillIndex ?? ResolveSkillIndex(),
+                turnManager = turnManager != null ? turnManager : FindOne<TurnManagerV2>(),
+                cam = cam != null ? cam : FindOne<CombatActionManagerV2>()
+            };
+
+            if (shared.turnManager != null && turnManager == null)
+                turnManager = shared.turnManager;
+            if (shared.cam != null && cam == null)
+                cam = shared.cam;
+
+            if (shared.cam != null && shared.cam.pickCamera != null)
+                shared.pickCamera = shared.cam.pickCamera;
+
+            if (shared.pickCamera == null)
+                shared.pickCamera = Camera.main;
+
+            if (shared.cam != null && shared.cam.rulebook != null && shared.skillIndex != null)
+            {
+                if (shared.cam.rulebook.includeSkillIndexDerivedLinks)
+                    shared.cam.rulebook.skillIndex = shared.skillIndex;
+            }
+
+            shared.occupancy = occupancyService != null ? occupancyService : (shared.turnManager != null ? shared.turnManager.occupancyService : null);
+            if (shared.occupancy == null)
+                shared.occupancy = ResolveOccupancyService();
+            if (occupancyService == null && shared.occupancy != null)
+                occupancyService = shared.occupancy;
+
+            shared.authoring = shared.occupancy != null ? shared.occupancy.authoring : null;
+            if (shared.authoring == null && shared.cam != null)
+                shared.authoring = shared.cam.authoring;
+            if (shared.authoring == null)
+                shared.authoring = FindOne<HexBoardAuthoringLite>();
+
+            shared.tiler = shared.cam != null ? shared.cam.tiler : null;
+            if (shared.tiler == null && shared.authoring != null)
+                shared.tiler = shared.authoring.GetComponentInChildren<HexBoardTiler>(true);
+            if (shared.tiler == null)
+                shared.tiler = FindOne<HexBoardTiler>();
+
+            shared.validator = shared.cam != null ? shared.cam.GetComponentInChildren<DefaultTargetValidator>(true) : null;
+            if (shared.validator == null && shared.authoring != null)
+                shared.validator = shared.authoring.GetComponentInChildren<DefaultTargetValidator>(true);
+            if (shared.validator == null)
+                shared.validator = _sharedValidator != null ? _sharedValidator : FindOne<DefaultTargetValidator>();
+            if (shared.validator != null)
+                _sharedValidator = shared.validator;
+
+            if (shared.occupancy != null)
+            {
+                shared.environment = shared.occupancy.GetComponent<HexEnvironmentSystem>();
+                if (shared.environment == null && shared.occupancy.authoring != null)
+                {
+                    shared.environment = shared.occupancy.authoring.GetComponent<HexEnvironmentSystem>()
+                                         ?? shared.occupancy.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+                }
+            }
+            if (shared.environment == null && shared.authoring != null)
+            {
+                shared.environment = shared.authoring.GetComponent<HexEnvironmentSystem>()
+                                     ?? shared.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+            }
+            if (shared.environment == null && shared.turnManager != null)
+                shared.environment = shared.turnManager.environment;
+            if (shared.environment == null)
+                shared.environment = FindOne<HexEnvironmentSystem>();
+
+            shared.view = go != null
+                ? go.GetComponentInChildren<Animator>(true)?.transform
+                  ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
+                  ?? go.transform
+                : null;
+
+            return shared;
+        }
+
+        void WireMovementAndAttack(
             GameObject go,
             UnitRuntimeContext context,
             CooldownHubV2 hub,
             Unit unit,
-            SkillIndex resolvedSkillIndex)
+            ref SharedRefs shared)
         {
             if (go == null)
-                return turnManager;
+                return;
 
-            var resolvedTurnManager = turnManager ?? FindOne<TurnManagerV2>();
-            var resolvedCam = cam ?? FindOne<CombatActionManagerV2>();
+            var resolvedTurnManager = shared.turnManager ?? turnManager;
+            var resolvedCam = shared.cam ?? cam;
+            if (resolvedCam != null && cam == null)
+                cam = resolvedCam;
 
-            if (resolvedCam != null && resolvedCam.rulebook != null && resolvedSkillIndex != null)
+            var resolvedAuthoring = shared.authoring;
+            var resolvedTiler = shared.tiler;
+            var resolvedValidator = shared.validator;
+            var resolvedOccupancy = shared.occupancy;
+            var resolvedEnv = shared.environment;
+            var view = shared.view ?? go.transform;
+            var resolvedCamera = shared.pickCamera != null ? shared.pickCamera : Camera.main;
+            shared.pickCamera = resolvedCamera;
+            if (resolvedEnv == null)
             {
-                if (resolvedCam.rulebook.includeSkillIndexDerivedLinks && resolvedCam.rulebook.skillIndex == null)
-                {
-                    resolvedCam.rulebook.skillIndex = resolvedSkillIndex;
-                }
+                resolvedEnv = FindOne<HexEnvironmentSystem>();
+                if (resolvedEnv != null)
+                    shared.environment = resolvedEnv;
             }
 
-            var resolvedAuthoring = occupancyService != null ? occupancyService.authoring : null;
-            if (resolvedAuthoring == null && resolvedCam != null)
-                resolvedAuthoring = resolvedCam.authoring;
-            if (resolvedAuthoring == null)
-                resolvedAuthoring = FindOne<HexBoardAuthoringLite>();
+            var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
+            MoveRateStatusRuntime primaryStatus = statuses != null && statuses.Length > 0 ? statuses[0] : null;
 
-            var resolvedTiler = (resolvedCam != null ? resolvedCam.tiler : null)
-                                ?? (resolvedAuthoring != null ? resolvedAuthoring.GetComponentInChildren<HexBoardTiler>(true) : null)
-                                ?? FindOne<HexBoardTiler>();
+            MoveRateStatusRuntime ResolveStatusFor(Component owner)
+            {
+                if (owner == null)
+                    return primaryStatus;
 
-            var resolvedValidator = (resolvedCam != null ? resolvedCam.GetComponentInChildren<DefaultTargetValidator>(true) : null)
-                                    ?? (resolvedAuthoring != null ? resolvedAuthoring.GetComponentInChildren<DefaultTargetValidator>(true) : null)
-                                    ?? FindOne<DefaultTargetValidator>();
-            if (resolvedValidator != null && _sharedValidator == null)
-                _sharedValidator = resolvedValidator;
+                var fromSelf = owner.GetComponent<MoveRateStatusRuntime>();
+                if (fromSelf != null)
+                    return fromSelf;
 
-            var resolvedOccupancy = occupancyService
-                                    ?? (resolvedTurnManager != null ? resolvedTurnManager.occupancyService : null)
-                                    ?? FindOne<HexOccupancyService>();
+                var fromParent = owner.GetComponentInParent<MoveRateStatusRuntime>(true);
+                if (fromParent != null)
+                    return fromParent;
 
-            var view = go.GetComponentInChildren<Animator>(true)?.transform
-                    ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
-                    ?? go.transform;
+                var fromChildren = owner.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                if (fromChildren != null)
+                    return fromChildren;
+
+                return primaryStatus;
+            }
 
             var movers = go.GetComponentsInChildren<HexClickMover>(true);
             foreach (var mover in movers)
@@ -364,16 +474,24 @@ namespace TGD.LevelV2
 
                 mover.ctx = context;
                 mover.AttachTurnManager(resolvedTurnManager);
-                if (!mover.authoring)
-                    mover.authoring = resolvedAuthoring;
-                if (!mover.tiler)
-                    mover.tiler = resolvedTiler;
-                if (!mover.targetValidator)
-                    mover.targetValidator = resolvedValidator;
-                if (!mover.occupancyService)
-                    mover.occupancyService = resolvedOccupancy;
+                mover.authoring = resolvedAuthoring;
+                mover.tiler = resolvedTiler;
+                mover.targetValidator = resolvedValidator;
+                mover.occupancyService = resolvedOccupancy;
+                mover.env = resolvedEnv;
+                mover.status = ResolveStatusFor(mover);
+                mover.stickySource = resolvedEnv;
                 mover.viewOverride = view;
+                mover.pickCamera = resolvedCamera;
+                if (resolvedCam != null)
+                {
+                    mover.pickMask = resolvedCam.pickMask;
+                    mover.pickPlaneY = resolvedCam.pickPlaneY;
+                    mover.rayMaxDistance = resolvedCam.rayMaxDistance;
+                }
                 mover.driver = null;
+                mover.bridgeOverride = null;
+                mover.RefreshFactoryInjection();
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -382,12 +500,10 @@ namespace TGD.LevelV2
                 if (moveCost == null)
                     continue;
 
-                if (moveCost.stats == null)
-                    moveCost.stats = context != null ? context.stats : null;
-                if (moveCost.cooldownHub == null)
-                    moveCost.cooldownHub = hub;
+                moveCost.stats = context != null ? context.stats : null;
+                moveCost.cooldownHub = hub;
                 moveCost.ctx = context;
-                moveCost.turnManager = turnManager;
+                moveCost.turnManager = resolvedTurnManager;
             }
 
             var attacks = go.GetComponentsInChildren<AttackControllerV2>(true);
@@ -399,16 +515,17 @@ namespace TGD.LevelV2
                 attack.ctx = context;
                 attack.turnManager = resolvedTurnManager;
                 attack.AttachTurnManager(resolvedTurnManager);
-                attack.driver = null;
-                if (!attack.authoring)
-                    attack.authoring = resolvedAuthoring;
-                if (!attack.tiler)
-                    attack.tiler = resolvedTiler;
-                if (!attack.targetValidator)
-                    attack.targetValidator = resolvedValidator;
-                if (!attack.occupancyService)
-                    attack.occupancyService = resolvedOccupancy;
+                attack.authoring = resolvedAuthoring;
+                attack.tiler = resolvedTiler;
+                attack.targetValidator = resolvedValidator;
+                attack.occupancyService = resolvedOccupancy;
+                attack.env = resolvedEnv;
+                attack.status = ResolveStatusFor(attack);
+                attack.stickySource = resolvedEnv;
                 attack.viewOverride = view;
+                attack.driver = null;
+                attack.bridgeOverride = null;
+                attack.RefreshFactoryInjection();
             }
 
             var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
@@ -417,8 +534,7 @@ namespace TGD.LevelV2
                 if (animDriver == null)
                     continue;
 
-                if (animDriver.ctx == null)
-                    animDriver.ctx = context;
+                animDriver.ctx = context;
                 if (unit != null)
                     animDriver.BindUnit(unit);
             }
@@ -429,8 +545,7 @@ namespace TGD.LevelV2
                 if (listener == null)
                     continue;
 
-                if (listener.ctx == null)
-                    listener.ctx = context;
+                listener.ctx = context;
             }
 
             var chainActions = go.GetComponentsInChildren<ChainActionBase>(true);
@@ -440,12 +555,9 @@ namespace TGD.LevelV2
                     continue;
 
                 chain.BindContext(context, resolvedTurnManager);
-                if (chain.targetValidator == null)
-                    chain.targetValidator = resolvedValidator;
-                if (chain.tiler == null)
-                    chain.tiler = resolvedTiler;
-                if (chain.driver != null)
-                    chain.driver = null;
+                chain.targetValidator = resolvedValidator;
+                chain.tiler = resolvedTiler;
+                chain.driver = null;
             }
 
             var unitMoveListeners = go.GetComponentsInChildren<UnitMoveAnimListener>(true);
@@ -454,10 +566,8 @@ namespace TGD.LevelV2
                 if (listener == null)
                     continue;
 
-                if (listener.ctx == null)
-                    listener.ctx = context;
-                if (listener.mover == null)
-                    listener.mover = listener.GetComponent<HexClickMover>() ?? listener.GetComponentInParent<HexClickMover>(true);
+                listener.ctx = context;
+                listener.mover = listener.GetComponent<HexClickMover>() ?? listener.GetComponentInParent<HexClickMover>(true);
             }
 
             var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
@@ -466,22 +576,170 @@ namespace TGD.LevelV2
                 if (driver == null)
                     continue;
 
-                if (cam != null)
-                    driver.actionManager = cam;
-                driver.turnManager = turnManager;
+                driver.actionManager = resolvedCam;
+                driver.turnManager = resolvedTurnManager;
             }
 
-            var statuses = go.GetComponentsInChildren<MoveRateStatusRuntime>(true);
             foreach (var status in statuses)
             {
                 if (status == null)
                     continue;
-                status.turnManager = turnManager;
-                if (turnManager != null)
-                    status.AttachTurnManager(turnManager);
+
+                status.Attach(context, resolvedTurnManager);
+            }
+        }
+
+        void WireHazardWatchers(GameObject go, UnitRuntimeContext context, ref SharedRefs shared)
+        {
+            if (go == null)
+                return;
+
+            var resolvedEnv = shared.environment;
+            if (resolvedEnv == null)
+            {
+                resolvedEnv = FindOne<HexEnvironmentSystem>();
+                if (resolvedEnv != null)
+                    shared.environment = resolvedEnv;
             }
 
-            return resolvedTurnManager;
+            var watchers = go.GetComponentsInChildren<HexHazardWatcher>(true);
+            if (watchers == null || watchers.Length == 0)
+                return;
+
+            for (int i = 0; i < watchers.Length; i++)
+            {
+                var watcher = watchers[i];
+                if (watcher == null)
+                    continue;
+
+                watcher.RefreshFactoryInjection(context, resolvedEnv);
+            }
+        }
+
+        void WireOccupancy(
+            GameObject go,
+            UnitRuntimeContext context,
+            Unit unit,
+            UnitFaction faction,
+            ref UnitGridAdapter adapter,
+            Hex spawn,
+            Facing4 facing,
+            ref SharedRefs shared)
+        {
+            if (go == null)
+                return;
+
+            var occSvc = shared.occupancy;
+            if (occSvc == null)
+                occSvc = occupancyService;
+            if (occSvc == null && shared.turnManager != null)
+                occSvc = shared.turnManager.occupancyService;
+            if (occSvc == null)
+                occSvc = ResolveOccupancyService();
+
+            shared.occupancy = occSvc;
+            if (occupancyService == null && occSvc != null)
+                occupancyService = occSvc;
+
+            if (shared.environment == null && occSvc != null)
+            {
+                shared.environment = occSvc.GetComponent<HexEnvironmentSystem>();
+                if (shared.environment == null && occSvc.authoring != null)
+                {
+                    shared.environment = occSvc.authoring.GetComponent<HexEnvironmentSystem>()
+                                        ?? occSvc.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+                }
+            }
+
+            if (shared.authoring == null && occSvc != null)
+                shared.authoring = occSvc.authoring;
+
+            var resolvedEnv = shared.environment;
+
+            var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
+            if (adapter == null)
+                adapter = EnsureGridAdapter(go, bound);
+            else if (adapter.Unit == null && bound != null)
+                adapter.Unit = bound;
+
+            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
+            if (bridge != null)
+            {
+                bridge.occupancyService = occSvc;
+                if (defaultFootprint != null)
+                    bridge.overrideFootprint = defaultFootprint;
+            }
+
+            if (bridge != null && adapter != null)
+                bridge.Bind(adapter);
+
+            var face = bound != null ? bound.Facing : facing;
+            if (bridge != null)
+            {
+                bool placed = bridge.PlaceImmediate(spawn, face);
+                if (!placed)
+                {
+                    Debug.LogWarning($"[Factory] Failed to immediately place {bound?.Id ?? go.name} at {spawn}.", go);
+                    bridge.EnsurePlacedNow();
+                }
+            }
+
+            if (bridge != null)
+            {
+                foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
+                {
+                    if (mover == null)
+                        continue;
+
+                    mover.bridgeOverride = bridge;
+                    mover.occupancyService = occSvc;
+                    if (resolvedEnv != null)
+                    {
+                        mover.env = resolvedEnv;
+                        if (mover.status == null)
+                        {
+                            mover.status = mover.GetComponent<MoveRateStatusRuntime>()
+                                          ?? mover.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                          ?? mover.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                        }
+                        mover.stickySource = resolvedEnv;
+                        mover.RefreshFactoryInjection();
+                    }
+                }
+
+                foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+                {
+                    if (attack == null)
+                        continue;
+
+                    attack.bridgeOverride = bridge;
+                    attack.occupancyService = occSvc;
+                    if (resolvedEnv != null)
+                    {
+                        attack.env = resolvedEnv;
+                        if (attack.status == null)
+                        {
+                            attack.status = attack.GetComponent<MoveRateStatusRuntime>()
+                                            ?? attack.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                            ?? attack.GetComponentInChildren<MoveRateStatusRuntime>(true);
+                        }
+                        attack.stickySource = resolvedEnv;
+                        attack.RefreshFactoryInjection();
+                    }
+                }
+            }
+
+            var tm = shared.turnManager ?? turnManager;
+            if (tm != null && bound != null)
+            {
+                bool isFriendly = faction == UnitFaction.Friendly;
+                tm.RegisterSpawn(bound, isFriendly);
+                bool isEnemy = tm.IsEnemyUnit(bound);
+                bool isPlayer = tm.IsPlayerUnit(bound);
+                Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
+            }
+
+            EnsureDefaultValidatorInjected(shared);
         }
 
         SkillIndex ResolveSkillIndex()
@@ -511,9 +769,18 @@ namespace TGD.LevelV2
         {
             if (occupancyService != null)
                 return occupancyService;
+
+            HexOccupancyService resolved = null;
             if (turnManager != null && turnManager.occupancyService != null)
-                return turnManager.occupancyService;
-            return FindOne<HexOccupancyService>();
+                resolved = turnManager.occupancyService;
+
+            if (resolved == null)
+                resolved = FindOne<HexOccupancyService>();
+
+            if (resolved != null && occupancyService == null)
+                occupancyService = resolved;
+
+            return resolved;
         }
 
         static UnitGridAdapter EnsureGridAdapter(GameObject go, Unit unit)
@@ -525,126 +792,6 @@ namespace TGD.LevelV2
             if (unit != null)
                 adapter.Unit = unit;
             return adapter;
-        }
-
-        void FinalizeOccupancyChain(
-            GameObject go,
-            UnitRuntimeContext context,
-            Unit unit,
-            UnitFaction faction,
-            UnitGridAdapter adapter,
-            TurnManagerV2 resolvedTurnManager,
-            Hex spawn,
-            Facing4 facing)
-        {
-            if (go == null)
-                return;
-
-            var occSvc = ResolveOccupancyService();
-            if (occSvc != null)
-                Debug.Log($"[Factory] OccSvc instance={occSvc.GetInstanceID()} for {unit?.Id}", this);
-
-            var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
-            if (adapter == null)
-                adapter = EnsureGridAdapter(go, bound);
-            else if (adapter.Unit == null && bound != null)
-                adapter.Unit = bound;
-
-            WireOccupancyBinding(go, context, ref adapter, occSvc, spawn, facing);
-
-            if (occupancyService == null && occSvc != null)
-                occupancyService = occSvc;
-
-            var tm = resolvedTurnManager != null ? resolvedTurnManager : turnManager;
-
-            if (tm != null && bound != null)
-            {
-                bool isFriendly = faction == UnitFaction.Friendly;
-                tm.RegisterSpawn(bound, isFriendly);
-                bool isEnemy = tm.IsEnemyUnit(bound);
-                bool isPlayer = tm.IsPlayerUnit(bound);
-                Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
-            }
-
-            EnsureDefaultValidatorInjected(occSvc, tm);
-        }
-
-        PlayerOccupancyBridge WireOccupancyBinding(
-            GameObject go,
-            UnitRuntimeContext ctx,
-            ref UnitGridAdapter adapter,
-            HexOccupancyService occSvc,
-            Hex spawn,
-            Facing4 facing)
-        {
-            if (go == null)
-                return null;
-
-            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
-            if (bridge != null)
-            {
-                if (!bridge.occupancyService && occSvc)
-                    bridge.occupancyService = occSvc;
-                if (bridge.overrideFootprint == null && defaultFootprint != null)
-                    bridge.overrideFootprint = defaultFootprint;
-            }
-
-            if (adapter == null)
-                adapter = go.GetComponent<UnitGridAdapter>() ?? go.AddComponent<UnitGridAdapter>();
-
-            var bound = ctx != null ? ctx.boundUnit : null;
-            if (bound == null && adapter != null)
-                bound = adapter.Unit;
-
-            if (ctx == null)
-                ctx = go.GetComponent<UnitRuntimeContext>();
-
-            if (bound == null && ctx != null)
-                bound = ctx.boundUnit;
-
-            if (bound != null && adapter != null)
-                adapter.Unit = bound;
-
-            if (bridge != null && adapter != null)
-                bridge.Bind(adapter);
-
-            foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
-            {
-                if (mover == null)
-                    continue;
-
-                if (occSvc != null && mover.occupancyService == null)
-                    mover.occupancyService = occSvc;
-                if (bridge != null && mover.bridgeOverride == null)
-                    mover.bridgeOverride = bridge;
-            }
-
-            foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
-            {
-                if (attack == null)
-                    continue;
-
-                if (occSvc != null && attack.occupancyService == null)
-                    attack.occupancyService = occSvc;
-                if (bridge != null && attack.bridgeOverride == null)
-                    attack.bridgeOverride = bridge;
-            }
-
-            var face = facing;
-            if (bound != null)
-                face = bound.Facing;
-
-            if (bridge != null)
-            {
-                bool placed = bridge.PlaceImmediate(spawn, face);
-                if (!placed)
-                {
-                    Debug.LogWarning($"[Factory] Failed to immediately place {bound?.Id ?? go.name} at {spawn}.", go);
-                    bridge.EnsurePlacedNow();
-                }
-            }
-
-            return bridge;
         }
 
         static void ApplyAbilityLoadout(
@@ -836,27 +983,36 @@ namespace TGD.LevelV2
             }
         }
 
-        void EnsureDefaultValidatorInjected(HexOccupancyService occSvc, TurnManagerV2 tm)
+        void EnsureDefaultValidatorInjected(in SharedRefs shared)
         {
+            var tm = shared.turnManager ?? turnManager;
             if (tm == null)
-                tm = turnManager;
+                tm = FindOne<TurnManagerV2>();
 
-            if (occSvc == null)
-                occSvc = ResolveOccupancyService();
+            var occSvc = shared.occupancy ?? ResolveOccupancyService();
 
-            var validator = _sharedValidator != null ? _sharedValidator : FindOne<DefaultTargetValidator>();
+            var validator = shared.validator ?? _sharedValidator ?? FindOne<DefaultTargetValidator>();
             if (validator == null)
                 return;
 
             _sharedValidator = validator;
 
-            HexEnvironmentSystem env = null;
-            if (occSvc != null)
+            HexEnvironmentSystem env = shared.environment;
+            if (env == null && occSvc != null)
             {
                 env = occSvc.GetComponent<HexEnvironmentSystem>();
-                if (!env && occSvc.authoring != null)
+                if (env == null && occSvc.authoring != null)
                     env = occSvc.authoring.GetComponent<HexEnvironmentSystem>() ?? occSvc.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
             }
+
+            if (env == null && shared.authoring != null)
+                env = shared.authoring.GetComponent<HexEnvironmentSystem>() ?? shared.authoring.GetComponentInParent<HexEnvironmentSystem>(true);
+
+            if (env == null && shared.turnManager != null)
+                env = shared.turnManager.environment;
+
+            if (env == null)
+                env = FindOne<HexEnvironmentSystem>();
 
             validator.InjectServices(tm, occSvc, env);
         }

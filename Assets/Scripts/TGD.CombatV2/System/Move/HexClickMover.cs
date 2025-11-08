@@ -21,6 +21,7 @@ namespace TGD.CombatV2
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
+        [HideInInspector]
         public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
         public HexBoardTiler tiler;      // 着色
         public DefaultTargetValidator targetValidator;
@@ -29,9 +30,11 @@ namespace TGD.CombatV2
         public UnitRuntimeContext ctx;            // ★ 新增
 
         [Header("Bridge (optional)")]
+        [HideInInspector]
         public PlayerOccupancyBridge bridgeOverride;   // ★ 新增
 
         [Header("View (optional)")]
+        [HideInInspector]
         public Transform viewOverride;                 // ★ 新增
         [Header("Debug")]                         // ★ 新增（若你已有 debugLog 就跳过）
         public bool debugLog = true;
@@ -39,16 +42,20 @@ namespace TGD.CombatV2
 
         // === 新增：临时回合时间（无 TurnManager 时自管理） ===
         [Header("Turn Manager Binding")]
+        [HideInInspector]
         public bool UseTurnManager = true;
+        [HideInInspector]
         public bool ManageEnergyLocally = false;
+        [HideInInspector]
         public bool ManageTurnTimeLocally = false;
         TurnManagerV2 _turnManager;
 
         [Header("Turn Time (TEMP no-TM)")]
+        [HideInInspector]
         public bool simulateTurnTime = true;
         [Tooltip("基础回合时间（秒）")]
+        [HideInInspector]
         public int baseTurnSeconds = 6;
-        [SerializeField, Tooltip("当前剩余回合秒数（运行时）")]
         int _turnSecondsLeft = -1;
         int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
         public string CooldownKey => ResolveMoveSkillId();
@@ -543,10 +550,9 @@ namespace TGD.CombatV2
         void Awake()
         {
             _cost = costProvider as IMoveCostService;
-            _painter = new HexAreaPainter(tiler);
+            RefreshPainterAndSticky(markPreviewDirty: false);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
-            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
             if (driver == null)
                 driver = GetComponentInParent<HexBoardTestDriver>(true);
@@ -583,6 +589,36 @@ namespace TGD.CombatV2
                 maxRangeHexes = -1
             };
             EnsureBound();
+        }
+
+        void RefreshPainterAndSticky(bool markPreviewDirty)
+        {
+            if (tiler != null)
+            {
+                _painter?.Clear();
+                _painter = new HexAreaPainter(tiler);
+            }
+            else if (_painter != null)
+            {
+                _painter.Clear();
+                _painter = null;
+            }
+
+            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+
+            if (markPreviewDirty)
+            {
+                _paths.Clear();
+                _previewDirty = true;
+                _previewAnchorVersion = -1;
+                _planAnchorVersion = -1;
+                _showing = false;
+            }
+        }
+
+        public void RefreshFactoryInjection()
+        {
+            RefreshPainterAndSticky(markPreviewDirty: true);
         }
 
         void Start()
