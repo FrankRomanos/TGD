@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -265,7 +265,7 @@ namespace TGD.CombatV2.Integration
             return svc != null && svc.IsFree(anchor, fp, facing);
         }
 
-        public bool GetActor(Unit unit, Hex anchor, out IGridActor actor)
+        public bool GetActor(Unit unit, Hex anchor, out CoreV2.IGridActor actor)
         {
             var svc = ResolveService();
             if (svc != null)
