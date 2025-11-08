@@ -47,8 +47,9 @@ namespace TGD.CombatV2
             ApplyDefinition();
         }
 
-        void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             ApplyDefinition();
         }
 

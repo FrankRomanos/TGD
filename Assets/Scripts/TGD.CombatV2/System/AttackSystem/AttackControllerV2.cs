@@ -45,7 +45,7 @@ namespace TGD.CombatV2
 
         [Header("Turn Manager Binding")]
         [SerializeField, HideInInspector]
-        TurnManagerV2 turnManager;
+        public TurnManagerV2 turnManager;
         TurnManagerV2 _boundTurnManager;
 
         [Header("Animation")]
