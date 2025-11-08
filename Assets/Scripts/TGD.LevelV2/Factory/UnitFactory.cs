@@ -6,7 +6,6 @@ using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
 using TGD.HexBoard;
-using TGD.HexBoard.Environment;
 using UnityEngine;
 
 namespace TGD.LevelV2
