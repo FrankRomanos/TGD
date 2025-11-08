@@ -9,6 +9,7 @@ using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
+    [DisallowMultipleComponent]
     [AddComponentMenu("TGD/CombatV2/Skill Definition Action Tool")]
     public sealed class SkillDefinitionActionTool : ChainActionBase, IActionResolveEffect, IFullRoundActionTool, IActionCostPreviewV2, ICooldownKeyProvider
     {
@@ -28,6 +29,13 @@ namespace TGD.CombatV2
 
         string ICooldownKeyProvider.CooldownKey => CooldownId;
 
+        public void SetId(string value)
+        {
+            string normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (!string.Equals(skillId, normalized, StringComparison.Ordinal))
+                skillId = normalized;
+        }
+
         void Reset()
         {
             ApplyDefinition();
@@ -39,8 +47,9 @@ namespace TGD.CombatV2
             ApplyDefinition();
         }
 
-        void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             ApplyDefinition();
         }
 
@@ -149,7 +158,7 @@ namespace TGD.CombatV2
             yield return base.OnConfirm(hex);
 
             if (Kind != ActionKind.FullRound)
-                LogConfirm(ResolveUnit(), hex);
+                LogConfirm(OwnerUnit, hex);
         }
 
         bool IActionCostPreviewV2.TryPeekCost(out int seconds, out int energy)

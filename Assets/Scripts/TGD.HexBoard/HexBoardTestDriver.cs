@@ -1,10 +1,12 @@
 ﻿// File: TGD.HexBoard/HexBoardTestDriver.cs
+using System;
 using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
     [DisallowMultipleComponent]
+    [Obsolete("HexBoardTestDriver is deprecated; prefer UnitFactory pipelines and runtime binding.")]
     public sealed class HexBoardTestDriver : MonoBehaviour, IUnitView, IUnitAvatarSource
     {
         public HexBoardAuthoringLite authoring;

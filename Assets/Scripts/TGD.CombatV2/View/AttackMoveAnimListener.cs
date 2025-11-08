@@ -18,21 +18,21 @@ namespace TGD.CombatV2
         int _runningId;
         bool _prevRM;
         AttackControllerV2 _attack;
-        Unit UnitRef
+        Unit OwnerUnit
         {
             get
             {
                 if (ctx != null && ctx.boundUnit != null)
                     return ctx.boundUnit;
-                if (_attack != null && _attack.ctx != null && _attack.ctx.boundUnit != null)
+                if (_attack != null && _attack.Ctx != null && _attack.Ctx.boundUnit != null)
                 {
-                    ctx = _attack.ctx;
+                    ctx = _attack.Ctx;
                     return ctx.boundUnit;
                 }
                 return null;
             }
         }
-        bool Match(Unit u) => u != null && u == UnitRef;
+        bool Match(Unit u) => u != null && u == OwnerUnit;
 
         void Reset()
         {

@@ -123,9 +123,9 @@ namespace TGD.CombatV2
             if (_attack == null)
                 _attack = GetComponentInParent<AttackControllerV2>(true);
 
-            if (_attack != null && _attack.ctx != null && _attack.ctx.boundUnit != null)
+            if (_attack != null && _attack.Ctx != null && _attack.Ctx.boundUnit != null)
             {
-                ctx = _attack.ctx;
+                ctx = _attack.Ctx;
                 _unit = ctx.boundUnit;
             }
         }

@@ -27,7 +27,7 @@ namespace TGD.CombatV2
         float _product = 1f;
         TurnManagerV2 _subscribedManager;
 
-        public Unit UnitRef => ctx != null ? ctx.boundUnit : null;
+        public Unit OwnerUnit => ctx != null ? ctx.boundUnit : null;
 
         public readonly struct EntrySnapshot
         {
@@ -150,7 +150,7 @@ namespace TGD.CombatV2
 
         Entry GetOrCreateEntry(string tag, bool exclusive, float mult, int turns, string source)
         {
-            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+            var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
             if (_entriesByTag.TryGetValue(tag, out var existing) && existing != null)
             {
                 existing.mult = mult;
@@ -232,7 +232,7 @@ namespace TGD.CombatV2
                 _entriesByTag.Remove(entry.tag);
                 if (log)
                 {
-                    var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+                    var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
                     Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
                 }
             }
@@ -252,7 +252,7 @@ namespace TGD.CombatV2
                 return;
 
             bool changed = false;
-            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+            var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
                 var entry = _entries[i];
