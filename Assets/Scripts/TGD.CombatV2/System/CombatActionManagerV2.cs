@@ -2,7 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.CoreV2.Rules;
@@ -106,6 +108,10 @@ namespace TGD.CombatV2
         int _bonusPlanDepth = -1;
         Unit _activeUnit;
         UnitRuntimeContext _activeCtx;
+        readonly HashSet<DerivedScopeKey> _derivedScopes = new();
+        int _actionTokenSequence;
+        int _currentActionToken;
+        bool _auditedGlobalTools;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -166,6 +172,47 @@ namespace TGD.CombatV2
             public ICooldownSink cooldowns;
         }
 
+        readonly struct ChainOptionDedupKey : IEquatable<ChainOptionDedupKey>
+        {
+            public readonly string ownerId;
+            public readonly string toolId;
+            public readonly ActionKind kind;
+            public readonly Type toolType;
+
+            public ChainOptionDedupKey(string ownerId, string toolId, ActionKind kind, Type toolType)
+            {
+                this.ownerId = ownerId ?? string.Empty;
+                this.toolId = toolId ?? string.Empty;
+                this.kind = kind;
+                this.toolType = toolType;
+            }
+
+            public bool Equals(ChainOptionDedupKey other)
+            {
+                return ownerId == other.ownerId
+                    && toolId == other.toolId
+                    && kind == other.kind
+                    && toolType == other.toolType;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ChainOptionDedupKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = ownerId.GetHashCode();
+                    hash = (hash * 397) ^ toolId.GetHashCode();
+                    hash = (hash * 397) ^ (int)kind;
+                    hash = (hash * 397) ^ (toolType != null ? toolType.GetHashCode() : 0);
+                    return hash;
+                }
+            }
+        }
+
         struct ChainQueuedAction
         {
             public IActionToolV2 tool;
@@ -183,6 +230,59 @@ namespace TGD.CombatV2
             public ITurnBudget budget;
             public IResourcePool resources;
             public int depth;
+        }
+
+        enum DerivedCandidateSource
+        {
+            Tools
+        }
+
+        enum DerivedCandidateWhy
+        {
+            Ok,
+            ToolInvalid,
+            WrongKind,
+            NullOwner,
+            OwnerMismatch,
+            NotLearned,
+            CostInvalid,
+            BudgetFail,
+            OnCooldown
+        }
+
+        readonly struct DerivedScopeKey : IEquatable<DerivedScopeKey>
+        {
+            public readonly string ownerId;
+            public readonly string baseId;
+            public readonly int token;
+
+            public DerivedScopeKey(string ownerId, string baseId, int token)
+            {
+                this.ownerId = ownerId ?? string.Empty;
+                this.baseId = baseId ?? string.Empty;
+                this.token = token;
+            }
+
+            public bool Equals(DerivedScopeKey other)
+            {
+                return ownerId == other.ownerId && baseId == other.baseId && token == other.token;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is DerivedScopeKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = ownerId.GetHashCode();
+                    hash = (hash * 397) ^ baseId.GetHashCode();
+                    hash = (hash * 397) ^ token;
+                    return hash;
+                }
+            }
         }
 
         struct ChainQueueOutcome
@@ -220,6 +320,20 @@ namespace TGD.CombatV2
 
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
+        struct ChainOptionDebug
+        {
+            public string toolId;
+            public ActionKind kind;
+            public Unit owner;
+            public string reason;
+            public int secs;
+            public int energy;
+            public KeyCode key;
+        }
+
+        readonly List<ChainOptionDebug> _chainDiagnostics = new();
+        readonly Dictionary<string, string> _chainDiagLast = new(StringComparer.Ordinal);
+        readonly Dictionary<string, string> _chainPromptLast = new(StringComparer.Ordinal);
         readonly List<ChainOption> _derivedBuffer = new();
         readonly List<ChainPopupOptionData> _chainPopupOptionBuffer = new();
         Unit _currentChainFocus;
@@ -786,6 +900,8 @@ namespace TGD.CombatV2
             if (!Application.isPlaying)
                 return;
 
+            AuditGlobalTools();
+
             if (turnManager != null)
             {
                 turnManager.TurnStarted += OnTurnStarted;
@@ -858,6 +974,44 @@ namespace TGD.CombatV2
         {
             if (ReferenceEquals(s_gateHubInstance, this))
                 s_gateHubInstance = null;
+        }
+
+        void AuditGlobalTools()
+        {
+            if (_auditedGlobalTools)
+                return;
+            if (!debugLog)
+                return;
+            if (!Application.isPlaying)
+                return;
+
+            var behaviours = Resources.FindObjectsOfTypeAll<MonoBehaviour>();
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                var behaviour = behaviours[i];
+                if (behaviour == null)
+                    continue;
+
+                if (behaviour is not IActionToolV2)
+                    continue;
+
+                var go = behaviour.gameObject;
+                if (go == null)
+                    continue;
+
+                var scene = go.scene;
+                if (!scene.IsValid() || !scene.isLoaded)
+                    continue;
+
+                var context = behaviour.GetComponentInParent<UnitRuntimeContext>(true);
+                if (context != null)
+                    continue;
+
+                string path = GetHierarchyPath(go);
+                Debug.LogWarning($"[Guard] Global IActionToolV2 found outside Unit: {behaviour.name} @ {path}", behaviour);
+            }
+
+            _auditedGlobalTools = true;
         }
 
         void HandleFactoryTurnStarted(Unit unit)
@@ -1874,6 +2028,9 @@ namespace TGD.CombatV2
             _endTurnGuardDepth++;
             int previousDepth = _chainDepth;
             _chainDepth = chainDepth;
+            int parentToken = _currentActionToken;
+            int actionToken = ++_actionTokenSequence;
+            _currentActionToken = actionToken;
             try
             {
                 _phase = Phase.Executing;
@@ -1920,6 +2077,8 @@ namespace TGD.CombatV2
             }
             finally
             {
+                ClearDerivedScopeForToken(actionToken);
+                _currentActionToken = parentToken;
                 _chainDepth = previousDepth;
                 _endTurnGuardDepth = Mathf.Max(0, _endTurnGuardDepth - 1);
                 TryFinalizeEndTurn();
@@ -2041,7 +2200,7 @@ namespace TGD.CombatV2
 
             var derivedQueue = new List<DerivedQueuedAction>();
             var cooldowns = (turnManager != null && unit != null) ? turnManager.GetCooldowns(unit) : null;
-            bool shouldDerived = ShouldRunDerivedWindow(unit, aliveTool);
+            bool shouldDerived = ShouldRunDerivedWindow(unit, aliveTool, plan.kind);
             bool skipDerived = shouldDerived && _pendingEndTurn && IsPendingEndTurnFor(unit);
             if (shouldDerived && !skipDerived)
                 yield return RunDerivedWindow(unit, aliveTool, plan, report, budget, resources, cooldowns, derivedQueue);
@@ -2248,6 +2407,13 @@ namespace TGD.CombatV2
         {
             if (debugLog)
                 Debug.Log(message, this);
+        }
+
+        void ChainDebugLog(string message)
+        {
+            if (!debugLog)
+                return;
+            Debug.Log(message, this);
         }
 
         void CleanupAfterAbort(IActionToolV2 tool, bool logCancel)
@@ -2494,7 +2660,34 @@ namespace TGD.CombatV2
                 || kind == ActionKind.Derived;
         }
 
-        bool ShouldRunDerivedWindow(Unit unit, IActionToolV2 baseTool)
+        string NormalizeDerivedScopeId(string baseSkillId)
+        {
+            var normalized = NormalizeSkillId(baseSkillId);
+            if (!string.IsNullOrEmpty(normalized))
+                return normalized;
+            return string.IsNullOrEmpty(baseSkillId) ? string.Empty : baseSkillId;
+        }
+
+        bool CanEnterDerivedScope(Unit owner, string baseSkillId)
+        {
+            var key = new DerivedScopeKey(owner != null ? owner.Id : string.Empty, NormalizeDerivedScopeId(baseSkillId), _currentActionToken);
+            return !_derivedScopes.Contains(key);
+        }
+
+        void MarkDerivedScope(Unit owner, string baseSkillId)
+        {
+            var key = new DerivedScopeKey(owner != null ? owner.Id : string.Empty, NormalizeDerivedScopeId(baseSkillId), _currentActionToken);
+            _derivedScopes.Add(key);
+        }
+
+        void ClearDerivedScopeForToken(int token)
+        {
+            if (token <= 0)
+                return;
+            _derivedScopes.RemoveWhere(key => key.token == token);
+        }
+
+        bool ShouldRunDerivedWindow(Unit unit, IActionToolV2 baseTool, string baseSkillId)
         {
             if (unit == null || baseTool == null)
                 return false;
@@ -2505,7 +2698,10 @@ namespace TGD.CombatV2
             if (!turnManager.IsPlayerUnit(unit))
                 return false;
 
-            return IsDerivedSourceKind(baseTool.Kind);
+            if (!IsDerivedSourceKind(baseTool.Kind))
+                return false;
+
+            return CanEnterDerivedScope(unit, baseSkillId);
         }
 
         KeyCode ResolveChainKey(string id)
@@ -2522,7 +2718,73 @@ namespace TGD.CombatV2
             return KeyCode.None;
         }
 
-        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending, bool isEnemyPhase, bool restrictToOwner)
+        bool ShouldPreferChainOption(ChainOption candidate, ChainOption existing)
+        {
+            bool candidateIsDefinition = candidate.tool is SkillDefinitionActionTool;
+            bool existingIsDefinition = existing.tool is SkillDefinitionActionTool;
+            if (candidateIsDefinition == existingIsDefinition)
+                return false;
+            return !candidateIsDefinition && existingIsDefinition;
+        }
+
+        void DeduplicateChainOptions(List<ChainOption> options)
+        {
+            if (options == null || options.Count <= 1)
+                return;
+
+            var keep = new List<ChainOption>(options.Count);
+            var map = new Dictionary<ChainOptionDedupKey, (ChainOption option, int index)>();
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                var option = options[i];
+                string ownerId = option.owner != null ? option.owner.Id : string.Empty;
+                string toolId = string.Empty;
+                Type toolType = null;
+
+                if (option.tool != null)
+                {
+                    try
+                    {
+                        toolId = NormalizeSkillId(option.tool.Id) ?? option.tool.Id ?? string.Empty;
+                    }
+                    catch (MissingReferenceException)
+                    {
+                        toolId = string.Empty;
+                    }
+
+                    try
+                    {
+                        toolType = option.tool.GetType();
+                    }
+                    catch (MissingReferenceException)
+                    {
+                        toolType = null;
+                    }
+                }
+
+                var key = new ChainOptionDedupKey(ownerId, toolId, option.kind, toolType);
+
+                if (!map.TryGetValue(key, out var existing))
+                {
+                    int index = keep.Count;
+                    keep.Add(option);
+                    map[key] = (option, index);
+                    continue;
+                }
+
+                if (ShouldPreferChainOption(option, existing.option))
+                {
+                    keep[existing.index] = option;
+                    map[key] = (option, existing.index);
+                }
+            }
+
+            options.Clear();
+            options.AddRange(keep);
+        }
+
+        List<ChainOption> BuildChainOptions(Unit unit, ITurnBudget budget, IResourcePool resources, int baseTimeCost, IReadOnlyList<ActionKind> allowedKinds, ICooldownSink cooldowns, ISet<IActionToolV2> pending, bool isEnemyPhase, bool restrictToOwner, List<ChainOptionDebug> diagnostics = null)
         {
             _chainBuffer.Clear();
             if (allowedKinds == null || allowedKinds.Count == 0)
@@ -2531,33 +2793,66 @@ namespace TGD.CombatV2
             var rules = ResolveRules();
             bool allowFriendlyInsertion = !restrictToOwner && (isEnemyPhase || (rules?.AllowFriendlyInsertions() ?? false));
             bool enforceReactionWithinBase = rules?.ReactionMustBeWithinBaseTime() ?? true;
+            diagnostics?.Clear();
 
             foreach (var pair in _toolsById)
             {
                 foreach (var candidate in pair.Value)
                 {
-                    if (!TryResolveAliveTool(candidate, out var tool))
+                    IActionToolV2 resolvedTool;
+                    if (!TryResolveAliveTool(candidate, out resolvedTool))
+                    {
+                        diagnostics?.Add(new ChainOptionDebug
+                        {
+                            toolId = candidate?.Id,
+                            kind = candidate != null ? candidate.Kind : ActionKind.Standard,
+                            owner = null,
+                            reason = "toolUnavailable",
+                            secs = -1,
+                            energy = -1,
+                            key = KeyCode.None
+                        });
                         continue;
+                    }
 
-                    var owner = ResolveUnit(tool);
+                    var owner = ResolveUnit(resolvedTool);
+                    string toolId = resolvedTool.Id;
+                    ActionKind kind = resolvedTool.Kind;
+
+                    bool Reject(string reason, int secsValue = -1, int energyValue = -1, KeyCode keyValue = KeyCode.None)
+                    {
+                        diagnostics?.Add(new ChainOptionDebug
+                        {
+                            toolId = toolId,
+                            kind = kind,
+                            owner = owner,
+                            reason = reason,
+                            secs = secsValue,
+                            energy = energyValue,
+                            key = keyValue
+                        });
+                        return true;
+                    }
+
                     if (restrictToOwner && owner != unit)
-                        continue;
+                        if (Reject("restrictOwner")) continue;
                     if (!allowFriendlyInsertion && owner != unit)
-                        continue;
+                        if (Reject("ownerMismatch")) continue;
                     if (allowFriendlyInsertion && owner == null)
-                        continue;
+                        if (Reject("ownerMissing")) continue;
+
                     var ownerCtx = ResolveContext(owner);
-                    if (!IsToolGrantedForContext(ownerCtx, tool))
-                        continue;
+                    if (!IsToolGrantedForContext(ownerCtx, resolvedTool))
+                        if (Reject("notGranted")) continue;
                     if (allowFriendlyInsertion && isEnemyPhase)
                     {
                         if (turnManager == null || owner == null || !turnManager.IsPlayerUnit(owner))
-                            continue;
+                            if (Reject("ownerNotPlayer")) continue;
                     }
                     else if (allowFriendlyInsertion && owner != unit)
                     {
                         if (turnManager != null && turnManager.IsEnemyUnit(owner))
-                            continue;
+                            if (Reject("ownerIsEnemy")) continue;
                     }
 
                     ITurnBudget ownerBudget = budget;
@@ -2566,7 +2861,7 @@ namespace TGD.CombatV2
                     if (owner != unit)
                     {
                         if (turnManager == null)
-                            continue;
+                            if (Reject("noTurnManager")) continue;
 
                         ownerBudget = turnManager.GetBudget(owner);
                         ownerResources = turnManager.GetResources(owner);
@@ -2574,17 +2869,17 @@ namespace TGD.CombatV2
                     }
 
                     if (allowFriendlyInsertion && ownerBudget == null && ownerResources == null && ownerCooldowns == null)
-                        continue;
+                        if (Reject("noHandles")) continue;
                     if (turnManager != null && owner != null && turnManager.HasActiveFullRound(owner))
-                        continue;
+                        if (Reject("fullRound")) continue;
 
-                    if (pending != null && pending.Contains(tool))
-                        continue;
+                    if (pending != null && pending.Contains(resolvedTool))
+                        if (Reject("pending")) continue;
 
                     bool kindAllowed = false;
                     for (int i = 0; i < allowedKinds.Count; i++)
                     {
-                        if (allowedKinds[i] == tool.Kind)
+                        if (allowedKinds[i] == resolvedTool.Kind)
                         {
                             kindAllowed = true;
                             break;
@@ -2592,58 +2887,240 @@ namespace TGD.CombatV2
                     }
 
                     if (!kindAllowed)
-                        continue;
+                        if (Reject("kindNotAllowed")) continue;
 
-                    if (tool.Kind == ActionKind.Derived)
-                        continue;
+                    if (resolvedTool.Kind == ActionKind.Derived)
+                        if (Reject("skipDerived")) continue;
 
-                    var cost = GetBaselineCost(tool);
+                    var cost = GetBaselineCost(resolvedTool);
                     if (!cost.valid)
-                        continue;
+                        if (Reject("costInvalid")) continue;
 
                     int secs = cost.TotalSeconds;
                     int energy = cost.TotalEnergy;
 
-                    if (tool.Kind == ActionKind.Reaction)
+                    if (resolvedTool.Kind == ActionKind.Reaction)
                     {
                         if (enforceReactionWithinBase)
                         {
                             if (baseTimeCost <= 0 && secs > 0)
-                                continue;
+                                if (Reject("reactionNoBase", secs, energy)) continue;
                             if (secs > baseTimeCost)
-                                continue;
+                                if (Reject("reactionTime", secs, energy)) continue;
                         }
                     }
 
-                    if (tool.Kind == ActionKind.Free && secs != 0)
-                        continue;
+                    if (resolvedTool.Kind == ActionKind.Free && secs != 0)
+                        if (Reject("freeHasTime", secs, energy)) continue;
 
-                    if (!MeetsBudget(owner, secs, energy, ownerBudget, ownerResources))
-                        continue;
+                    string budgetFail = EvaluateBudgetFailure(owner, secs, energy, ownerBudget, ownerResources);
+                    if (budgetFail != null)
+                        if (Reject($"budget:{budgetFail}", secs, energy)) continue;
 
-                    if (ownerCooldowns != null && !IsCooldownReadyForConfirm(tool, ownerCooldowns))
-                        continue;
+                    if (ownerCooldowns != null && !IsCooldownReadyForConfirm(resolvedTool, ownerCooldowns))
+                        if (Reject("cooldown", secs, energy)) continue;
 
-                    var key = ResolveChainKey(tool.Id);
+                    var key = ResolveChainKey(resolvedTool.Id);
                     if (key == KeyCode.None)
-                        continue;
+                        if (Reject("noKey", secs, energy)) continue;
 
                     _chainBuffer.Add(new ChainOption
                     {
-                        tool = tool,
+                        tool = resolvedTool,
                         key = key,
                         secs = secs,
                         energy = energy,
-                        kind = tool.Kind,
+                        kind = resolvedTool.Kind,
                         owner = owner,
                         budget = ownerBudget,
                         resources = ownerResources,
                         cooldowns = ownerCooldowns
                     });
+
+                    diagnostics?.Add(new ChainOptionDebug
+                    {
+                        toolId = toolId,
+                        kind = kind,
+                        owner = owner,
+                        reason = "ok",
+                        secs = secs,
+                        energy = energy,
+                        key = key
+                    });
                 }
             }
 
             return _chainBuffer;
+        }
+
+        ActionKind? ResolveActionKindForLogging(string skillId, SkillIndex index)
+        {
+            var normalized = NormalizeSkillId(skillId);
+            if (string.IsNullOrEmpty(normalized))
+                return null;
+
+            if (index != null && index.TryGet(normalized, out var info) && info.definition != null)
+                return info.definition.ActionKind;
+
+            if (_toolsById.TryGetValue(normalized, out var list) && list != null)
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var entry = list[i];
+                    if (TryResolveAliveTool(entry, out var tool))
+                        return tool.Kind;
+                }
+            }
+
+            return null;
+        }
+
+        void LogLearnedChainActions(string contextLabel)
+        {
+            if (!debugLog || turnManager == null)
+                return;
+
+            var index = ResolveSkillIndex();
+
+            void LogSide(bool isPlayerSide)
+            {
+                var units = turnManager.GetSideUnits(isPlayerSide);
+                if (units == null)
+                    return;
+
+                foreach (var unit in units)
+                {
+                    if (unit == null)
+                        continue;
+
+                    var ctx = turnManager.GetContext(unit);
+                    var learned = ctx?.LearnedActions;
+                    var reaction = new List<string>();
+                    var free = new List<string>();
+
+                    if (learned != null)
+                    {
+                        for (int i = 0; i < learned.Count; i++)
+                        {
+                            string id = learned[i];
+                            var kind = ResolveActionKindForLogging(id, index);
+                            if (kind == ActionKind.Reaction)
+                                reaction.Add(NormalizeSkillId(id) ?? id);
+                            else if (kind == ActionKind.Free)
+                                free.Add(NormalizeSkillId(id) ?? id);
+                        }
+                    }
+
+                    string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
+                    string context = string.IsNullOrEmpty(contextLabel) ? "?" : contextLabel;
+                    string reactionText = reaction.Count > 0 ? string.Join(", ", reaction) : string.Empty;
+                    string freeText = free.Count > 0 ? string.Join(", ", free) : string.Empty;
+                    string learnedText = (learned != null && learned.Count > 0) ? string.Join(", ", learned) : string.Empty;
+                    ChainDebugLog($"[ChainDiag] Learned base={context} unit={unitLabel} Reaction=[{reactionText}] Free=[{freeText}] All=[{learnedText}]");
+                }
+            }
+
+            LogSide(true);
+            LogSide(false);
+        }
+
+        void LogChainDiagnostics(Unit baseUnit, string basePlanKind, string stageLabel, int baseTimeCost, bool isEnemyPhase, List<ChainOptionDebug> diagnostics)
+        {
+            if (!debugLog || diagnostics == null)
+                return;
+
+            string baseLabel = string.IsNullOrEmpty(basePlanKind) ? "?" : basePlanKind;
+            string stage = string.IsNullOrEmpty(stageLabel) ? "?" : stageLabel;
+            string ownerLabel = baseUnit != null ? TurnManagerV2.FormatUnitLabel(baseUnit) : "?";
+
+            var entries = new System.Text.StringBuilder();
+            if (diagnostics.Count > 0)
+            {
+                for (int i = 0; i < diagnostics.Count; i++)
+                {
+                    var entry = diagnostics[i];
+                    if (i > 0)
+                        entries.Append(", ");
+
+                    string optionOwner = entry.owner != null ? TurnManagerV2.FormatUnitLabel(entry.owner) : "?";
+                    string optionId = string.IsNullOrEmpty(entry.toolId) ? "?" : entry.toolId;
+                    string reason = string.IsNullOrEmpty(entry.reason) ? "unknown" : entry.reason;
+
+                    entries.Append(optionOwner);
+                    entries.Append(':');
+                    entries.Append(optionId);
+                    entries.Append('(');
+                    entries.Append(reason);
+                    if (entry.secs >= 0)
+                    {
+                        entries.Append(";secs=");
+                        entries.Append(entry.secs);
+                    }
+                    if (entry.energy >= 0)
+                    {
+                        entries.Append(";energy=");
+                        entries.Append(entry.energy);
+                    }
+                    if (entry.key != KeyCode.None)
+                    {
+                        entries.Append(";key=");
+                        entries.Append(entry.key);
+                    }
+                    entries.Append(')');
+                }
+            }
+
+            string list = entries.ToString();
+            string phase = isEnemyPhase ? "Enemy" : "Player";
+            int secs = Mathf.Max(0, baseTimeCost);
+            string message = $"[ChainDiag] base={baseLabel} owner={ownerLabel} stage={stage} baseSecs={secs} phase={phase} -> [{list}]";
+            string key = $"{baseLabel}|{ownerLabel}|{stage}|{phase}";
+            if (_chainDiagLast.TryGetValue(key, out var last) && string.Equals(last, message, StringComparison.Ordinal))
+                return;
+
+            _chainDiagLast[key] = message;
+            ChainDebugLog(message);
+        }
+
+        void LogChainPrompt(Unit baseUnit, string baseKind, string stageLabel, string phaseLabel, IList<string> entries)
+        {
+            if (!debugLog)
+                return;
+
+            string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
+            string ownerLabel = baseUnit != null ? TurnManagerV2.FormatUnitLabel(baseUnit) : "?";
+            string stage = string.IsNullOrEmpty(stageLabel) ? "?" : stageLabel;
+            string content = (entries != null && entries.Count > 0) ? string.Join(", ", entries) : string.Empty;
+            string message = $"[ChainPrompt] owner={ownerLabel} base={baseLabel} stage={stage} {phaseLabel}=[{content}]";
+            string key = $"{ownerLabel}|{baseLabel}|{stage}|{phaseLabel}";
+            if (_chainPromptLast.TryGetValue(key, out var last) && string.Equals(last, message, StringComparison.Ordinal))
+                return;
+
+            _chainPromptLast[key] = message;
+            ChainDebugLog(message);
+        }
+
+        void LogDerivedDiagnostics(Unit owner, string baseKind, DerivedCandidateSource source, List<string> entries)
+        {
+            if (!debugLog)
+                return;
+
+            string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
+            string ownerLabel = owner != null ? TurnManagerV2.FormatUnitLabel(owner) : "?";
+            string list = entries != null && entries.Count > 0 ? string.Join(", ", entries) : string.Empty;
+            ChainDebugLog($"[ChainDiag] base={baseLabel} owner={ownerLabel} stage=W4.5 src={source} -> [{list}]");
+        }
+
+        void LogChainAllowedKinds(Unit owner, string baseKind, string stageLabel, IReadOnlyList<ActionKind> kinds)
+        {
+            if (!debugLog)
+                return;
+
+            string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
+            string ownerLabel = owner != null ? TurnManagerV2.FormatUnitLabel(owner) : "?";
+            string stage = string.IsNullOrEmpty(stageLabel) ? "?" : stageLabel;
+            string allowed = (kinds != null && kinds.Count > 0) ? string.Join(",", kinds) : string.Empty;
+            ChainDebugLog($"[ChainDiag] base={baseLabel} owner={ownerLabel} stage={stage} allowed=[{allowed}]");
         }
 
         static string FormatChainStageLabel(int depth)
@@ -2894,10 +3371,78 @@ namespace TGD.CombatV2
             };
         }
 
-        void UpdateChainPopupStage(IChainPopupUI popup, string label, List<ChainOption> options, bool showSkip)
+        void UpdateChainPopupStage(IChainPopupUI popup, Unit baseUnit, string baseKind, string label, List<ChainOption> options, bool showSkip)
         {
             if (popup == null)
                 return;
+
+            if (options != null && label == "W4.5" && baseUnit != null)
+            {
+                for (int i = options.Count - 1; i >= 0; i--)
+                {
+                    var option = options[i];
+                    bool hasTool = TryResolveAliveTool(option.tool, out var resolvedTool);
+                    var resolvedOwner = hasTool ? ResolveUnit(resolvedTool) : null;
+                    bool bad = option.owner == null || option.owner != baseUnit;
+                    if (!bad)
+                    {
+                        bad = !hasTool || resolvedOwner == null || resolvedOwner != baseUnit;
+                    }
+
+                    if (bad)
+                    {
+                        string expected = TurnManagerV2.FormatUnitLabel(baseUnit);
+                        string got = resolvedOwner != null
+                            ? TurnManagerV2.FormatUnitLabel(resolvedOwner)
+                            : (option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?");
+                        string optionId = hasTool
+                            ? (string.IsNullOrEmpty(resolvedTool.Id) ? "?" : resolvedTool.Id)
+                            : (option.tool != null ? (string.IsNullOrEmpty(option.tool.Id) ? "?" : option.tool.Id) : "?");
+                        Debug.LogWarning($"[ChainGuard] DROP foreign/anonymous candidate owner={expected} got={got} id={optionId}", this);
+                        options.RemoveAt(i);
+                        continue;
+                    }
+
+                    if (hasTool && !ReferenceEquals(option.tool, resolvedTool))
+                    {
+                        option.tool = resolvedTool;
+                        options[i] = option;
+                    }
+                }
+            }
+
+            if (debugLog)
+            {
+                var rawEntries = new List<string>(options != null ? options.Count : 0);
+                if (options != null)
+                {
+                    for (int i = 0; i < options.Count; i++)
+                    {
+                        var option = options[i];
+                        string ownerLabel = option.owner != null ? TurnManagerV2.FormatUnitLabel(option.owner) : "?";
+                        string optionId = "?";
+                        if (option.tool != null)
+                        {
+                            try
+                            {
+                                optionId = string.IsNullOrEmpty(option.tool.Id) ? "?" : option.tool.Id;
+                            }
+                            catch (MissingReferenceException)
+                            {
+                                optionId = "?";
+                            }
+                        }
+
+                        int instanceId = 0;
+                        if (option.tool is UnityEngine.Object unityObj && !Dead(unityObj))
+                            instanceId = unityObj.GetInstanceID();
+
+                        rawEntries.Add(ownerLabel + ":" + optionId + "@" + instanceId);
+                    }
+                }
+
+                LogChainPrompt(baseUnit, baseKind, label, "RAW", rawEntries);
+            }
 
             _chainPopupOptionBuffer.Clear();
             if (options != null && options.Count > 1)
@@ -2942,6 +3487,21 @@ namespace TGD.CombatV2
                     groupLabel));
             }
 
+            if (debugLog)
+            {
+                var finalEntries = new List<string>(_chainPopupOptionBuffer.Count);
+                for (int i = 0; i < _chainPopupOptionBuffer.Count; i++)
+                {
+                    var entry = _chainPopupOptionBuffer[i];
+                    string identifier = string.IsNullOrEmpty(entry.Id) ? "?" : entry.Id;
+                    if (!string.IsNullOrEmpty(entry.GroupLabel))
+                        identifier = entry.GroupLabel + ":" + identifier;
+                    finalEntries.Add(identifier);
+                }
+
+                LogChainPrompt(baseUnit, baseKind, label, "FINAL", finalEntries);
+            }
+
             popup.UpdateStage(new ChainPopupStageData(label, _chainPopupOptionBuffer, showSkip));
         }
 
@@ -2978,6 +3538,12 @@ namespace TGD.CombatV2
         IEnumerator RunChainWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, int baseTimeCost, List<ChainQueuedAction> pendingActions, Action<bool> onComplete, bool restrictToOwner = false, bool allowOwnerCancel = false)
         {
             _chainWindowDepth++;
+            if (_chainWindowDepth == 1)
+            {
+                _chainDiagLast.Clear();
+                _chainPromptLast.Clear();
+                LogLearnedChainActions(basePlan.kind);
+            }
             PushInputSuppression();
             SetChainFocus(unit);
 
@@ -3036,9 +3602,16 @@ namespace TGD.CombatV2
                     List<ActionKind> stageNextKinds = null;
                     bool stageSuppressCancel = false;
                     HashSet<Unit> stageFullRoundLogged = depth == 0 ? new HashSet<Unit>() : null;
+                    bool stageAllowedLogged = false;
 
                     while (stageActive)
                     {
+                        if (!stageAllowedLogged)
+                        {
+                            LogChainAllowedKinds(unit, basePlan.kind, label, stageKinds);
+                            stageAllowedLogged = true;
+                        }
+
                         if (stageSuppressCancel)
                         {
                             stageSuppressCancel = false;
@@ -3046,7 +3619,9 @@ namespace TGD.CombatV2
                             continue;
                         }
 
-                        var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase, restrictToOwner);
+                        var options = BuildChainOptions(unit, budget, resources, baseTimeCost, stageKinds, cooldowns, pendingSet, isEnemyPhase, restrictToOwner, _chainDiagnostics);
+                        DeduplicateChainOptions(options);
+                        LogChainDiagnostics(unit, basePlan.kind, label, baseTimeCost, isEnemyPhase, _chainDiagnostics);
                         if (stageOwnersUsed.Count > 0 && options.Count > 0)
                         {
                             for (int i = options.Count - 1; i >= 0; --i)
@@ -3176,7 +3751,7 @@ namespace TGD.CombatV2
                         }
 
                         if (popupOpened)
-                            UpdateChainPopupStage(popup, label, ownerOptions, true);
+                            UpdateChainPopupStage(popup, unit, basePlan.kind, label, ownerOptions, true);
 
                         if (_pendingEndTurn)
                         {
@@ -3398,11 +3973,26 @@ namespace TGD.CombatV2
             }
         }
 
-        List<ChainOption> BuildDerivedOptions(Unit unit, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, IReadOnlyList<string> allowedIds)
+        List<ChainOption> BuildDerivedOptions(Unit unit, string baseKindId, ITurnBudget budget, IResourcePool resources, ICooldownSink cooldowns, IReadOnlyList<string> allowedIds)
         {
             _derivedBuffer.Clear();
+            List<string> diagnostics = debugLog ? new List<string>() : null;
+
             if (allowedIds == null || allowedIds.Count == 0)
+            {
+                LogDerivedDiagnostics(unit, baseKindId, DerivedCandidateSource.Tools, diagnostics);
                 return _derivedBuffer;
+            }
+
+            void Append(Unit owner, string toolId, DerivedCandidateWhy why)
+            {
+                if (diagnostics == null)
+                    return;
+
+                string ownerLabel = owner != null ? TurnManagerV2.FormatUnitLabel(owner) : "?";
+                string idLabel = string.IsNullOrEmpty(toolId) ? "?" : toolId;
+                diagnostics.Add($"{ownerLabel}:{idLabel}({why})");
+            }
 
             for (int i = 0; i < allowedIds.Count; i++)
             {
@@ -3411,14 +4001,20 @@ namespace TGD.CombatV2
                     continue;
 
                 var toolsForId = EnsureToolsForId(unit, id);
-                if (toolsForId == null)
+                if (toolsForId == null || toolsForId.Count == 0)
+                {
+                    Append(null, id, DerivedCandidateWhy.ToolInvalid);
                     continue;
+                }
 
                 for (int j = 0; j < toolsForId.Count; j++)
                 {
                     var candidate = toolsForId[j];
                     if (candidate == null)
+                    {
+                        Append(null, id, DerivedCandidateWhy.ToolInvalid);
                         continue;
+                    }
                     if (candidate is SkillDefinitionActionTool defTool && defTool.Definition == null)
                         TryAssignDefinitionFromIndex(defTool, id);
 
@@ -3426,31 +4022,57 @@ namespace TGD.CombatV2
                         behaviour.enabled = true;
 
                     if (!TryResolveAliveTool(candidate, out var tool))
+                    {
+                        Append(null, id, DerivedCandidateWhy.ToolInvalid);
                         continue;
+                    }
 
                     if (tool.Kind != ActionKind.Derived)
+                    {
+                        Append(ResolveUnit(tool), tool.Id, DerivedCandidateWhy.WrongKind);
                         continue;
+                    }
 
                     var owner = ResolveUnit(tool);
-                    if (owner != unit)
+                    if (owner == null)
+                    {
+                        Append(null, tool.Id, DerivedCandidateWhy.NullOwner);
                         continue;
+                    }
+                    if (owner != unit)
+                    {
+                        Append(owner, tool.Id, DerivedCandidateWhy.OwnerMismatch);
+                        continue;
+                    }
 
                     var ownerCtx = ResolveContext(owner);
                     if (!IsToolGrantedForContext(ownerCtx, tool))
+                    {
+                        Append(owner, tool.Id, DerivedCandidateWhy.NotLearned);
                         continue;
+                    }
 
                     var cost = GetBaselineCost(tool);
                     if (!cost.valid)
+                    {
+                        Append(owner, tool.Id, DerivedCandidateWhy.CostInvalid);
                         continue;
+                    }
 
                     int secs = cost.TotalSeconds;
                     int energy = cost.TotalEnergy;
 
                     if (!MeetsBudget(unit, secs, energy, budget, resources))
+                    {
+                        Append(owner, tool.Id, DerivedCandidateWhy.BudgetFail);
                         continue;
+                    }
 
                     if (cooldowns != null && !IsCooldownReadyForConfirm(tool, cooldowns))
+                    {
+                        Append(owner, tool.Id, DerivedCandidateWhy.OnCooldown);
                         continue;
+                    }
 
                     var key = ResolveChainKey(tool.Id);
 
@@ -3460,11 +4082,18 @@ namespace TGD.CombatV2
                         key = key,
                         secs = secs,
                         energy = energy,
-                        kind = tool.Kind
+                        kind = tool.Kind,
+                        owner = owner,
+                        budget = budget,
+                        resources = resources,
+                        cooldowns = cooldowns
                     });
+
+                    Append(owner, tool.Id, DerivedCandidateWhy.Ok);
                 }
             }
 
+            LogDerivedDiagnostics(unit, baseKindId, DerivedCandidateSource.Tools, diagnostics);
             return _derivedBuffer;
         }
 
@@ -3514,7 +4143,16 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                var options = BuildDerivedOptions(unit, budget, resources, cooldowns, allowedIds);
+                MarkDerivedScope(unit, basePlan.kind);
+
+                if (debugLog && allowedIds != null && allowedIds.Count > 0)
+                {
+                    string edgeList = string.Join(", ", allowedIds);
+                    ChainDebugLog($"[Rulebook] DerivedLinks from {basePlan.kind} -> [{edgeList}] (NOT used for candidates)");
+                }
+
+                var options = BuildDerivedOptions(unit, basePlan.kind, budget, resources, cooldowns, allowedIds);
+                DeduplicateChainOptions(options);
                 Log($"[Chain] DerivedPromptOpen(from={basePlan.kind}, count={options.Count}, baseSuccess=true)");
 
                 if (options.Count == 0)
@@ -3530,7 +4168,7 @@ namespace TGD.CombatV2
                 {
                     popup.OpenWindow(BuildDerivedPopupWindow(unit, baseTool, basePlan, isEnemyPhase));
                     popup.SetAnchor(ResolveChainAnchor(unit));
-                    UpdateChainPopupStage(popup, "W4.5", options, true);
+                    UpdateChainPopupStage(popup, unit, basePlan.kind, "W4.5", options, true);
                     popupOpened = true;
                 }
 
@@ -3574,7 +4212,7 @@ namespace TGD.CombatV2
                                 }
 
                                 if (!resolved && popupOpened)
-                                    UpdateChainPopupStage(popup, "W4.5", options, true);
+                                    UpdateChainPopupStage(popup, unit, basePlan.kind, "W4.5", options, true);
 
                                 continue;
                             }
@@ -3631,7 +4269,14 @@ namespace TGD.CombatV2
 
                 PopInputSuppression();
                 if (_chainWindowDepth > 0)
+                {
                     _chainWindowDepth--;
+                    if (_chainWindowDepth == 0)
+                    {
+                        _chainDiagLast.Clear();
+                        _chainPromptLast.Clear();
+                    }
+                }
             }
         }
 
@@ -4577,6 +5222,24 @@ namespace TGD.CombatV2
             return null;
         }
 
+        static string GetHierarchyPath(GameObject go)
+        {
+            if (go == null)
+                return "?";
+
+            var builder = new StringBuilder();
+            var current = go.transform;
+            while (current != null)
+            {
+                if (builder.Length > 0)
+                    builder.Insert(0, '/');
+                builder.Insert(0, current.name);
+                current = current.parent;
+            }
+
+            return builder.Length > 0 ? builder.ToString() : "?";
+        }
+
         static string NormalizeSkillId(string skillId)
         {
             return string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
@@ -4591,36 +5254,7 @@ namespace TGD.CombatV2
             if (string.IsNullOrEmpty(normalized))
                 return false;
 
-            if (grants.Contains(normalized))
-                return true;
-
-            var index = ResolveSkillIndex();
-            if (index == null)
-                return false;
-
-            return IsDerivedFromGranted(index, normalized, grants, 0);
-        }
-
-        bool IsDerivedFromGranted(SkillIndex index, string skillId, HashSet<string> grants, int depth)
-        {
-            if (index == null || string.IsNullOrEmpty(skillId) || depth > 8)
-                return false;
-
-            if (!index.TryGet(skillId, out var info) || info.definition == null)
-                return false;
-
-            var definition = info.definition;
-            if (definition.ActionKind != ActionKind.Derived)
-                return false;
-
-            var baseId = NormalizeSkillId(definition.DerivedFromSkillId);
-            if (string.IsNullOrEmpty(baseId))
-                return false;
-
-            if (grants.Contains(baseId))
-                return true;
-
-            return IsDerivedFromGranted(index, baseId, grants, depth + 1);
+            return grants.Contains(normalized);
         }
 
         bool TryGetActiveTool(out IActionToolV2 tool)
