@@ -60,8 +60,8 @@ namespace TGD.LevelV2
             Unit owner = null;
             if (ctx != null && ctx.boundUnit != null)
                 owner = ctx.boundUnit;
-            else if (mover != null && mover.ctx != null && mover.ctx.boundUnit != null)
-                owner = mover.ctx.boundUnit;
+            else if (mover != null && mover.Ctx != null && mover.Ctx.boundUnit != null)
+                owner = mover.Ctx.boundUnit;
 
             return owner != null && u == owner;
         }

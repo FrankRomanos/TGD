@@ -162,8 +162,6 @@ namespace TGD.LevelV2
                     continue;
 
                 mover.enabled = hasMove;
-                if (!hasMove)
-                    mover.driver = null;
             }
         }
 
@@ -176,8 +174,6 @@ namespace TGD.LevelV2
                     continue;
 
                 attack.enabled = hasAttack;
-                if (!hasAttack)
-                    attack.driver = null;
             }
         }
 
