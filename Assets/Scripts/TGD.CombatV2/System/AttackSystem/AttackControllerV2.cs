@@ -34,33 +34,18 @@ namespace TGD.CombatV2
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
-        [HideInInspector]
-        public HexBoardTestDriver driver;
         public HexBoardTiler tiler;
         public HexEnvironmentSystem env;
         public DefaultTargetValidator targetValidator;
         public HexOccupancyService occupancyService;
 
         [Header("Context (optional)")]
-        public UnitRuntimeContext ctx;
         public MoveRateStatusRuntime status;
         public MonoBehaviour stickySource;
 
         [Header("Turn Manager Binding")]
-        [HideInInspector]
-        public bool UseTurnManager = true;
-        [HideInInspector]
-        public bool ManageEnergyLocally = false;
-        [HideInInspector]
-        public bool ManageTurnTimeLocally = false;
-
-        [Header("Costs & Turn")]
-        [HideInInspector]
-        public bool simulateTurnTime = true;
-        [HideInInspector]
-        public int baseTurnSeconds = 6;
-        [HideInInspector]
-        public TurnManagerV2 turnManager;
+        [SerializeField, HideInInspector]
+        TurnManagerV2 turnManager;
         TurnManagerV2 _boundTurnManager;
 
         [Header("Animation")]
@@ -159,7 +144,6 @@ namespace TGD.CombatV2
         PreviewData _currentPreview;
         Hex? _hover;
 
-        float _turnSecondsLeft = -1f;
         int _attacksThisTurn;
         int _reportUsedSeconds;
         int _reportRefundedSeconds;
@@ -188,15 +172,10 @@ namespace TGD.CombatV2
 
         PendingAttack _pendingAttack;
 
-        Unit ResolveSelfUnit()
-        {
-            if (ctx != null && ctx.boundUnit != null)
-                return ctx.boundUnit;
-            return null;
-        }
+        Unit ResolveSelfUnit() => OwnerUnit;
 
         Transform ResolveSelfView()
-            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
+            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
 
         void ClearExecReport()
         {
@@ -250,8 +229,6 @@ namespace TGD.CombatV2
                 Debug.Log(message, this);
         }
 
-        float MaxTurnSeconds => Mathf.Max(0f, baseTurnSeconds + (ctx ? ctx.Speed : 0));
-
         public void AttachTurnManager(TurnManagerV2 manager)
         {
             if (_boundTurnManager != null)
@@ -263,14 +240,7 @@ namespace TGD.CombatV2
             turnManager = manager;
             _boundTurnManager = null;
 
-            UseTurnManager = manager != null;
-            simulateTurnTime = !UseTurnManager;
-            ManageTurnTimeLocally = !UseTurnManager;
-            ManageEnergyLocally = !UseTurnManager;
-            if (!ManageTurnTimeLocally)
-                _turnSecondsLeft = -1f;
-
-            if (!UseTurnManager || !isActiveAndEnabled)
+            if (turnManager == null || !isActiveAndEnabled)
                 return;
 
             turnManager.TurnStarted += OnTurnStarted;
@@ -278,38 +248,10 @@ namespace TGD.CombatV2
             _boundTurnManager = turnManager;
         }
 
-        public void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
+        public override void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
         {
-            ctx = context;
+            base.BindContext(context, manager);
             AttachTurnManager(manager);
-        }
-
-        IResourcePool ResolveResourcePool()
-        {
-            var unit = ResolveSelfUnit();
-            if (!UseTurnManager || turnManager == null || unit == null)
-                return null;
-            return turnManager.GetResources(unit);
-        }
-
-        int ResolveEnergyAvailable(IResourcePool pool)
-        {
-            if (pool != null)
-                return pool.Get("Energy");
-            var stats = ctx != null ? ctx.stats : null;
-            return stats != null ? stats.Energy : int.MaxValue;
-        }
-
-        bool TryReserveEnergy(ref int available, int cost)
-        {
-            if (cost <= 0)
-                return true;
-            if (available == int.MaxValue)
-                return true;
-            if (available < cost)
-                return false;
-            available -= cost;
-            return true;
         }
 
         public struct PlannedAttackCost
@@ -495,13 +437,6 @@ namespace TGD.CombatV2
             if (!occupancyService)
                 occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
 
-            if (!occupancyService && driver != null)
-            {
-                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && driver.authoring != null)
-                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-            }
-
             if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
                 occupancyService = concreteBridge.occupancyService;
 
@@ -639,11 +574,11 @@ namespace TGD.CombatV2
         {
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
-            if (!UseTurnManager || turnManager == null || ResolveSelfUnit() != unit)
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null || ResolveSelfUnit() != unit)
                 return;
 
             ResetComboCounters();
-            _turnSecondsLeft = -1f;
         }
 
         void ResetComboCounters()
@@ -651,13 +586,6 @@ namespace TGD.CombatV2
             _attacksThisTurn = 0;
             _pendingComboBaseCount = 0;
             _reportComboBaseCount = 0;
-        }
-
-        void EnsureTurnTimeInited()
-        {
-            if (!ManageTurnTimeLocally) return;
-            if (_turnSecondsLeft >= 0f) return;
-            _turnSecondsLeft = MaxTurnSeconds;
         }
 
         bool IsReady => EnsureBound();
@@ -704,7 +632,6 @@ namespace TGD.CombatV2
                 if (raiseHud) RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Not ready.");
                 return false;
             }
-            EnsureTurnTimeInited();
             if (!IsReady)
             {
                 DumpReadiness();
@@ -723,18 +650,17 @@ namespace TGD.CombatV2
             }
             int needSec = 1;
             var selfUnit = ResolveSelfUnit();
-            if (UseTurnManager && turnManager != null && selfUnit != null)
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null || selfUnit == null)
             {
-                var budget = turnManager.GetBudget(selfUnit);
-                if (budget == null || !budget.HasTime(needSec))
-                {
-                    if (raiseHud)
-                        RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
-                    reason = "(no-time)";
-                    return false;
-                }
+                if (raiseHud)
+                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Not ready.");
+                reason = "(no-turn-manager)";
+                return false;
             }
-            else if (ManageTurnTimeLocally && _turnSecondsLeft + 1e-4f < needSec)
+
+            var budget = tm.GetBudget(selfUnit);
+            if (budget == null || !budget.HasTime(needSec))
             {
                 if (raiseHud)
                     RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
@@ -742,10 +668,9 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            var pool = ResolveResourcePool();
-            int energyAvailable = ResolveEnergyAvailable(pool);
             int moveEnergyCost = MoveEnergyPerSecond();
-            if (moveEnergyCost > 0 && energyAvailable < moveEnergyCost)
+            var resources = tm.GetResources(selfUnit);
+            if (resources != null && moveEnergyCost > 0 && !resources.Has("Energy", moveEnergyCost))
             {
                 if (raiseHud)
                     RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
@@ -798,7 +723,6 @@ namespace TGD.CombatV2
         public IEnumerator OnConfirm(Hex hex)
         {
             ClearExecReport();
-            EnsureTurnTimeInited();
             if (!IsReady)
             {
                 RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Not ready.");
@@ -870,54 +794,43 @@ namespace TGD.CombatV2
             int moveEnergyCost = Mathf.Max(0, preview.moveEnergyCost);
             int attackEnergyCost = preview.targetIsEnemy ? Mathf.Max(0, preview.attackEnergyCost) : 0;
 
-            if (!UseTurnManager && simulateTurnTime)
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null)
             {
-                if (_turnSecondsLeft + 1e-4f < moveSecsCharge)
-                {
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
-                    yield break;
-                }
-                if (attackPlanned && _turnSecondsLeft + 1e-4f < moveSecsCharge + attackSecsCharge)
-                {
-                    attackPlanned = false;
-                    attackSecsCharge = 0;
-                    attackEnergyCost = 0;
-                    _pendingComboBaseCount = 0;
-                }
+                RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotReady, "Turn manager missing.");
+                yield break;
             }
 
-            var resourcePool = ResolveResourcePool();
-            bool usingExternalResources = UseTurnManager && resourcePool != null;
-            if (!usingExternalResources)
+            var budget = tm.GetBudget(unit);
+            if (budget == null || !budget.HasTime(moveSecsCharge))
             {
-                int energyAvailable = ResolveEnergyAvailable(resourcePool);
-                if (!TryReserveEnergy(ref energyAvailable, moveEnergyCost))
+                RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
+                yield break;
+            }
+
+            if (attackPlanned && !budget.HasTime(moveSecsCharge + attackSecsCharge))
+            {
+                attackPlanned = false;
+                attackSecsCharge = 0;
+                attackEnergyCost = 0;
+                _pendingComboBaseCount = 0;
+            }
+
+            var resources = tm.GetResources(unit);
+            if (resources != null)
+            {
+                int totalEnergy = moveEnergyCost + (attackPlanned ? attackEnergyCost : 0);
+                if (totalEnergy > 0 && !resources.Has("Energy", totalEnergy))
                 {
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy for move.");
-                    yield break;
-                }
-                if (attackPlanned && !TryReserveEnergy(ref energyAvailable, attackEnergyCost))
-                {
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy for attack.");
+                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
                     yield break;
                 }
             }
-            if (!UseTurnManager && ManageEnergyLocally)
-                SpendEnergy(moveEnergyCost);
             int attackEnergySpent = 0;
             if (attackPlanned)
             {
-                if (!UseTurnManager && ManageEnergyLocally && attackEnergyCost > 0)
-                    SpendEnergy(attackEnergyCost);
                 attackEnergySpent = Mathf.Max(0, attackEnergyCost);
                 _attacksThisTurn = Mathf.Max(0, _attacksThisTurn + 1);
-            }
-
-            if (!UseTurnManager && ManageTurnTimeLocally)
-            {
-                _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - moveSecsCharge, 0f, MaxTurnSeconds);
-                if (attackPlanned)
-                    _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft - attackSecsCharge, 0f, MaxTurnSeconds);
             }
 
             _currentPreview = null;
@@ -1296,15 +1209,6 @@ namespace TGD.CombatV2
 
                 if (reached.Count <= 1)
                 {
-                    if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
-                        RefundMoveEnergy(moveEnergyPaid);
-                    if (!UseTurnManager && ManageTurnTimeLocally)
-                    {
-                        float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
-                        if (refundMove > 0f)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
-                    }
-
                     if (attackPlanned && authoring?.Layout != null && view != null)
                     {
                         var fromW = hexSpace.HexToWorld(startAnchor, y);
@@ -1386,10 +1290,6 @@ namespace TGD.CombatV2
                     if (attackPlanned && !attackRolledBack && effMR + 1e-4f < preview.mrClick)
                     {
                         attackRolledBack = true;
-                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
-                            RefundAttackEnergy(attackEnergyPaid);
-                        if (!UseTurnManager && ManageTurnTimeLocally)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
                         var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
@@ -1430,20 +1330,6 @@ namespace TGD.CombatV2
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
-                if (!UseTurnManager && ManageTurnTimeLocally)
-                {
-                    float refundMove = moveSecsCharge - usedSeconds + refundedSeconds;
-                    if (refundMove > 0f)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refundMove, 0f, MaxTurnSeconds);
-                }
-
-                if (refundedSeconds > 0)
-                {
-                    int refundEnergy = Mathf.Max(0, refundedSeconds * moveEnergyRate);
-                    if (!UseTurnManager && ManageEnergyLocally && refundEnergy > 0)
-                        RefundMoveEnergy(refundEnergy);
-                }
-
                 bool attackSuccess = attackPlanned && !attackRolledBack && !truncated && !stoppedByExternal;
                 if (attackSuccess)
                 {
@@ -1453,12 +1339,8 @@ namespace TGD.CombatV2
                 {
                     if (!attackRolledBack)
                     {
-                        if (attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
-                            RefundAttackEnergy(attackEnergyPaid);
                         _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
                         AttackEventsV2.RaiseMiss(unit, "Out of reach.");
-                        if (!UseTurnManager && ManageTurnTimeLocally)
-                            _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + attackSecsCharge, 0f, MaxTurnSeconds);
                     }
                 }
                 float cutoff = Mathf.Max(0f, ResolveAttackFreeMoveCutoff());
@@ -1516,21 +1398,8 @@ namespace TGD.CombatV2
 
             void HandleApproachAbort()
             {
-                if (moveEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
-                    RefundMoveEnergy(moveEnergyPaid);
-                if (attackPlanned && attackEnergyPaid > 0 && !UseTurnManager && ManageEnergyLocally)
-                    RefundAttackEnergy(attackEnergyPaid);
                 if (attackPlanned)
                     _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
-                if (!UseTurnManager && ManageTurnTimeLocally)
-                {
-                    float refund = moveSecsCharge;
-                    if (attackPlanned)
-                        refund += attackSecsCharge;
-                    if (refund > 0f)
-                        _turnSecondsLeft = Mathf.Clamp(_turnSecondsLeft + refund, 0f, MaxTurnSeconds);
-                }
-
                 var abortUnit = ResolveSelfUnit();
                 var abortAnchor = CurrentAnchor;
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
@@ -1678,8 +1547,9 @@ namespace TGD.CombatV2
             if (hasActor && occActor is UnitGridAdapter grid && grid.Unit != null)
                 unitAt = grid.Unit.Id;
 
-            bool selfPlayer = UseTurnManager && turnManager?.IsPlayerUnit(self) == true;
-            bool selfEnemy = UseTurnManager && turnManager?.IsEnemyUnit(self) == true;
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            bool selfPlayer = tm?.IsPlayerUnit(self) == true;
+            bool selfEnemy = tm?.IsEnemyUnit(self) == true;
 
             TargetCheckResult validatorResult = default;
             if (targetValidator != null && _attackSpec != null)
@@ -1700,19 +1570,20 @@ namespace TGD.CombatV2
             if (ReferenceEquals(candidate, self))
                 return false;
 
-            if (!UseTurnManager || turnManager == null)
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null)
                 return false;
 
-            bool selfPlayer = turnManager.IsPlayerUnit(self);
-            bool selfEnemy = turnManager.IsEnemyUnit(self);
+            bool selfPlayer = tm.IsPlayerUnit(self);
+            bool selfEnemy = tm.IsEnemyUnit(self);
 
             if (selfPlayer)
-                return turnManager.IsEnemyUnit(candidate);
+                return tm.IsEnemyUnit(candidate);
 
             if (selfEnemy)
-                return turnManager.IsPlayerUnit(candidate);
+                return tm.IsPlayerUnit(candidate);
 
-            return turnManager.IsEnemyUnit(candidate);
+            return tm.IsEnemyUnit(candidate);
         }
 
         bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)
@@ -1874,37 +1745,6 @@ namespace TGD.CombatV2
             return path;
         }
 
-        void SpendEnergy(int amount)
-        {
-            if (amount <= 0) return;
-            var stats = ctx != null ? ctx.stats : null;
-            if (stats == null) return;
-            int before = stats.Energy;
-            stats.Energy = Mathf.Clamp(stats.Energy - amount, 0, stats.MaxEnergy);
-        }
-
-        void RefundMoveEnergy(int amount)
-        {
-            if (amount <= 0) return;
-            var stats = ctx != null ? ctx.stats : null;
-            if (stats == null) return;
-            int before = stats.Energy;
-            stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
-        }
-
-        void RefundAttackEnergy(int amount)
-        {
-            if (amount <= 0) return;
-            var stats = ctx != null ? ctx.stats : null;
-            if (stats == null) return;
-            int before = stats.Energy;
-            stats.Energy = Mathf.Clamp(stats.Energy + amount, 0, stats.MaxEnergy);
-#if !USE_TMV2
-            if (debugLog)
-                LogInternal($"[Attack] Refund attack energy +{amount} ({before}->{stats.Energy})");
-#endif
-        }
-
         void OnAttackStrikeFired(Unit unit, int comboIndex)
         {
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
@@ -1949,14 +1789,14 @@ namespace TGD.CombatV2
         {
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
-            if (!UseTurnManager || turnManager == null)
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null)
                 return;
-
             var unit = ResolveSelfUnit();
             if (unit == null)
                 return;
 
-            bool belongs = isPlayerSide ? turnManager.IsPlayerUnit(unit) : turnManager.IsEnemyUnit(unit);
+            bool belongs = isPlayerSide ? tm.IsPlayerUnit(unit) : tm.IsEnemyUnit(unit);
             if (!belongs)
                 return;
 
@@ -2064,7 +1904,7 @@ namespace TGD.CombatV2
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && _bridge != bridgeOverride)
+            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)

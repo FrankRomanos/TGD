@@ -8,7 +8,6 @@ namespace TGD.CombatV2
 {
     public abstract class ChainActionBase : ActionToolBase, IActionToolV2, IActionCostPreviewV2, IActionEnergyReportV2, IActionExecReportV2, IBindContext, ICursorUser
     {
-        protected UnitRuntimeContext ctx;
         protected TurnManagerV2 turnManager;
 
         [Header("Targeting")]
@@ -77,7 +76,7 @@ namespace TGD.CombatV2
             _spec = GetTargetingSpec();
             Cursor?.Clear();
             _lastTarget = null;
-            AttackEventsV2.RaiseAimShown(ResolveUnit(), System.Array.Empty<Hex>());
+            AttackEventsV2.RaiseAimShown(OwnerUnit, System.Array.Empty<Hex>());
         }
 
         public virtual void OnExitAim()
@@ -99,14 +98,14 @@ namespace TGD.CombatV2
 
             var validator = ResolveValidator();
             var spec = _spec ?? GetTargetingSpec();
-            var unit = ResolveUnit();
+            var unit = OwnerUnit;
             var check = validator != null ? validator.Check(unit, hex, spec) : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly };
 
             var color = check.ok && check.hit != HitKind.Ally ? hoverValidColor : hoverInvalidColor;
             cursor.ShowSingle(hex, color);
 
             if (check.ok && check.hit != HitKind.Ally)
-                AttackEventsV2.RaiseAimShown(unit, new[] { hex });
+            AttackEventsV2.RaiseAimShown(unit, new[] { hex });
             else
                 AttackEventsV2.RaiseAimShown(unit, System.Array.Empty<Hex>());
         }
@@ -147,16 +146,6 @@ namespace TGD.CombatV2
             _energyUsed = Mathf.Max(0, energyUsed);
         }
 
-        public Unit ResolveUnit()
-        {
-            var context = ctx != null ? ctx : GetComponentInParent<UnitRuntimeContext>(true);
-            if (ctx == null && context != null)
-                ctx = context;
-            if (context != null && context.boundUnit != null)
-                return context.boundUnit;
-            return null;
-        }
-
         public virtual TargetingSpec GetTargetingSpec()
         {
             return TargetingPresets.For(targetRule, maxRangeHexes);
@@ -180,9 +169,9 @@ namespace TGD.CombatV2
             return validator.Check(unit, hex, spec);
         }
 
-        public virtual void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
+        public override void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
         {
-            ctx = context;
+            base.BindContext(context, tm);
             turnManager = tm;
 
             if (ctx != null)

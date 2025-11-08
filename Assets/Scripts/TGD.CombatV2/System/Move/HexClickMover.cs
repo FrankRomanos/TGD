@@ -13,6 +13,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
+    [DisallowMultipleComponent]
     public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [SerializeField]
@@ -21,13 +22,9 @@ namespace TGD.CombatV2
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
-        [HideInInspector]
-        public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
         public HexBoardTiler tiler;      // 着色
         public DefaultTargetValidator targetValidator;
         public HexOccupancyService occupancyService;
-        [Header("Context (optional)")]           // ★ 新增
-        public UnitRuntimeContext ctx;            // ★ 新增
 
         [Header("Bridge (optional)")]
         [HideInInspector]
@@ -40,52 +37,11 @@ namespace TGD.CombatV2
         public bool debugLog = true;
         public bool suppressInternalLogs = false;
 
-        // === 新增：临时回合时间（无 TurnManager 时自管理） ===
-        [Header("Turn Manager Binding")]
-        [HideInInspector]
-        public bool UseTurnManager = true;
-        [HideInInspector]
-        public bool ManageEnergyLocally = false;
-        [HideInInspector]
-        public bool ManageTurnTimeLocally = false;
         TurnManagerV2 _turnManager;
-
-        [Header("Turn Time (TEMP no-TM)")]
-        [HideInInspector]
-        public bool simulateTurnTime = true;
-        [Tooltip("基础回合时间（秒）")]
-        [HideInInspector]
-        public int baseTurnSeconds = 6;
-        int _turnSecondsLeft = -1;
-        int MaxTurnSeconds => Mathf.Max(0, baseTurnSeconds + (ctx ? ctx.Speed : 0));
         public string CooldownKey => ResolveMoveSkillId();
-        void EnsureTurnTimeInited()
-        {
-            if (!ManageTurnTimeLocally) return;
-            if (_turnSecondsLeft < 0)
-            {
-                _turnSecondsLeft = MaxTurnSeconds;
-            }
-        }
-
-        Unit OwnerUnit
-        {
-            get
-            {
-                if (ctx != null && ctx.boundUnit != null)
-                    return ctx.boundUnit;
-                return null;
-            }
-        }
-        Unit ResolveSelfUnit()
-        {
-            if (ctx != null && ctx.boundUnit != null)
-                return ctx.boundUnit;
-            return null;
-        }
 
         Transform ResolveSelfView()
-            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
+            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
 
         Hex CurrentAnchor
         {
@@ -100,23 +56,13 @@ namespace TGD.CombatV2
         public void AttachTurnManager(TurnManagerV2 tm)
         {
             _turnManager = tm;
-            UseTurnManager = tm != null;
-            simulateTurnTime = !UseTurnManager;
-            ManageTurnTimeLocally = !UseTurnManager;
-            ManageEnergyLocally = !UseTurnManager;
-            if (!ManageTurnTimeLocally)
-                _turnSecondsLeft = -1;
         }
 
-        public void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
+        public override void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
         {
-            ctx = context;
+            base.BindContext(context, tm);
             AttachTurnManager(tm);
         }
-        [Header("Action Config & Cost")]
-        public MonoBehaviour costProvider;
-        IMoveCostService _cost;
-
         [Tooltip("精准移动：进入减速地形时永久降低 MoveRate（已禁用保留字段）")]
         public bool applyPermanentSlowInPreciseMove = false;
 
@@ -288,7 +234,6 @@ namespace TGD.CombatV2
                 valid = false
             };
 
-            EnsureTurnTimeInited();
             RefreshStateForAim();
 
             _bridge?.EnsurePlacedNow();
@@ -392,7 +337,6 @@ namespace TGD.CombatV2
 
         public bool TryPrecheckAim(out string reason, bool raiseHud = true)
         {
-            EnsureTurnTimeInited();
             RefreshStateForAim();
 
             // 统一拿占位
@@ -402,7 +346,7 @@ namespace TGD.CombatV2
 
             var unit = OwnerUnit;
 
-            // ✅ 放宽“就绪”条件：不再要求 driver / driver.IsReady / SelfActor
+            // ✅ 放宽“就绪”条件：不再要求额外测试脚手架
             if (authoring == null || authoring.Layout == null || unit == null || _bridge == null || _occ == null)
             {
                 DumpReadiness();
@@ -418,48 +362,32 @@ namespace TGD.CombatV2
                 return false;
             }
 
+            if (_turnManager == null)
+            {
+                DumpReadiness();
+                if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
+                reason = "(no-turn-manager)";
+                return false;
+            }
+
             int needSec = ResolveMoveBudgetSeconds();
             var costSpec = BuildCostSpec();
 
-            if (UseTurnManager)
-            {
-                var budget = (_turnManager != null) ? _turnManager.GetBudget(unit) : null;
-                if (budget == null || !budget.HasTime(needSec))
-                {
-                    if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
-                    reason = "(no-time)";
-                    return false;
-                }
-            }
-            else if (ManageTurnTimeLocally && _turnSecondsLeft < needSec)
+            var budget = _turnManager.GetBudget(unit);
+            if (budget == null || !budget.HasTime(needSec))
             {
                 if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
                 reason = "(no-time)";
                 return false;
             }
 
-            if (_cost != null)
+            int plannedEnergy = Mathf.Max(0, costSpec.energyPerSecond) * Mathf.Max(0, needSec);
+            var resources = _turnManager.GetResources(unit);
+            if (resources != null && plannedEnergy > 0 && !resources.Has("Energy", plannedEnergy))
             {
-                if (UseTurnManager)
-                {
-                    int energyRate = Mathf.Max(0, costSpec.energyPerSecond);
-                    if (energyRate > 0 && _turnManager != null)
-                    {
-                        var pool = _turnManager.GetResources(unit);
-                        if (pool != null && !pool.Has("Energy", energyRate))
-                        {
-                            if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
-                            reason = "(no-energy)";
-                            return false;
-                        }
-                    }
-                }
-                else if (!_cost.HasEnough(unit, costSpec))
-                {
-                    if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
-                    reason = "(no-energy)";
-                    return false;
-                }
+                if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null);
+                reason = "(no-energy)";
+                return false;
             }
 
             reason = null;
@@ -485,7 +413,6 @@ namespace TGD.CombatV2
         public IEnumerator OnConfirm(Hex hex)
         {
             ClearExecReport();
-            EnsureTurnTimeInited();
             RefreshStateForAim();
 
             _bridge?.EnsurePlacedNow();
@@ -500,24 +427,7 @@ namespace TGD.CombatV2
             }
 
             int needSec = ResolveMoveBudgetSeconds();
-
-            if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < needSec)
-            {
-                HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NoBudget, "No More Time");
-                yield break;
-            }
-
             var costSpec = BuildCostSpec();
-            if (_cost != null)
-            {
-                if (_cost.IsOnCooldown(unit, costSpec))
-                { HexMoveEvents.RaiseRejected(unit, MoveBlockReason.OnCooldown, null); yield break; }
-                if (!_cost.HasEnough(unit, costSpec))
-                { HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotEnoughResource, null); yield break; }
-
-                if (!UseTurnManager && ManageEnergyLocally)
-                    _cost.Pay(unit, costSpec);
-            }
 
             if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
             {
@@ -542,20 +452,17 @@ namespace TGD.CombatV2
         {
             get
             {
-                var unit = ResolveSelfUnit();
+                var unit = OwnerUnit;
                 return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
             }
         }
 
         void Awake()
         {
-            _cost = costProvider as IMoveCostService;
             RefreshPainterAndSticky(markPreviewDirty: false);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
 
-            if (driver == null)
-                driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
             if (!targetValidator)
@@ -568,13 +475,6 @@ namespace TGD.CombatV2
             if (bridges != null && bridges.Length > 1)
                 Debug.LogError($"[Guard] Multiple PlayerOccupancyBridge in parents: {bridges.Length}. Keep ONE.", this);
 #endif
-
-            if (!occupancyService && driver != null)
-            {
-                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && driver.authoring != null)
-                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-            }
 
             if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
                 occupancyService = _playerBridge.occupancyService;
@@ -625,11 +525,7 @@ namespace TGD.CombatV2
         {
             tiler?.EnsureBuilt();
 
-            driver?.EnsureInit();
             if (authoring?.Layout == null)
-                return;
-
-            if (driver != null && !driver.IsReady)
                 return;
 
             EnsureBound();
@@ -812,7 +708,7 @@ namespace TGD.CombatV2
                 (blockByPhysics && obstacleMask != 0)
                     ? HexAreaUtil.MakeDefaultBlocker(
                         authoring,
-                        driver != null ? driver.Map : null,  // 没有 driver 时可为 null，默认实现能容忍
+                        null,
                         startHex,
                         blockByUnits: false,
                         blockByPhysics: true,
@@ -930,7 +826,7 @@ namespace TGD.CombatV2
 
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
-            unit ??= driver != null ? driver.UnitRef : null;
+            unit ??= OwnerUnit;
             (MoveBlockReason mapped, string message) = reason switch
             {
                 "lackTime" => (MoveBlockReason.NoBudget, "No More Time"),
@@ -988,24 +884,7 @@ namespace TGD.CombatV2
                     yield break;
 
                 int requiredSec = ResolveMoveBudgetSeconds();
-
-                if (!UseTurnManager && ManageTurnTimeLocally && _turnSecondsLeft < requiredSec)
-                {
-                    HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.NoBudget, "No More Time");
-                    yield break;
-                }
-
                 var costSpec = BuildCostSpec();
-                if (_cost != null)
-                {
-                    if (_cost.IsOnCooldown(OwnerUnit, costSpec))
-                    { HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.OnCooldown, null); yield break; }
-                    if (!_cost.HasEnough(OwnerUnit, costSpec))
-                    { HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.NotEnoughResource, null); yield break; }
-
-                    if (!UseTurnManager && ManageEnergyLocally)
-                        _cost.Pay(OwnerUnit, costSpec);
-                }
 
                 var rates = BuildMoveRates(path[0]);
                 var startAnchor = CurrentAnchor;
@@ -1033,10 +912,6 @@ namespace TGD.CombatV2
 
                 if (reached == null || reached.Count < 2)
                 {
-                    if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(OwnerUnit, costSpec, requiredSec);
-                    if (!UseTurnManager && ManageTurnTimeLocally)
-                        _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft + requiredSec);
                     HexMoveEvents.RaiseTimeRefunded(OwnerUnit, requiredSec);
                     yield break;
                 }
@@ -1127,14 +1002,7 @@ namespace TGD.CombatV2
                         LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                     }
 
-                    // 预览地图/真实地图：driver 可能没有，跳过即可
-                    if (driver != null && driver.Map != null)
-                    {
-                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                    }
-
                     unit.Position = to;
-                    if (driver != null) driver.SyncView();
                 }
 
                 if (OwnerUnit != null)
@@ -1154,13 +1022,8 @@ namespace TGD.CombatV2
                     LogInternal("[Move] No more time.");
                 }
 
-                if (!UseTurnManager && ManageTurnTimeLocally)
-                    _turnSecondsLeft = Mathf.Max(0, _turnSecondsLeft - spentSec);
-
                 if (refunded > 0)
                 {
-                    if (!UseTurnManager && ManageEnergyLocally)
-                        _cost?.RefundSeconds(OwnerUnit, costSpec, refunded);
                     HexMoveEvents.RaiseTimeRefunded(OwnerUnit, refunded);
                 }
             }
@@ -1227,7 +1090,7 @@ namespace TGD.CombatV2
             if (!ReferenceEquals(_playerBridge, desired))
                 _playerBridge = desired;
 
-            if (bridgeOverride != null && _bridge != bridgeOverride)
+            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
                 _bridge = bridgeOverride;
 
             if (_bridge == null && desired != null)

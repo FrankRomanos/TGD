@@ -1,10 +1,35 @@
 using UnityEngine;
+using TGD.CoreV2;
 
 namespace TGD.CombatV2
 {
-    public abstract class ActionToolBase : MonoBehaviour
+    public abstract class ActionToolBase : MonoBehaviour, IToolOwner, IBindContext
     {
+        [SerializeField]
+        protected UnitRuntimeContext ctx;
+
         bool _subscribed;
+
+        public UnitRuntimeContext Ctx => ctx;
+
+        public virtual void Bind(UnitRuntimeContext context, TurnManagerV2 tm = null)
+        {
+            Bind(context);
+        }
+
+        public void Bind(UnitRuntimeContext context)
+        {
+            ctx = context;
+        }
+
+        public virtual void BindContext(UnitRuntimeContext context, TurnManagerV2 turnManager)
+        {
+            Bind(context, turnManager);
+        }
+
+        protected Unit OwnerUnit => ctx != null ? ctx.boundUnit : null;
+
+        protected Unit ResolveSelfUnit() => OwnerUnit;
 
         protected virtual void OnEnable()
         {
@@ -39,5 +64,13 @@ namespace TGD.CombatV2
         protected abstract void HookEvents(bool bind);
 
         protected static bool Dead(Object o) => o == null || o.Equals(null);
+
+#if UNITY_EDITOR
+        protected virtual void OnValidate()
+        {
+            if (ctx == null)
+                ctx = GetComponentInParent<UnitRuntimeContext>(true);
+        }
+#endif
     }
 }
