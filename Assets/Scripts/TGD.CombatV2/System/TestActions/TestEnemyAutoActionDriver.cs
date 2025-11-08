@@ -53,7 +53,7 @@ namespace TGD.CombatV2
             if (action == null)
                 return;
 
-            var actionUnit = action.ResolveUnit();
+            var actionUnit = action != null ? action.Ctx?.boundUnit : null;
             if (actionUnit == null || unit != actionUnit)
                 return;
 

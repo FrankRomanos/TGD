@@ -49,8 +49,8 @@ namespace TGD.CombatV2
 
         bool IsThisUnit(Unit u)
         {
-            // 比较 mover/driver 的 UnitRef 是否一致
-            return mover != null && mover.driver != null && ReferenceEquals(u, mover.driver.UnitRef);
+            var owner = mover != null ? mover.Ctx?.boundUnit : null;
+            return owner != null && ReferenceEquals(u, owner);
         }
 
         void OnMoveStarted(Unit u, List<Hex> path)
