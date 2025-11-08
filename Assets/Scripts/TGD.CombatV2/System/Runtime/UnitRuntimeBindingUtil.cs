@@ -7,25 +7,22 @@ namespace TGD.CombatV2
 {
     static class UnitRuntimeBindingUtil
     {
-        public static Unit ResolveUnit(UnitRuntimeContext ctx, HexBoardTestDriver driver)
+        public static Unit ResolveUnit(UnitRuntimeContext ctx)
         {
             if (ctx != null && ctx.boundUnit != null)
                 return ctx.boundUnit;
 
-            return driver != null ? driver.UnitRef : null;
+            return null;
         }
 
-        public static Transform ResolveUnitView(Component owner, UnitRuntimeContext ctx, HexBoardTestDriver driver, Transform viewOverride)
+        public static Transform ResolveUnitView(Component owner, UnitRuntimeContext ctx, Transform viewOverride)
         {
             if (viewOverride)
                 return viewOverride;
 
-            var unit = ResolveUnit(ctx, driver);
+            var unit = ResolveUnit(ctx);
             if (unit != null && UnitAnchorV2.TryGetView(unit, out var anchor))
                 return anchor;
-
-            if (driver != null && driver.unitView != null)
-                return driver.unitView;
 
             if (ctx != null)
                 return ctx.transform;

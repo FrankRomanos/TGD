@@ -21,13 +21,9 @@ namespace TGD.CombatV2
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
-        [HideInInspector]
-        public HexBoardTestDriver driver;     // 提供 UnitRef/SyncView
         public HexBoardTiler tiler;      // 着色
         public DefaultTargetValidator targetValidator;
         public HexOccupancyService occupancyService;
-        [Header("Context (optional)")]           // ★ 新增
-        public UnitRuntimeContext ctx;            // ★ 新增
 
         [Header("Bridge (optional)")]
         [HideInInspector]
@@ -68,24 +64,8 @@ namespace TGD.CombatV2
             }
         }
 
-        Unit OwnerUnit
-        {
-            get
-            {
-                if (ctx != null && ctx.boundUnit != null)
-                    return ctx.boundUnit;
-                return null;
-            }
-        }
-        Unit ResolveSelfUnit()
-        {
-            if (ctx != null && ctx.boundUnit != null)
-                return ctx.boundUnit;
-            return null;
-        }
-
         Transform ResolveSelfView()
-            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
+            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
 
         Hex CurrentAnchor
         {
@@ -108,9 +88,9 @@ namespace TGD.CombatV2
                 _turnSecondsLeft = -1;
         }
 
-        public void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
+        public override void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
         {
-            ctx = context;
+            base.BindContext(context, tm);
             AttachTurnManager(tm);
         }
         [Header("Action Config & Cost")]
@@ -402,7 +382,7 @@ namespace TGD.CombatV2
 
             var unit = OwnerUnit;
 
-            // ✅ 放宽“就绪”条件：不再要求 driver / driver.IsReady / SelfActor
+            // ✅ 放宽“就绪”条件：不再要求额外测试脚手架
             if (authoring == null || authoring.Layout == null || unit == null || _bridge == null || _occ == null)
             {
                 DumpReadiness();
@@ -542,7 +522,7 @@ namespace TGD.CombatV2
         {
             get
             {
-                var unit = ResolveSelfUnit();
+                var unit = OwnerUnit;
                 return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
             }
         }
@@ -554,8 +534,6 @@ namespace TGD.CombatV2
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
 
-            if (driver == null)
-                driver = GetComponentInParent<HexBoardTestDriver>(true);
             if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
             if (!targetValidator)
@@ -568,13 +546,6 @@ namespace TGD.CombatV2
             if (bridges != null && bridges.Length > 1)
                 Debug.LogError($"[Guard] Multiple PlayerOccupancyBridge in parents: {bridges.Length}. Keep ONE.", this);
 #endif
-
-            if (!occupancyService && driver != null)
-            {
-                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && driver.authoring != null)
-                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-            }
 
             if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
                 occupancyService = _playerBridge.occupancyService;
@@ -625,11 +596,7 @@ namespace TGD.CombatV2
         {
             tiler?.EnsureBuilt();
 
-            driver?.EnsureInit();
             if (authoring?.Layout == null)
-                return;
-
-            if (driver != null && !driver.IsReady)
                 return;
 
             EnsureBound();
@@ -812,7 +779,7 @@ namespace TGD.CombatV2
                 (blockByPhysics && obstacleMask != 0)
                     ? HexAreaUtil.MakeDefaultBlocker(
                         authoring,
-                        driver != null ? driver.Map : null,  // 没有 driver 时可为 null，默认实现能容忍
+                        null,
                         startHex,
                         blockByUnits: false,
                         blockByPhysics: true,
@@ -930,7 +897,7 @@ namespace TGD.CombatV2
 
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
-            unit ??= driver != null ? driver.UnitRef : null;
+            unit ??= OwnerUnit;
             (MoveBlockReason mapped, string message) = reason switch
             {
                 "lackTime" => (MoveBlockReason.NoBudget, "No More Time"),
@@ -1127,14 +1094,7 @@ namespace TGD.CombatV2
                         LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                     }
 
-                    // 预览地图/真实地图：driver 可能没有，跳过即可
-                    if (driver != null && driver.Map != null)
-                    {
-                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                    }
-
                     unit.Position = to;
-                    if (driver != null) driver.SyncView();
                 }
 
                 if (OwnerUnit != null)

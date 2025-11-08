@@ -468,8 +468,7 @@ namespace TGD.LevelV2
                 if (mover == null)
                     continue;
 
-                mover.ctx = context;
-                mover.AttachTurnManager(resolvedTurnManager);
+                mover.BindContext(context, resolvedTurnManager);
                 mover.authoring = resolvedAuthoring;
                 mover.tiler = resolvedTiler;
                 mover.targetValidator = resolvedValidator;
@@ -485,7 +484,6 @@ namespace TGD.LevelV2
                     mover.pickPlaneY = resolvedCam.pickPlaneY;
                     mover.rayMaxDistance = resolvedCam.rayMaxDistance;
                 }
-                mover.driver = null;
                 mover.bridgeOverride = null;
                 mover.RefreshFactoryInjection();
             }
@@ -508,9 +506,8 @@ namespace TGD.LevelV2
                 if (attack == null)
                     continue;
 
-                attack.ctx = context;
+                attack.BindContext(context, resolvedTurnManager);
                 attack.turnManager = resolvedTurnManager;
-                attack.AttachTurnManager(resolvedTurnManager);
                 attack.authoring = resolvedAuthoring;
                 attack.tiler = resolvedTiler;
                 attack.targetValidator = resolvedValidator;
@@ -519,7 +516,6 @@ namespace TGD.LevelV2
                 attack.status = ResolveStatusFor(attack);
                 attack.stickySource = resolvedEnv;
                 attack.viewOverride = view;
-                attack.driver = null;
                 attack.bridgeOverride = null;
                 attack.RefreshFactoryInjection();
             }

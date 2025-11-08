@@ -149,7 +149,7 @@ namespace TGD.CombatV2
             yield return base.OnConfirm(hex);
 
             if (Kind != ActionKind.FullRound)
-                LogConfirm(ResolveUnit(), hex);
+                LogConfirm(OwnerUnit, hex);
         }
 
         bool IActionCostPreviewV2.TryPeekCost(out int seconds, out int energy)

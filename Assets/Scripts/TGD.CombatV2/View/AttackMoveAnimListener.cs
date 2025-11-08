@@ -24,9 +24,9 @@ namespace TGD.CombatV2
             {
                 if (ctx != null && ctx.boundUnit != null)
                     return ctx.boundUnit;
-                if (_attack != null && _attack.ctx != null && _attack.ctx.boundUnit != null)
+                if (_attack != null && _attack.Ctx != null && _attack.Ctx.boundUnit != null)
                 {
-                    ctx = _attack.ctx;
+                    ctx = _attack.Ctx;
                     return ctx.boundUnit;
                 }
                 return null;

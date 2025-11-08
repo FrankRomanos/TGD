@@ -30,9 +30,14 @@ namespace TGD.CombatV2
 
         Unit ResolveUnit(Unit unit)
         {
-            if (unit != null) return unit;
-            var driver = GetComponentInParent<HexBoardTestDriver>();
-            return driver != null ? driver.UnitRef : null;
+            if (unit != null)
+                return unit;
+
+            if (ctx != null && ctx.boundUnit != null)
+                return ctx.boundUnit;
+
+            var owner = GetComponentInParent<TGD.CoreV2.IToolOwner>();
+            return owner != null ? owner.Ctx?.boundUnit : null;
         }
 
         public bool IsOnCooldown(Unit unit, in MoveCostSpec spec)

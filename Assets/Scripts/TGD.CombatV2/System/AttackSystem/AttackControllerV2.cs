@@ -34,15 +34,12 @@ namespace TGD.CombatV2
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
-        [HideInInspector]
-        public HexBoardTestDriver driver;
         public HexBoardTiler tiler;
         public HexEnvironmentSystem env;
         public DefaultTargetValidator targetValidator;
         public HexOccupancyService occupancyService;
 
         [Header("Context (optional)")]
-        public UnitRuntimeContext ctx;
         public MoveRateStatusRuntime status;
         public MonoBehaviour stickySource;
 
@@ -188,15 +185,10 @@ namespace TGD.CombatV2
 
         PendingAttack _pendingAttack;
 
-        Unit ResolveSelfUnit()
-        {
-            if (ctx != null && ctx.boundUnit != null)
-                return ctx.boundUnit;
-            return null;
-        }
+        Unit ResolveSelfUnit() => OwnerUnit;
 
         Transform ResolveSelfView()
-            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, driver, viewOverride);
+            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
 
         void ClearExecReport()
         {
@@ -278,9 +270,9 @@ namespace TGD.CombatV2
             _boundTurnManager = turnManager;
         }
 
-        public void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
+        public override void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
         {
-            ctx = context;
+            base.BindContext(context, manager);
             AttachTurnManager(manager);
         }
 
@@ -494,13 +486,6 @@ namespace TGD.CombatV2
 
             if (!occupancyService)
                 occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
-
-            if (!occupancyService && driver != null)
-            {
-                occupancyService = driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && driver.authoring != null)
-                    occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-            }
 
             if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
                 occupancyService = concreteBridge.occupancyService;

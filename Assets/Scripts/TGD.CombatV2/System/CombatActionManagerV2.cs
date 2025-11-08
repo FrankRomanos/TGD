@@ -31,8 +31,6 @@ namespace TGD.CombatV2
 
         [Header("Turn Runtime")]
         public TurnManagerV2 turnManager;
-        public HexBoardTestDriver unitDriver;
-
         [Header("Factory Mode")]
         public bool useFactoryMode = false;
 
@@ -1550,27 +1548,11 @@ namespace TGD.CombatV2
 
         Unit ResolveUnit(IActionToolV2 tool)
         {
-            if (tool is HexClickMover mover && mover != null)
-            {
-                if (mover.ctx != null && mover.ctx.boundUnit != null)
-                    return mover.ctx.boundUnit;
-                if (mover.driver != null)
-                    return mover.driver.UnitRef;
-            }
+            if (tool is TGD.CoreV2.IToolOwner own && own.Ctx != null)
+                return own.Ctx.boundUnit;
 
-            if (tool is AttackControllerV2 attack && attack != null)
-            {
-                if (attack.ctx != null && attack.ctx.boundUnit != null)
-                    return attack.ctx.boundUnit;
-                if (attack.driver != null)
-                    return attack.driver.UnitRef;
-            }
-
-            if (tool is ChainActionBase chain && chain != null)
-                return chain.ResolveUnit();
-
-            if (unitDriver != null)
-                return unitDriver.UnitRef;
+            if (_activeCtx != null)
+                return _activeCtx.boundUnit;
 
             return null;
         }
@@ -4863,9 +4845,6 @@ namespace TGD.CombatV2
 
             if (isPlayerUnit)
             {
-                if (unitDriver != null && unitDriver.UnitRef != unit)
-                    yield break;
-
                 if (skipPhaseStartFreeChain)
                 {
                     Log($"[Free] PhaseStart(P1) freeskip unit={TurnManagerV2.FormatUnitLabel(unit)}");
@@ -4877,12 +4856,6 @@ namespace TGD.CombatV2
             }
 
             // 敌方分支：整批友方连锁期间加守卫，避免被 AutoFinishEnemyTurn 抢先结束
-            if (unitDriver != null)
-            {
-                var driverUnit = unitDriver.UnitRef;
-                if (driverUnit != null && turnManager.IsEnemyUnit(driverUnit))
-                    yield break;
-            }
 
             if (skipPhaseStartFreeChain)
             {
