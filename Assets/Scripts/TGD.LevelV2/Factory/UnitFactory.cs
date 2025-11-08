@@ -553,7 +553,6 @@ namespace TGD.LevelV2
                 chain.BindContext(context, resolvedTurnManager);
                 chain.targetValidator = resolvedValidator;
                 chain.tiler = resolvedTiler;
-                chain.driver = null;
             }
 
             var unitMoveListeners = go.GetComponentsInChildren<UnitMoveAnimListener>(true);
