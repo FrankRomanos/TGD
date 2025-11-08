@@ -29,7 +29,6 @@ namespace TGD.CombatV2
             if (context == null)
                 context = GetComponent<UnitRuntimeContext>();
             bool changed = RegisterCoreBindings();
-            changed |= WireMoveCosts();
             changed |= WireAttackCosts();
             changed |= WireStatusRuntime();
             changed |= AutoWireHudAndAnim();
@@ -69,44 +68,6 @@ namespace TGD.CombatV2
             _registeredTurnManager = turnManager;
             _registeredContext = context;
             _registeredCooldownStore = cooldownStore;
-
-            return changed;
-        }
-
-        bool WireMoveCosts()
-        {
-            var move = GetComponent<MoveCostServiceV2Adapter>();
-            if (move == null)
-                return false;
-
-            bool changed = false;
-
-            if (move.turnManager != turnManager)
-            {
-                move.turnManager = turnManager;
-                changed = true;
-            }
-
-            if (move.ctx != context)
-            {
-                move.ctx = context;
-                changed = true;
-            }
-
-            if (context != null)
-            {
-                if (move.cooldownHub == null && context.cooldownHub != null)
-                {
-                    move.cooldownHub = context.cooldownHub;
-                    changed = true;
-                }
-
-                if (move.stats == null && context.stats != null)
-                {
-                    move.stats = context.stats;
-                    changed = true;
-                }
-            }
 
             return changed;
         }
