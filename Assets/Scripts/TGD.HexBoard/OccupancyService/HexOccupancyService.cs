@@ -3,6 +3,7 @@ using TGD.CoreV2;
 
 namespace TGD.HexBoard
 {
+    [DefaultExecutionOrder(-1000)]
     public sealed class HexOccupancyService : MonoBehaviour, IOccupancyService
     {
         public HexBoardAuthoringLite authoring;
@@ -33,6 +34,9 @@ namespace TGD.HexBoard
 
             if (adapter.Unit == null && ctx.boundUnit != null)
                 adapter.Unit = ctx.boundUnit;
+
+            if (ctx.occService == null)
+                ctx.occService = this;
 
             return adapter;
         }

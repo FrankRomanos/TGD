@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2.Rules;
+using TGD.HexBoard;
 
 namespace TGD.CoreV2
 {
@@ -53,6 +54,7 @@ namespace TGD.CoreV2
         public IReadOnlyList<string> LearnedActions => _learnedActions;
         public readonly HashSet<string> GrantedSkillIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public Unit boundUnit; // TurnManagerV2.Bind(unit, ctx) 时顺手写入
+        [NonSerialized] public IOccupancyService occService;
 
         public void SetLearnedActions(IEnumerable<string> actions)
         {

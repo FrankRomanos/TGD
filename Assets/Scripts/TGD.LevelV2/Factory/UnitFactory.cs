@@ -630,6 +630,9 @@ namespace TGD.LevelV2
             if (occupancyService == null && occSvc != null)
                 occupancyService = occSvc;
 
+            if (context != null && occSvc != null)
+                context.occService = occSvc;
+
             if (shared.environment == null && occSvc != null)
             {
                 shared.environment = occSvc.GetComponent<HexEnvironmentSystem>();
