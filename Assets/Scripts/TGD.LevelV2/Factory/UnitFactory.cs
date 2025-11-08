@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using TGD.CombatV2;
 using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
@@ -803,7 +804,7 @@ namespace TGD.LevelV2
             var granted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var unlocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            AssignSkillDefinitions(go, availabilities, skillIndex);
+            AssignSkillDefinitions(context, availabilities, skillIndex);
 
             if (availabilities != null)
             {
@@ -881,46 +882,77 @@ namespace TGD.LevelV2
         }
 
         static void AssignSkillDefinitions(
-            GameObject go,
+            UnitRuntimeContext context,
             IReadOnlyList<UnitActionBinder.ActionAvailability> availabilities,
             SkillIndex skillIndex)
         {
-            if (go == null)
+            if (context == null)
                 return;
 
-            var tools = go.GetComponentsInChildren<SkillDefinitionActionTool>(true);
-            if ((tools == null || tools.Length == 0) && go != null)
-                tools = Array.Empty<SkillDefinitionActionTool>();
+            var used = new HashSet<SkillDefinitionActionTool>();
+            var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (availabilities == null || availabilities.Count == 0)
+            if (availabilities != null)
+            {
+                for (int i = 0; i < availabilities.Count; i++)
+                {
+                    var entry = availabilities[i];
+                    var id = NormalizeSkillId(entry.skillId);
+                    if (string.IsNullOrEmpty(id))
+                        continue;
+                    if (BuiltinSkillIds.Contains(id))
+                        continue;
+                    if (!uniqueIds.Add(id))
+                        continue;
+
+                    string slotName = ResolveToolSlotName(id);
+                    string trayPath = $"ActionTools/{slotName}";
+                    var tool = UnitRuntimeBindingUtil.EnsureToolOnTray<SkillDefinitionActionTool>(context, trayPath);
+                    if (tool == null)
+                    {
+                        Debug.LogWarning($"[ActionBinder] Failed to ensure SkillDefinitionActionTool for {id}.", context);
+                        continue;
+                    }
+
+                    tool.gameObject.name = slotName;
+                    tool.SetId(id);
+                    if (tool.Ctx != context)
+                        tool.Bind(context);
+                    tool.enabled = true;
+
+                    if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
+                    {
+                        if (!ReferenceEquals(tool.Definition, info.definition))
+                            tool.SetDefinition(info.definition);
+                    }
+                    else if (tool.Definition == null || !string.Equals(NormalizeSkillId(tool.Definition.Id), id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
+                    }
+
+                    used.Add(tool);
+                }
+            }
+
+            DisableUnusedSkillDefinitionTools(context, used);
+        }
+
+        static void DisableUnusedSkillDefinitionTools(UnitRuntimeContext context, HashSet<SkillDefinitionActionTool> used)
+        {
+            if (context == null)
                 return;
 
-            var map = new Dictionary<string, SkillDefinitionActionTool>(StringComparer.OrdinalIgnoreCase);
-            var pool = new List<SkillDefinitionActionTool>();
-            var poolSet = new HashSet<SkillDefinitionActionTool>();
+            var root = context.transform;
+            if (root == null)
+                return;
 
-            SkillDefinitionActionTool EnsureToolComponent()
-            {
-                if (go == null)
-                    return null;
+            var tray = root.Find("ActionTools");
+            if (tray == null)
+                return;
 
-                var created = go.AddComponent<SkillDefinitionActionTool>();
-                if (created != null)
-                    created.enabled = true;
-                return created;
-            }
-
-            void AddToPool(SkillDefinitionActionTool candidate)
-            {
-                if (candidate != null && poolSet.Add(candidate))
-                    pool.Add(candidate);
-            }
-
-            void RemoveFromPool(SkillDefinitionActionTool candidate)
-            {
-                if (candidate != null && poolSet.Remove(candidate))
-                    pool.Remove(candidate);
-            }
+            var tools = tray.GetComponentsInChildren<SkillDefinitionActionTool>(true);
+            if (tools == null)
+                return;
 
             for (int i = 0; i < tools.Length; i++)
             {
@@ -928,102 +960,40 @@ namespace TGD.LevelV2
                 if (tool == null)
                     continue;
 
-                var definitionId = NormalizeSkillId(tool.Definition != null ? tool.Definition.Id : null);
-                var explicitId = NormalizeSkillId(tool.Id);
-
-                bool isBuiltin = (!string.IsNullOrEmpty(definitionId) && BuiltinSkillIds.Contains(definitionId))
-                    || (!string.IsNullOrEmpty(explicitId) && BuiltinSkillIds.Contains(explicitId));
-
-                if (isBuiltin)
+                var id = NormalizeSkillId(tool.Id);
+                if (!string.IsNullOrEmpty(id) && BuiltinSkillIds.Contains(id))
                 {
                     tool.enabled = false;
                     continue;
                 }
 
-                bool mapped = false;
-                if (!string.IsNullOrEmpty(definitionId) && !map.ContainsKey(definitionId))
-                {
-                    map[definitionId] = tool;
-                    mapped = true;
-                }
+                if (used != null && used.Contains(tool))
+                    continue;
 
-                if (!string.IsNullOrEmpty(explicitId) && !map.ContainsKey(explicitId))
-                {
-                    map[explicitId] = tool;
-                    mapped = true;
-                }
-
-                if (mapped)
-                {
-                    tool.enabled = true;
-                }
-                else
-                {
-                    AddToPool(tool);
-                }
+                tool.enabled = false;
             }
+        }
 
-            var assignedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static string ResolveToolSlotName(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                return "Skill";
 
-            for (int i = 0; i < availabilities.Count; i++)
+            var builder = new StringBuilder(id.Length);
+            for (int i = 0; i < id.Length; i++)
             {
-                var entry = availabilities[i];
-                var id = NormalizeSkillId(entry.skillId);
-                if (string.IsNullOrEmpty(id))
-                    continue;
-                if (BuiltinSkillIds.Contains(id))
-                    continue;
-                if (!assignedIds.Add(id))
-                    continue;
-
-                SkillDefinitionActionTool tool = null;
-                if (map.TryGetValue(id, out var existing) && existing != null)
-                    tool = existing;
-
-                if (tool == null)
-                {
-                    if (pool.Count == 0)
-                    {
-                        tool = EnsureToolComponent();
-                        if (tool == null)
-                        {
-                            Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
-                            continue;
-                        }
-                    }
-
-                    if (tool == null)
-                    {
-                        int lastIndex = pool.Count - 1;
-                        tool = pool[lastIndex];
-                        pool.RemoveAt(lastIndex);
-                        poolSet.Remove(tool);
-                    }
-                }
+                char c = id[i];
+                if (char.IsLetterOrDigit(c))
+                    builder.Append(c);
                 else
-                {
-                    RemoveFromPool(tool);
-                }
-
-                if (tool == null)
-                {
-                    Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
-                    continue;
-                }
-
-                if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
-                {
-                    if (!ReferenceEquals(tool.Definition, info.definition))
-                        tool.SetDefinition(info.definition);
-                }
-                else if (tool.Definition == null || !string.Equals(tool.Definition.Id, id, StringComparison.OrdinalIgnoreCase))
-                {
-                    Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
-                }
-
-                tool.enabled = true;
-                map[id] = tool;
+                    builder.Append('_');
             }
+
+            var sanitized = builder.ToString().Trim('_');
+            if (string.IsNullOrEmpty(sanitized))
+                sanitized = "Skill";
+
+            return $"Skill_{sanitized}";
         }
 
         static string NormalizeSkillId(string skillId)

@@ -13,6 +13,7 @@ namespace TGD.CombatV2
     /// <summary>
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
+    [DisallowMultipleComponent]
     public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
         [SerializeField]

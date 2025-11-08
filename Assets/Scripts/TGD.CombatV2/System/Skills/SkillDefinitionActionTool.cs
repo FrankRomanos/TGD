@@ -9,6 +9,7 @@ using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
+    [DisallowMultipleComponent]
     [AddComponentMenu("TGD/CombatV2/Skill Definition Action Tool")]
     public sealed class SkillDefinitionActionTool : ChainActionBase, IActionResolveEffect, IFullRoundActionTool, IActionCostPreviewV2, ICooldownKeyProvider
     {
@@ -27,6 +28,13 @@ namespace TGD.CombatV2
         public override ActionKind Kind => definition != null ? definition.ActionKind : ActionKind.Standard;
 
         string ICooldownKeyProvider.CooldownKey => CooldownId;
+
+        public void SetId(string value)
+        {
+            string normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (!string.Equals(skillId, normalized, StringComparison.Ordinal))
+                skillId = normalized;
+        }
 
         void Reset()
         {

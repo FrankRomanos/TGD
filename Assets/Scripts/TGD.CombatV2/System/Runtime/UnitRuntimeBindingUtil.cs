@@ -1,3 +1,4 @@
+using System;
 using TGD.CombatV2.Integration;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -116,6 +117,66 @@ namespace TGD.CombatV2
             }
 
             return null;
+        }
+
+        public static T EnsureToolOnTray<T>(UnitRuntimeContext ctx, string tray = "ActionTools") where T : Component
+        {
+            if (ctx == null)
+            {
+                Debug.LogWarning("[Binding] Cannot ensure tool tray without context.");
+                return null;
+            }
+
+            var root = ctx.transform;
+            if (root == null)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(tray))
+                tray = "ActionTools";
+
+            var segments = tray.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+                segments = new[] { "ActionTools" };
+
+            Transform current = root;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                var segment = segments[i];
+                if (string.IsNullOrEmpty(segment))
+                    continue;
+
+                Transform next = null;
+                for (int childIndex = 0; childIndex < current.childCount; childIndex++)
+                {
+                    var child = current.GetChild(childIndex);
+                    if (child != null && string.Equals(child.name, segment, StringComparison.Ordinal))
+                    {
+                        next = child;
+                        break;
+                    }
+                }
+
+                if (next == null)
+                {
+                    var go = new GameObject(segment);
+                    go.transform.SetParent(current, false);
+                    next = go.transform;
+                }
+
+                current = next;
+            }
+
+            if (current == null)
+                return null;
+
+            var tool = current.GetComponent<T>();
+            if (tool == null)
+                tool = current.gameObject.AddComponent<T>();
+
+            if (tool is IToolOwner owner && owner.Ctx != ctx)
+                owner.Bind(ctx);
+
+            return tool;
         }
     }
 }
