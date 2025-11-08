@@ -25,13 +25,16 @@ namespace TGD.CombatV2
         public ActionKind Kind => ActionKind.Standard;
 
         [Header("Bridge (optional)")]
+        [HideInInspector]
         public PlayerOccupancyBridge bridgeOverride;   // ★ 新增：强制使用角色自己的桥
 
         [Header("View (optional)")]
+        [HideInInspector]
         public Transform viewOverride;
 
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
+        [HideInInspector]
         public HexBoardTestDriver driver;
         public HexBoardTiler tiler;
         public HexEnvironmentSystem env;
@@ -43,17 +46,20 @@ namespace TGD.CombatV2
         public MoveRateStatusRuntime status;
         public MonoBehaviour stickySource;
 
-        [Header("Config")]
-        public MonoBehaviour enemyProvider;
-
         [Header("Turn Manager Binding")]
+        [HideInInspector]
         public bool UseTurnManager = true;
+        [HideInInspector]
         public bool ManageEnergyLocally = false;
+        [HideInInspector]
         public bool ManageTurnTimeLocally = false;
 
         [Header("Costs & Turn")]
+        [HideInInspector]
         public bool simulateTurnTime = true;
+        [HideInInspector]
         public int baseTurnSeconds = 6;
+        [HideInInspector]
         public TurnManagerV2 turnManager;
         TurnManagerV2 _boundTurnManager;
 
@@ -480,7 +486,7 @@ namespace TGD.CombatV2
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
-            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+            RefreshSticky(markPreviewDirty: false);
             TryResolveBridge();
 
             if (!targetValidator)
@@ -511,6 +517,26 @@ namespace TGD.CombatV2
                 maxRangeHexes = -1
             };
             EnsureBound();
+        }
+
+        void RefreshSticky(bool markPreviewDirty)
+        {
+            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+
+            if (markPreviewDirty)
+            {
+                _previewDirty = true;
+                _previewAnchorVersion = -1;
+                _planAnchorVersion = -1;
+                _hover = null;
+                _currentPreview = null;
+                _cursor?.Clear();
+            }
+        }
+
+        public void RefreshFactoryInjection()
+        {
+            RefreshSticky(markPreviewDirty: true);
         }
 
         protected override void HookEvents(bool bind)

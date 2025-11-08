@@ -121,7 +121,6 @@ namespace TGD.CombatV2
 
         bool WireStatusRuntime()
         {
-            var driver = ResolveDriver();
             var statuses = GetComponentsInChildren<MoveRateStatusRuntime>(true);
             bool changed = false;
             foreach (var status in statuses)
@@ -129,15 +128,9 @@ namespace TGD.CombatV2
                 if (status == null)
                     continue;
 
-                if (turnManager != null && status.turnManager != turnManager)
+                if (status.ctx != context || status.turnManager != turnManager)
                 {
-                    status.AttachTurnManager(turnManager);
-                    changed = true;
-                }
-
-                if (driver != null && status.driver != driver)
-                {
-                    status.AttachDriver(driver);
+                    status.Attach(context, turnManager);
                     changed = true;
                 }
             }

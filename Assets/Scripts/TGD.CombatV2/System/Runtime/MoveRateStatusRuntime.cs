@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using TGD.CoreV2;
-using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
@@ -19,7 +18,7 @@ namespace TGD.CombatV2
         }
 
         public bool debugLog = false;
-        public HexBoardTestDriver driver;
+        public UnitRuntimeContext ctx;
         public TurnManagerV2 turnManager;
 
         readonly List<Entry> _entries = new();
@@ -28,7 +27,7 @@ namespace TGD.CombatV2
         float _product = 1f;
         TurnManagerV2 _subscribedManager;
 
-        public Unit UnitRef => driver ? driver.UnitRef : null;
+        public Unit UnitRef => ctx != null ? ctx.boundUnit : null;
 
         public readonly struct EntrySnapshot
         {
@@ -51,7 +50,7 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             ResolveAutoRefs();
-            AttachTurnManager(turnManager);
+            Attach(ctx, turnManager);
         }
 
         void OnDisable()
@@ -65,17 +64,16 @@ namespace TGD.CombatV2
 
         void ResolveAutoRefs()
         {
-            if (driver == null)
-                driver = GetComponentInParent<HexBoardTestDriver>();
+            if (ctx == null)
+                ctx = GetComponentInParent<UnitRuntimeContext>();
             if (turnManager == null)
                 turnManager = GetComponentInParent<TurnManagerV2>();
         }
 
-        public void AttachDriver(HexBoardTestDriver drv)
+        public void Attach(UnitRuntimeContext context, TurnManagerV2 manager)
         {
-            driver = drv;
-            if (_subscribedManager != null)
-                _subscribedManager.RegisterMoveRateStatus(this);
+            ctx = context;
+            AttachTurnManager(manager);
         }
 
         public void AttachTurnManager(TurnManagerV2 manager)
