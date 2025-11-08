@@ -829,6 +829,8 @@ namespace TGD.LevelV2
             var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
             var boundUnit = context != null ? context.boundUnit : null;
             string ownerLabel = boundUnit != null ? TurnManagerV2.FormatUnitLabel(boundUnit) : "?";
+            bool advancedLogs = cam != null && cam.AdvancedDebugLogsEnabled;
+
             foreach (var behaviour in behaviours)
             {
                 if (behaviour is IActionToolV2 tool)
@@ -857,7 +859,8 @@ namespace TGD.LevelV2
                         shouldRegister = false;
                     }
 
-                    Debug.Log($"[Binder] owner={ownerLabel} tool={toolType} id={idLabel} kind={kind} enable={enable} register={shouldRegister}", behaviour);
+                    if (advancedLogs)
+                        Debug.Log($"[Binder] owner={ownerLabel} tool={toolType} id={idLabel} kind={kind} enable={enable} register={shouldRegister}", behaviour);
 
                     behaviour.enabled = enable;
 
@@ -867,12 +870,14 @@ namespace TGD.LevelV2
                         {
                             cam.RegisterTool(tool);
                             int instanceId = behaviour != null ? behaviour.GetInstanceID() : 0;
-                            Debug.Log($"[Binder] +Reg owner={ownerLabel} id={idLabel} inst={instanceId}", behaviour);
+                            if (advancedLogs)
+                                Debug.Log($"[Binder] +Reg owner={ownerLabel} id={idLabel} inst={instanceId}", behaviour);
                         }
                         else
                         {
                             cam.UnregisterTool(tool);
-                            Debug.Log($"[Binder] -Reg owner={ownerLabel} id={idLabel}", behaviour);
+                            if (advancedLogs)
+                                Debug.Log($"[Binder] -Reg owner={ownerLabel} id={idLabel}", behaviour);
                         }
                     }
                 }

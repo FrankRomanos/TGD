@@ -68,6 +68,8 @@ namespace TGD.CombatV2
         public MonoBehaviour chainPopupUiBehaviour;
 
         public bool debugLog = true;
+        [Tooltip("Enables verbose binder/chain/rulebook diagnostics when Debug Log is also on.")]
+        public bool advancedDebugLog = false;
         public bool quietInternalToolLogs = true;
 
         [Header("Phase Start Free Chain")]
@@ -2409,9 +2411,11 @@ namespace TGD.CombatV2
                 Debug.Log(message, this);
         }
 
+        public bool AdvancedDebugLogsEnabled => debugLog && advancedDebugLog;
+
         void ChainDebugLog(string message)
         {
-            if (!debugLog)
+            if (!AdvancedDebugLogsEnabled)
                 return;
             Debug.Log(message, this);
         }
@@ -2977,7 +2981,7 @@ namespace TGD.CombatV2
 
         void LogLearnedChainActions(string contextLabel)
         {
-            if (!debugLog || turnManager == null)
+            if (!AdvancedDebugLogsEnabled || turnManager == null)
                 return;
 
             var index = ResolveSkillIndex();
@@ -3026,7 +3030,7 @@ namespace TGD.CombatV2
 
         void LogChainDiagnostics(Unit baseUnit, string basePlanKind, string stageLabel, int baseTimeCost, bool isEnemyPhase, List<ChainOptionDebug> diagnostics)
         {
-            if (!debugLog || diagnostics == null)
+            if (!AdvancedDebugLogsEnabled || diagnostics == null)
                 return;
 
             string baseLabel = string.IsNullOrEmpty(basePlanKind) ? "?" : basePlanKind;
@@ -3084,7 +3088,7 @@ namespace TGD.CombatV2
 
         void LogChainPrompt(Unit baseUnit, string baseKind, string stageLabel, string phaseLabel, IList<string> entries)
         {
-            if (!debugLog)
+            if (!AdvancedDebugLogsEnabled)
                 return;
 
             string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
@@ -3102,7 +3106,7 @@ namespace TGD.CombatV2
 
         void LogDerivedDiagnostics(Unit owner, string baseKind, DerivedCandidateSource source, List<string> entries)
         {
-            if (!debugLog)
+            if (!AdvancedDebugLogsEnabled)
                 return;
 
             string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
@@ -3113,7 +3117,7 @@ namespace TGD.CombatV2
 
         void LogChainAllowedKinds(Unit owner, string baseKind, string stageLabel, IReadOnlyList<ActionKind> kinds)
         {
-            if (!debugLog)
+            if (!AdvancedDebugLogsEnabled)
                 return;
 
             string baseLabel = string.IsNullOrEmpty(baseKind) ? "?" : baseKind;
