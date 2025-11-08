@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2.Rules;
-using TGD.HexBoard;
 
 namespace TGD.CoreV2
 {

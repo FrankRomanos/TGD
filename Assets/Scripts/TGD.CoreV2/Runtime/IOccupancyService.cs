@@ -1,6 +1,4 @@
-using TGD.CoreV2;
-
-namespace TGD.HexBoard
+namespace TGD.CoreV2
 {
     public interface IOccupancyService
     {
