@@ -48,6 +48,10 @@ namespace TGD.CombatV2
         public TurnManagerV2 turnManager;
         TurnManagerV2 _boundTurnManager;
 
+        [Header("Runtime Behaviour")]
+        [SerializeField]
+        bool assumePrepaid = true;
+
         [Header("Animation")]
         public float stepSeconds = 0.12f;
         public float minStepSeconds = 0.06f;
@@ -648,7 +652,7 @@ namespace TGD.CombatV2
                 reason = "(entangled)";
                 return false;
             }
-            int needSec = 1;
+
             var selfUnit = ResolveSelfUnit();
             var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
             if (tm == null || selfUnit == null)
@@ -659,23 +663,27 @@ namespace TGD.CombatV2
                 return false;
             }
 
-            var budget = tm.GetBudget(selfUnit);
-            if (budget == null || !budget.HasTime(needSec))
+            if (!assumePrepaid)
             {
-                if (raiseHud)
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
-                reason = "(no-time)";
-                return false;
-            }
+                const int needSec = 1;
+                var budget = tm.GetBudget(selfUnit);
+                if (budget == null || !budget.HasTime(needSec))
+                {
+                    if (raiseHud)
+                        RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
+                    reason = "(no-time)";
+                    return false;
+                }
 
-            int moveEnergyCost = MoveEnergyPerSecond();
-            var resources = tm.GetResources(selfUnit);
-            if (resources != null && moveEnergyCost > 0 && !resources.Has("Energy", moveEnergyCost))
-            {
-                if (raiseHud)
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
-                reason = "(no-energy)";
-                return false;
+                int moveEnergyCost = MoveEnergyPerSecond();
+                var resources = tm.GetResources(selfUnit);
+                if (resources != null && moveEnergyCost > 0 && !resources.Has("Energy", moveEnergyCost))
+                {
+                    if (raiseHud)
+                        RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                    reason = "(no-energy)";
+                    return false;
+                }
             }
             reason = null;
             return true;
@@ -801,29 +809,32 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            var budget = tm.GetBudget(unit);
-            if (budget == null || !budget.HasTime(moveSecsCharge))
+            if (!assumePrepaid)
             {
-                RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
-                yield break;
-            }
-
-            if (attackPlanned && !budget.HasTime(moveSecsCharge + attackSecsCharge))
-            {
-                attackPlanned = false;
-                attackSecsCharge = 0;
-                attackEnergyCost = 0;
-                _pendingComboBaseCount = 0;
-            }
-
-            var resources = tm.GetResources(unit);
-            if (resources != null)
-            {
-                int totalEnergy = moveEnergyCost + (attackPlanned ? attackEnergyCost : 0);
-                if (totalEnergy > 0 && !resources.Has("Energy", totalEnergy))
+                var budget = tm.GetBudget(unit);
+                if (budget == null || !budget.HasTime(moveSecsCharge))
                 {
-                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                    RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.CantMove, "No more time.");
                     yield break;
+                }
+
+                if (attackPlanned && !budget.HasTime(moveSecsCharge + attackSecsCharge))
+                {
+                    attackPlanned = false;
+                    attackSecsCharge = 0;
+                    attackEnergyCost = 0;
+                    _pendingComboBaseCount = 0;
+                }
+
+                var resources = tm.GetResources(unit);
+                if (resources != null)
+                {
+                    int totalEnergy = moveEnergyCost + (attackPlanned ? attackEnergyCost : 0);
+                    if (totalEnergy > 0 && !resources.Has("Energy", totalEnergy))
+                    {
+                        RaiseRejected(ResolveSelfUnit(), AttackRejectReasonV2.NotEnoughResource, "Not enough energy.");
+                        yield break;
+                    }
                 }
             }
             int attackEnergySpent = 0;
