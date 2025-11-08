@@ -565,7 +565,7 @@ namespace TGD.LevelV2
                 if (status == null)
                     continue;
 
-                status.Attach(context, resolvedTurnManager);
+                status.BindContext(context, resolvedTurnManager);
             }
         }
 

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -6,7 +7,7 @@ using TGD.CoreV2;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class MoveRateStatusRuntime : MonoBehaviour
+    public sealed class MoveRateStatusRuntime : MonoBehaviour, IBindContext
     {
         [System.Serializable]
         public sealed class Entry
@@ -18,8 +19,8 @@ namespace TGD.CombatV2
         }
 
         public bool debugLog = false;
-        public UnitRuntimeContext ctx;
-        public TurnManagerV2 turnManager;
+        [SerializeField] UnitRuntimeContext ctx;
+        [SerializeField] TurnManagerV2 turnManager;
 
         readonly List<Entry> _entries = new();
         readonly Dictionary<string, Entry> _entriesByTag = new();
@@ -27,7 +28,12 @@ namespace TGD.CombatV2
         float _product = 1f;
         TurnManagerV2 _subscribedManager;
 
-        public Unit UnitRef => ctx != null ? ctx.boundUnit : null;
+        public UnitRuntimeContext Context => ctx;
+        public TurnManagerV2 Manager => turnManager;
+        public Unit OwnerUnit => ctx != null ? ctx.boundUnit : null;
+
+        [Obsolete("Use OwnerUnit or ctx.boundUnit instead.")]
+        public Unit UnitRef => OwnerUnit;
 
         public readonly struct EntrySnapshot
         {
@@ -50,7 +56,7 @@ namespace TGD.CombatV2
         void OnEnable()
         {
             ResolveAutoRefs();
-            Attach(ctx, turnManager);
+            BindContext(ctx, turnManager);
         }
 
         void OnDisable()
@@ -70,7 +76,13 @@ namespace TGD.CombatV2
                 turnManager = GetComponentInParent<TurnManagerV2>();
         }
 
+        [Obsolete("Use BindContext(UnitRuntimeContext, TurnManagerV2)")] 
         public void Attach(UnitRuntimeContext context, TurnManagerV2 manager)
+        {
+            BindContext(context, manager);
+        }
+
+        public void BindContext(UnitRuntimeContext context, TurnManagerV2 manager)
         {
             ctx = context;
             AttachTurnManager(manager);
@@ -78,15 +90,12 @@ namespace TGD.CombatV2
 
         public void AttachTurnManager(TurnManagerV2 manager)
         {
-            if (_subscribedManager == manager)
-                return;
-
-            if (_subscribedManager != null)
+            if (_subscribedManager != null && _subscribedManager != manager)
             {
                 _subscribedManager.UnregisterMoveRateStatus(this);
+                _subscribedManager = null;
             }
 
-            _subscribedManager = null;
             turnManager = manager;
 
             if (manager != null && isActiveAndEnabled)
@@ -94,6 +103,11 @@ namespace TGD.CombatV2
                 manager.RegisterMoveRateStatus(this);
                 _subscribedManager = manager;
             }
+        }
+
+        void IBindContext.BindContext(UnitRuntimeContext context, TurnManagerV2 turnManager)
+        {
+            BindContext(context, turnManager);
         }
 
 
@@ -150,7 +164,7 @@ namespace TGD.CombatV2
 
         Entry GetOrCreateEntry(string tag, bool exclusive, float mult, int turns, string source)
         {
-            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+            var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
             if (_entriesByTag.TryGetValue(tag, out var existing) && existing != null)
             {
                 existing.mult = mult;
@@ -232,7 +246,7 @@ namespace TGD.CombatV2
                 _entriesByTag.Remove(entry.tag);
                 if (log)
                 {
-                    var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+                    var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
                     Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
                 }
             }
@@ -252,7 +266,7 @@ namespace TGD.CombatV2
                 return;
 
             bool changed = false;
-            var unitLabel = TurnManagerV2.FormatUnitLabel(UnitRef);
+            var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
                 var entry = _entries[i];

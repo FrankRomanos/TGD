@@ -89,9 +89,9 @@ namespace TGD.CombatV2
                 if (status == null)
                     continue;
 
-                if (status.ctx != context || status.turnManager != turnManager)
+                if (status.Context != context || status.Manager != turnManager)
                 {
-                    status.Attach(context, turnManager);
+                    status.BindContext(context, turnManager);
                     changed = true;
                 }
             }
