@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   id: Reaction001
   kind: 0
-  displayName: Reaction002
+  displayName: Reaction001
   icon: {fileID: 21300000, guid: 3d95840df1d062a4e819f59540c0c782, type: 3}
   actionKind: 1
   targetRule: 5

@@ -1,4 +1,4 @@
-// File: TGD.HexBoard/HexHazardWatcher.cs
+﻿// File: TGD.HexBoard/HexHazardWatcher.cs
 using TGD.CoreV2;
 using UnityEngine;
 

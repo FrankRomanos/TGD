@@ -10,22 +10,22 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 394137ad8209411eab87f5b89b9a63be, type: 3}
-  m_Name: Reaction002
+  m_Name: Free001
   m_EditorClassIdentifier: 
-  id: Reaction002
+  id: Free001
   kind: 0
-  displayName: Reaction002
-  icon: {fileID: 21300000, guid: 24a02720e11b75847a46793978ec0e26, type: 3}
-  actionKind: 1
-  targetRule: 5
+  displayName: "\u5168\u795E\u8D2F\u6CE8"
+  icon: {fileID: 21300000, guid: cb6b35328c2f7954a89d7a811c6bd9c2, type: 3}
+  actionKind: 5
+  targetRule: 0
   costAuthority: 0
-  timeCostSeconds: 1
-  energyCost: 40
+  timeCostSeconds: 0
+  energyCost: 10
   maxRangeHexes: -1
-  cooldownKey: Reaction002
+  cooldownKey: Free001
   derivedFromSkillId: 
   fullRoundRounds: 1
   confirmLogs:
   - 
   resolveLogs:
-  - "\u65E0\u654C\uFF01"
+  - Free

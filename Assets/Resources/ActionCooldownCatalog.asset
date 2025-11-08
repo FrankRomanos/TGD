@@ -19,3 +19,7 @@ MonoBehaviour:
     seconds: 18
   - key: Free
     seconds: 60
+  - key: DerivedAttack
+    seconds: 24
+  - key: DerivedDerived
+    seconds: 24

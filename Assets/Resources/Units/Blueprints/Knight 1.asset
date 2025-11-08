@@ -74,12 +74,6 @@ MonoBehaviour:
   - skillId: Attack
     learned: 1
     initialCooldownSeconds: 0
-  - skillId: DerivedAfterAttack
-    learned: 1
-    initialCooldownSeconds: 0
-  - skillId: DerivedAfterDerived
-    learned: 1
-    initialCooldownSeconds: 0
   - skillId: Reaction001
     learned: 1
     initialCooldownSeconds: 0
