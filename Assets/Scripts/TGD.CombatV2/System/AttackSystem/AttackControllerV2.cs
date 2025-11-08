@@ -323,8 +323,12 @@ namespace TGD.CombatV2
                     occupancyService = driver.authoring.GetComponent<HexOccupancyService>() ?? driver.authoring.GetComponentInParent<HexOccupancyService>(true);
             }
 
-            if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
-                occupancyService = concreteBridge.occupancyService;
+            if (occupancyService == null)
+            {
+                var concreteBridge = _bridge as PlayerOccupancyBridge;
+                if (concreteBridge != null && concreteBridge.occupancyService)
+                    occupancyService = concreteBridge.occupancyService;
+            }
 
             _attackSpec = new TargetingSpec
             {
@@ -362,10 +366,14 @@ namespace TGD.CombatV2
 
             if (occupancyService)
                 _occ = occupancyService.Get();
-            else if (_bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
+            else
             {
-                occupancyService = concreteBridge.occupancyService;
-                _occ = occupancyService ? occupancyService.Get() : null;
+                var concreteBridge = _bridge as PlayerOccupancyBridge;
+                if (concreteBridge != null && concreteBridge.occupancyService)
+                {
+                    occupancyService = concreteBridge.occupancyService;
+                    _occ = occupancyService ? occupancyService.Get() : null;
+                }
             }
 
             _bridge?.EnsurePlacedNow();
