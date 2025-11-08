@@ -69,8 +69,17 @@ MonoBehaviour:
   avatar: {fileID: 21300000, guid: 3f96bf270cdfe06499c4fc76314f3646, type: 3}
   abilities:
   - skillId: Move
+    learned: 0
+    initialCooldownSeconds: 0
+  - skillId: Attack
+    learned: 0
+    initialCooldownSeconds: 0
+  - skillId: Reaction001
     learned: 1
     initialCooldownSeconds: 0
   - skillId: Attack
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: Move
     learned: 1
     initialCooldownSeconds: 0

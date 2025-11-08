@@ -13,12 +13,6 @@ MonoBehaviour:
   m_Name: SkillIndex
   m_EditorClassIdentifier: 
   entries:
-  - definition: {fileID: 11400000, guid: ecf54a441b724131aa060245aa09b797, type: 2}
-    displayName: Move
-    icon: {fileID: 21300000, guid: c0e400fa25476224cb77d40f780ebfd9, type: 3}
-  - definition: {fileID: 11400000, guid: 02943c61c4c5480fabafd254acf2443c, type: 2}
-    displayName: Attack
-    icon: {fileID: 21300000, guid: d7cc2af5daea9e649b2816a8979883eb, type: 3}
   - definition: {fileID: 11400000, guid: bf53f183214c418a965fc43569d0a49c, type: 2}
     displayName: Reaction002
     icon: {fileID: 0}
@@ -36,4 +30,10 @@ MonoBehaviour:
     icon: {fileID: 0}
   - definition: {fileID: 11400000, guid: 2a44624ef4ed456fb0eedc47415fc1cb, type: 2}
     displayName: "\u6D3E\u751F1"
+    icon: {fileID: 0}
+  - definition: {fileID: 11400000, guid: 02943c61c4c5480fabafd254acf2443c, type: 2}
+    displayName: Attack
+    icon: {fileID: 0}
+  - definition: {fileID: 11400000, guid: ecf54a441b724131aa060245aa09b797, type: 2}
+    displayName: Move
     icon: {fileID: 0}

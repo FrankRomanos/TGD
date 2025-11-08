@@ -788,6 +788,12 @@ namespace TGD.LevelV2
             return adapter;
         }
 
+        static readonly HashSet<string> BuiltinSkillIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Move",
+            "Attack"
+        };
+
         static void ApplyAbilityLoadout(
             GameObject go,
             UnitRuntimeContext context,
@@ -821,20 +827,58 @@ namespace TGD.LevelV2
             context?.SetGrantedActions(granted);
 
             var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            var boundUnit = context != null ? context.boundUnit : null;
+            string ownerLabel = boundUnit != null ? TurnManagerV2.FormatUnitLabel(boundUnit) : "?";
+            bool advancedLogs = cam != null && cam.AdvancedDebugLogsEnabled;
+
             foreach (var behaviour in behaviours)
             {
                 if (behaviour is IActionToolV2 tool)
                 {
                     var id = NormalizeSkillId(tool.Id);
                     bool enable = !string.IsNullOrEmpty(id) && unlocked.Contains(id);
+                    bool shouldRegister = !string.IsNullOrEmpty(id) && granted.Contains(id);
+                    string idLabel = string.IsNullOrEmpty(id) ? "?" : id;
+                    string toolType = behaviour != null ? behaviour.GetType().Name : "?";
+                    ActionKind kind;
+                    try
+                    {
+                        kind = tool.Kind;
+                    }
+                    catch (MissingReferenceException)
+                    {
+                        kind = ActionKind.Standard;
+                    }
+
+                    bool isSkillDefinitionTool = behaviour is SkillDefinitionActionTool;
+                    bool isBuiltin = isSkillDefinitionTool && !string.IsNullOrEmpty(id) && BuiltinSkillIds.Contains(id);
+
+                    if (isBuiltin)
+                    {
+                        enable = false;
+                        shouldRegister = false;
+                    }
+
+                    if (advancedLogs)
+                        Debug.Log($"[Binder] owner={ownerLabel} tool={toolType} id={idLabel} kind={kind} enable={enable} register={shouldRegister}", behaviour);
+
                     behaviour.enabled = enable;
 
                     if (cam != null)
                     {
-                        if (!string.IsNullOrEmpty(id) && granted.Contains(id))
+                        if (shouldRegister)
+                        {
                             cam.RegisterTool(tool);
+                            int instanceId = behaviour != null ? behaviour.GetInstanceID() : 0;
+                            if (advancedLogs)
+                                Debug.Log($"[Binder] +Reg owner={ownerLabel} id={idLabel} inst={instanceId}", behaviour);
+                        }
                         else
+                        {
                             cam.UnregisterTool(tool);
+                            if (advancedLogs)
+                                Debug.Log($"[Binder] -Reg owner={ownerLabel} id={idLabel}", behaviour);
+                        }
                     }
                 }
             }
@@ -849,8 +893,8 @@ namespace TGD.LevelV2
                 return;
 
             var tools = go.GetComponentsInChildren<SkillDefinitionActionTool>(true);
-            if (tools == null || tools.Length == 0)
-                return;
+            if ((tools == null || tools.Length == 0) && go != null)
+                tools = Array.Empty<SkillDefinitionActionTool>();
 
             if (availabilities == null || availabilities.Count == 0)
                 return;
@@ -858,6 +902,17 @@ namespace TGD.LevelV2
             var map = new Dictionary<string, SkillDefinitionActionTool>(StringComparer.OrdinalIgnoreCase);
             var pool = new List<SkillDefinitionActionTool>();
             var poolSet = new HashSet<SkillDefinitionActionTool>();
+
+            SkillDefinitionActionTool EnsureToolComponent()
+            {
+                if (go == null)
+                    return null;
+
+                var created = go.AddComponent<SkillDefinitionActionTool>();
+                if (created != null)
+                    created.enabled = true;
+                return created;
+            }
 
             void AddToPool(SkillDefinitionActionTool candidate)
             {
@@ -878,15 +933,38 @@ namespace TGD.LevelV2
                     continue;
 
                 var definitionId = NormalizeSkillId(tool.Definition != null ? tool.Definition.Id : null);
-                if (!string.IsNullOrEmpty(definitionId) && !map.ContainsKey(definitionId))
-                    map[definitionId] = tool;
-
                 var explicitId = NormalizeSkillId(tool.Id);
-                if (!string.IsNullOrEmpty(explicitId) && !map.ContainsKey(explicitId))
-                    map[explicitId] = tool;
 
-                if (string.IsNullOrEmpty(definitionId))
+                bool isBuiltin = (!string.IsNullOrEmpty(definitionId) && BuiltinSkillIds.Contains(definitionId))
+                    || (!string.IsNullOrEmpty(explicitId) && BuiltinSkillIds.Contains(explicitId));
+
+                if (isBuiltin)
+                {
+                    tool.enabled = false;
+                    continue;
+                }
+
+                bool mapped = false;
+                if (!string.IsNullOrEmpty(definitionId) && !map.ContainsKey(definitionId))
+                {
+                    map[definitionId] = tool;
+                    mapped = true;
+                }
+
+                if (!string.IsNullOrEmpty(explicitId) && !map.ContainsKey(explicitId))
+                {
+                    map[explicitId] = tool;
+                    mapped = true;
+                }
+
+                if (mapped)
+                {
+                    tool.enabled = true;
+                }
+                else
+                {
                     AddToPool(tool);
+                }
             }
 
             var assignedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -896,6 +974,8 @@ namespace TGD.LevelV2
                 var entry = availabilities[i];
                 var id = NormalizeSkillId(entry.skillId);
                 if (string.IsNullOrEmpty(id))
+                    continue;
+                if (BuiltinSkillIds.Contains(id))
                     continue;
                 if (!assignedIds.Add(id))
                     continue;
@@ -908,18 +988,31 @@ namespace TGD.LevelV2
                 {
                     if (pool.Count == 0)
                     {
-                        Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
-                        continue;
+                        tool = EnsureToolComponent();
+                        if (tool == null)
+                        {
+                            Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
+                            continue;
+                        }
                     }
 
-                    int lastIndex = pool.Count - 1;
-                    tool = pool[lastIndex];
-                    pool.RemoveAt(lastIndex);
-                    poolSet.Remove(tool);
+                    if (tool == null)
+                    {
+                        int lastIndex = pool.Count - 1;
+                        tool = pool[lastIndex];
+                        pool.RemoveAt(lastIndex);
+                        poolSet.Remove(tool);
+                    }
                 }
                 else
                 {
                     RemoveFromPool(tool);
+                }
+
+                if (tool == null)
+                {
+                    Debug.LogWarning($"[ActionBinder] No SkillDefinitionActionTool available for {id}.", go);
+                    continue;
                 }
 
                 if (skillIndex != null && skillIndex.TryGet(id, out var info) && info.definition != null)
@@ -932,6 +1025,7 @@ namespace TGD.LevelV2
                     Debug.LogWarning($"[ActionBinder] Missing SkillDefinition for {id}.", tool);
                 }
 
+                tool.enabled = true;
                 map[id] = tool;
             }
         }

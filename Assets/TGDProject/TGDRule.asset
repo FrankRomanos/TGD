@@ -59,10 +59,6 @@ MonoBehaviour:
     allowReactionNext: 0
     allowFreeNext: 1
     allowDerivedNext: 0
-  derivedRules:
-  - sourceId: Attack
-    derivedIds:
-    - DerivedAfterAttack
-  - sourceId: DerivedAfterAttack
-    derivedIds:
-    - DerivedAfterDerived
+  derivedRules: []
+  skillIndex: {fileID: 11400000, guid: 801d1b50d65c48a6831480530382ebf9, type: 2}
+  includeSkillIndexDerivedLinks: 1
