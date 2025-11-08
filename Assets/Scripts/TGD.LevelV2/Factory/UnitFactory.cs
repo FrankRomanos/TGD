@@ -657,7 +657,6 @@ namespace TGD.LevelV2
             var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
             if (bridge != null)
             {
-                bridge.occupancyService = occSvc;
                 bridge.occSvc = occSvc;
                 if (defaultFootprint != null)
                     bridge.overrideFootprint = defaultFootprint;
