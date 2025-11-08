@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace TGD.CombatV2
 {
-    static class UnitRuntimeBindingUtil
+    public static class UnitRuntimeBindingUtil
     {
         public static Unit ResolveUnit(UnitRuntimeContext ctx)
         {
