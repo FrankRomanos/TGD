@@ -543,10 +543,9 @@ namespace TGD.CombatV2
         void Awake()
         {
             _cost = costProvider as IMoveCostService;
-            _painter = new HexAreaPainter(tiler);
+            RefreshPainterAndSticky(markPreviewDirty: false);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
-            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
 
             if (driver == null)
                 driver = GetComponentInParent<HexBoardTestDriver>(true);
@@ -583,6 +582,36 @@ namespace TGD.CombatV2
                 maxRangeHexes = -1
             };
             EnsureBound();
+        }
+
+        void RefreshPainterAndSticky(bool markPreviewDirty)
+        {
+            if (tiler != null)
+            {
+                _painter?.Clear();
+                _painter = new HexAreaPainter(tiler);
+            }
+            else if (_painter != null)
+            {
+                _painter.Clear();
+                _painter = null;
+            }
+
+            _sticky = (stickySource as IStickyMoveSource) ?? (env as IStickyMoveSource);
+
+            if (markPreviewDirty)
+            {
+                _paths.Clear();
+                _previewDirty = true;
+                _previewAnchorVersion = -1;
+                _planAnchorVersion = -1;
+                _showing = false;
+            }
+        }
+
+        public void RefreshFactoryInjection()
+        {
+            RefreshPainterAndSticky(markPreviewDirty: true);
         }
 
         void Start()
