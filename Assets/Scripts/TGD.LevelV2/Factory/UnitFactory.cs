@@ -821,20 +821,44 @@ namespace TGD.LevelV2
             context?.SetGrantedActions(granted);
 
             var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            var boundUnit = context != null ? context.boundUnit : null;
+            string ownerLabel = boundUnit != null ? TurnManagerV2.FormatUnitLabel(boundUnit) : "?";
             foreach (var behaviour in behaviours)
             {
                 if (behaviour is IActionToolV2 tool)
                 {
                     var id = NormalizeSkillId(tool.Id);
                     bool enable = !string.IsNullOrEmpty(id) && unlocked.Contains(id);
+                    bool shouldRegister = !string.IsNullOrEmpty(id) && granted.Contains(id);
+                    string idLabel = string.IsNullOrEmpty(id) ? "?" : id;
+                    string toolType = behaviour != null ? behaviour.GetType().Name : "?";
+                    ActionKind kind;
+                    try
+                    {
+                        kind = tool.Kind;
+                    }
+                    catch (MissingReferenceException)
+                    {
+                        kind = ActionKind.Standard;
+                    }
+
+                    Debug.Log($"[Binder] owner={ownerLabel} tool={toolType} id={idLabel} kind={kind} enable={enable} register={shouldRegister}", behaviour);
+
                     behaviour.enabled = enable;
 
                     if (cam != null)
                     {
-                        if (!string.IsNullOrEmpty(id) && granted.Contains(id))
+                        if (shouldRegister)
+                        {
                             cam.RegisterTool(tool);
+                            int instanceId = behaviour != null ? behaviour.GetInstanceID() : 0;
+                            Debug.Log($"[Binder] +Reg owner={ownerLabel} id={idLabel} inst={instanceId}", behaviour);
+                        }
                         else
+                        {
                             cam.UnregisterTool(tool);
+                            Debug.Log($"[Binder] -Reg owner={ownerLabel} id={idLabel}", behaviour);
+                        }
                     }
                 }
             }
