@@ -99,12 +99,21 @@ namespace TGD.CombatV2.Integration
             if (!Application.isPlaying)
                 return;
 
+            // 禁止在 Disable 时清空占位，维持唯一真相源
+        }
+
+        void OnDestroy()
+        {
+            if (!Application.isPlaying)
+                return;
+
             if (_occ != null && _actor != null && _placed)
             {
+                _occ.TempClearForOwner(_actor);
                 _occ.Remove(_actor);
                 _placed = false;
                 if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
+                    Debug.Log($"[Occ] DestroyRemove {IdLabel()}", this);
             }
         }
 

@@ -865,11 +865,10 @@ namespace TGD.CombatV2
 
             var unit = OwnerUnit;
 #if UNITY_EDITOR
-            var unitPos = unit != null ? unit.Position : Hex.Zero;
             var anchor = CurrentAnchor;
             var occOk = (_playerBridge != null && _playerBridge.IsReady);
             var label = TurnManagerV2.FormatUnitLabel(unit);
-            LogInternal($"[Probe][MoveAim] unit={label} unitPos={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
+            LogInternal($"[Probe][MoveAim] unit={label} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
 #endif
 
             _bridge?.EnsurePlacedNow();
@@ -1127,14 +1126,7 @@ namespace TGD.CombatV2
                         LogInternal($"[Sticky] Apply U={unitLabel} tag={tag}@{to} mult={stickM:F2} turns={stickTurns}");
                     }
 
-                    // 预览地图/真实地图：driver 可能没有，跳过即可
-                    if (driver != null && driver.Map != null)
-                    {
-                        if (!driver.Map.Move(unit, to)) driver.Map.Set(unit, to);
-                    }
-
-                    unit.Position = to;
-                    if (driver != null) driver.SyncView();
+                    // 真实占位提交依赖桥，额外的 Unit/driver 镜像交由桥负责
                 }
 
                 if (OwnerUnit != null)
