@@ -69,10 +69,10 @@ MonoBehaviour:
   avatar: {fileID: 21300000, guid: d365a3010aedb1d4a8c3abe28a1f36fa, type: 3}
   abilities:
   - skillId: Move
-    learned: 1
+    learned: 0
     initialCooldownSeconds: 0
   - skillId: Attack
-    learned: 1
+    learned: 0
     initialCooldownSeconds: 0
   - skillId: Reaction001
     learned: 1
@@ -84,5 +84,17 @@ MonoBehaviour:
     learned: 1
     initialCooldownSeconds: 0
   - skillId: Reaction002
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: DerivedAttack
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: DerivedDerived
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: Attack
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: Move
     learned: 1
     initialCooldownSeconds: 0
