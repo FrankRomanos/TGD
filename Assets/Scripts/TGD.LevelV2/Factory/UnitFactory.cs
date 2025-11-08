@@ -479,9 +479,7 @@ namespace TGD.LevelV2
                 mover.occupancyService = resolvedOccupancy;
                 mover.env = resolvedEnv;
                 mover.status = ResolveStatusFor(mover);
-                mover.stickySource = mover.status != null
-                    ? mover.status
-                    : (resolvedEnv != null ? resolvedEnv : null);
+                mover.stickySource = resolvedEnv;
                 mover.viewOverride = view;
                 mover.pickCamera = resolvedCamera;
                 if (resolvedCam != null)
@@ -492,6 +490,7 @@ namespace TGD.LevelV2
                 }
                 mover.driver = null;
                 mover.bridgeOverride = null;
+                mover.RefreshFactoryInjection();
             }
 
             var moveCosts = go.GetComponentsInChildren<MoveCostServiceV2Adapter>(true);
@@ -521,12 +520,11 @@ namespace TGD.LevelV2
                 attack.occupancyService = resolvedOccupancy;
                 attack.env = resolvedEnv;
                 attack.status = ResolveStatusFor(attack);
-                attack.stickySource = attack.status != null
-                    ? attack.status
-                    : (resolvedEnv != null ? resolvedEnv : null);
+                attack.stickySource = resolvedEnv;
                 attack.viewOverride = view;
                 attack.driver = null;
                 attack.bridgeOverride = null;
+                attack.RefreshFactoryInjection();
             }
 
             var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
@@ -676,11 +674,8 @@ namespace TGD.LevelV2
                                           ?? mover.GetComponentInParent<MoveRateStatusRuntime>(true)
                                           ?? mover.GetComponentInChildren<MoveRateStatusRuntime>(true);
                         }
-
-                        if (mover.status != null)
-                            mover.stickySource = mover.status;
-                        else
-                            mover.stickySource = resolvedEnv;
+                        mover.stickySource = resolvedEnv;
+                        mover.RefreshFactoryInjection();
                     }
                 }
 
@@ -700,11 +695,8 @@ namespace TGD.LevelV2
                                             ?? attack.GetComponentInParent<MoveRateStatusRuntime>(true)
                                             ?? attack.GetComponentInChildren<MoveRateStatusRuntime>(true);
                         }
-
-                        if (attack.status != null)
-                            attack.stickySource = attack.status;
-                        else
-                            attack.stickySource = resolvedEnv;
+                        attack.stickySource = resolvedEnv;
+                        attack.RefreshFactoryInjection();
                     }
                 }
             }
