@@ -1,4 +1,4 @@
-using System.Collections;
+ï»¿using System.Collections;
 using TMPro;
 using TGD.HexBoard;
 using UnityEngine;
@@ -8,8 +8,8 @@ namespace TGD.CombatV2
 {
     /// <summary>
     /// Consolidated HUD listener for move/attack rejections and refunds.
-    /// ñîºÏ°æ£ºÄÚÖÃ¡°ÇáÎ¢Ò¡»Î + ÇáÎ¢Ëõ·ÅÂö³å + ²ÊÉ«½¥±ä£¨Ç¿ÖÆ¸²¸Ç£©¡±
-    /// ²»ÒÀÀµ UIV2 / µÚÈı·½²å¼ş¡£
+    /// è€¦åˆç‰ˆï¼šå†…ç½®â€œè½»å¾®æ‘‡æ™ƒ + è½»å¾®ç¼©æ”¾è„‰å†² + å½©è‰²æ¸å˜ï¼ˆå¼ºåˆ¶è¦†ç›–ï¼‰â€
+    /// ä¸ä¾èµ– UIV2 / ç¬¬ä¸‰æ–¹æ’ä»¶ã€‚
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class ActionHudMessageListenerTMP : MonoBehaviour
@@ -20,7 +20,7 @@ namespace TGD.CombatV2
 
         [Header("Debug / Preview")]
         public bool forceKind = false;
-        public HudKind forcedKind = HudKind.Energy; // ÔËĞĞÊ±¿ÉÔÚ Inspector ÇĞ»»
+        public HudKind forcedKind = HudKind.Energy; // è¿è¡Œæ—¶å¯åœ¨ Inspector åˆ‡æ¢
 
         [Header("Filter")]
         public HexBoardTestDriver driver;
@@ -36,13 +36,13 @@ namespace TGD.CombatV2
 
         [Header("Effects - Shake")]
         public bool enableShake = true;
-        [Range(0f, 30f)] public float shakeAmplitude = 6f;   // ÏñËØÕñ·ù
+        [Range(0f, 30f)] public float shakeAmplitude = 6f;   // åƒç´ æŒ¯å¹…
         [Range(0f, 60f)] public float shakeFrequency = 18f;  // Hz
 
         [Header("Effects - Pulse (scale)")]
         public bool enablePulse = true;
-        [Range(0f, 0.25f)] public float pulseAmplitude = 0.06f; // ¡À6%
-        [Range(0.1f, 20f)] public float pulseFrequency = 6f;    // ´Î/Ãë
+        [Range(0f, 0.25f)] public float pulseAmplitude = 0.06f; // Â±6%
+        [Range(0.1f, 20f)] public float pulseFrequency = 6f;    // æ¬¡/ç§’
 
         [Header("Effects - Gradient Colors (TMP VertexGradient)")]
         public HudGradient gradientInfo = HudGradient.InfoDefault();
@@ -171,9 +171,9 @@ namespace TGD.CombatV2
 
         void Show(string text, HudKind kind = HudKind.Info)
         {
-            if (forceKind) kind = forcedKind;   // ÔÊĞíÔÚ Inspector Ç¿ÖÆÔ¤ÀÀÅäÉ«
+            if (forceKind) kind = forcedKind;   // å…è®¸åœ¨ Inspector å¼ºåˆ¶é¢„è§ˆé…è‰²
 
-            ApplyGradient(kind);                 // Ç¿ÖÆĞ´Èë½¥±ä
+            ApplyGradient(kind);                 // å¼ºåˆ¶å†™å…¥æ¸å˜
             uiText.text = text;
 
             if (_co != null) StopCoroutine(_co);
@@ -185,21 +185,21 @@ namespace TGD.CombatV2
         {
             if (!uiText) return;
 
-            // ¡ª¡ª Í³Ò»»ù´¡×´Ì¬£¬±ÜÃâ±»Ä¬ÈÏÑÕÉ«/Ô¤Éè¸²¸Ç ¡ª¡ª
+            // â€”â€” ç»Ÿä¸€åŸºç¡€çŠ¶æ€ï¼Œé¿å…è¢«é»˜è®¤é¢œè‰²/é¢„è®¾è¦†ç›– â€”â€”
             uiText.richText = true;
             uiText.overrideColorTags = false;
-            uiText.color = Color.white;                 // ¶¥µã»ùÉ«Éè°×
+            uiText.color = Color.white;                 // é¡¶ç‚¹åŸºè‰²è®¾ç™½
             uiText.enableVertexGradient = true;
 #if TMP_PRESENT
-    uiText.colorGradientPreset = null;          // ²»ÓÃÍâ²¿ Gradient ×Ê²ú
+    uiText.colorGradientPreset = null;          // ä¸ç”¨å¤–éƒ¨ Gradient èµ„äº§
 #endif
 
-            // Ç¿ÖÆ°Ñ¡°µ±Ç°ÊµÀı²ÄÖÊ¡±µÄÃæÉ«ÉèÎª°×£¨±ÜÃâ²ÄÖÊÔ¤ÉèÈ¾É«£©
-            var mat = uiText.fontMaterial;              // ×¢Òâ£ºÕâÊÇÊµÀı£¬²»ÊÇ¹²Ïí
+            // å¼ºåˆ¶æŠŠâ€œå½“å‰å®ä¾‹æè´¨â€çš„é¢è‰²è®¾ä¸ºç™½ï¼ˆé¿å…æè´¨é¢„è®¾æŸ“è‰²ï¼‰
+            var mat = uiText.fontMaterial;              // æ³¨æ„ï¼šè¿™æ˜¯å®ä¾‹ï¼Œä¸æ˜¯å…±äº«
             if (mat && mat.HasProperty(TMPro.ShaderUtilities.ID_FaceColor))
                 mat.SetColor(TMPro.ShaderUtilities.ID_FaceColor, Color.white);
 
-            // ¡ª¡ª Ñ¡ÎÒÃÇ×Ô¼ºµÄËÄ½Ç½¥±ä ¡ª¡ª
+            // â€”â€” é€‰æˆ‘ä»¬è‡ªå·±çš„å››è§’æ¸å˜ â€”â€”
             var g = kind switch
             {
                 HudKind.Energy => gradientEnergy,
@@ -209,7 +209,7 @@ namespace TGD.CombatV2
             };
             uiText.colorGradient = g.ToVertexGradient();
 
-            // Ë¢ĞÂÍø¸ñ
+            // åˆ·æ–°ç½‘æ ¼
             uiText.SetVerticesDirty();
             uiText.SetLayoutDirty();
         }
@@ -236,7 +236,7 @@ namespace TGD.CombatV2
 
                 if (enablePulse)
                 {
-                    // ÕıÏÒÂö³å£º1 ¡À amplitude£¬±£³Ö¸÷ÏòµÈ±È
+                    // æ­£å¼¦è„‰å†²ï¼š1 Â± amplitudeï¼Œä¿æŒå„å‘ç­‰æ¯”
                     float s = 1f + Mathf.Sin(t * Mathf.PI * 2f * pulseFrequency) * pulseAmplitude;
                     root.localScale = new Vector3(s, s, 1f);
                 }
@@ -244,7 +244,7 @@ namespace TGD.CombatV2
                 yield return null;
             }
 
-            // ¸´Î»
+            // å¤ä½
             root.anchoredPosition = basePos;
             root.localScale = baseScale;
 
@@ -255,7 +255,7 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            // µ­³ö
+            // æ·¡å‡º
             float d = 0f;
             const float duration = 0.25f;
             while (d < duration)
@@ -319,7 +319,7 @@ namespace TGD.CombatV2
                 => new VertexGradient(topLeft, topRight, bottomLeft, bottomRight);
 
             public static HudGradient InfoDefault()
-     // Tiffany Blue Ïµ£ºÉÏÇ³ÏÂÉî£¬Æ«ÇåË¬
+     // Tiffany Blue ç³»ï¼šä¸Šæµ…ä¸‹æ·±ï¼Œåæ¸…çˆ½
      => FromHex("#E6FFFA", "#C9FFF3", "#81D8D0", "#17CFC0");
             public static HudGradient EnergyDefault() => FromHex("#FFD35A", "#FF7A1A", "#FFB000", "#FF5A00");
             public static HudGradient TimeDefault() => FromHex("#67E8F9", "#60A5FA", "#00D1FF", "#0077FF");
