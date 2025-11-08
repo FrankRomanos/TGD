@@ -509,6 +509,15 @@ namespace TGD.LevelV2
                 attack.RefreshFactoryInjection();
             }
 
+            var hudListeners = go.GetComponentsInChildren<ActionHudMessageListenerTMP>(true);
+            foreach (var hud in hudListeners)
+            {
+                if (hud == null)
+                    continue;
+
+                hud.BindContext(context, resolvedTurnManager);
+            }
+
             var attackAnimDrivers = go.GetComponentsInChildren<AttackAnimDriver>(true);
             foreach (var animDriver in attackAnimDrivers)
             {
@@ -565,7 +574,7 @@ namespace TGD.LevelV2
                 if (status == null)
                     continue;
 
-                status.Attach(context, resolvedTurnManager);
+                status.BindContext(context, resolvedTurnManager);
             }
         }
 
@@ -621,6 +630,9 @@ namespace TGD.LevelV2
             if (occupancyService == null && occSvc != null)
                 occupancyService = occSvc;
 
+            if (context != null && occSvc != null)
+                context.occService = occSvc;
+
             if (shared.environment == null && occSvc != null)
             {
                 shared.environment = occSvc.GetComponent<HexEnvironmentSystem>();
@@ -646,6 +658,7 @@ namespace TGD.LevelV2
             if (bridge != null)
             {
                 bridge.occupancyService = occSvc;
+                bridge.occSvc = occSvc;
                 if (defaultFootprint != null)
                     bridge.overrideFootprint = defaultFootprint;
             }

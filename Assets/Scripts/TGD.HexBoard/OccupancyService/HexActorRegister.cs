@@ -1,8 +1,10 @@
+using System;
 using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
+    [Obsolete("Replaced by UnitFactoryV2 + IOccupancyService", false)]
     public sealed class HexActorRegister : MonoBehaviour
     {
         public HexOccupancyService occService;

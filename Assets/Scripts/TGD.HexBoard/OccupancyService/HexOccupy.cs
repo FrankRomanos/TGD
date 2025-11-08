@@ -116,6 +116,25 @@ namespace TGD.HexBoard
             actorToCells.Remove(a);
         }
 
+        public bool IsFree(Hex anchor, FootprintShape footprint, Facing4 facing)
+        {
+            if (!Layout.Contains(anchor))
+                return false;
+
+            if (footprint == null)
+                return !IsBlockedInternal(anchor, null, true);
+
+            foreach (var cell in HexFootprint.Expand(anchor, facing, footprint))
+            {
+                if (!Layout.Contains(cell))
+                    return false;
+                if (IsBlockedInternal(cell, null, true))
+                    return false;
+            }
+
+            return true;
+        }
+
         public bool TempReserve(Hex cell, IGridActor owner)
         {
             if (owner == null) return false;
