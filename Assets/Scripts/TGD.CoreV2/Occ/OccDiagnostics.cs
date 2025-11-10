@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace TGD.CoreV2
@@ -8,6 +9,7 @@ namespace TGD.CoreV2
 
         static IOccupancyService _canonicalService;
         static string _canonicalBoardId;
+        static Action _healthCheckHandler;
 
         public static void Log(OccAction act, OccTxnId id, string actorId, Hex from, Hex to, OccFailReason reason)
         {
@@ -36,6 +38,16 @@ namespace TGD.CoreV2
                 var board = string.IsNullOrEmpty(occ.BoardId) ? "<null>" : occ.BoardId;
                 Debug.LogError($"[Occ] Multiple IOccupancyService detected @ {where}: canonical={canonicalBoard}, incoming={board}.");
             }
+        }
+
+        public static void RegisterHealthCheck(Action handler)
+        {
+            _healthCheckHandler = handler;
+        }
+
+        public static void RunHealthCheck()
+        {
+            _healthCheckHandler?.Invoke();
         }
     }
 }
