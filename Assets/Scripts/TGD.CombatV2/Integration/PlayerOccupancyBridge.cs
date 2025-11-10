@@ -28,6 +28,8 @@ namespace TGD.CombatV2.Integration
 
         public int AnchorVersion { get; private set; } = 0;
 
+        bool UseIOcc => _ctx != null && _ctx.occService != null && OccRuntimeSwitch.UseIOccWrites;
+
         void Awake()
         {
             _driver = GetComponent<HexBoardTestDriver>();
@@ -71,6 +73,8 @@ namespace TGD.CombatV2.Integration
                 EnsurePlacedNow();
 
 #if UNITY_EDITOR
+            if (UseIOcc)
+                return;
             if (!autoMirrorDebug)
                 return;
 
@@ -91,6 +95,16 @@ namespace TGD.CombatV2.Integration
         {
             if (!Application.isPlaying)
                 return;
+
+            if (UseIOcc && _ctx != null && _ctx.occService != null)
+            {
+                OccTxnId tx;
+                _ctx.occService.Remove(_ctx, out tx);
+                _placed = false;
+                if (debugLog)
+                    Debug.Log($"[Occ] Remove via IOcc tx={tx.Value} {IdLabel()}", this);
+                return;
+            }
 
             if (_occ != null && _actor != null && _placed)
             {
@@ -144,36 +158,47 @@ namespace TGD.CombatV2.Integration
 
         public bool MoveCommit(Hex newAnchor, Facing4 newFacing)
         {
+            if (UseIOcc)
+            {
+                OccTxnId tx; OccFailReason reason;
+                bool ok = _ctx.occService.TryMove(_ctx, newAnchor, newFacing, out tx, out reason);
+                if (ok)
+                {
+                    _placed = true;
+                    MirrorDriver(newAnchor, newFacing);
+                    if (shadowCheck)
+                        ShadowCheck(newAnchor, newFacing, "Move");
+                    RaiseAnchorChanged(newAnchor);
+                    if (debugLog)
+                        Debug.Log($"[Occ] Move via IOcc tx={tx.Value} -> {newAnchor}", this);
+                    return true;
+                }
+
+                Debug.LogWarning($"[Occ] Move via IOcc failed: {reason} -> {newAnchor}", this);
+                return false;
+            }
+
             if (_occ == null && occupancyService)
                 _occ = occupancyService.Get();
             if (!IsReady)
                 return false;
 
-            _occ?.TempClearForOwner(_actor);
             bool success = false;
             bool replaced = false;
 
             if (_occ.TryMove(_actor, newAnchor))
             {
-                _actor.Anchor = newAnchor;
                 _actor.Facing = newFacing;
                 _placed = true;
                 success = true;
             }
             else
             {
-                if (_occ != null)
+                if (_occ != null && _occ.TryPlace(_actor, newAnchor, newFacing))
                 {
-                    _occ.Remove(_actor);
-                    _occ.TempClearForOwner(_actor);
-                    if (_occ.TryPlace(_actor, newAnchor, newFacing))
-                    {
-                        _actor.Anchor = newAnchor;
-                        _actor.Facing = newFacing;
-                        _placed = true;
-                        success = true;
-                        replaced = true;
-                    }
+                    _placed = true;
+                    success = true;
+                    replaced = true;
                 }
             }
 
@@ -364,6 +389,27 @@ namespace TGD.CombatV2.Integration
             EnsureActorBinding(explicitAdapter);
             EnsureOccupancyBacking();
 
+            if (UseIOcc)
+            {
+                OccTxnId tx; OccFailReason reason;
+                bool ok = _ctx.occService.TryPlace(_ctx, anchor, facing, out tx, out reason);
+                if (ok)
+                {
+                    _placed = true;
+                    MirrorDriver(anchor, facing);
+                    if (shadowCheck)
+                        ShadowCheck(anchor, facing, "Place");
+                    RaiseAnchorChanged(anchor);
+                    if (debugLog)
+                        Debug.Log($"[Occ] Place via IOcc tx={tx.Value} -> {anchor}", this);
+                }
+                else
+                {
+                    Debug.LogWarning($"[Occ] Place via IOcc failed: {reason} @ {anchor}", this);
+                }
+                return ok;
+            }
+
             if (!IsReady || _occ == null || _actor == null)
                 return false;
 
@@ -378,6 +424,17 @@ namespace TGD.CombatV2.Integration
                 ShadowCheck(anchor, facing, "Place");
             RaiseAnchorChanged(anchor);
             return true;
+        }
+
+        public void SyncAfterIOccPlacement(Hex anchor, Facing4 facing)
+        {
+            _placed = true;
+            MirrorDriver(anchor, facing);
+            if (shadowCheck)
+                ShadowCheck(anchor, facing, "Place");
+            RaiseAnchorChanged(anchor);
+            if (debugLog)
+                Debug.Log($"[Occ] Sync via IOcc -> {anchor}", this);
         }
 
         void ShadowCheck(Hex anchor, Facing4 facing, string verb)

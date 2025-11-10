@@ -11,17 +11,134 @@ namespace TGD.HexBoard
         public OccActorResolver actorResolver; // 解析 ctx -> UnitGridAdapter
         public string boardId = "Board-1";
         int _storeVersion;
+        int _nextTxn = 1;
 
         public string BoardId { get { return boardId; } }
         public int StoreVersion { get { return _storeVersion; } }
 
         public bool TryPlace(UnitRuntimeContext ctx, Hex anchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
-        { txn = new OccTxnId(0); reason = OccFailReason.NoStore; return false; }
+        {
+            txn = NewTxn();
+            reason = OccFailReason.None;
+
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                reason = OccFailReason.NoStore;
+                OccDiagnostics.Log(OccAction.Place, txn, ctx ? ctx.name : "ctx-null", Hex.Zero, anchor, reason);
+                return false;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.Log(OccAction.Place, txn, "null", Hex.Zero, anchor, reason);
+                return false;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.Log(OccAction.Place, txn, "null", Hex.Zero, anchor, reason);
+                return false;
+            }
+            if (!store.CanPlace(actor, anchor, facing))
+            {
+                reason = OccFailReason.Blocked;
+                OccDiagnostics.Log(OccAction.Place, txn, actor.Id, actor.Anchor, anchor, reason);
+                return false;
+            }
+
+            bool ok = store.TryPlace(actor, anchor, facing);
+            if (ok)
+                _storeVersion++;
+
+            OccDiagnostics.Log(OccAction.Place, txn, actor.Id, actor.Anchor, anchor, ok ? OccFailReason.None : OccFailReason.Blocked);
+            return ok;
+        }
 
         public bool TryMove(UnitRuntimeContext ctx, Hex anchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
-        { txn = new OccTxnId(0); reason = OccFailReason.NoStore; return false; }
+        {
+            txn = NewTxn();
+            reason = OccFailReason.None;
 
-        public void Remove(UnitRuntimeContext ctx, out OccTxnId txn) { txn = new OccTxnId(0); }
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                reason = OccFailReason.NoStore;
+                OccDiagnostics.Log(OccAction.Move, txn, ctx ? ctx.name : "ctx-null", Hex.Zero, anchor, reason);
+                return false;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.Log(OccAction.Move, txn, "null", Hex.Zero, anchor, reason);
+                return false;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.Log(OccAction.Move, txn, "null", Hex.Zero, anchor, reason);
+                return false;
+            }
+
+            bool ok = store.TryMove(actor, anchor);
+            if (ok)
+            {
+                actor.Facing = facing;
+            }
+            else if (store.CanPlace(actor, anchor, facing))
+            {
+                ok = store.TryPlace(actor, anchor, facing);
+            }
+            else
+            {
+                reason = OccFailReason.Blocked;
+            }
+
+            if (!ok && reason == OccFailReason.None)
+                reason = OccFailReason.Blocked;
+
+            if (ok)
+                _storeVersion++;
+
+            OccDiagnostics.Log(OccAction.Move, txn, actor.Id, actor.Anchor, anchor, reason);
+            return ok;
+        }
+
+        public void Remove(UnitRuntimeContext ctx, out OccTxnId txn)
+        {
+            txn = NewTxn();
+
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                OccDiagnostics.Log(OccAction.Remove, txn, ctx ? ctx.name : "ctx-null", Hex.Zero, Hex.Zero, OccFailReason.NoStore);
+                return;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                OccDiagnostics.Log(OccAction.Remove, txn, "null", Hex.Zero, Hex.Zero, OccFailReason.ActorMissing);
+                return;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                OccDiagnostics.Log(OccAction.Remove, txn, "null", Hex.Zero, Hex.Zero, OccFailReason.ActorMissing);
+                return;
+            }
+            store.Remove(actor);
+            _storeVersion++;
+            OccDiagnostics.Log(OccAction.Remove, txn, actor.Id, actor.Anchor, Hex.Zero, OccFailReason.None);
+        }
+
+        OccTxnId NewTxn() { return new OccTxnId(_nextTxn++); }
 
         public bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing)
         {
