@@ -1,13 +1,15 @@
+using System;
 using UnityEngine;
 
 namespace TGD.CoreV2
 {
-    public static partial class OccDiagnostics
+    public static class OccDiagnostics
     {
         public static bool TraceLog = true;
 
         static IOccupancyService _canonicalService;
         static string _canonicalBoardId;
+        static Action _healthCheckHandler;
 
         public static void Log(OccAction act, OccTxnId id, string actorId, Hex from, Hex to, OccFailReason reason)
         {
@@ -38,11 +40,14 @@ namespace TGD.CoreV2
             }
         }
 
-        public static void RunHealthCheck()
+        public static void RegisterHealthCheck(Action handler)
         {
-            RunHealthCheckPlatform();
+            _healthCheckHandler = handler;
         }
 
-        static partial void RunHealthCheckPlatform();
+        public static void RunHealthCheck()
+        {
+            _healthCheckHandler?.Invoke();
+        }
     }
 }
