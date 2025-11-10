@@ -392,7 +392,7 @@ namespace TGD.CombatV2.Integration
 
         bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
         {
-            if (UseIOcc && Time.frameCount == _lastWriteFrame && anchor == _lastFrom)
+            if (UseIOcc && Time.frameCount == _lastWriteFrame && anchor.Equals(_lastFrom))
             {
                 if (debugLog)
                     Debug.LogWarning($"[Occ] WriteGuard: ignore back-place to {_lastFrom} in same frame", this);
