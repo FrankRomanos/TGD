@@ -28,6 +28,7 @@ namespace TGD.CombatV2
         [HideInInspector]
         public PlayerOccupancyBridge bridgeOverride;   // ★ 新增：强制使用角色自己的桥
 
+
         [Header("View (optional)")]
         [HideInInspector]
         public Transform viewOverride;
@@ -42,6 +43,19 @@ namespace TGD.CombatV2
         [Header("Context (optional)")]
         public MoveRateStatusRuntime status;
         public MonoBehaviour stickySource;
+        // ===== Context =====
+        [SerializeField] private UnitRuntimeContext _ctx;
+
+        private TGD.CoreV2.UnitRuntimeContext ResolveCtx()
+        {
+            if (_ctx != null) return _ctx;
+            // 自身或父层拿一次并缓存
+            _ctx = GetComponent<TGD.CoreV2.UnitRuntimeContext>() ??
+                   GetComponentInParent<TGD.CoreV2.UnitRuntimeContext>(true);
+            return _ctx;
+        }
+
+        // 如果你已有 Init/Bind(UnitRuntimeContext ctx) 之类的方法，也可以在那里显式赋值：_ctx = ctx;
 
         [Header("Turn Manager Binding")]
         [SerializeField, HideInInspector]
@@ -1828,19 +1842,19 @@ namespace TGD.CombatV2
             return self != null && self == unit;
         }
 
-        void ReserveTemp(Hex cell)
+        void ReserveTemp(TGD.CoreV2.Hex cell)
         {
             if (_tempReservedThisAction.Contains(cell))
                 return;
-            if (!TGD.HexBoard.OccTempOps.Reserve(_ctx, cell))
+
+            var ctx = ResolveCtx();
+            if (ctx == null) return;
+            if (!TGD.HexBoard.OccTempOps.Reserve(ctx, cell))
                 return;
 
             _tempReservedThisAction.Add(cell);
             string unitLabel = TurnManagerV2.FormatUnitLabel(ResolveSelfUnit());
-            if (debugLog)
-            {
-                LogInternal($"[Occ] TempReserve U={unitLabel} @{cell}");
-            }
+            if (debugLog) LogInternal($"[Occ] TempReserve U={unitLabel} @{cell}");
         }
 
         void ClearTempReservations(string reason, bool logAlways = false)
@@ -1848,9 +1862,9 @@ namespace TGD.CombatV2
             int tracked = _tempReservedThisAction.Count;
             int occCleared = 0;
 
-            // 统一门面：不再直接 _occ.TempClearForOwner(SelfActor)
-            if (_ctx != null)
-                occCleared = TGD.HexBoard.OccTempOps.ClearFor(_ctx);
+            var ctx = ResolveCtx();
+            if (ctx != null)
+                occCleared = TGD.HexBoard.OccTempOps.ClearFor(ctx);
 
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
@@ -1861,6 +1875,7 @@ namespace TGD.CombatV2
                 LogInternal($"[Occ] TempClear U={unitLabel} count={count} ({reason})");
             }
         }
+
 
         int ResolveComboIndex()
         {
