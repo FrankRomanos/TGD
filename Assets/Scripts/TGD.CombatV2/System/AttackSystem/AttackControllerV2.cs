@@ -1830,11 +1830,9 @@ namespace TGD.CombatV2
 
         void ReserveTemp(Hex cell)
         {
-            if (_occ == null || _bridge == null || SelfActor == null)
-                return;
             if (_tempReservedThisAction.Contains(cell))
                 return;
-            if (!_occ.TempReserve(cell, SelfActor))
+            if (!TGD.HexBoard.OccTempOps.Reserve(_ctx, cell))
                 return;
 
             _tempReservedThisAction.Add(cell);
@@ -1848,16 +1846,19 @@ namespace TGD.CombatV2
         void ClearTempReservations(string reason, bool logAlways = false)
         {
             int tracked = _tempReservedThisAction.Count;
-            int occCleared = (_occ != null && _bridge != null && SelfActor != null) ? _occ.TempClearForOwner(SelfActor) : 0;
+            int occCleared = 0;
+
+            // 统一门面：不再直接 _occ.TempClearForOwner(SelfActor)
+            if (_ctx != null)
+                occCleared = TGD.HexBoard.OccTempOps.ClearFor(_ctx);
+
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
-            if (logAlways || count > 0)
+
+            if (logAlways || (debugLog && count > 0))
             {
                 string unitLabel = TurnManagerV2.FormatUnitLabel(ResolveSelfUnit());
-                if (debugLog)
-                {
-                    LogInternal($"[Occ] TempClear U={unitLabel} count={count} ({reason})");
-                }
+                LogInternal($"[Occ] TempClear U={unitLabel} count={count} ({reason})");
             }
         }
 
