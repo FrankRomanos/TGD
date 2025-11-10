@@ -23,10 +23,54 @@ namespace TGD.HexBoard
 
         public void Remove(UnitRuntimeContext ctx, out OccTxnId txn) { txn = new OccTxnId(0); }
 
-        public bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing) { return false; }
+        public bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing)
+        {
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null || actorResolver == null || ctx == null)
+                return false;
 
-        public bool TryGetActorInfo(Hex anchor, out OccActorInfo info) { info = null; return false; }
+            var adapter = actorResolver.GetOrBind(ctx);
+            if (adapter == null)
+                return false;
 
-        public OccSnapshot[] DumpAll() { return new OccSnapshot[0]; }
+            return store.CanPlaceIgnoringTemp(adapter, anchor, facing);
+        }
+
+        public bool TryGetActorInfo(Hex anchor, out OccActorInfo info)
+        {
+            info = null;
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+                return false;
+
+            IGridActor actor;
+            if (!store.TryGetActor(anchor, out actor) || actor == null)
+                return false;
+
+            var key = (actor.Footprint != null) ? actor.Footprint.name : "Single";
+            info = new OccActorInfo(actor.Id, actor.Anchor, actor.Facing, key);
+            return true;
+        }
+
+        public OccSnapshot[] DumpAll()
+        {
+            try
+            {
+                var adapters = GameObject.FindObjectsOfType<UnitGridAdapter>(true);
+                var list = new System.Collections.Generic.List<OccSnapshot>(adapters.Length);
+                for (int i = 0; i < adapters.Length; i++)
+                {
+                    var adapter = adapters[i];
+                    var key = (adapter.Footprint != null) ? adapter.Footprint.name : "Single";
+                    list.Add(new OccSnapshot(BoardId, adapter.Id, adapter.Anchor, adapter.Facing, key, StoreVersion));
+                }
+
+                return list.ToArray();
+            }
+            catch
+            {
+                return new OccSnapshot[0];
+            }
+        }
     }
 }

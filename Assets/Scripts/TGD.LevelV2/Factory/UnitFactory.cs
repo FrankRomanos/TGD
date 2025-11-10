@@ -104,6 +104,7 @@ namespace TGD.LevelV2
             var go = Instantiate(prefab, parent);
 
             var context = EnsureContext(go);
+            InjectOccService(context);
             var cooldownHub = EnsureCooldownHub(go, context);
             ApplyStats(context, final.stats);
             InitializeCooldowns(cooldownHub, final.abilities);
@@ -260,6 +261,22 @@ namespace TGD.LevelV2
                     continue;
                 hub.secStore.StartSeconds(ability.skillId.Trim(), Mathf.Max(0, ability.initialCooldownSeconds));
             }
+        }
+
+        static void InjectOccService(UnitRuntimeContext ctx)
+        {
+            if (ctx == null)
+                return;
+
+            var occAdapter = UnityEngine.Object.FindFirstObjectByType<HexOccServiceAdapter>(FindObjectsInactive.Include);
+            if (occAdapter == null)
+            {
+                Debug.LogError("[Occ] HexOccServiceAdapter not found.");
+                return;
+            }
+
+            ctx.occService = occAdapter;
+            OccDiagnostics.AssertSingleStore(ctx.occService, "Factory.Spawn");
         }
 
         string ReserveUnitId(string preferred, string fallback)

@@ -12,6 +12,8 @@ namespace TGD.CombatV2.Integration
         public FootprintShape overrideFootprint;
         public bool debugLog;
         public bool autoMirrorDebug = false;
+        public bool shadowCheck = true;
+        public bool shadowStrictBreak = false;
 
         HexBoardTestDriver _driver;
         UnitRuntimeContext _ctx;
@@ -51,15 +53,6 @@ namespace TGD.CombatV2.Integration
 
             EnsureOccupancyBacking();
             EnsureActorBinding();
-        }
-
-        HexBoardLayout ResolveLayout()
-        {
-            if (occupancyService != null && occupancyService.authoring != null)
-                return occupancyService.authoring.Layout;
-            if (_driver != null && _driver.authoring != null)
-                return _driver.authoring.Layout;
-            return null;
         }
 
         void Start() => EnsurePlacedNow();
@@ -191,6 +184,8 @@ namespace TGD.CombatV2.Integration
                     string verb = replaced ? "RePlace" : "Move";
                     Debug.Log($"[Occ] {verb} {IdLabel()} -> {newAnchor}", this);
                 }
+                if (shadowCheck)
+                    ShadowCheck(newAnchor, newFacing, "Move");
                 MirrorDriver(_actor.Anchor, _actor.Facing);
                 RaiseAnchorChanged(newAnchor);
                 return true;
@@ -322,13 +317,14 @@ namespace TGD.CombatV2.Integration
 
         void EnsureOccupancyBacking()
         {
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (_occ == null)
+            if (_occ != null)
+                return;
+
+            if (occupancyService)
             {
-                var layout = ResolveLayout();
-                if (layout != null)
-                    _occ = new HexOccupancy(layout);
+                _occ = occupancyService.Get();
+                if (_occ == null && debugLog)
+                    Debug.LogError("[Occ] HexOccupancyService returned null store.", this);
             }
         }
 
@@ -378,8 +374,42 @@ namespace TGD.CombatV2.Integration
             if (debugLog)
                 Debug.Log($"[Occ] Place {IdLabel()} at {anchor}", this);
             MirrorDriver(anchor, facing);
+            if (shadowCheck)
+                ShadowCheck(anchor, facing, "Place");
             RaiseAnchorChanged(anchor);
             return true;
+        }
+
+        void ShadowCheck(Hex anchor, Facing4 facing, string verb)
+        {
+            if (_ctx == null || _ctx.occService == null)
+                return;
+
+            bool free = _ctx.occService.IsFreeFor(_ctx, anchor, facing);
+            if (free)
+            {
+                Debug.LogWarning($"[OCC_SHADOW] {verb} MISMATCH -> IOcc says Free but bridge placed @ {anchor}", this);
+#if UNITY_EDITOR
+                if (shadowStrictBreak)
+                    Debug.Break();
+#endif
+            }
+            else if (debugLog)
+            {
+                Debug.Log($"[OCC_SHADOW] {verb} OK (store一致) @ {anchor}", this);
+            }
+
+            OccActorInfo info;
+            if (_ctx.occService.TryGetActorInfo(anchor, out info))
+            {
+                var id = IdLabel();
+                if (!string.IsNullOrEmpty(info.ActorId) && info.ActorId != id)
+                    Debug.LogWarning($"[OCC_SHADOW] ID mismatch at {anchor}: store={info.ActorId} local={id}", this);
+            }
+            else
+            {
+                Debug.LogWarning($"[OCC_SHADOW] Missing actor info at {anchor}", this);
+            }
         }
     }
 }
