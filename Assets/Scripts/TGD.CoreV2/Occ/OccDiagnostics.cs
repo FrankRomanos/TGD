@@ -1,9 +1,8 @@
 using UnityEngine;
-using TGD.HexBoard;
 
 namespace TGD.CoreV2
 {
-    public static class OccDiagnostics
+    public static partial class OccDiagnostics
     {
         public static bool TraceLog = true;
 
@@ -41,18 +40,9 @@ namespace TGD.CoreV2
 
         public static void RunHealthCheck()
         {
-            var contexts = Object.FindObjectsByType<UnitRuntimeContext>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None);
-
-            for (int i = 0; i < contexts.Length; i++)
-            {
-                var ctx = contexts[i];
-                var adapters = ctx.GetComponentsInChildren<UnitGridAdapter>(true);
-                if (adapters.Length > 1)
-                {
-                    Debug.LogError($"[OccCheck] {ctx.name} has {adapters.Length} UnitGridAdapter! This can break 'ignore-self' logic. Remove extras.", ctx);
-                }
-            }
+            RunHealthCheckPlatform();
         }
+
+        static partial void RunHealthCheckPlatform();
     }
 }
