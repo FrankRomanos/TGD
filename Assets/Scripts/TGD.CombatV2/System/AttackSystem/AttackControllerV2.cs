@@ -1903,7 +1903,8 @@ namespace TGD.CombatV2
         {
             if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge != null)
             {
-                playerBridge.EnsurePlacedNow();
+                if (!OccRuntimeSwitch.UseIOccWrites)
+                    playerBridge.EnsurePlacedNow();
                 var bridgeService = playerBridge.occupancyService;
                 if (bridgeService != null)
                 {
@@ -1915,7 +1916,8 @@ namespace TGD.CombatV2
             }
             else
             {
-                _bridge?.EnsurePlacedNow();
+                if (!OccRuntimeSwitch.UseIOccWrites)
+                    _bridge?.EnsurePlacedNow();
             }
 
             if (occupancyService != null)

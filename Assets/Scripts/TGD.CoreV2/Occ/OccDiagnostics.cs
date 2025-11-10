@@ -1,4 +1,5 @@
 using UnityEngine;
+using TGD.HexBoard;
 
 namespace TGD.CoreV2
 {
@@ -35,6 +36,22 @@ namespace TGD.CoreV2
                 var canonicalBoard = string.IsNullOrEmpty(_canonicalBoardId) ? "<null>" : _canonicalBoardId;
                 var board = string.IsNullOrEmpty(occ.BoardId) ? "<null>" : occ.BoardId;
                 Debug.LogError($"[Occ] Multiple IOccupancyService detected @ {where}: canonical={canonicalBoard}, incoming={board}.");
+            }
+        }
+
+        public static void RunHealthCheck()
+        {
+            var contexts = Object.FindObjectsByType<UnitRuntimeContext>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+            for (int i = 0; i < contexts.Length; i++)
+            {
+                var ctx = contexts[i];
+                var adapters = ctx.GetComponentsInChildren<UnitGridAdapter>(true);
+                if (adapters.Length > 1)
+                {
+                    Debug.LogError($"[OccCheck] {ctx.name} has {adapters.Length} UnitGridAdapter! This can break 'ignore-self' logic. Remove extras.", ctx);
+                }
             }
         }
     }
