@@ -11,6 +11,6 @@ namespace TGD.CombatV2.Integration
         int AnchorVersion { get; }
         event System.Action<Hex, int> AnchorChanged;
         bool EnsurePlacedNow();
-        bool MoveCommit(Hex newAnchor, Facing4 newFacing);
+        bool MoveCommit(Hex newAnchor, Facing4 newFacing, OccToken token = default);
     }
 }
