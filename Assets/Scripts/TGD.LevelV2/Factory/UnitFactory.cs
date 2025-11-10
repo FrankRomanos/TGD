@@ -630,6 +630,9 @@ namespace TGD.LevelV2
             if (occupancyService == null && occSvc != null)
                 occupancyService = occSvc;
 
+            if (context != null && occSvc != null)
+                context.occService = occSvc;
+
             if (shared.environment == null && occSvc != null)
             {
                 shared.environment = occSvc.GetComponent<HexEnvironmentSystem>();
@@ -654,7 +657,7 @@ namespace TGD.LevelV2
             var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
             if (bridge != null)
             {
-                bridge.occupancyService = occSvc;
+                bridge.occSvc = occSvc;
                 if (defaultFootprint != null)
                     bridge.overrideFootprint = defaultFootprint;
             }

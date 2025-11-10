@@ -2,7 +2,7 @@
     "name": "TGD.VFXV2",
     "rootNamespace": "",
     "references": [
-        "GUID:13a6fdc14ca9df84eb8019bc66fa9e5d"
+        "ShapesRuntime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

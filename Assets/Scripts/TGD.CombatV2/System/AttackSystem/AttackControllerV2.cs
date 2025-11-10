@@ -441,8 +441,8 @@ namespace TGD.CombatV2
             if (!occupancyService)
                 occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
 
-            if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occupancyService)
-                occupancyService = concreteBridge.occupancyService;
+            if (occupancyService == null && _bridge is PlayerOccupancyBridge concreteBridge && concreteBridge.occSvc)
+                occupancyService = concreteBridge.occSvc;
 
             RefreshOccupancy();
 
@@ -1888,7 +1888,7 @@ namespace TGD.CombatV2
             if (_bridge is PlayerOccupancyBridge playerBridge && playerBridge != null)
             {
                 playerBridge.EnsurePlacedNow();
-                var bridgeService = playerBridge.occupancyService;
+                var bridgeService = playerBridge.occSvc;
                 if (bridgeService != null)
                 {
                     if (occupancyService == null)
@@ -1966,7 +1966,7 @@ namespace TGD.CombatV2
             // 2) 占位服务：优先 turnManager.occupancyService → 桥里的 → 已挂的
             if (occupancyService == null)
                 occupancyService = (turnManager?.occupancyService)
-                                   ?? (_playerBridge?.occupancyService)
+                                   ?? (_playerBridge?.occSvc)
                                    ?? occupancyService;
 
             RefreshOccupancy();

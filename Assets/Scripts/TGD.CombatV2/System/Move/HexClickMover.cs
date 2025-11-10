@@ -476,8 +476,8 @@ namespace TGD.CombatV2
                 Debug.LogError($"[Guard] Multiple PlayerOccupancyBridge in parents: {bridges.Length}. Keep ONE.", this);
 #endif
 
-            if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
-                occupancyService = _playerBridge.occupancyService;
+            if (occupancyService == null && _playerBridge != null && _playerBridge.occSvc)
+                occupancyService = _playerBridge.occSvc;
 
             _moveSpec = new TargetingSpec
             {
@@ -532,9 +532,9 @@ namespace TGD.CombatV2
 
             if (occupancyService != null)
                 _occ = occupancyService.Get();
-            else if (_playerBridge != null && _playerBridge.occupancyService)
+            else if (_playerBridge != null && _playerBridge.occSvc)
             {
-                occupancyService = _playerBridge.occupancyService;
+                occupancyService = _playerBridge.occSvc;
                 _occ = occupancyService ? occupancyService.Get() : null;
             }
 
@@ -1067,7 +1067,7 @@ namespace TGD.CombatV2
                 _playerBridge = _bridge as PlayerOccupancyBridge;
 
             if (occupancyService == null)
-                occupancyService = (_turnManager?.occupancyService) ?? (_playerBridge?.occupancyService);
+                occupancyService = (_turnManager?.occupancyService) ?? (_playerBridge?.occSvc);
 
             if (_occ == null && occupancyService != null)
                 _occ = occupancyService.Get();

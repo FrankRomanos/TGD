@@ -1,6 +1,7 @@
-﻿using UnityEngine;
-using TGD.HexBoard;
+﻿using System;
+using UnityEngine;
 using TGD.CoreV2;
+using TGD.HexBoard;
 
 namespace TGD.CombatV2.Integration
 {
@@ -8,68 +9,190 @@ namespace TGD.CombatV2.Integration
     [DisallowMultipleComponent]
     public sealed class PlayerOccupancyBridge : MonoBehaviour, IActorOccupancyBridge
     {
-        public HexOccupancyService occupancyService;
+        public HexOccupancyService occSvc;
+
+        [SerializeField, Obsolete("Use occSvc for IOccupancyService injection.", false)]
+        HexOccupancyService occupancyService;
+
+        [SerializeField, Obsolete("Test driver fallback removed.", false)]
+        HexBoardTestDriver legacyDriver;
+
         public FootprintShape overrideFootprint;
         public bool debugLog;
-        public bool autoMirrorDebug = false;
+        public bool autoMirrorDebug;
 
-        HexBoardTestDriver _driver;
         UnitRuntimeContext _ctx;
         UnitGridAdapter _componentAdapter;
-        HexOccupancy _occ;
         IGridActor _actor;
         bool _placed;
+        IOccupancyService _resolvedOcc;
+        bool _loggedRoute;
+        bool _failedOccLogged;
 
-        public event System.Action<Hex, int> AnchorChanged;
+        public event Action<Hex, int> AnchorChanged;
 
         public Hex CurrentAnchor => _actor?.Anchor ?? Hex.Zero;
 
-        public int AnchorVersion { get; private set; } = 0;
+        public int AnchorVersion { get; private set; }
 
         void Awake()
         {
-            _driver = GetComponent<HexBoardTestDriver>();
-            _ctx = GetComponent<UnitRuntimeContext>();
+            if (occSvc == null && occupancyService != null)
+                occSvc = occupancyService;
+
+            _ctx = GetComponent<UnitRuntimeContext>() ?? GetComponentInParent<UnitRuntimeContext>(true);
             _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
 
-            if (!occupancyService)
-                occupancyService = GetComponent<HexOccupancyService>();
-
-            if (!occupancyService && _ctx != null)
-                occupancyService = _ctx.GetComponentInParent<HexOccupancyService>(true);
-
-            if (!occupancyService && _driver != null)
-            {
-                occupancyService = _driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && _driver.authoring != null)
-                {
-                    occupancyService = _driver.authoring.GetComponent<HexOccupancyService>();
-                    if (!occupancyService)
-                        occupancyService = _driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-                }
-            }
-
-            EnsureOccupancyBacking();
             EnsureActorBinding();
         }
 
-        HexBoardLayout ResolveLayout()
+#if UNITY_EDITOR
+        void OnValidate()
         {
-            if (occupancyService != null && occupancyService.authoring != null)
-                return occupancyService.authoring.Layout;
-            if (_driver != null && _driver.authoring != null)
-                return _driver.authoring.Layout;
-            return null;
+            if (legacyDriver != null)
+            {
+                Debug.LogWarning("[Occ] PlayerOccupancyBridge cleared legacy HexBoardTestDriver reference.", this);
+                legacyDriver = null;
+            }
+
+            if (occupancyService != null && occSvc == null)
+                occSvc = occupancyService;
         }
+#endif
 
         void Start() => EnsurePlacedNow();
 
-        void RaiseAnchorChanged(Hex anchor)
+        UnitRuntimeContext ResolveContext()
         {
-            AnchorVersion++;
-            AnchorChanged?.Invoke(anchor, AnchorVersion);
-            if (debugLog)
-                Debug.Log($"[Occ] AnchorChanged v{AnchorVersion} -> {anchor}", this);
+            if (_ctx != null)
+                return _ctx;
+
+            _ctx = GetComponent<UnitRuntimeContext>() ?? GetComponentInParent<UnitRuntimeContext>(true);
+            return _ctx;
+        }
+
+        void EnsureActorBinding(UnitGridAdapter explicitAdapter = null)
+        {
+            if (explicitAdapter != null)
+                _componentAdapter = explicitAdapter;
+
+            var ctx = ResolveContext();
+
+            if (_componentAdapter == null && ctx != null)
+                _componentAdapter = ctx.GetComponent<UnitGridAdapter>() ?? ctx.GetComponentInChildren<UnitGridAdapter>(true);
+
+            if (_componentAdapter == null)
+                _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
+
+            if (_componentAdapter == null)
+                _componentAdapter = gameObject.AddComponent<UnitGridAdapter>();
+
+            if (overrideFootprint != null && _componentAdapter.Footprint == null)
+                _componentAdapter.Footprint = overrideFootprint;
+
+            if (ctx != null && ctx.boundUnit != null && _componentAdapter.Unit != ctx.boundUnit)
+                _componentAdapter.Unit = ctx.boundUnit;
+
+            _actor = _componentAdapter;
+        }
+
+        public void Bind(UnitGridAdapter adapter)
+        {
+            EnsureActorBinding(adapter);
+        }
+
+        static HexOccupancyService FindSceneService()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<HexOccupancyService>();
+#else
+            return FindObjectOfType<HexOccupancyService>();
+#endif
+        }
+
+        IOccupancyService ResolveService()
+        {
+            if (_resolvedOcc != null)
+                return _resolvedOcc;
+
+            if (occSvc != null)
+            {
+                _resolvedOcc = occSvc;
+            }
+            else
+            {
+                var ctx = ResolveContext();
+                if (ctx != null && ctx.occService != null)
+                {
+                    _resolvedOcc = ctx.occService;
+                }
+                else
+                {
+                    var found = FindSceneService();
+                    if (found != null)
+                    {
+                        occSvc = found;
+                        _resolvedOcc = found;
+                    }
+                }
+            }
+
+            if (_resolvedOcc != null)
+            {
+                var ctx = ResolveContext();
+                if (ctx != null && ctx.occService != _resolvedOcc)
+                    ctx.occService = _resolvedOcc;
+
+                if (!_loggedRoute)
+                {
+                    _loggedRoute = true;
+                    Debug.Log($"[Occ] PlayerOccupancyBridge using {_resolvedOcc.GetType().Name} via IOccupancyService", this);
+                }
+
+                _failedOccLogged = false;
+            }
+            else if (!_failedOccLogged)
+            {
+                _failedOccLogged = true;
+                Debug.LogError("[Occ] PlayerOccupancyBridge failed to resolve IOccupancyService. Assign HexOccupancyService.", this);
+            }
+
+            return _resolvedOcc;
+        }
+
+        public bool IsReady
+        {
+            get
+            {
+                var svc = ResolveService();
+                if (svc == null)
+                    return false;
+
+                EnsureActorBinding();
+
+                if (_actor == null)
+                    return false;
+
+                var ctx = ResolveContext();
+                if (ctx != null && ctx.boundUnit != null)
+                    return true;
+
+                return _componentAdapter != null && _componentAdapter.Unit != null;
+            }
+        }
+
+        public object Actor => _actor;
+
+        public bool EnsurePlacedNow()
+        {
+            var unit = ResolveUnit();
+            var anchor = unit != null ? unit.Position : (_actor != null ? _actor.Anchor : Hex.Zero);
+            var facing = unit != null ? unit.Facing : (_actor != null ? _actor.Facing : Facing4.PlusQ);
+
+            if (_placed)
+                return true;
+
+            return TryPlaceImmediateInternal(anchor, facing);
         }
 
         void Update()
@@ -78,18 +201,14 @@ namespace TGD.CombatV2.Integration
                 EnsurePlacedNow();
 
 #if UNITY_EDITOR
-            if (!autoMirrorDebug)
+            if (!autoMirrorDebug || _actor == null)
                 return;
 
             var unit = ResolveUnit();
-            if (unit != null && _placed)
+            if (unit != null && !unit.Position.Equals(_actor.Anchor))
             {
-                var anchor = _actor.Anchor;
-                if (!unit.Position.Equals(anchor))
-                {
-                    Debug.LogWarning($"[Occ] Drift detected: unit={unit.Position} occ={anchor}. Auto-mirror.", this);
-                    MirrorDriver(anchor, _actor.Facing);
-                }
+                Debug.LogWarning($"[Occ] Drift detected: unit={unit.Position} occ={_actor.Anchor}. Auto-sync.", this);
+                SyncUnit(_actor.Anchor, _actor.Facing);
             }
 #endif
         }
@@ -99,141 +218,161 @@ namespace TGD.CombatV2.Integration
             if (!Application.isPlaying)
                 return;
 
-            if (_occ != null && _actor != null && _placed)
-            {
-                _occ.Remove(_actor);
-                _placed = false;
-                if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
-            }
-        }
-
-        public bool IsReady
-        {
-            get
-            {
-                if (_occ == null || _actor == null)
-                    return false;
-
-                if (_componentAdapter != null)
-                    return _componentAdapter.Unit != null;
-
-                if (_driver != null)
-                    return _driver.IsReady && _driver.UnitRef != null;
-
-                return false;
-            }
-        }
-
-        public object Actor => _actor;
-
-        public bool EnsurePlacedNow()
-        {
-            var unitRef = ResolveUnit();
-            var anchor = unitRef != null ? unitRef.Position : (_actor != null ? _actor.Anchor : Hex.Zero);
-            var face = unitRef != null ? unitRef.Facing : (_actor != null ? _actor.Facing : Facing4.PlusQ);
-            if (_placed)
-                return true;
-            return TryPlaceImmediateInternal(anchor, face);
-        }
-
-        public void Bind(UnitGridAdapter adapter)
-        {
-            if (adapter == null)
+            if (!_placed)
                 return;
 
-            EnsureActorBinding(adapter);
-            EnsureOccupancyBacking();
+            var ctx = ResolveContext();
+            var svc = ResolveService();
+            if (ctx != null && svc != null)
+            {
+                svc.Remove(ctx);
+                _placed = false;
+                if (debugLog)
+                    Debug.Log($"[Occ] Remove {IdLabel()} via IOccupancyService", this);
+            }
         }
 
         public bool PlaceImmediate(Hex anchor, Facing4 facing)
             => TryPlaceImmediateInternal(anchor, facing, _componentAdapter);
 
+        public bool Register(Unit unit, Hex anchor, Facing4 facing)
+        {
+            if (unit != null)
+            {
+                var ctx = ResolveContext();
+                if (ctx != null && ctx.boundUnit == null)
+                    ctx.boundUnit = unit;
+
+                if (_componentAdapter != null && _componentAdapter.Unit == null)
+                    _componentAdapter.Unit = unit;
+            }
+
+            return TryPlaceImmediateInternal(anchor, facing, _componentAdapter);
+        }
+
+        public bool MoveTo(Unit unit, Hex anchor, Facing4 facing)
+            => MoveCommit(anchor, facing);
+
+        public void Unregister(Unit unit)
+        {
+            var ctx = ResolveContext();
+            var svc = ResolveService();
+            if (ctx != null && svc != null && _placed)
+            {
+                svc.Remove(ctx);
+                _placed = false;
+            }
+        }
+
+        public bool IsFree(Unit unit, Hex anchor, FootprintShape fp, Facing4 facing)
+        {
+            var svc = ResolveService();
+            return svc != null && svc.IsFree(anchor, fp, facing);
+        }
+
+        public bool GetActor(Unit unit, Hex anchor, out CoreV2.IGridActor actor)
+        {
+            var svc = ResolveService();
+            if (svc != null)
+                return svc.TryGetActor(anchor, out actor);
+
+            actor = null;
+            return false;
+        }
+
         public bool MoveCommit(Hex newAnchor, Facing4 newFacing)
         {
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (!IsReady)
+            var ctx = ResolveContext();
+            var svc = ResolveService();
+            EnsureActorBinding();
+
+            if (ctx == null || svc == null || _actor == null)
                 return false;
 
-            _occ?.TempClearForOwner(_actor);
-            bool success = false;
-            bool replaced = false;
-
-            if (_occ.TryMove(_actor, newAnchor))
-            {
-                _actor.Anchor = newAnchor;
-                _actor.Facing = newFacing;
-                _placed = true;
-                success = true;
-            }
-            else
-            {
-                if (_occ != null)
-                {
-                    _occ.Remove(_actor);
-                    _occ.TempClearForOwner(_actor);
-                    if (_occ.TryPlace(_actor, newAnchor, newFacing))
-                    {
-                        _actor.Anchor = newAnchor;
-                        _actor.Facing = newFacing;
-                        _placed = true;
-                        success = true;
-                        replaced = true;
-                    }
-                }
-            }
-
+            bool success = svc.TryMove(ctx, newAnchor, newFacing);
             if (success)
             {
-                if (debugLog)
-                {
-                    string verb = replaced ? "RePlace" : "Move";
-                    Debug.Log($"[Occ] {verb} {IdLabel()} -> {newAnchor}", this);
-                }
-                MirrorDriver(_actor.Anchor, _actor.Facing);
+                _placed = true;
+                SyncUnit(newAnchor, newFacing);
                 RaiseAnchorChanged(newAnchor);
+#if UNITY_EDITOR
+                ValidateConsistency(ctx, newAnchor);
+#endif
+                if (debugLog)
+                    Debug.Log($"[Occ] Move {IdLabel()} -> {newAnchor}", this);
                 return true;
             }
 
 #if UNITY_EDITOR
-            Debug.LogWarning($"[Occ] MoveCommit failed -> {newAnchor}", this);
+            Debug.LogWarning($"[Occ] MoveCommit failed via IOccupancyService -> {newAnchor}", this);
 #endif
             return false;
         }
 
-        Unit ResolveUnit()
+        bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
         {
-            if (_ctx != null && _ctx.boundUnit != null)
+            var ctx = ResolveContext();
+            var svc = ResolveService();
+            EnsureActorBinding(explicitAdapter);
+
+            if (ctx == null || svc == null || _actor == null)
+                return false;
+
+            bool placed = svc.TryPlace(ctx, anchor, facing);
+            if (placed)
             {
-                if (_componentAdapter != null && _componentAdapter.Unit != _ctx.boundUnit)
-                    _componentAdapter.Unit = _ctx.boundUnit;
-                return _ctx.boundUnit;
+                _placed = true;
+                SyncUnit(anchor, facing);
+                RaiseAnchorChanged(anchor);
+#if UNITY_EDITOR
+                ValidateConsistency(ctx, anchor);
+#endif
+                if (debugLog)
+                    Debug.Log($"[Occ] Place {IdLabel()} at {anchor} via IOccupancyService", this);
+                return true;
             }
 
-            if (_componentAdapter != null && _componentAdapter.Unit != null)
-                return _componentAdapter.Unit;
-
-            if (_driver != null && _driver.IsReady)
-                return _driver.UnitRef;
-
-            return null;
+#if UNITY_EDITOR
+            Debug.LogWarning($"[Occ] PlaceImmediate failed via IOccupancyService -> {anchor}", this);
+#endif
+            return false;
         }
 
-        IGridActor CreateActorAdapter()
+        void SyncUnit(Hex anchor, Facing4 facing)
         {
             if (_componentAdapter != null)
             {
-                if (overrideFootprint != null && _componentAdapter.Footprint == null)
-                    _componentAdapter.Footprint = overrideFootprint;
-                var unit = ResolveUnit();
-                if (_componentAdapter.Unit == null && unit != null)
-                    _componentAdapter.Unit = unit;
-                return _componentAdapter;
+                _componentAdapter.Anchor = anchor;
+                _componentAdapter.Facing = facing;
             }
 
-            var fp = overrideFootprint ? overrideFootprint : CreateSingle();
-            return new BridgeActor(_driver, fp);
+            var ctx = ResolveContext();
+            if (ctx != null && ctx.boundUnit != null)
+            {
+                ctx.boundUnit.Position = anchor;
+                ctx.boundUnit.Facing = facing;
+            }
+        }
+
+        void RaiseAnchorChanged(Hex anchor)
+        {
+            AnchorVersion++;
+            AnchorChanged?.Invoke(anchor, AnchorVersion);
+            if (debugLog)
+                Debug.Log($"[Occ] AnchorChanged v{AnchorVersion} -> {anchor}", this);
+        }
+
+        Unit ResolveUnit()
+        {
+            var ctx = ResolveContext();
+            if (ctx != null && ctx.boundUnit != null)
+            {
+                if (_componentAdapter != null && _componentAdapter.Unit != ctx.boundUnit)
+                    _componentAdapter.Unit = ctx.boundUnit;
+                return ctx.boundUnit;
+            }
+
+            return _componentAdapter != null ? _componentAdapter.Unit : null;
         }
 
         string IdLabel()
@@ -245,141 +384,18 @@ namespace TGD.CombatV2.Integration
             if (_actor != null && !string.IsNullOrEmpty(_actor.Id))
                 return _actor.Id;
 
-            if (_driver != null && !string.IsNullOrEmpty(_driver.unitId))
-                return _driver.unitId;
-
-            return "Unit";
+            return _ctx != null ? _ctx.name : name;
         }
 
-        sealed class BridgeActor : IGridActor
+#if UNITY_EDITOR
+        void ValidateConsistency(UnitRuntimeContext ctx, Hex anchor)
         {
-            readonly HexBoardTestDriver _driver;
-            readonly FootprintShape _footprint;
+            if (ctx?.boundUnit == null)
+                return;
 
-            public BridgeActor(HexBoardTestDriver driver, FootprintShape footprint)
-            {
-                _driver = driver;
-                _footprint = footprint ? footprint : PlayerOccupancyBridge.CreateSingle();
-                if (driver != null && driver.UnitRef != null)
-                {
-                    Anchor = driver.UnitRef.Position;
-                    Facing = driver.UnitRef.Facing;
-                }
-                else
-                {
-                    Anchor = Hex.Zero;
-                    Facing = Facing4.PlusQ;
-                }
-            }
-
-            public string Id
-            {
-                get
-                {
-                    if (_driver != null && !string.IsNullOrEmpty(_driver.unitId))
-                        return _driver.unitId;
-                    return "Player";
-                }
-            }
-
-            public Hex Anchor { get; set; }
-            public Facing4 Facing { get; set; }
-            public FootprintShape Footprint => _footprint;
+            if (!ctx.boundUnit.Position.Equals(anchor))
+                Debug.LogWarning($"[Occ] Context/unit mismatch: ctx={ctx.name} unit={ctx.boundUnit.Position} occ={anchor}", ctx);
         }
-
-        void MirrorDriver(Hex anchor, Facing4 facing)
-        {
-            var unit = ResolveUnit();
-            if (unit != null)
-            {
-                unit.Position = anchor;
-                unit.Facing = facing;
-            }
-
-            if (_driver != null && _driver.IsReady && _driver.UnitRef != null)
-            {
-                var driverUnit = _driver.UnitRef;
-                driverUnit.Position = anchor;
-                driverUnit.Facing = facing;
-
-                if (_driver.Map != null)
-                    _driver.Map.Set(driverUnit, anchor);
-
-                _driver.SyncView();
-            }
-
-            if (debugLog)
-                Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
-        }
-
-        static FootprintShape CreateSingle()
-        {
-            var shape = ScriptableObject.CreateInstance<FootprintShape>();
-            shape.name = "PlayerFootprint_Single_Runtime";
-            shape.offsets = new() { new L2(0, 0) };
-            return shape;
-        }
-
-        void EnsureOccupancyBacking()
-        {
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (_occ == null)
-            {
-                var layout = ResolveLayout();
-                if (layout != null)
-                    _occ = new HexOccupancy(layout);
-            }
-        }
-
-        void EnsureActorBinding(UnitGridAdapter explicitAdapter = null)
-        {
-            if (explicitAdapter != null)
-                _componentAdapter = explicitAdapter;
-
-            if (_componentAdapter == null)
-                _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
-
-            if (_componentAdapter != null)
-            {
-                if (overrideFootprint != null && _componentAdapter.Footprint == null)
-                    _componentAdapter.Footprint = overrideFootprint;
-
-                if (_componentAdapter.Unit == null)
-                {
-                    var unit = _ctx != null && _ctx.boundUnit != null ? _ctx.boundUnit : null;
-                    if (unit == null && _driver != null && _driver.IsReady)
-                        unit = _driver.UnitRef;
-                    if (unit != null)
-                        _componentAdapter.Unit = unit;
-                }
-
-                _actor = _componentAdapter;
-            }
-            else if (_actor == null)
-            {
-                _actor = CreateActorAdapter();
-            }
-        }
-
-        bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
-        {
-            _driver?.EnsureInit();
-            EnsureActorBinding(explicitAdapter);
-            EnsureOccupancyBacking();
-
-            if (!IsReady || _occ == null || _actor == null)
-                return false;
-
-            if (!_occ.TryPlace(_actor, anchor, facing))
-                return false;
-
-            _placed = true;
-            if (debugLog)
-                Debug.Log($"[Occ] Place {IdLabel()} at {anchor}", this);
-            MirrorDriver(anchor, facing);
-            RaiseAnchorChanged(anchor);
-            return true;
-        }
+#endif
     }
 }

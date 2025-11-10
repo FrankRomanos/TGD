@@ -27,8 +27,8 @@ namespace TGD.CombatV2
         {
             if (_bridge == null)
                 _bridge = GetComponent<PlayerOccupancyBridge>();
-            if (!occupancyService && _bridge != null && _bridge.occupancyService)
-                occupancyService = _bridge.occupancyService;
+            if (!occupancyService && _bridge != null && _bridge.occSvc)
+                occupancyService = _bridge.occSvc;
         }
 
         void OnDisable()
@@ -47,8 +47,8 @@ namespace TGD.CombatV2
 
             if (occupancyService)
                 _occ = occupancyService.Get();
-            else if (_bridge != null && _bridge.occupancyService)
-                _occ = _bridge.occupancyService.Get();
+            else if (_bridge != null && _bridge.occSvc)
+                _occ = _bridge.occSvc.Get();
 
             var actor = SelfActor;
             var finalFacing = facingOverride ?? (actor != null ? actor.Facing : Facing4.PlusQ);
