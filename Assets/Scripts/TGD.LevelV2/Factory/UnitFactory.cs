@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Text;
 using TGD.CombatV2;
-using TGD.CombatV2.Integration;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
@@ -122,8 +121,13 @@ namespace TGD.LevelV2
             go.name = $"{ResolveDisplayName(final, unitId)} ({final.faction})";
             PlaceTransform(go.transform, spawnHex);
 
+            var viewHandle = EnsureViewHandle(go, context);
+            var initialViewRoot = viewHandle != null ? viewHandle.viewRoot : null;
+
             var resolvedSkillIndex = ResolveSkillIndex();
             var shared = ResolveShared(go, resolvedSkillIndex);
+            if (shared.view == null)
+                shared.view = initialViewRoot;
 
             RegisterTurnSystems(unit, context, cooldownHub, final.faction, shared.turnManager);
 
@@ -139,7 +143,7 @@ namespace TGD.LevelV2
 
             WireHazardWatchers(go, context, ref shared);
 
-            TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
+            TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar, shared.view);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
@@ -426,11 +430,21 @@ namespace TGD.LevelV2
 
             shared.validator = EnsureLocalTargetValidator(go, shared.turnManager ?? turnManager, shared.occupancy, shared.environment);
 
-            shared.view = go != null
-                ? go.GetComponentInChildren<Animator>(true)?.transform
-                  ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
-                  ?? go.transform
-                : null;
+            if (go != null)
+            {
+                var existingHandle = go.GetComponent<UnitViewHandle>();
+                if (existingHandle != null && existingHandle.viewRoot != null)
+                    shared.view = existingHandle.viewRoot;
+            }
+
+            if (shared.view == null)
+            {
+                shared.view = go != null
+                    ? go.GetComponentInChildren<Animator>(true)?.transform
+                      ?? go.GetComponentInChildren<SkinnedMeshRenderer>(true)?.transform
+                      ?? go.transform
+                    : null;
+            }
 
             return shared;
         }
@@ -513,7 +527,6 @@ namespace TGD.LevelV2
                     mover.pickPlaneY = resolvedCam.pickPlaneY;
                     mover.rayMaxDistance = resolvedCam.rayMaxDistance;
                 }
-                mover.bridgeOverride = null;
                 mover.RefreshFactoryInjection();
             }
 
@@ -533,7 +546,6 @@ namespace TGD.LevelV2
                 attack.status = ResolveStatusFor(attack);
                 attack.stickySource = resolvedEnv;
                 attack.viewOverride = view;
-                attack.bridgeOverride = null;
                 attack.RefreshFactoryInjection();
             }
 
@@ -679,21 +691,10 @@ namespace TGD.LevelV2
             else if (adapter.Unit == null && bound != null)
                 adapter.Unit = bound;
 
-            var bridge = go.GetComponent<PlayerOccupancyBridge>() ?? go.AddComponent<PlayerOccupancyBridge>();
-            if (bridge != null)
-            {
-                bridge.occupancyService = occSvc;
-                if (defaultFootprint != null)
-                    bridge.overrideFootprint = defaultFootprint;
-            }
-
-            if (bridge != null && adapter != null)
-                bridge.Bind(adapter);
-
             var face = bound != null ? bound.Facing : facing;
             bool placed = false;
 
-            if (context != null && context.occService != null && OccRuntimeSwitch.UseIOccWrites)
+            if (context != null && context.occService != null)
             {
                 OccTxnId tx; OccFailReason reason;
                 if (!context.occService.TryPlace(context, spawn, face, out tx, out reason))
@@ -703,69 +704,51 @@ namespace TGD.LevelV2
                 }
 
                 placed = true;
-                bridge?.SyncAfterIOccPlacement(spawn, face);
             }
 
-            if (!placed && bridge != null)
+            if (!placed)
             {
-                placed = bridge.PlaceImmediate(spawn, face);
-                if (!placed)
-                {
-                    Debug.LogWarning($"[Factory] Failed to immediately place {bound?.Id ?? go.name} at {spawn}.", go);
-                    placed = bridge.EnsurePlacedNow();
-                    if (!placed)
-                        return false;
-                }
-            }
-
-            if (!placed && bridge == null)
-            {
-                Debug.LogWarning($"[Factory] Missing PlayerOccupancyBridge for {bound?.Id ?? go.name}; cannot place at {spawn}.", go);
+                Debug.LogError($"[Occ] Missing IOccupancyService for {bound?.Id ?? go.name}; cannot place at {spawn}.", go);
                 return false;
             }
 
-            if (bridge != null)
+            foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
             {
-                foreach (var mover in go.GetComponentsInChildren<HexClickMover>(true))
-                {
-                    if (mover == null)
-                        continue;
+                if (mover == null)
+                    continue;
 
-                    mover.bridgeOverride = bridge;
-                    mover.occupancyService = occSvc;
-                    if (resolvedEnv != null)
+                mover.occupancyService = occSvc;
+                if (resolvedEnv != null)
+                {
+                    mover.env = resolvedEnv;
+                    if (mover.status == null)
                     {
-                        mover.env = resolvedEnv;
-                        if (mover.status == null)
-                        {
-                            mover.status = mover.GetComponent<MoveRateStatusRuntime>()
-                                          ?? mover.GetComponentInParent<MoveRateStatusRuntime>(true)
-                                          ?? mover.GetComponentInChildren<MoveRateStatusRuntime>(true);
-                        }
-                        mover.stickySource = resolvedEnv;
-                        mover.RefreshFactoryInjection();
+                        mover.status = mover.GetComponent<MoveRateStatusRuntime>()
+                                      ?? mover.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                      ?? mover.GetComponentInChildren<MoveRateStatusRuntime>(true);
                     }
+                    mover.stickySource = resolvedEnv;
+                    mover.RefreshFactoryInjection();
                 }
+            }
 
-                foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+            foreach (var attack in go.GetComponentsInChildren<AttackControllerV2>(true))
+            {
+                if (attack == null)
+                    continue;
+
+                attack.occupancyService = occSvc;
+                if (resolvedEnv != null)
                 {
-                    if (attack == null)
-                        continue;
-
-                    attack.bridgeOverride = bridge;
-                    attack.occupancyService = occSvc;
-                    if (resolvedEnv != null)
+                    attack.env = resolvedEnv;
+                    if (attack.status == null)
                     {
-                        attack.env = resolvedEnv;
-                        if (attack.status == null)
-                        {
-                            attack.status = attack.GetComponent<MoveRateStatusRuntime>()
-                                            ?? attack.GetComponentInParent<MoveRateStatusRuntime>(true)
-                                            ?? attack.GetComponentInChildren<MoveRateStatusRuntime>(true);
-                        }
-                        attack.stickySource = resolvedEnv;
-                        attack.RefreshFactoryInjection();
+                        attack.status = attack.GetComponent<MoveRateStatusRuntime>()
+                                        ?? attack.GetComponentInParent<MoveRateStatusRuntime>(true)
+                                        ?? attack.GetComponentInChildren<MoveRateStatusRuntime>(true);
                     }
+                    attack.stickySource = resolvedEnv;
+                    attack.RefreshFactoryInjection();
                 }
             }
 
@@ -1048,7 +1031,38 @@ namespace TGD.LevelV2
         static string NormalizeSkillId(string skillId)
             => string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
 
-        void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar)
+        static UnitViewHandle EnsureViewHandle(GameObject go, UnitRuntimeContext context, Transform preferredRoot = null)
+        {
+            if (go == null)
+                return null;
+
+            var handle = go.GetComponent<UnitViewHandle>();
+            if (handle == null)
+                handle = go.AddComponent<UnitViewHandle>();
+
+            handle.ctx = context;
+
+            Transform resolvedRoot = preferredRoot;
+            if (resolvedRoot == null)
+            {
+                resolvedRoot = handle.viewRoot;
+                if (resolvedRoot == null && go != null)
+                {
+                    resolvedRoot = go.transform.Find("UnitView");
+                    if (resolvedRoot == null)
+                        resolvedRoot = go.transform;
+                }
+            }
+
+            handle.viewRoot = resolvedRoot != null ? resolvedRoot : go.transform;
+
+            if (context != null && context.boundUnit != null)
+                handle.unitIdOverride = context.boundUnit.Id;
+
+            return handle;
+        }
+
+        void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar, Transform visualRoot)
         {
             var record = new SpawnRecord
             {
@@ -1061,26 +1075,20 @@ namespace TGD.LevelV2
 
             _spawned[unit] = record;
 
-            WireUnitView(unit, context, go);
+            WireUnitView(unit, context, go, visualRoot);
             if (unit != null)
                 UnitAvatarRegistry.Register(unit.Id, avatar);
         }
 
-        static void WireUnitView(Unit unit, UnitRuntimeContext context, GameObject go)
+        static void WireUnitView(Unit unit, UnitRuntimeContext context, GameObject go, Transform visualRoot)
         {
             if (go == null)
                 return;
 
-            var handle = go.GetComponent<UnitViewHandle>();
-            if (handle == null)
-                handle = go.AddComponent<UnitViewHandle>();
+            var handle = EnsureViewHandle(go, context, visualRoot);
 
-            handle.ctx = context;
-
-            var candidate = go.transform.Find("UnitView");
-            handle.viewRoot = candidate != null ? candidate : go.transform;
-
-            handle.unitIdOverride = unit != null ? unit.Id : null;
+            if (unit != null)
+                handle.unitIdOverride = unit.Id;
 
             UnitLocator.Register(handle);
         }
