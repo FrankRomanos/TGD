@@ -1,5 +1,5 @@
+using System;
 using UnityEngine;
-using TGD.HexBoard;
 
 namespace TGD.CoreV2
 {
@@ -13,6 +13,9 @@ namespace TGD.CoreV2
         public Transform viewRoot;
 
         public UnitRuntimeContext ctx;
+
+        public static event Action<IUnitView> ViewEnabled;
+        public static event Action<IUnitView> ViewDisabled;
 
         public string UnitId
         {
@@ -45,12 +48,17 @@ namespace TGD.CoreV2
         {
             if (ctx == null)
                 ctx = GetComponent<UnitRuntimeContext>();
-            UnitLocator.Register(this);
+            ViewEnabled?.Invoke(this);
         }
 
         void OnDisable()
         {
-            UnitLocator.Unregister(this);
+            ViewDisabled?.Invoke(this);
+        }
+
+        void OnDestroy()
+        {
+            ViewDisabled?.Invoke(this);
         }
     }
 }

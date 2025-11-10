@@ -9,6 +9,15 @@ namespace TGD.HexBoard
     {
         static readonly Dictionary<string, Transform> Registry = new();
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void Bootstrap()
+        {
+            UnitViewHandle.ViewEnabled -= HandleViewEnabled;
+            UnitViewHandle.ViewDisabled -= HandleViewDisabled;
+            UnitViewHandle.ViewEnabled += HandleViewEnabled;
+            UnitViewHandle.ViewDisabled += HandleViewDisabled;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetOnDomainReload()
         {
@@ -69,6 +78,16 @@ namespace TGD.HexBoard
 
             if (view is Component c) return c.transform;
             return null;
+        }
+
+        static void HandleViewEnabled(IUnitView view)
+        {
+            Register(view);
+        }
+
+        static void HandleViewDisabled(IUnitView view)
+        {
+            Unregister(view);
         }
     }
 }
