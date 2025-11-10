@@ -128,7 +128,14 @@ namespace TGD.LevelV2
 
             var adapter = EnsureGridAdapter(go, unit);
             WireMovementAndAttack(go, context, cooldownHub, unit, ref shared);
-            WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, unit.Facing, ref shared);
+            if (!WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, unit.Facing, ref shared))
+            {
+                _usedIds.Remove(unit.Id);
+                Destroy(go);
+                Debug.LogError($"[Factory] Occupancy placement failed for {unit.Id}.", this);
+                return null;
+            }
+
             WireHazardWatchers(go, context, ref shared);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar);
@@ -622,7 +629,7 @@ namespace TGD.LevelV2
             }
         }
 
-        void WireOccupancy(
+        bool WireOccupancy(
             GameObject go,
             UnitRuntimeContext context,
             Unit unit,
@@ -633,7 +640,7 @@ namespace TGD.LevelV2
             ref SharedRefs shared)
         {
             if (go == null)
-                return;
+                return false;
 
             var occSvc = shared.occupancy;
             if (occSvc == null)
@@ -680,14 +687,37 @@ namespace TGD.LevelV2
                 bridge.Bind(adapter);
 
             var face = bound != null ? bound.Facing : facing;
-            if (bridge != null)
+            bool placed = false;
+
+            if (context != null && context.occService != null && OccRuntimeSwitch.UseIOccWrites)
             {
-                bool placed = bridge.PlaceImmediate(spawn, face);
+                OccTxnId tx; OccFailReason reason;
+                if (!context.occService.TryPlace(context, spawn, face, out tx, out reason))
+                {
+                    Debug.LogError($"[Occ] Spawn TryPlace failed: {reason} for {bound?.Id ?? go.name}", go);
+                    return false;
+                }
+
+                placed = true;
+                bridge?.SyncAfterIOccPlacement(spawn, face);
+            }
+
+            if (!placed && bridge != null)
+            {
+                placed = bridge.PlaceImmediate(spawn, face);
                 if (!placed)
                 {
                     Debug.LogWarning($"[Factory] Failed to immediately place {bound?.Id ?? go.name} at {spawn}.", go);
-                    bridge.EnsurePlacedNow();
+                    placed = bridge.EnsurePlacedNow();
+                    if (!placed)
+                        return false;
                 }
+            }
+
+            if (!placed && bridge == null)
+            {
+                Debug.LogWarning($"[Factory] Missing PlayerOccupancyBridge for {bound?.Id ?? go.name}; cannot place at {spawn}.", go);
+                return false;
             }
 
             if (bridge != null)
@@ -745,6 +775,7 @@ namespace TGD.LevelV2
                 Debug.Log($"[Factory] TM roster {bound.Id}: player={isPlayer} enemy={isEnemy}", this);
             }
 
+            return true;
         }
 
         SkillIndex ResolveSkillIndex()
