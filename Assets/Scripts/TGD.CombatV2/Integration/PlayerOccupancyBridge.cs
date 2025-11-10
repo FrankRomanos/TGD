@@ -21,6 +21,9 @@ namespace TGD.CombatV2.Integration
         HexOccupancy _occ;
         IGridActor _actor;
         bool _placed;
+        int _lastWriteFrame = -1;
+        Hex _lastFrom;
+        Hex _lastTo;
 
         public event System.Action<Hex, int> AnchorChanged;
 
@@ -158,6 +161,7 @@ namespace TGD.CombatV2.Integration
 
         public bool MoveCommit(Hex newAnchor, Facing4 newFacing)
         {
+            var previousAnchor = _actor != null ? _actor.Anchor : (ResolveUnit()?.Position ?? Hex.Zero);
             if (UseIOcc)
             {
                 OccTxnId tx; OccFailReason reason;
@@ -169,6 +173,9 @@ namespace TGD.CombatV2.Integration
                     if (shadowCheck)
                         ShadowCheck(newAnchor, newFacing, "Move");
                     RaiseAnchorChanged(newAnchor);
+                    _lastWriteFrame = Time.frameCount;
+                    _lastFrom = previousAnchor;
+                    _lastTo = newAnchor;
                     if (debugLog)
                         Debug.Log($"[Occ] Move via IOcc tx={tx.Value} -> {newAnchor}", this);
                     return true;
@@ -385,6 +392,13 @@ namespace TGD.CombatV2.Integration
 
         bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
         {
+            if (UseIOcc && Time.frameCount == _lastWriteFrame && anchor.Equals(_lastFrom))
+            {
+                if (debugLog)
+                    Debug.LogWarning($"[Occ] WriteGuard: ignore back-place to {_lastFrom} in same frame", this);
+                return false;
+            }
+
             _driver?.EnsureInit();
             EnsureActorBinding(explicitAdapter);
             EnsureOccupancyBacking();

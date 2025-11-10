@@ -43,7 +43,7 @@ namespace TGD.HexBoard
                 OccDiagnostics.Log(OccAction.Place, txn, "null", Hex.Zero, anchor, reason);
                 return false;
             }
-            if (!store.CanPlace(actor, anchor, facing))
+            if (!store.CanPlace(actor, anchor, facing, actor))
             {
                 reason = OccFailReason.Blocked;
                 OccDiagnostics.Log(OccAction.Place, txn, actor.Id, actor.Anchor, anchor, reason);
@@ -91,7 +91,7 @@ namespace TGD.HexBoard
             {
                 actor.Facing = facing;
             }
-            else if (store.CanPlace(actor, anchor, facing))
+            else if (store.CanPlace(actor, anchor, facing, actor))
             {
                 ok = store.TryPlace(actor, anchor, facing);
             }
