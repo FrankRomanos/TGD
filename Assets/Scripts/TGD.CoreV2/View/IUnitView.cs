@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace TGD.HexBoard
+namespace TGD.CoreV2
 {
     /// <summary>
     /// Interface implemented by view objects that expose a unit's visible transform.
