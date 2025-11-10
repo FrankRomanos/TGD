@@ -53,15 +53,6 @@ namespace TGD.CombatV2.Integration
             EnsureActorBinding();
         }
 
-        HexBoardLayout ResolveLayout()
-        {
-            if (occupancyService != null && occupancyService.authoring != null)
-                return occupancyService.authoring.Layout;
-            if (_driver != null && _driver.authoring != null)
-                return _driver.authoring.Layout;
-            return null;
-        }
-
         void Start() => EnsurePlacedNow();
 
         void RaiseAnchorChanged(Hex anchor)
@@ -322,13 +313,14 @@ namespace TGD.CombatV2.Integration
 
         void EnsureOccupancyBacking()
         {
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (_occ == null)
+            if (_occ != null)
+                return;
+
+            if (occupancyService)
             {
-                var layout = ResolveLayout();
-                if (layout != null)
-                    _occ = new HexOccupancy(layout);
+                _occ = occupancyService.Get();
+                if (_occ == null && debugLog)
+                    Debug.LogError("[Occ] HexOccupancyService returned null store.", this);
             }
         }
 

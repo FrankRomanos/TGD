@@ -542,3 +542,37 @@ Initialize(turnManager, combatManager) / Shutdown() 仍然保留。
 
 这些日志一方面是debug，一方面是UI数据源（Banner/将来详细战斗log面板）。
 
+IOcc 的目标（它想成为谁）
+唯一真源（SSOT）：全局只存在“一个棋盘占位账本”。任何占位/移动/查询都只经过它。
+可回放、可审计：每次占位操作都有可关联的事件、Token、日志；取消或回滚也有对偶记录。
+与战斗时序对齐：占位变更与 CAM/TMV2 的 W2/W3/W4 阶段配平（预扣→执行→结算）。
+解偶对象形态：Boss 变体、Footprint 改变、强制位移、跨场景/多棋盘都能用同一 API。
+可演化：后续可接“软预留/硬占位”“碰撞裁决”“占位变形（Refit）”“传送/分裂/合体”等高级能力。
+
+IOcc 的域模型（概念清单）
+BoardId / Layout：棋盘实例身份；同项目允许多块棋盘并存（内外场）。
+Actor(IGridActor)：只包含占位最小集（Id、Anchor、Facing、Footprint），不含行为。
+Store(HexOccupancy)：某 BoardId 对应的占位账本（数据结构）。
+Service(IOcc)：所有读写 Store 的唯一入口（门面 + 规则钩子 + 日志）。
+Adapter(UnitGridAdapter)：把 UnitRuntimeContext 映射为 IGridActor（仅适配层）。
+
+IOcc 的最小职责（API 语义，不是签名）
+TryPlace(ctx, anchor, facing)：原子放置；成功后 Store 可见；失败返回 false；不修改其他状态。
+TryMove(ctx, anchor, facing)：原子移动；内部等价于合法性检查 + Remove+Place 或高效 Move。
+Remove(ctx)：原子移除；无声失败可接受（例如反复调用）。
+IsFree(anchor, footprint, facing)：纯查询；不产生副作用。
+TryGetActor(anchor, out actor)：纯查询；辅助调试与验证。
+（可选）Refit(ctx, newFootprint, newFacing)：原子变形（Boss 变大/变小/转身时的占位切换）。
+（可选）ReservePath(token, cells) / Commit(token) / Cancel(token)：软预留通道，避免多人“抢格”。
+
+关键点：IOcc 只对“占不占、站哪格、脸朝哪”负责。移动的消耗/时序/动画归 CAM/TMV2；规则影响（例如禁止穿友军）归 Rule 引擎；IOcc 只提供确定性裁决与一致日志。
+
+而我们现在的状态（以及与理想状态差异）
+已有：HexOccupancy 作为 Store；UnitGridAdapter 把 Unit 映射为 Actor；HexOccupancyService 原型。
+差异：
+多入口/多路线：曾同时存在 PlayerOccupancyBridge、Mover/Attack 内部直触、Service 半接入 → 并行通道。
+生命周期不统一：有的通过 Factory 放置，有的晚点才注册，有的销毁不 Remove → 悬挂引用。
+跨棋盘/跨场景身份不明确：Layout/Authoring 解析路径不唯一 → “看似同一棋盘”实际是不同 Store。
+无回滚/对偶：当 CAM 在 W3 失败时，IOcc 没有“与这次行动绑定的撤销”概念 → 留脏占位。
+适配层重复：一个 Unit 可能创建了多个 UnitGridAdapter（或者旧桥和新适配共存）→ 双注册。
+
