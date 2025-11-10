@@ -10,38 +10,39 @@ namespace TGD.HexBoard
     /// </summary>
     public static class UnitAvatarRegistry
     {
-        static readonly Dictionary<string, IUnitAvatarSource> Sources = new();
+        static readonly Dictionary<string, Sprite> Avatars = new();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetOnDomainReload()
         {
-            Sources.Clear();
+            Avatars.Clear();
         }
 
-        public static bool Register(IUnitAvatarSource source)
+        public static bool Register(string unitId, Sprite avatar)
         {
-            if (source == null)
+            if (string.IsNullOrEmpty(unitId))
                 return false;
 
-            string id = source.UnitId;
-            if (string.IsNullOrEmpty(id))
+            if (avatar == null)
+            {
+                Avatars.Remove(unitId);
                 return false;
+            }
 
-            Sources[id] = source;
+            Avatars[unitId] = avatar;
             return true;
         }
 
-        public static void Unregister(IUnitAvatarSource source)
+        public static void Unregister(string unitId, Sprite expectedAvatar = null)
         {
-            if (source == null)
+            if (string.IsNullOrEmpty(unitId))
                 return;
 
-            string id = source.UnitId;
-            if (string.IsNullOrEmpty(id))
+            if (!Avatars.TryGetValue(unitId, out var existing))
                 return;
 
-            if (Sources.TryGetValue(id, out var existing) && ReferenceEquals(existing, source))
-                Sources.Remove(id);
+            if (expectedAvatar == null || existing == expectedAvatar)
+                Avatars.Remove(unitId);
         }
 
         public static bool TryGetAvatar(Unit unit, out Sprite avatar)
@@ -56,12 +57,11 @@ namespace TGD.HexBoard
             if (string.IsNullOrEmpty(unitId))
                 return false;
 
-            if (!Sources.TryGetValue(unitId, out var source) || source == null)
+            if (!Avatars.TryGetValue(unitId, out var stored) || stored == null)
                 return false;
 
-            avatar = source.GetAvatarSprite();
-            return avatar != null;
+            avatar = stored;
+            return true;
         }
     }
 }
-

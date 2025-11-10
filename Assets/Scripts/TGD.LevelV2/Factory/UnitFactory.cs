@@ -62,6 +62,7 @@ namespace TGD.LevelV2
             public UnitRuntimeContext context;
             public CooldownHubV2 cooldownHub;
             public UnitGridAdapter gridAdapter;
+            public Sprite avatar;
         }
 
         public IReadOnlyList<Unit> FriendlyUnits => _friendlies;
@@ -169,6 +170,9 @@ namespace TGD.LevelV2
 
             if (record.gameObject != null)
                 Destroy(record.gameObject);
+
+            if (!string.IsNullOrEmpty(unit.Id))
+                UnitAvatarRegistry.Unregister(unit.Id, record.avatar);
 
             _spawned.Remove(unit);
             _friendlies.Remove(unit);
@@ -1051,35 +1055,34 @@ namespace TGD.LevelV2
                 gameObject = go,
                 context = context,
                 cooldownHub = hub,
-                gridAdapter = adapter
+                gridAdapter = adapter,
+                avatar = avatar
             };
 
             _spawned[unit] = record;
 
-            TryRegisterUnitView(unit, go, avatar);
+            WireUnitView(unit, context, go);
+            if (unit != null)
+                UnitAvatarRegistry.Register(unit.Id, avatar);
         }
 
-        void TryRegisterUnitView(Unit unit, GameObject go, Sprite avatar)
+        static void WireUnitView(Unit unit, UnitRuntimeContext context, GameObject go)
         {
-            if (unit == null || go == null)
+            if (go == null)
                 return;
 
-            var binder = go.GetComponentInChildren<UnitViewBinding>(true);
-            if (binder == null)
-                binder = go.AddComponent<UnitViewBinding>();
+            var handle = go.GetComponent<UnitViewHandle>();
+            if (handle == null)
+                handle = go.AddComponent<UnitViewHandle>();
 
-            if (binder != null)
-            {
-                if (!binder.HasExplicitViewTransform)
-                {
-                    var candidate = go.transform.Find("UnitView");
-                    if (candidate != null)
-                        binder.SetViewTransform(candidate);
-                }
-                binder.Bind(unit);
-                binder.SetAvatar(avatar);
-                return;
-            }
+            handle.ctx = context;
+
+            var candidate = go.transform.Find("UnitView");
+            handle.viewRoot = candidate != null ? candidate : go.transform;
+
+            handle.unitIdOverride = unit != null ? unit.Id : null;
+
+            UnitLocator.Register(handle);
         }
 
         static DefaultTargetValidator EnsureLocalTargetValidator(GameObject go, TurnManagerV2 tm, HexOccupancyService occupancy, HexEnvironmentSystem environment)

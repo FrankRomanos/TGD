@@ -5,7 +5,7 @@ using UnityEngine;
 namespace TGD.HexBoard
 {
     [DisallowMultipleComponent]
-    public sealed class HexBoardTestDriver : MonoBehaviour, IUnitView, IUnitAvatarSource
+    public sealed class HexBoardTestDriver : MonoBehaviour, IUnitView
     {
         public HexBoardAuthoringLite authoring;
         public Transform unitView;
@@ -13,10 +13,6 @@ namespace TGD.HexBoard
         public int startQ = 9, startR = 7;
         public Facing4 startFacing = Facing4.PlusQ;
         public float y = 0.01f;
-
-        [Header("UI Testing")]
-        [Tooltip("Temporary portrait used by HUD timelines during prototyping.")]
-        public Sprite temporaryAvatar;
 
         public Unit UnitRef => _unit;
         public HexBoardLayout Layout => _layout;
@@ -29,7 +25,6 @@ namespace TGD.HexBoard
         Unit _unit;
         bool _inited;
         bool _registered;
-        bool _avatarRegistered;
 
         public bool IsReady => _inited && _layout != null && _unit != null && _map != null;
 
@@ -51,14 +46,12 @@ namespace TGD.HexBoard
             _inited = true;
             SyncView();
             TryRegisterView();
-            TryRegisterAvatar();
         }
 
         void OnEnable()
         {
             EnsureInit();
             TryRegisterView();
-            TryRegisterAvatar();
         }
 
         void Start() => EnsureInit();
@@ -78,12 +71,6 @@ namespace TGD.HexBoard
             {
                 UnitLocator.Unregister(this);
                 _registered = false;
-            }
-
-            if (_avatarRegistered)
-            {
-                UnitAvatarRegistry.Unregister(this);
-                _avatarRegistered = false;
             }
         }
 
@@ -119,17 +106,5 @@ namespace TGD.HexBoard
                 _registered = true;
         }
 
-        void TryRegisterAvatar()
-        {
-            if (_avatarRegistered || !IsReady)
-                return;
-
-            if (UnitAvatarRegistry.Register(this))
-                _avatarRegistered = true;
-        }
-
-        string IUnitAvatarSource.UnitId => UnitId;
-
-        Sprite IUnitAvatarSource.GetAvatarSprite() => temporaryAvatar;
     }
 }
