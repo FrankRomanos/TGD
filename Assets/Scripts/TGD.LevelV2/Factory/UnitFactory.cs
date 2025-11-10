@@ -268,7 +268,7 @@ namespace TGD.LevelV2
             if (ctx == null)
                 return;
 
-            var occAdapter = Object.FindFirstObjectByType<HexOccServiceAdapter>(FindObjectsInactive.Include);
+            var occAdapter = UnityEngine.Object.FindFirstObjectByType<HexOccServiceAdapter>(FindObjectsInactive.Include);
             if (occAdapter == null)
             {
                 Debug.LogError("[Occ] HexOccServiceAdapter not found.");
