@@ -1,4 +1,5 @@
 ﻿// File: TGD.HexBoard/Occ/HexOccServiceAdapter.cs
+using System.Collections.Generic;
 using UnityEngine;
 using TGD.CoreV2;
 
@@ -12,6 +13,59 @@ namespace TGD.HexBoard
         public string boardId = "Board-1";
         int _storeVersion;
         int _nextTxn = 1;
+        ulong _nextToken = 1;
+
+        readonly Dictionary<OccToken, HashSet<Hex>> _tokenToCells = new();
+        readonly Dictionary<IGridActor, List<OccToken>> _actorToTokens = new();
+
+        static readonly List<HexOccServiceAdapter> _snapshotCandidates = new();
+        static HexOccServiceAdapter _snapshotOwner;
+
+        void OnEnable()
+        {
+            if (!_snapshotCandidates.Contains(this))
+                _snapshotCandidates.Add(this);
+
+            if (_snapshotOwner == null)
+                InstallSnapshotProvider();
+        }
+
+        void OnDisable()
+        {
+            _snapshotCandidates.Remove(this);
+
+            if (ReferenceEquals(_snapshotOwner, this))
+            {
+                OccDiagnostics.RegisterTokenSnapshotProvider(null);
+                _snapshotOwner = null;
+                PromoteNextSnapshotOwner();
+            }
+        }
+
+        void InstallSnapshotProvider()
+        {
+            OccDiagnostics.RegisterTokenSnapshotProvider(GetTokenLedgerSnapshot);
+            _snapshotOwner = this;
+        }
+
+        static void PromoteNextSnapshotOwner()
+        {
+            for (int i = _snapshotCandidates.Count - 1; i >= 0; i--)
+            {
+                var candidate = _snapshotCandidates[i];
+                if (candidate == null)
+                {
+                    _snapshotCandidates.RemoveAt(i);
+                    continue;
+                }
+
+                if (!candidate.isActiveAndEnabled)
+                    continue;
+
+                candidate.InstallSnapshotProvider();
+                break;
+            }
+        }
 
         public string BoardId { get { return boardId; } }
         public int StoreVersion { get { return _storeVersion; } }
@@ -141,12 +195,237 @@ namespace TGD.HexBoard
                 OccDiagnostics.Log(OccAction.Remove, txn, "null", Hex.Zero, Hex.Zero, OccFailReason.ActorMissing);
                 return;
             }
+            CancelAll(ctx, "Remove");
             store.Remove(actor);
             _storeVersion++;
             OccDiagnostics.Log(OccAction.Remove, txn, actor.Id, actor.Anchor, Hex.Zero, OccFailReason.None);
         }
 
+        public bool ReservePath(UnitRuntimeContext ctx, IReadOnlyList<Hex> cells, out OccToken token, out OccReserveResult result)
+        {
+            token = default;
+            result = OccReserveResult.Ok;
+
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                result = OccReserveResult.NoStore;
+                return false;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                result = OccReserveResult.NoActor;
+                return false;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                result = OccReserveResult.NoActor;
+                return false;
+            }
+
+            var unique = new List<Hex>();
+            var seen = new HashSet<Hex>();
+            if (cells != null)
+            {
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    var cell = cells[i];
+                    if (seen.Add(cell))
+                        unique.Add(cell);
+                }
+            }
+
+            var owned = new HashSet<Hex>();
+            if (_actorToTokens.TryGetValue(actor, out var ownedTokens) && ownedTokens != null)
+            {
+                for (int i = 0; i < ownedTokens.Count; i++)
+                {
+                    var tk = ownedTokens[i];
+                    if (_tokenToCells.TryGetValue(tk, out var tokenCells) && tokenCells != null)
+                        owned.UnionWith(tokenCells);
+                }
+            }
+
+            if (owned.Count > 0)
+            {
+                for (int i = 0; i < unique.Count; i++)
+                {
+                    if (owned.Contains(unique[i]))
+                    {
+                        result = OccReserveResult.AlreadyReserved;
+                        return false;
+                    }
+                }
+            }
+
+            var reservedNow = new List<Hex>();
+            for (int i = 0; i < unique.Count; i++)
+            {
+                var cell = unique[i];
+                if (store.TempReserve(cell, actor))
+                {
+                    reservedNow.Add(cell);
+                    continue;
+                }
+
+                if (reservedNow.Count > 0)
+                    store.TempRelease(actor, reservedNow);
+                result = OccReserveResult.Blocked;
+                return false;
+            }
+
+            token = NewToken();
+            var ledgerCells = unique.Count > 0 ? new HashSet<Hex>(unique) : new HashSet<Hex>();
+            _tokenToCells[token] = ledgerCells;
+
+            if (!_actorToTokens.TryGetValue(actor, out var list) || list == null)
+            {
+                list = new List<OccToken>();
+                _actorToTokens[actor] = list;
+            }
+            list.Add(token);
+
+            OccDiagnostics.LogReserve(token, actor.Id, ledgerCells.Count);
+            return true;
+        }
+
+        public bool Commit(UnitRuntimeContext ctx, OccToken token, Hex finalAnchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
+        {
+            txn = default;
+            reason = OccFailReason.None;
+
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                reason = OccFailReason.NoStore;
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
+                return false;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
+                return false;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                reason = OccFailReason.ActorMissing;
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
+                return false;
+            }
+
+            if (!token.IsValid || !_tokenToCells.TryGetValue(token, out var reservedCells))
+            {
+                reason = OccFailReason.Blocked;
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
+                return false;
+            }
+
+            if (!_actorToTokens.TryGetValue(actor, out var tokenList) || tokenList == null || !tokenList.Contains(token))
+            {
+                reason = OccFailReason.Blocked;
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
+                return false;
+            }
+
+            bool ok = TryMove(ctx, finalAnchor, facing, out txn, out reason);
+            if (ok)
+            {
+                store.TempClearForOwner(actor);
+                _tokenToCells.Remove(token);
+                tokenList.Remove(token);
+                if (tokenList.Count == 0)
+                    _actorToTokens.Remove(actor);
+            }
+
+            OccDiagnostics.LogCommit(token, finalAnchor, reason);
+            return ok;
+        }
+
+        public bool Cancel(UnitRuntimeContext ctx, OccToken token, string reasonTag = null)
+        {
+            if (!token.IsValid)
+                return false;
+
+            var store = (backing != null) ? backing.Get() : null;
+            if (store == null)
+            {
+                OccDiagnostics.LogCancel(token, reasonTag ?? "NoStore");
+                return false;
+            }
+
+            if (actorResolver == null || ctx == null)
+            {
+                OccDiagnostics.LogCancel(token, reasonTag ?? "NoActor");
+                return false;
+            }
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+            {
+                OccDiagnostics.LogCancel(token, reasonTag ?? "NoActor");
+                return false;
+            }
+
+            if (!_tokenToCells.TryGetValue(token, out var cells))
+            {
+                OccDiagnostics.LogCancel(token, reasonTag ?? "MissingToken");
+                return false;
+            }
+
+            store.TempRelease(actor, cells);
+            _tokenToCells.Remove(token);
+
+            if (_actorToTokens.TryGetValue(actor, out var list) && list != null)
+            {
+                list.Remove(token);
+                if (list.Count == 0)
+                    _actorToTokens.Remove(actor);
+            }
+
+            OccDiagnostics.LogCancel(token, reasonTag);
+            return true;
+        }
+
+        public int CancelAll(UnitRuntimeContext ctx, string reasonTag = null)
+        {
+            var store = (backing != null) ? backing.Get() : null;
+
+            if (actorResolver == null || ctx == null)
+                return 0;
+
+            var actor = actorResolver.GetOrBind(ctx);
+            if (actor == null)
+                return 0;
+
+            if (!_actorToTokens.TryGetValue(actor, out var list) || list == null || list.Count == 0)
+            {
+                store?.TempClearForOwner(actor);
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var token = list[i];
+                _tokenToCells.Remove(token);
+                OccDiagnostics.LogCancel(token, reasonTag ?? "CancelAll");
+                count++;
+            }
+
+            _actorToTokens.Remove(actor);
+            store?.TempClearForOwner(actor);
+            return count;
+        }
+
         OccTxnId NewTxn() { return new OccTxnId(_nextTxn++); }
+        OccToken NewToken() { return new OccToken(++_nextToken); }
 
         public bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing)
         {
@@ -197,6 +476,35 @@ FindObjectsInactive.Include, FindObjectsSortMode.None);
             {
                 return new OccSnapshot[0];
             }
+        }
+
+        OccDiagnostics.OccTokenLedgerSnapshot GetTokenLedgerSnapshot()
+        {
+            if (_tokenToCells.Count == 0)
+                return OccDiagnostics.OccTokenLedgerSnapshot.Empty;
+
+            var owners = new List<OccDiagnostics.OccTokenOwnerSnapshot>(_actorToTokens.Count);
+            foreach (var kv in _actorToTokens)
+            {
+                var tokens = kv.Value;
+                if (tokens == null || tokens.Count == 0)
+                    continue;
+
+                int validCount = 0;
+                for (int i = 0; i < tokens.Count; i++)
+                {
+                    if (_tokenToCells.ContainsKey(tokens[i]))
+                        validCount++;
+                }
+
+                if (validCount <= 0)
+                    continue;
+
+                string actorId = kv.Key != null ? kv.Key.Id : "<null>";
+                owners.Add(new OccDiagnostics.OccTokenOwnerSnapshot(actorId, validCount));
+            }
+
+            return new OccDiagnostics.OccTokenLedgerSnapshot(_tokenToCells.Count, owners);
         }
     }
 }

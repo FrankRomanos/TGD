@@ -161,6 +161,40 @@ namespace TGD.HexBoard
             return count;
         }
 
+        public bool TempRelease(Hex cell, IGridActor owner)
+        {
+            if (owner == null)
+                return false;
+
+            if (!tempCellToActor.TryGetValue(cell, out var existing) || existing != owner)
+                return false;
+
+            tempCellToActor.Remove(cell);
+            if (tempActorToCells.TryGetValue(owner, out var set) && set != null)
+            {
+                set.Remove(cell);
+                if (set.Count == 0)
+                    tempActorToCells.Remove(owner);
+            }
+
+            return true;
+        }
+
+        public int TempRelease(IGridActor owner, IEnumerable<Hex> cells)
+        {
+            if (owner == null || cells == null)
+                return 0;
+
+            int count = 0;
+            foreach (var cell in cells)
+            {
+                if (TempRelease(cell, owner))
+                    count++;
+            }
+
+            return count;
+        }
+
         public int ClearLayer(OccLayer layer)
         {
             switch (layer)

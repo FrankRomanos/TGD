@@ -178,6 +178,9 @@ namespace TGD.CombatV2
         string _reportRefundTag;
         bool _reportAttackExecuted;
         readonly HashSet<Hex> _tempReservedThisAction = new();
+        OccToken _approachToken;
+        Hex _approachReservedTarget;
+        bool _approachFallbackActive;
 
         struct PendingAttack
         {
@@ -575,6 +578,7 @@ namespace TGD.CombatV2
                 _boundTurnManager.SideEnded -= OnSideEnded;
                 _boundTurnManager = null;
             }
+            ClearApproachReservations("OnDestroy");
             base.OnDestroy();
         }
 
@@ -957,6 +961,7 @@ namespace TGD.CombatV2
         {
             if (!IsReady)
             {
+                ClearApproachReservations("NotReady");
                 return new PreviewData
                 {
                     valid = false,
@@ -985,6 +990,7 @@ namespace TGD.CombatV2
 
             if (layout != null && !layout.Contains(target))
             {
+                ClearApproachReservations("NoPath");
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
                 preview.rejectMessage = "Target out of board.";
@@ -993,6 +999,7 @@ namespace TGD.CombatV2
 
             if (env != null && env.IsPit(target))
             {
+                ClearApproachReservations("Pit");
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
                 preview.rejectMessage = "Target is pit.";
@@ -1009,6 +1016,7 @@ namespace TGD.CombatV2
                 preview.valid = false;
                 preview.rejectReason = reject;
                 preview.rejectMessage = message;
+                ClearApproachReservations("InvalidTarget");
                 if (logInvalid && debugLog)
                 {
                     // Phase logging handled by CombatActionManagerV2.
@@ -1020,6 +1028,7 @@ namespace TGD.CombatV2
             bool treatAsMoveOnly = check.plan == PlanKind.MoveOnly;
             if (!treatAsEnemy && !treatAsMoveOnly)
             {
+                ClearApproachReservations("UnsupportedPlan");
                 preview.valid = false;
                 preview.rejectReason = AttackRejectReasonV2.NoPath;
                 preview.rejectMessage = "Unsupported plan.";
@@ -1037,6 +1046,7 @@ namespace TGD.CombatV2
                 int range = Mathf.Max(1, ResolveMeleeRange());
                 if (!TryFindMeleePath(start, target, range, passability, out landing, out path))
                 {
+                    ClearApproachReservations("NoPath");
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
                     preview.rejectMessage = "No landing.";
@@ -1047,6 +1057,7 @@ namespace TGD.CombatV2
             {
                 if ((passability != null && passability.IsBlocked(target)) || (passability == null && _occ != null && _occ.IsBlocked(target, SelfActor)))
                 {
+                    ClearApproachReservations("Blocked");
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
                     preview.rejectMessage = "Cell occupied.";
@@ -1056,6 +1067,7 @@ namespace TGD.CombatV2
                 path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target, passability));
                 if (path == null)
                 {
+                    ClearApproachReservations("NoPath");
                     preview.valid = false;
                     preview.rejectReason = AttackRejectReasonV2.NoPath;
                     preview.rejectMessage = "No path.";
@@ -1087,6 +1099,10 @@ namespace TGD.CombatV2
             preview.moveEnergyCost = Mathf.Max(0, chargeSecs) * MoveEnergyPerSecond();
             preview.attackEnergyCost = ComputeAttackEnergyCost(treatAsEnemy);
             preview.valid = true;
+            if (preview.path != null)
+                TryReserveApproachPath(preview.path, target);
+            else
+                ClearApproachReservations("NoPath");
             return preview;
         }
 
@@ -1146,6 +1162,7 @@ namespace TGD.CombatV2
             if (hexSpace == null)
             {
                 Debug.LogWarning("[AttackControllerV2] HexSpace instance is missing.", this);
+                ClearApproachReservations("NoSpace");
                 yield break;
             }
             var unit = ResolveSelfUnit();
@@ -1246,7 +1263,20 @@ namespace TGD.CombatV2
                         finalFacing = nf;
                     }
 
-                    _bridge?.MoveCommit(startAnchor, finalFacing);
+                    var tokenForCommit = _approachToken;
+                    if (_bridge != null)
+                    {
+                        bool committed = _bridge.MoveCommit(startAnchor, finalFacing, tokenForCommit);
+                        if (!committed && tokenForCommit.IsValid && debugLog)
+                            Debug.LogWarning($"[Occ] Commit failed for approach start @{startAnchor}", this);
+                    }
+                    _approachToken = default;
+                    _approachReservedTarget = Hex.Zero;
+                    if (_approachFallbackActive && ctx != null)
+                    {
+                        TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                        _approachFallbackActive = false;
+                    }
                     UnitRuntimeBindingUtil.SyncUnit(unit, startAnchor, finalFacing);
                     AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : startAnchor);
 
@@ -1350,8 +1380,21 @@ namespace TGD.CombatV2
                 if (!reachedDestination)
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
-                _bridge?.MoveCommit(lastPosition, finalFacing);
-                UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
+                    var commitToken = _approachToken;
+                    if (_bridge != null)
+                    {
+                        bool committed = _bridge.MoveCommit(lastPosition, finalFacing, commitToken);
+                        if (!committed && commitToken.IsValid && debugLog)
+                            Debug.LogWarning($"[Occ] Commit failed for attack @{lastPosition}", this);
+                    }
+                    _approachToken = default;
+                    _approachReservedTarget = Hex.Zero;
+                    if (_approachFallbackActive && ctx != null)
+                    {
+                        TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                        _approachFallbackActive = false;
+                    }
+                    UnitRuntimeBindingUtil.SyncUnit(unit, lastPosition, finalFacing);
 
                 AttackEventsV2.RaiseAttackMoveFinished(unit, unit != null ? unit.Position : lastPosition);
 
@@ -1429,7 +1472,16 @@ namespace TGD.CombatV2
                 var abortAnchor = CurrentAnchor;
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
-                _bridge?.MoveCommit(abortAnchor, abortFacing);
+                var tokenForCommit = _approachToken;
+                if (_bridge != null)
+                    _bridge.MoveCommit(abortAnchor, abortFacing, tokenForCommit);
+                _approachToken = default;
+                _approachReservedTarget = Hex.Zero;
+                if (_approachFallbackActive && ctx != null)
+                {
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                    _approachFallbackActive = false;
+                }
                 UnitRuntimeBindingUtil.SyncUnit(abortUnit, abortAnchor, abortFacing);
                 AttackEventsV2.RaiseAttackMoveFinished(abortUnit, abortUnit != null ? abortUnit.Position : abortAnchor);
                 int plannedMove = Mathf.Max(0, moveSecsCharge);
@@ -1842,6 +1894,81 @@ namespace TGD.CombatV2
             return self != null && self == unit;
         }
 
+        void ClearApproachReservations(string reason)
+        {
+            var occ = ctx != null ? ctx.occService : null;
+            if (_approachToken.IsValid && occ != null)
+                occ.Cancel(ctx, _approachToken, reason);
+            _approachToken = default;
+            _approachReservedTarget = Hex.Zero;
+
+            if (_approachFallbackActive)
+            {
+                if (ctx != null)
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                _approachFallbackActive = false;
+            }
+        }
+
+        void ReserveApproachFallback(List<Hex> path)
+        {
+            if (ctx == null)
+                return;
+
+            TGD.HexBoard.OccTempOps.ClearFor(ctx);
+            bool any = false;
+            if (path != null)
+            {
+                for (int i = 1; i < path.Count; i++)
+                {
+                    if (TGD.HexBoard.OccTempOps.Reserve(ctx, path[i]))
+                        any = true;
+                }
+            }
+
+            _approachFallbackActive = any;
+        }
+
+        bool TryReserveApproachPath(List<Hex> path, Hex target)
+        {
+            var occ = ctx != null ? ctx.occService : null;
+            if (occ == null)
+            {
+                ReserveApproachFallback(path);
+                return false;
+            }
+
+            if (_approachToken.IsValid)
+            {
+                if (target.Equals(_approachReservedTarget))
+                    return true;
+                occ.Cancel(ctx, _approachToken, "Update");
+                _approachToken = default;
+            }
+
+            OccToken token;
+            OccReserveResult result;
+            if (occ.ReservePath(ctx, path, out token, out result))
+            {
+                _approachToken = token;
+                _approachReservedTarget = target;
+                if (_approachFallbackActive && ctx != null)
+                {
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                    _approachFallbackActive = false;
+                }
+                return true;
+            }
+
+            if (result == OccReserveResult.Blocked)
+                ReserveApproachFallback(path);
+
+            if (result == OccReserveResult.AlreadyReserved)
+                return true;
+
+            return false;
+        }
+
         void ReserveTemp(TGD.CoreV2.Hex cell)
         {
             if (_tempReservedThisAction.Contains(cell))
@@ -1859,12 +1986,15 @@ namespace TGD.CombatV2
 
         void ClearTempReservations(string reason, bool logAlways = false)
         {
+            ClearApproachReservations(reason);
             int tracked = _tempReservedThisAction.Count;
             int occCleared = 0;
 
             var ctx = ResolveCtx();
             if (ctx != null)
+            {
                 occCleared = TGD.HexBoard.OccTempOps.ClearFor(ctx);
+            }
 
             int count = Mathf.Max(tracked, occCleared);
             _tempReservedThisAction.Clear();
