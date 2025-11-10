@@ -25,5 +25,17 @@ public sealed class OccDebugHotkey : MonoBehaviour
         var services = FindObjectsByType<HexOccupancyService>(FindObjectsSortMode.None);
         var uniqueStores = services.Select(s => s.Get()).Where(x => x != null).Distinct().Count();
         Debug.Log($"[OccCheck] HexOccupancyService={services.Length}, UniqueStores={uniqueStores}");
+
+        var snapshot = OccDiagnostics.CaptureTokenSnapshot();
+        Debug.Log($"[OccCheck] ActiveTokens={snapshot.ActiveTokens}");
+        Debug.Log($"[OccCheck] SoftReserved={(store != null ? store.SoftReservedCount : 0)}");
+        if (snapshot.Owners != null)
+        {
+            foreach (var owner in snapshot.Owners)
+            {
+                if (owner.TokenCount > 1)
+                    Debug.LogWarning($"[OccCheck] Actor={owner.ActorId} tokens={owner.TokenCount}");
+            }
+        }
     }
 }

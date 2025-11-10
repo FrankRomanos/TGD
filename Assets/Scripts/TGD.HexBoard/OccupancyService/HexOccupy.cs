@@ -18,6 +18,8 @@ namespace TGD.HexBoard
         readonly Dictionary<IGridActor, List<Hex>> actorToCells = new();
         readonly Dictionary<Hex, IGridActor> tempCellToActor = new();
         readonly Dictionary<IGridActor, HashSet<Hex>> tempActorToCells = new();
+        readonly Dictionary<Hex, IGridActor> softCellToActor = new Dictionary<Hex, IGridActor>();
+        readonly Dictionary<IGridActor, HashSet<Hex>> softActorToCells = new Dictionary<IGridActor, HashSet<Hex>>();
 
         public HexOccupancy(HexBoardLayout layout) { Layout = layout; }
 
@@ -160,6 +162,137 @@ namespace TGD.HexBoard
             tempActorToCells.Remove(owner);
             return count;
         }
+
+        public bool TempReserveSoft(Hex cell, IGridActor owner)
+        {
+            if (owner == null) return false;
+            if (!Layout.Contains(cell)) return false;
+
+            if (softCellToActor.TryGetValue(cell, out var existing) && existing == owner)
+                return false;
+
+            if (softCellToActor.TryGetValue(cell, out var prev) && prev != null && prev != owner)
+            {
+                if (softActorToCells.TryGetValue(prev, out var prevCells))
+                {
+                    prevCells.Remove(cell);
+                    if (prevCells.Count == 0)
+                        softActorToCells.Remove(prev);
+                }
+            }
+
+            softCellToActor[cell] = owner;
+
+            if (!softActorToCells.TryGetValue(owner, out var set) || set == null)
+            {
+                set = new HashSet<Hex>();
+                softActorToCells[owner] = set;
+            }
+
+            set.Add(cell);
+            return true;
+        }
+
+        public int TempClearSoftForOwner(IGridActor owner)
+        {
+            if (owner == null) return 0;
+            if (!softActorToCells.TryGetValue(owner, out var cells) || cells == null)
+                return 0;
+
+            int count = cells.Count;
+            foreach (var cell in cells)
+            {
+                if (softCellToActor.TryGetValue(cell, out var who) && who == owner)
+                    softCellToActor.Remove(cell);
+            }
+
+            softActorToCells.Remove(owner);
+            return count;
+        }
+
+        public bool TempRelease(Hex cell, IGridActor owner)
+        {
+            if (owner == null)
+                return false;
+
+            if (!tempCellToActor.TryGetValue(cell, out var existing) || existing != owner)
+                return false;
+
+            tempCellToActor.Remove(cell);
+            if (tempActorToCells.TryGetValue(owner, out var set) && set != null)
+            {
+                set.Remove(cell);
+                if (set.Count == 0)
+                    tempActorToCells.Remove(owner);
+            }
+
+            return true;
+        }
+
+        public int TempRelease(IGridActor owner, IEnumerable<Hex> cells)
+        {
+            if (owner == null || cells == null)
+                return 0;
+
+            int count = 0;
+            foreach (var cell in cells)
+            {
+                if (TempRelease(cell, owner))
+                    count++;
+            }
+
+            return count;
+        }
+
+        public bool TempReleaseSoft(Hex cell, IGridActor owner)
+        {
+            if (owner == null)
+                return false;
+
+            if (!softCellToActor.TryGetValue(cell, out var existing) || existing != owner)
+                return false;
+
+            softCellToActor.Remove(cell);
+
+            if (softActorToCells.TryGetValue(owner, out var set) && set != null)
+            {
+                set.Remove(cell);
+                if (set.Count == 0)
+                    softActorToCells.Remove(owner);
+            }
+
+            return true;
+        }
+
+        public int TempReleaseSoft(IGridActor owner, IEnumerable<Hex> cells)
+        {
+            if (owner == null || cells == null)
+                return 0;
+
+            int count = 0;
+            foreach (var cell in cells)
+            {
+                if (TempReleaseSoft(cell, owner))
+                    count++;
+            }
+
+            return count;
+        }
+
+        public int ClearSoftLayer()
+        {
+            int count = softCellToActor.Count;
+            softCellToActor.Clear();
+            softActorToCells.Clear();
+            return count;
+        }
+
+        public bool IsSoftReserved(Hex cell)
+        {
+            return softCellToActor.ContainsKey(cell);
+        }
+
+        public int SoftReservedCount => softCellToActor.Count;
 
         public int ClearLayer(OccLayer layer)
         {
