@@ -289,9 +289,18 @@ namespace TGD.CoreV2
             if (_rules == null)
                 _rules = new UnitRuleSet();
         }
+        void OnDisable()
+        {
+            if (!Application.isPlaying) return;
+            if (occService != null)
+                occService.CancelAll(this, "OnDisable");
+        }
+
         void OnDestroy()
         {
             if (!Application.isPlaying) return;
+            if (occService != null)
+                occService.CancelAll(this, "OnDestroy");
             if (occAutoCleanupOnDestroy && occService != null)
             {
                 OccTxnId tx;

@@ -159,12 +159,35 @@ namespace TGD.CombatV2.Integration
         public bool PlaceImmediate(Hex anchor, Facing4 facing)
             => TryPlaceImmediateInternal(anchor, facing, _componentAdapter);
 
-        public bool MoveCommit(Hex newAnchor, Facing4 newFacing)
+        public bool MoveCommit(Hex newAnchor, Facing4 newFacing, OccToken token = default)
         {
             var previousAnchor = _actor != null ? _actor.Anchor : (ResolveUnit()?.Position ?? Hex.Zero);
             if (UseIOcc)
             {
                 OccTxnId tx; OccFailReason reason;
+                if (token.IsValid)
+                {
+                    bool committed = _ctx.occService.Commit(_ctx, token, newAnchor, newFacing, out tx, out reason);
+                    if (committed)
+                    {
+                        _placed = true;
+                        MirrorDriver(newAnchor, newFacing);
+                        if (shadowCheck)
+                            ShadowCheck(newAnchor, newFacing, "Move");
+                        RaiseAnchorChanged(newAnchor);
+                        _lastWriteFrame = Time.frameCount;
+                        _lastFrom = previousAnchor;
+                        _lastTo = newAnchor;
+                        if (debugLog)
+                            Debug.Log($"[Occ] Commit via IOcc tx={tx.Value} -> {newAnchor}", this);
+                        return true;
+                    }
+
+                    Debug.LogWarning($"[Occ] Commit via IOcc failed: {reason} -> {newAnchor}", this);
+                    _ctx.occService.Cancel(_ctx, token, "CommitFailed");
+                    return false;
+                }
+
                 bool ok = _ctx.occService.TryMove(_ctx, newAnchor, newFacing, out tx, out reason);
                 if (ok)
                 {

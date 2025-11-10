@@ -180,6 +180,9 @@ namespace TGD.CombatV2
         bool _isAiming = false;
         bool _isExecuting = false;
         readonly Dictionary<Hex, List<Hex>> _paths = new();
+        OccToken _previewToken;
+        Hex _previewReservedTarget;
+        bool _previewFallbackActive;
         HexAreaPainter _painter;
 
         TargetingSpec _moveSpec;
@@ -257,11 +260,23 @@ namespace TGD.CombatV2
             if (_previewDirty || !_paths.TryGetValue(target, out var path) || path == null || path.Count < 2)
             {
                 if (!TryRebuildPathCache(out _))
+                {
+                    ClearPreviewReservations("NoPath");
                     return result;
+                }
+
+                _paths.TryGetValue(target, out path);
             }
 
-            if (_paths.TryGetValue(target, out var cached) && cached != null && cached.Count >= 2)
+            if (path != null && path.Count >= 1)
+            {
                 result.valid = true;
+                TryReservePreviewPath(path, target);
+            }
+            else
+            {
+                ClearPreviewReservations("NoPath");
+            }
 
             return result;
         }
@@ -406,6 +421,7 @@ namespace TGD.CombatV2
         public void OnExitAim()
         {
             _isAiming = false;
+            ClearPreviewReservations("ExitAim");
             HideRange();
         }
         public void OnHover(Hex hex) { /* 可选：做 hover 高亮 */ }
@@ -422,6 +438,7 @@ namespace TGD.CombatV2
             var targetCheck = ValidateMoveTarget(unit, hex);
             if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
             {
+                ClearPreviewReservations("InvalidTarget");
                 RaiseTargetRejected(unit, targetCheck.reason);
                 yield break;
             }
@@ -443,6 +460,7 @@ namespace TGD.CombatV2
             }
             else
             {
+                ClearPreviewReservations("NoPath");
                 HexMoveEvents.RaiseRejected(unit, MoveBlockReason.PathBlocked, null);
                 yield break;
             }
@@ -559,6 +577,7 @@ namespace TGD.CombatV2
         protected override void OnDisable()
         {
             base.OnDisable();
+            ClearPreviewReservations("Disable");
             _painter?.Clear();
             _paths.Clear();
             _showing = false;
@@ -579,6 +598,7 @@ namespace TGD.CombatV2
             _previewDirty = true;
             _previewAnchorVersion = -1;
             _planAnchorVersion = -1;
+            ClearPreviewReservations("AnchorChanged");
             if (_showing)
             {
                 _painter.Clear();
@@ -753,6 +773,81 @@ namespace TGD.CombatV2
             return true;
         }
 
+        void ClearPreviewReservations(string reason)
+        {
+            var occ = ctx != null ? ctx.occService : null;
+            if (_previewToken.IsValid && occ != null)
+                occ.Cancel(ctx, _previewToken, reason);
+            _previewToken = default;
+            _previewReservedTarget = Hex.Zero;
+
+            if (_previewFallbackActive)
+            {
+                if (ctx != null)
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                _previewFallbackActive = false;
+            }
+        }
+
+        void ReservePreviewFallback(List<Hex> path)
+        {
+            if (ctx == null)
+                return;
+
+            TGD.HexBoard.OccTempOps.ClearFor(ctx);
+            bool any = false;
+            if (path != null)
+            {
+                for (int i = 1; i < path.Count; i++)
+                {
+                    if (TGD.HexBoard.OccTempOps.Reserve(ctx, path[i]))
+                        any = true;
+                }
+            }
+
+            _previewFallbackActive = any;
+        }
+
+        bool TryReservePreviewPath(List<Hex> path, Hex target)
+        {
+            var occ = ctx != null ? ctx.occService : null;
+            if (occ == null)
+            {
+                ReservePreviewFallback(path);
+                return false;
+            }
+
+            if (_previewToken.IsValid)
+            {
+                if (target.Equals(_previewReservedTarget))
+                    return true;
+                occ.Cancel(ctx, _previewToken, "Update");
+                _previewToken = default;
+            }
+
+            OccToken token;
+            OccReserveResult reserveResult;
+            if (occ.ReservePath(ctx, path, out token, out reserveResult, OccReserveMode.SoftPath))
+            {
+                _previewToken = token;
+                _previewReservedTarget = target;
+                if (_previewFallbackActive && ctx != null)
+                {
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                    _previewFallbackActive = false;
+                }
+                return true;
+            }
+
+            if (reserveResult == OccReserveResult.Blocked)
+                ReservePreviewFallback(path);
+
+            if (reserveResult == OccReserveResult.AlreadyReserved)
+                return true;
+
+            return false;
+        }
+
 
         // ===== 外部 UI 调用 =====
         public void ShowRange()
@@ -772,7 +867,7 @@ namespace TGD.CombatV2
             if (occupancyService) _occ = occupancyService.Get();
 
             if (authoring == null || authoring.Layout == null || unit == null || _occ == null || _bridge == null)
-            { HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null); return; }
+            { ClearPreviewReservations("NotReady"); HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null); return; }
 
             _painter.Clear();
 
@@ -780,6 +875,7 @@ namespace TGD.CombatV2
             {
                 _paths.Clear();
                 _previewDirty = true;
+                ClearPreviewReservations("Entangled");
                 HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, null);
                 _showing = true;
                 return;
@@ -789,6 +885,7 @@ namespace TGD.CombatV2
             {
                 _paths.Clear();
                 _previewDirty = true;
+                ClearPreviewReservations("NoPath");
                 return;
             }
 
@@ -802,6 +899,7 @@ namespace TGD.CombatV2
 
         public void HideRange()
         {
+            ClearPreviewReservations("HideRange");
             _painter.Clear();
             _showing = false;
             _previewDirty = true;
@@ -874,6 +972,7 @@ namespace TGD.CombatV2
                 if (_playerBridge != null && plannedAnchorVersion >= 0 && plannedAnchorVersion != _playerBridge.AnchorVersion)
                 {
                     Debug.LogWarning($"[Guard] Anchor changed before execute (planV={plannedAnchorVersion} nowV={_playerBridge.AnchorVersion}). Abort.", this);
+                    ClearPreviewReservations("AnchorChanged");
                     HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.PathBlocked, "Anchor changed.");
                     yield break;
                 }
@@ -881,7 +980,10 @@ namespace TGD.CombatV2
                 _bridge?.EnsurePlacedNow();
                 if (occupancyService) _occ = occupancyService.Get();
                 if (authoring == null || authoring.Layout == null || OwnerUnit == null || _occ == null || _bridge == null)
+                {
+                    ClearPreviewReservations("NotReady");
                     yield break;
+                }
 
                 int requiredSec = ResolveMoveBudgetSeconds();
                 var costSpec = BuildCostSpec();
@@ -912,6 +1014,7 @@ namespace TGD.CombatV2
 
                 if (reached == null || reached.Count < 2)
                 {
+                    ClearPreviewReservations("NoPath");
                     HexMoveEvents.RaiseTimeRefunded(OwnerUnit, requiredSec);
                     yield break;
                 }
@@ -922,6 +1025,7 @@ namespace TGD.CombatV2
                 var hexSpace = HexSpace.Instance;
                 if (hexSpace == null)
                 {
+                    ClearPreviewReservations("NoSpace");
                     Debug.LogWarning("[HexClickMover] HexSpace instance is missing.", this);
                     yield break;
                 }
@@ -1005,12 +1109,26 @@ namespace TGD.CombatV2
                     unit.Position = to;
                 }
 
+                var tokenForCommit = _previewToken;
                 if (OwnerUnit != null)
                 {
                     var finalAnchor = CurrentAnchor;
                     var finalFacing = SelfActor != null ? SelfActor.Facing : OwnerUnit.Facing;
-                    _bridge?.MoveCommit(finalAnchor, finalFacing);
+                    if (_bridge != null)
+                    {
+                        bool committed = _bridge.MoveCommit(finalAnchor, finalFacing, tokenForCommit);
+                        if (!committed && tokenForCommit.IsValid)
+                            HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.PathBlocked, "CommitFailed");
+                    }
                     UnitRuntimeBindingUtil.SyncUnit(OwnerUnit, finalAnchor, finalFacing);
+                }
+
+                _previewToken = default;
+                _previewReservedTarget = Hex.Zero;
+                if (_previewFallbackActive && ctx != null)
+                {
+                    TGD.HexBoard.OccTempOps.ClearFor(ctx);
+                    _previewFallbackActive = false;
                 }
 
                 _moving = false;
