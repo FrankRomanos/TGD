@@ -89,7 +89,7 @@ namespace TGD.HexBoard
 
         public bool TryPlace(IGridActor a, Hex anchor, Facing4 facing)
         {
-            if (!CanPlace(a, anchor, facing)) return false;
+            if (!CanPlace(a, anchor, facing, a)) return false;
             Remove(a);
 
             var cells = new List<Hex>();
