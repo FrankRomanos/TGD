@@ -1,509 +1,108 @@
-﻿using UnityEngine;
-using TGD.HexBoard;
+using UnityEngine;
 using TGD.CoreV2;
+using TGD.HexBoard;
 
 namespace TGD.CombatV2.Integration
 {
+    [System.Obsolete("Replaced by IOcc (shim only). Do not use in new code.", false)]
     [DefaultExecutionOrder(-500)]
     [DisallowMultipleComponent]
     public sealed class PlayerOccupancyBridge : MonoBehaviour, IActorOccupancyBridge
     {
-        public HexOccupancyService occupancyService;
-        public FootprintShape overrideFootprint;
-        public bool debugLog;
-        public bool autoMirrorDebug = false;
-        public bool shadowCheck = true;
-        public bool shadowStrictBreak = false;
-
-        HexBoardTestDriver _driver;
+        [SerializeField]
         UnitRuntimeContext _ctx;
-        UnitGridAdapter _componentAdapter;
-        HexOccupancy _occ;
-        IGridActor _actor;
-        bool _placed;
-        int _lastWriteFrame = -1;
-        Hex _lastFrom;
-        Hex _lastTo;
+
+        [SerializeField]
+        UnitGridAdapter _actor;
+
+        int _anchorVersion;
 
         public event System.Action<Hex, int> AnchorChanged;
 
-        public Hex CurrentAnchor => _actor?.Anchor ?? Hex.Zero;
-
-        public int AnchorVersion { get; private set; } = 0;
-
-        bool UseIOcc => _ctx != null && _ctx.occService != null && OccRuntimeSwitch.UseIOccWrites;
-
         void Awake()
         {
-            _driver = GetComponent<HexBoardTestDriver>();
-            _ctx = GetComponent<UnitRuntimeContext>();
-            _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
+            if (_ctx == null)
+                _ctx = GetComponent<UnitRuntimeContext>();
 
-            if (!occupancyService)
-                occupancyService = GetComponent<HexOccupancyService>();
-
-            if (!occupancyService && _ctx != null)
-                occupancyService = _ctx.GetComponentInParent<HexOccupancyService>(true);
-
-            if (!occupancyService && _driver != null)
-            {
-                occupancyService = _driver.GetComponentInParent<HexOccupancyService>(true);
-                if (!occupancyService && _driver.authoring != null)
-                {
-                    occupancyService = _driver.authoring.GetComponent<HexOccupancyService>();
-                    if (!occupancyService)
-                        occupancyService = _driver.authoring.GetComponentInParent<HexOccupancyService>(true);
-                }
-            }
-
-            EnsureOccupancyBacking();
-            EnsureActorBinding();
+            if (_actor == null)
+                _actor = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
         }
 
-        void Start() => EnsurePlacedNow();
-
-        void RaiseAnchorChanged(Hex anchor)
+        void OnEnable()
         {
-            AnchorVersion++;
-            AnchorChanged?.Invoke(anchor, AnchorVersion);
-            if (debugLog)
-                Debug.Log($"[Occ] AnchorChanged v{AnchorVersion} -> {anchor}", this);
-        }
-
-        void Update()
-        {
-            if (!_placed)
-                EnsurePlacedNow();
-
-#if UNITY_EDITOR
-            if (UseIOcc)
-                return;
-            if (!autoMirrorDebug)
-                return;
-
-            var unit = ResolveUnit();
-            if (unit != null && _placed)
-            {
-                var anchor = _actor.Anchor;
-                if (!unit.Position.Equals(anchor))
-                {
-                    Debug.LogWarning($"[Occ] Drift detected: unit={unit.Position} occ={anchor}. Auto-mirror.", this);
-                    MirrorDriver(anchor, _actor.Facing);
-                }
-            }
-#endif
+            Awake();
+            EnsurePlacedNow();
         }
 
         void OnDisable()
         {
-            if (!Application.isPlaying)
+            var service = _ctx?.occService;
+            if (service == null)
                 return;
 
-            if (UseIOcc && _ctx != null && _ctx.occService != null)
-            {
-                OccTxnId tx;
-                _ctx.occService.Remove(_ctx, out tx);
-                _placed = false;
-                if (debugLog)
-                    Debug.Log($"[Occ] Remove via IOcc tx={tx.Value} {IdLabel()}", this);
-                return;
-            }
-
-            if (_occ != null && _actor != null && _placed)
-            {
-                _occ.Remove(_actor);
-                _placed = false;
-                if (debugLog)
-                    Debug.Log($"[Occ] Remove {IdLabel()}", this);
-            }
+            service.Remove(_ctx, out _);
         }
 
-        public bool IsReady
-        {
-            get
-            {
-                if (_occ == null || _actor == null)
-                    return false;
+        IOccupancyService Service => _ctx?.occService;
 
-                if (_componentAdapter != null)
-                    return _componentAdapter.Unit != null;
-
-                if (_driver != null)
-                    return _driver.IsReady && _driver.UnitRef != null;
-
-                return false;
-            }
-        }
+        public bool IsReady => Service != null && _actor != null;
 
         public object Actor => _actor;
 
+        public Hex CurrentAnchor => _actor != null ? _actor.Anchor : Hex.Zero;
+
+        public int AnchorVersion => _anchorVersion;
+
         public bool EnsurePlacedNow()
         {
-            var unitRef = ResolveUnit();
-            var anchor = unitRef != null ? unitRef.Position : (_actor != null ? _actor.Anchor : Hex.Zero);
-            var face = unitRef != null ? unitRef.Facing : (_actor != null ? _actor.Facing : Facing4.PlusQ);
-            if (_placed)
+            var service = Service;
+            if (service == null || _actor == null)
+                return false;
+
+            var anchor = _actor.Anchor;
+            var facing = _actor.Facing;
+
+            if (service.TryPlace(_ctx, anchor, facing, out _, out var reason))
+            {
+                NotifyAnchorChanged(anchor);
                 return true;
-            return TryPlaceImmediateInternal(anchor, face);
+            }
+
+            if (reason == OccFailReason.AlreadyPlaced || !service.IsFreeFor(_ctx, anchor, facing))
+                return true;
+
+            return false;
         }
-
-        public void Bind(UnitGridAdapter adapter)
-        {
-            if (adapter == null)
-                return;
-
-            EnsureActorBinding(adapter);
-            EnsureOccupancyBacking();
-        }
-
-        public bool PlaceImmediate(Hex anchor, Facing4 facing)
-            => TryPlaceImmediateInternal(anchor, facing, _componentAdapter);
 
         public bool MoveCommit(Hex newAnchor, Facing4 newFacing, OccToken token = default)
         {
-            var previousAnchor = _actor != null ? _actor.Anchor : (ResolveUnit()?.Position ?? Hex.Zero);
-            if (UseIOcc)
-            {
-                OccTxnId tx; OccFailReason reason;
-                if (token.IsValid)
-                {
-                    bool committed = _ctx.occService.Commit(_ctx, token, newAnchor, newFacing, out tx, out reason);
-                    if (committed)
-                    {
-                        _placed = true;
-                        MirrorDriver(newAnchor, newFacing);
-                        if (shadowCheck)
-                            ShadowCheck(newAnchor, newFacing, "Move");
-                        RaiseAnchorChanged(newAnchor);
-                        _lastWriteFrame = Time.frameCount;
-                        _lastFrom = previousAnchor;
-                        _lastTo = newAnchor;
-                        if (debugLog)
-                            Debug.Log($"[Occ] Commit via IOcc tx={tx.Value} -> {newAnchor}", this);
-                        return true;
-                    }
-
-                    Debug.LogWarning($"[Occ] Commit via IOcc failed: {reason} -> {newAnchor}", this);
-                    _ctx.occService.Cancel(_ctx, token, "CommitFailed");
-                    return false;
-                }
-
-                bool ok = _ctx.occService.TryMove(_ctx, newAnchor, newFacing, out tx, out reason);
-                if (ok)
-                {
-                    _placed = true;
-                    MirrorDriver(newAnchor, newFacing);
-                    if (shadowCheck)
-                        ShadowCheck(newAnchor, newFacing, "Move");
-                    RaiseAnchorChanged(newAnchor);
-                    _lastWriteFrame = Time.frameCount;
-                    _lastFrom = previousAnchor;
-                    _lastTo = newAnchor;
-                    if (debugLog)
-                        Debug.Log($"[Occ] Move via IOcc tx={tx.Value} -> {newAnchor}", this);
-                    return true;
-                }
-
-                Debug.LogWarning($"[Occ] Move via IOcc failed: {reason} -> {newAnchor}", this);
-                return false;
-            }
-
-            if (_occ == null && occupancyService)
-                _occ = occupancyService.Get();
-            if (!IsReady)
+            var service = Service;
+            if (service == null || _actor == null)
                 return false;
 
-            bool success = false;
-            bool replaced = false;
-
-            if (_occ.TryMove(_actor, newAnchor))
+            bool success;
+            if (token.IsValid)
             {
-                _actor.Facing = newFacing;
-                _placed = true;
-                success = true;
+                success = service.Commit(_ctx, token, newAnchor, newFacing, out _, out var reason);
             }
             else
             {
-                if (_occ != null && _occ.TryPlace(_actor, newAnchor, newFacing))
-                {
-                    _placed = true;
-                    success = true;
-                    replaced = true;
-                }
+                success = service.TryMove(_ctx, newAnchor, newFacing, out _, out var reason);
             }
 
             if (success)
             {
-                if (debugLog)
-                {
-                    string verb = replaced ? "RePlace" : "Move";
-                    Debug.Log($"[Occ] {verb} {IdLabel()} -> {newAnchor}", this);
-                }
-                if (shadowCheck)
-                    ShadowCheck(newAnchor, newFacing, "Move");
-                MirrorDriver(_actor.Anchor, _actor.Facing);
-                RaiseAnchorChanged(newAnchor);
+                NotifyAnchorChanged(newAnchor);
                 return true;
             }
 
-#if UNITY_EDITOR
-            Debug.LogWarning($"[Occ] MoveCommit failed -> {newAnchor}", this);
-#endif
             return false;
         }
 
-        Unit ResolveUnit()
+        void NotifyAnchorChanged(Hex anchor)
         {
-            if (_ctx != null && _ctx.boundUnit != null)
-            {
-                if (_componentAdapter != null && _componentAdapter.Unit != _ctx.boundUnit)
-                    _componentAdapter.Unit = _ctx.boundUnit;
-                return _ctx.boundUnit;
-            }
-
-            if (_componentAdapter != null && _componentAdapter.Unit != null)
-                return _componentAdapter.Unit;
-
-            if (_driver != null && _driver.IsReady)
-                return _driver.UnitRef;
-
-            return null;
-        }
-
-        IGridActor CreateActorAdapter()
-        {
-            if (_componentAdapter != null)
-            {
-                if (overrideFootprint != null && _componentAdapter.Footprint == null)
-                    _componentAdapter.Footprint = overrideFootprint;
-                var unit = ResolveUnit();
-                if (_componentAdapter.Unit == null && unit != null)
-                    _componentAdapter.Unit = unit;
-                return _componentAdapter;
-            }
-
-            var fp = overrideFootprint ? overrideFootprint : CreateSingle();
-            return new BridgeActor(_driver, fp);
-        }
-
-        string IdLabel()
-        {
-            var unit = ResolveUnit();
-            if (unit != null && !string.IsNullOrEmpty(unit.Id))
-                return unit.Id;
-
-            if (_actor != null && !string.IsNullOrEmpty(_actor.Id))
-                return _actor.Id;
-
-            if (_driver != null && !string.IsNullOrEmpty(_driver.unitId))
-                return _driver.unitId;
-
-            return "Unit";
-        }
-
-        sealed class BridgeActor : IGridActor
-        {
-            readonly HexBoardTestDriver _driver;
-            readonly FootprintShape _footprint;
-
-            public BridgeActor(HexBoardTestDriver driver, FootprintShape footprint)
-            {
-                _driver = driver;
-                _footprint = footprint ? footprint : PlayerOccupancyBridge.CreateSingle();
-                if (driver != null && driver.UnitRef != null)
-                {
-                    Anchor = driver.UnitRef.Position;
-                    Facing = driver.UnitRef.Facing;
-                }
-                else
-                {
-                    Anchor = Hex.Zero;
-                    Facing = Facing4.PlusQ;
-                }
-            }
-
-            public string Id
-            {
-                get
-                {
-                    if (_driver != null && !string.IsNullOrEmpty(_driver.unitId))
-                        return _driver.unitId;
-                    return "Player";
-                }
-            }
-
-            public Hex Anchor { get; set; }
-            public Facing4 Facing { get; set; }
-            public FootprintShape Footprint => _footprint;
-        }
-
-        void MirrorDriver(Hex anchor, Facing4 facing)
-        {
-            var unit = ResolveUnit();
-            if (unit != null)
-            {
-                unit.Position = anchor;
-                unit.Facing = facing;
-            }
-
-            if (_driver != null && _driver.IsReady && _driver.UnitRef != null)
-            {
-                var driverUnit = _driver.UnitRef;
-                driverUnit.Position = anchor;
-                driverUnit.Facing = facing;
-
-                if (_driver.Map != null)
-                    _driver.Map.Set(driverUnit, anchor);
-
-                _driver.SyncView();
-            }
-
-            if (debugLog)
-                Debug.Log($"[Occ] MirrorDriver -> {anchor} facing={facing}", this);
-        }
-
-        static FootprintShape CreateSingle()
-        {
-            var shape = ScriptableObject.CreateInstance<FootprintShape>();
-            shape.name = "PlayerFootprint_Single_Runtime";
-            shape.offsets = new() { new L2(0, 0) };
-            return shape;
-        }
-
-        void EnsureOccupancyBacking()
-        {
-            if (_occ != null)
-                return;
-
-            if (occupancyService)
-            {
-                _occ = occupancyService.Get();
-                if (_occ == null && debugLog)
-                    Debug.LogError("[Occ] HexOccupancyService returned null store.", this);
-            }
-        }
-
-        void EnsureActorBinding(UnitGridAdapter explicitAdapter = null)
-        {
-            if (explicitAdapter != null)
-                _componentAdapter = explicitAdapter;
-
-            if (_componentAdapter == null)
-                _componentAdapter = GetComponent<UnitGridAdapter>() ?? GetComponentInChildren<UnitGridAdapter>(true);
-
-            if (_componentAdapter != null)
-            {
-                if (overrideFootprint != null && _componentAdapter.Footprint == null)
-                    _componentAdapter.Footprint = overrideFootprint;
-
-                if (_componentAdapter.Unit == null)
-                {
-                    var unit = _ctx != null && _ctx.boundUnit != null ? _ctx.boundUnit : null;
-                    if (unit == null && _driver != null && _driver.IsReady)
-                        unit = _driver.UnitRef;
-                    if (unit != null)
-                        _componentAdapter.Unit = unit;
-                }
-
-                _actor = _componentAdapter;
-            }
-            else if (_actor == null)
-            {
-                _actor = CreateActorAdapter();
-            }
-        }
-
-        bool TryPlaceImmediateInternal(Hex anchor, Facing4 facing, UnitGridAdapter explicitAdapter = null)
-        {
-            if (UseIOcc && Time.frameCount == _lastWriteFrame && anchor.Equals(_lastFrom))
-            {
-                if (debugLog)
-                    Debug.LogWarning($"[Occ] WriteGuard: ignore back-place to {_lastFrom} in same frame", this);
-                return false;
-            }
-
-            _driver?.EnsureInit();
-            EnsureActorBinding(explicitAdapter);
-            EnsureOccupancyBacking();
-
-            if (UseIOcc)
-            {
-                OccTxnId tx; OccFailReason reason;
-                bool ok = _ctx.occService.TryPlace(_ctx, anchor, facing, out tx, out reason);
-                if (ok)
-                {
-                    _placed = true;
-                    MirrorDriver(anchor, facing);
-                    if (shadowCheck)
-                        ShadowCheck(anchor, facing, "Place");
-                    RaiseAnchorChanged(anchor);
-                    if (debugLog)
-                        Debug.Log($"[Occ] Place via IOcc tx={tx.Value} -> {anchor}", this);
-                }
-                else
-                {
-                    Debug.LogWarning($"[Occ] Place via IOcc failed: {reason} @ {anchor}", this);
-                }
-                return ok;
-            }
-
-            if (!IsReady || _occ == null || _actor == null)
-                return false;
-
-            if (!_occ.TryPlace(_actor, anchor, facing))
-                return false;
-
-            _placed = true;
-            if (debugLog)
-                Debug.Log($"[Occ] Place {IdLabel()} at {anchor}", this);
-            MirrorDriver(anchor, facing);
-            if (shadowCheck)
-                ShadowCheck(anchor, facing, "Place");
-            RaiseAnchorChanged(anchor);
-            return true;
-        }
-
-        public void SyncAfterIOccPlacement(Hex anchor, Facing4 facing)
-        {
-            _placed = true;
-            MirrorDriver(anchor, facing);
-            if (shadowCheck)
-                ShadowCheck(anchor, facing, "Place");
-            RaiseAnchorChanged(anchor);
-            if (debugLog)
-                Debug.Log($"[Occ] Sync via IOcc -> {anchor}", this);
-        }
-
-        void ShadowCheck(Hex anchor, Facing4 facing, string verb)
-        {
-            if (_ctx == null || _ctx.occService == null)
-                return;
-
-            bool free = _ctx.occService.IsFreeFor(_ctx, anchor, facing);
-            if (free)
-            {
-                Debug.LogWarning($"[OCC_SHADOW] {verb} MISMATCH -> IOcc says Free but bridge placed @ {anchor}", this);
-#if UNITY_EDITOR
-                if (shadowStrictBreak)
-                    Debug.Break();
-#endif
-            }
-            else if (debugLog)
-            {
-                Debug.Log($"[OCC_SHADOW] {verb} OK (store一致) @ {anchor}", this);
-            }
-
-            OccActorInfo info;
-            if (_ctx.occService.TryGetActorInfo(anchor, out info))
-            {
-                var id = IdLabel();
-                if (!string.IsNullOrEmpty(info.ActorId) && info.ActorId != id)
-                    Debug.LogWarning($"[OCC_SHADOW] ID mismatch at {anchor}: store={info.ActorId} local={id}", this);
-            }
-            else
-            {
-                Debug.LogWarning($"[OCC_SHADOW] Missing actor info at {anchor}", this);
-            }
+            _anchorVersion++;
+            AnchorChanged?.Invoke(anchor, _anchorVersion);
         }
     }
 }
