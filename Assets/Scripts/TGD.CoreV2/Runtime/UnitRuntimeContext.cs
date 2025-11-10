@@ -15,6 +15,14 @@ namespace TGD.CoreV2
         public StatsV2 stats = new StatsV2();
         public CooldownHubV2 cooldownHub;
 
+        // ========= Services (Injected) =========
+        [Header("Services (Injected)")]
+        [Tooltip("工厂/场景在Spawn时注入的占位服务（IOcc）。")]
+        public IOccupancyService occService;
+
+        [Tooltip("对象销毁时自动从占位表中清理。")]
+        public bool occAutoCleanupOnDestroy = true;
+
         [Header("Fallbacks (for tests)")]
         [Tooltip("当 stats 为空时用于测试的默认 MoveRate")]
         public float fallbackMoveRate = 5f;
@@ -280,6 +288,18 @@ namespace TGD.CoreV2
                 fallbackMoveSkillId = MoveProfileRules.DefaultSkillId;
             if (_rules == null)
                 _rules = new UnitRuleSet();
+        }
+        void OnDestroy()
+        {
+            if (!Application.isPlaying) return;
+            if (occAutoCleanupOnDestroy && occService != null)
+            {
+                OccTxnId tx;
+                occService.Remove(this, out tx);   // 安全兜底：防悬挂占位
+#if UNITY_EDITOR
+                if (debugLog) Debug.Log($"[Occ] AutoRemove on Destroy: {name} tx={tx.Value}", this);
+#endif
+            }
         }
 
         [ContextMenu("Debug/Print Snapshot")]
