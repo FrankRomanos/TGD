@@ -56,7 +56,8 @@ namespace TGD.HexBoard
         {
             try
             {
-                var adapters = GameObject.FindObjectsOfType<UnitGridAdapter>(true);
+                var adapters = FindObjectsByType<UnitGridAdapter>(
+FindObjectsInactive.Include, FindObjectsSortMode.None);
                 var list = new System.Collections.Generic.List<OccSnapshot>(adapters.Length);
                 for (int i = 0; i < adapters.Length; i++)
                 {
