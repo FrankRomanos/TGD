@@ -163,11 +163,71 @@ namespace TGD.CombatV2
 
             CooldownStoreSecV2 Store => _manager.GetSecStore(_runtime);
 
+            sealed class CooldownTicket
+            {
+                public readonly CooldownSinkHandle handle;
+                public readonly string key;
+                public readonly int previousSeconds;
+
+                public CooldownTicket(CooldownSinkHandle handle, string key, int previousSeconds)
+                {
+                    this.handle = handle;
+                    this.key = key;
+                    previousSeconds = Mathf.Max(int.MinValue, previousSeconds);
+                    this.previousSeconds = previousSeconds;
+                }
+            }
+
+            static string ComposeKey(string key, string ownerId, int chainDepth)
+            {
+                string normalizedKey = string.IsNullOrEmpty(key) ? string.Empty : key.Trim();
+                string normalizedOwner = string.IsNullOrEmpty(ownerId) ? string.Empty : ownerId.Trim();
+                int depth = Mathf.Max(0, chainDepth);
+
+                if (string.IsNullOrEmpty(normalizedKey))
+                    return string.Empty;
+
+                if (string.IsNullOrEmpty(normalizedOwner))
+                    return depth > 0 ? $"{normalizedKey}#{depth}" : normalizedKey;
+
+                return depth > 0
+                    ? $"{normalizedOwner}::{normalizedKey}#{depth}"
+                    : $"{normalizedOwner}::{normalizedKey}";
+            }
+
             public bool Ready(string skillId)
             {
                 var store = Store;
                 if (store == null || string.IsNullOrEmpty(skillId)) return true;
                 return store.Ready(skillId);
+            }
+
+            public bool IsReady(string key, string ownerId, int chainDepth)
+            {
+                var composed = ComposeKey(key, ownerId, chainDepth);
+                if (string.IsNullOrEmpty(composed))
+                    return true;
+                return Ready(composed);
+            }
+
+            public bool TryStart(string key, string ownerId, int chainDepth)
+            {
+                var composed = ComposeKey(key, ownerId, chainDepth);
+                return !string.IsNullOrEmpty(composed);
+            }
+
+            public object TryStartTicket(string key, string ownerId, int chainDepth)
+            {
+                var store = Store;
+                if (store == null)
+                    return null;
+
+                var composed = ComposeKey(key, ownerId, chainDepth);
+                if (string.IsNullOrEmpty(composed))
+                    return null;
+
+                int previous = store.SecondsLeft(composed);
+                return new CooldownTicket(this, composed, previous);
             }
 
             public void StartSeconds(string skillId, int seconds)
@@ -200,6 +260,29 @@ namespace TGD.CombatV2
             {
                 var store = Store;
                 return store != null ? store.TurnsLeft(skillId) : 0;
+            }
+
+            public void Revert(object ticket)
+            {
+                if (ticket is not CooldownTicket cooldownTicket)
+                    return;
+
+                if (!ReferenceEquals(cooldownTicket.handle, this))
+                    return;
+
+                var store = Store;
+                if (store == null)
+                    return;
+
+                int previous = cooldownTicket.previousSeconds;
+                if (previous <= 0)
+                {
+                    store.StartSeconds(cooldownTicket.key, 0);
+                }
+                else
+                {
+                    store.StartSeconds(cooldownTicket.key, previous);
+                }
             }
         }
         sealed class FullRoundState

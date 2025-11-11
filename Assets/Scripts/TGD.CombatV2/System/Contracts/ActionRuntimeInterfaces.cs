@@ -24,5 +24,9 @@
         void AddSeconds(string skillId, int deltaSeconds);
         int SecondsLeft(string skillId);
         int TurnsLeft(string skillId);
+        bool IsReady(string key, string ownerId, int chainDepth);
+        bool TryStart(string key, string ownerId, int chainDepth);
+        object TryStartTicket(string key, string ownerId, int chainDepth);
+        void Revert(object ticket);
     }
 }
