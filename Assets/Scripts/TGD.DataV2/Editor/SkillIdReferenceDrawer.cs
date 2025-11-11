@@ -39,7 +39,8 @@ namespace TGD.DataV2.Editor
             bool allowEmpty = (attribute as SkillIdReferenceAttribute)?.allowEmpty ?? true;
             string normalized = SkillDisplayNameUtility.NormalizeId(property.stringValue);
             bool hasValue = !string.IsNullOrEmpty(normalized);
-            bool hasEntry = hasValue && _entryMap.TryGetValue(normalized, out var entry);
+            SkillEntry entry = default;
+            bool hasEntry = hasValue && _entryMap.TryGetValue(normalized, out entry);
             bool isValid = !hasValue ? allowEmpty : hasEntry;
 
             Rect fieldRect = EditorGUI.PrefixLabel(position, label);
