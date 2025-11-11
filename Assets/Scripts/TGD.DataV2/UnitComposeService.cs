@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
+using TGD.HexBoard;
 using UnityEngine;
 
 namespace TGD.DataV2
@@ -26,7 +27,8 @@ namespace TGD.DataV2
                 displayName = blueprint.displayName,
                 faction = blueprint.faction,
                 stats = new StatsV2(),
-                avatar = blueprint.avatar
+                avatar = blueprint.avatar,
+                footprint = blueprint.footprint
             };
 
             var sourceStats = blueprint.baseStats ?? new StatsV2();
@@ -84,6 +86,7 @@ namespace TGD.DataV2
                 blueprint.displayName = "Test Unit";
                 blueprint.baseStats.MaxEnergy = 5;
                 blueprint.baseStats.Energy = 12;
+                blueprint.footprint = ScriptableObject.CreateInstance<FootprintShape>();
                 blueprint.abilities = new[]
                 {
                     new UnitBlueprint.AbilitySlot
@@ -135,9 +138,11 @@ namespace TGD.DataV2
                 Assert.AreEqual(6, config.abilities[0].initialCooldownSeconds);
                 Assert.AreEqual("ActionC", config.abilities[1].skillId);
                 Assert.AreEqual(4, config.abilities[1].initialCooldownSeconds);
+                Assert.AreEqual(blueprint.footprint, config.footprint);
 
                 Debug.Log("[UnitCompose] Smoke test passed.");
 
+                ScriptableObject.DestroyImmediate(blueprint.footprint);
                 ScriptableObject.DestroyImmediate(blueprint);
                 ScriptableObject.DestroyImmediate(catalog);
                 ScriptableObject.DestroyImmediate(skillA);

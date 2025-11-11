@@ -1,11 +1,12 @@
 {
-    "name": "TGD.DataV2",
+    "name": "TGD.DataV2.Editor",
     "rootNamespace": "",
     "references": [
-        "GUID:a1b5b619a2c3db644bba9df3442b0243",
-        "GUID:a444cd44765d7a0479ba247d904b43c2"
+        "GUID:2334eef00437ffd41a5da501d42c1c05"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
