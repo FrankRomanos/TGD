@@ -6,7 +6,7 @@ namespace TGD.DataV2
 {
     /// <summary>
     /// 统一管理“动作冷却秒数”的小型目录。
-    /// 放到 Resources/ActionCooldownCatalog.asset 后，代码里可通过 ActionCooldownCatalog.Instance 访问。
+    /// 实例可由工厂注入；若未显式注入，会在 Resources 中尝试自动定位一个资产。
     /// 未配置的 key 返回 0（无冷却）。
     /// </summary>
     [CreateAssetMenu(menuName = "TGD/Catalogs/ActionCooldownCatalog", fileName = "ActionCooldownCatalog")]
@@ -25,14 +25,15 @@ namespace TGD.DataV2
         private Dictionary<string, int> _map;
 
         private static ActionCooldownCatalog _instance;
+        public static bool HasInstance => _instance != null;
+        public static ActionCooldownCatalog Current => _instance;
         public static ActionCooldownCatalog Instance
         {
             get
             {
                 if (_instance != null) return _instance;
 
-                // 约定资源路径：Resources/ActionCooldownCatalog.asset
-                _instance = Resources.Load<ActionCooldownCatalog>("ActionCooldownCatalog");
+                _instance = LocateInResources();
 
 #if UNITY_EDITOR
                 // 编辑器下没有资源也不阻塞运行：给一个内存默认体，Move/Attack=0
@@ -53,10 +54,28 @@ namespace TGD.DataV2
 
                 return _instance;
             }
-            set { _instance = value; }
+            set
+            {
+                _instance = value;
+                if (_instance != null)
+                    _instance.Rebuild();
+            }
         }
 
         private void OnEnable() => Rebuild();
+
+        static ActionCooldownCatalog LocateInResources()
+        {
+            var direct = Resources.Load<ActionCooldownCatalog>("ActionCooldownCatalog");
+            if (direct != null)
+                return direct;
+
+            var all = Resources.LoadAll<ActionCooldownCatalog>(string.Empty);
+            if (all != null && all.Length > 0)
+                return all[0];
+
+            return null;
+        }
 
         private void Rebuild()
         {

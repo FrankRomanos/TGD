@@ -1672,7 +1672,20 @@ namespace TGD.CombatV2
 
         public bool TryAutoExecuteAction(string toolId, Hex target)
         {
-            if (!PlayerCanActNow())
+            return TryAutoExecuteActionInternal(null, toolId, target, true);
+        }
+
+        public bool TryAutoExecuteActionForUnit(Unit unit, string toolId, Hex target)
+        {
+            if (unit != null && IsBonusTurnFor(unit))
+                return TryAutoExecuteActionInternal(unit, toolId, target, true);
+
+            return TryAutoExecuteActionInternal(unit, toolId, target, false);
+        }
+
+        bool TryAutoExecuteActionInternal(Unit explicitOwner, string toolId, Hex target, bool requirePlayerPhase)
+        {
+            if (!isActiveAndEnabled)
                 return false;
 
             if (_pendingEndTurn)
@@ -1685,20 +1698,34 @@ namespace TGD.CombatV2
             if (!TryResolveAliveTool(tool, out tool))
                 return false;
 
-            if (!CanActivateAtIdle(tool))
+            var owner = explicitOwner ?? (useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(tool));
+            if (owner == null)
                 return false;
+
+            if (requirePlayerPhase)
+            {
+                if (!PlayerCanActNow())
+                    return false;
+
+                if (_currentUnit != null && owner != _currentUnit)
+                    return false;
+
+                if (!CanActivateAtIdle(tool))
+                    return false;
+            }
+            else
+            {
+                if (!CanEnemyAutoExecute(owner, tool))
+                    return false;
+            }
 
             if (IsExecuting || IsAnyToolBusy())
                 return false;
 
-            var unit = useFactoryMode && _activeUnit != null ? _activeUnit : ResolveUnit(tool);
-            if (_currentUnit != null && unit != _currentUnit)
-                return false;
-
-            if (!TryBeginAim(tool, unit, out var reason))
+            if (!TryBeginAim(tool, owner, out var reason))
             {
                 if (!string.IsNullOrEmpty(reason))
-                    ActionPhaseLogger.Log(unit, tool.Id, "W1_AimReject", $"(reason={reason})");
+                    ActionPhaseLogger.Log(owner, tool.Id, "W1_AimReject", $"(reason={reason})");
                 return false;
             }
 
@@ -1711,10 +1738,36 @@ namespace TGD.CombatV2
             _hover = target;
             EnterAimForTool(tool);
             _phase = Phase.Aiming;
-            ActionPhaseLogger.Log(unit, tool.Id, "W1_AimBegin");
+            ActionPhaseLogger.Log(owner, tool.Id, "W1_AimBegin");
 
-            StartCoroutine(ConfirmRoutine(tool, unit, target));
+            StartCoroutine(ConfirmRoutine(tool, owner, target));
             return true;
+        }
+
+        bool CanEnemyAutoExecute(Unit owner, IActionToolV2 tool)
+        {
+            if (owner == null || turnManager == null)
+                return false;
+
+            if (_currentUnit != null && owner != _currentUnit)
+                return false;
+
+            if (!IsBonusTurnFor(owner))
+            {
+                if (!IsEffectiveEnemyPhase(owner))
+                    return false;
+                if (!turnManager.IsEnemyUnit(owner))
+                    return false;
+                if (turnManager.ActiveUnit != owner)
+                    return false;
+                if (!turnManager.HasReachedIdle(owner))
+                    return false;
+            }
+
+            if (IsPendingEndTurnFor(owner))
+                return false;
+
+            return CanActivateAtIdle(tool);
         }
 
         void TryHideAllAimUI()

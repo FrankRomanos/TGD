@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using TGD.CombatV2;
+using TGD.CombatV2.AI;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
@@ -29,6 +30,8 @@ namespace TGD.LevelV2
         [Header("Data")]
         [Tooltip("Optional catalog used to validate skills when composing units.")]
         public SkillIndex skillIndex;
+        [Tooltip("Optional catalog providing action cooldown data; auto-injected into ActionCooldownCatalog.Instance.")]
+        public ActionCooldownCatalog actionCooldownCatalog;
 
         [Header("Battle Control")]
         [Tooltip("Automatically call StartBattle after at least one unit is spawned.")]
@@ -40,6 +43,7 @@ namespace TGD.LevelV2
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
         bool _loggedMissingSkillIndex;
+        bool _loggedMissingCooldownCatalog;
         bool _triedLoadFallbackFootprint;
 
         struct SharedRefs
@@ -65,6 +69,11 @@ namespace TGD.LevelV2
             public Sprite avatar;
         }
 
+        void Awake()
+        {
+            EnsureCooldownCatalogInjected();
+        }
+
         public IReadOnlyList<Unit> FriendlyUnits => _friendlies;
         public IReadOnlyList<Unit> EnemyUnits => _enemies;
         public IEnumerable<Unit> AllUnits => _spawned.Keys;
@@ -76,6 +85,8 @@ namespace TGD.LevelV2
                 Debug.LogError("[Factory] Spawn failed: blueprint is null.", this);
                 return null;
             }
+
+            EnsureCooldownCatalogInjected();
 
             var resolvedSkillIndex = ResolveSkillIndex();
             var final = UnitComposeService.Compose(blueprint, resolvedSkillIndex);
@@ -100,6 +111,8 @@ namespace TGD.LevelV2
                 Debug.LogError("[Factory] Spawn failed: missing unit prefab.", this);
                 return null;
             }
+
+            EnsureCooldownCatalogInjected();
 
             var parent = unitRoot != null ? unitRoot : transform;
             var go = Instantiate(prefab, parent);
@@ -149,6 +162,7 @@ namespace TGD.LevelV2
             WireHazardWatchers(go, context, ref shared);
 
             TrackUnit(unit, final.faction, go, context, cooldownHub, adapter, final.avatar, shared.view);
+            MaybeAttachEnemyAIController(unit, final.faction, go, context, shared);
 
             Debug.Log($"[Factory] Spawn {ResolveDisplayName(final, unitId)} ({final.faction}) at {spawnHex}", this);
 
@@ -807,6 +821,46 @@ namespace TGD.LevelV2
             return true;
         }
 
+        void EnsureCooldownCatalogInjected()
+        {
+            var resolved = ResolveActionCooldownCatalog();
+            if (resolved == null)
+                return;
+
+            if (ActionCooldownCatalog.Current != resolved)
+                ActionCooldownCatalog.Instance = resolved;
+        }
+
+        ActionCooldownCatalog ResolveActionCooldownCatalog()
+        {
+            if (actionCooldownCatalog != null)
+                return actionCooldownCatalog;
+
+            var current = ActionCooldownCatalog.Current;
+            if (current != null)
+            {
+                actionCooldownCatalog = current;
+                _loggedMissingCooldownCatalog = false;
+                return actionCooldownCatalog;
+            }
+
+            var located = ActionCooldownCatalog.Instance;
+            if (located != null)
+            {
+                actionCooldownCatalog = located;
+                _loggedMissingCooldownCatalog = false;
+                return actionCooldownCatalog;
+            }
+
+            if (!_loggedMissingCooldownCatalog)
+            {
+                Debug.LogWarning("[Factory] ActionCooldownCatalog not assigned and no asset found in Resources.", this);
+                _loggedMissingCooldownCatalog = true;
+            }
+
+            return null;
+        }
+
         SkillIndex ResolveSkillIndex()
         {
             if (skillIndex != null)
@@ -1102,6 +1156,22 @@ namespace TGD.LevelV2
                 handle.unitIdOverride = context.boundUnit.Id;
 
             return handle;
+        }
+
+        void MaybeAttachEnemyAIController(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, SharedRefs shared)
+        {
+            if (faction != UnitFaction.Enemy)
+                return;
+            if (go == null || unit == null)
+                return;
+
+            var controller = go.GetComponent<EnemyAIController>() ?? go.AddComponent<EnemyAIController>();
+            if (controller.context == null)
+                controller.context = context;
+            if (controller.turnManager == null)
+                controller.turnManager = shared.turnManager != null ? shared.turnManager : turnManager;
+            if (controller.actionManager == null)
+                controller.actionManager = shared.cam != null ? shared.cam : cam;
         }
 
         void TrackUnit(Unit unit, UnitFaction faction, GameObject go, UnitRuntimeContext context, CooldownHubV2 hub, UnitGridAdapter adapter, Sprite avatar, Transform visualRoot)
