@@ -1115,6 +1115,7 @@ namespace TGD.CombatV2
 
             var startAnchor = CurrentAnchor;
             Facing4 finalFacing = unit != null ? unit.Facing : Facing4.PlusQ;
+            var occService = ctx != null ? ctx.occService : null;
             var passability = PassabilityFactory.ForApproach(_occ, SelfActor, startAnchor);
 
             List<Hex> executionPath = null;
@@ -1208,16 +1209,15 @@ namespace TGD.CombatV2
                     }
 
                     var tokenForCommit = _approachToken;
-                    var occ = ctx != null ? ctx.occService : null;
-                    if (occ != null)
+                    if (occService != null)
                     {
                         bool committed;
                         OccTxnId txn; OccFailReason reason;
 
                         if (tokenForCommit.IsValid)
-                            committed = occ.Commit(ctx, tokenForCommit, startAnchor, finalFacing, out txn, out reason);
+                            committed = occService.Commit(ctx, tokenForCommit, startAnchor, finalFacing, out txn, out reason);
                         else
-                            committed = occ.TryMove(ctx, startAnchor, finalFacing, out txn, out reason);
+                            committed = occService.TryMove(ctx, startAnchor, finalFacing, out txn, out reason);
 
                         if (!committed && tokenForCommit.IsValid && debugLog)
                             Debug.LogWarning($"[Occ] Commit failed for approach start @{startAnchor} ({reason})", this);
@@ -1333,16 +1333,15 @@ namespace TGD.CombatV2
                     truncated = true;
                 // ……for 循环完成后，准备最终提交：
                     var commitToken = _approachToken;
-                    var occ = ctx != null ? ctx.occService : null;
-                    if (occ != null)
+                    if (occService != null)
                     {
                         bool committed;
                         OccTxnId txn; OccFailReason reason;
 
                         if (commitToken.IsValid)
-                            committed = occ.Commit(ctx, commitToken, lastPosition, finalFacing, out txn, out reason);
+                            committed = occService.Commit(ctx, commitToken, lastPosition, finalFacing, out txn, out reason);
                         else
-                            committed = occ.TryMove(ctx, lastPosition, finalFacing, out txn, out reason);
+                            committed = occService.TryMove(ctx, lastPosition, finalFacing, out txn, out reason);
 
                         if (!committed && commitToken.IsValid && debugLog)
                             Debug.LogWarning($"[Occ] Commit failed for attack @{lastPosition} ({reason})", this);
@@ -1433,16 +1432,15 @@ namespace TGD.CombatV2
                 var abortFacing = abortUnit != null ? abortUnit.Facing : Facing4.PlusQ;
 
                 var tokenForCommit = _approachToken;
-                var occ = ctx != null ? ctx.occService : null;
-                if (occ != null)
+                if (occService != null)
                 {
                     bool committed;
                     OccTxnId txn; OccFailReason reason;
 
                     if (tokenForCommit.IsValid)
-                        committed = occ.Commit(ctx, tokenForCommit, abortAnchor, abortFacing, out txn, out reason);
+                        committed = occService.Commit(ctx, tokenForCommit, abortAnchor, abortFacing, out txn, out reason);
                     else
-                        committed = occ.TryMove(ctx, abortAnchor, abortFacing, out txn, out reason);
+                        committed = occService.TryMove(ctx, abortAnchor, abortFacing, out txn, out reason);
 
                     if (!committed && debugLog)
                         Debug.LogWarning($"[Occ] Abort commit failed @{abortAnchor} ({reason})", this);
