@@ -29,10 +29,6 @@ namespace TGD.CombatV2
         [SerializeField] UnitRuntimeContext _ctx;
         UnitGridAdapter _selfActor;
 
-        [Header("Bridge (optional)")]
-        [HideInInspector]
-        public PlayerOccupancyBridge bridgeOverride;   // ★ 新增
-
         [Header("View (optional)")]
         [HideInInspector]
         public Transform viewOverride;                 // ★ 新增
@@ -194,13 +190,12 @@ namespace TGD.CombatV2
         TargetingSpec _moveSpec;
 
         // 占位
-        IActorOccupancyBridge _bridge;
-        PlayerOccupancyBridge _playerBridge;
-        PlayerOccupancyBridge _boundPlayerBridge;
         HexOccupancy _occ;
         bool _previewDirty = true;
-        int _previewAnchorVersion = -1;
-        int _planAnchorVersion = -1;
+        Hex _previewAnchorSnapshot;
+        bool _hasPreviewAnchorSnapshot;
+        Hex _planAnchorSnapshot;
+        bool _hasPlanAnchorSnapshot;
         // === HUD 提示（可选）===
         [Header("HUD")]
         public bool showHudMessage = true;
@@ -259,7 +254,7 @@ namespace TGD.CombatV2
             if (!targetCheck.ok || targetCheck.plan != PlanKind.MoveOnly)
                 return result;
 
-            if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
+            if (_hasPreviewAnchorSnapshot && !_previewAnchorSnapshot.Equals(CurrentAnchor))
                 _previewDirty = true;
 
             if (_previewDirty || !_paths.TryGetValue(target, out var path) || path == null || path.Count < 2)
@@ -441,20 +436,18 @@ namespace TGD.CombatV2
                 yield break;
             }
 
-            int needSec = ResolveMoveBudgetSeconds();
-            var costSpec = BuildCostSpec();
-
-            if (_playerBridge != null && _previewAnchorVersion != _playerBridge.AnchorVersion)
+            if (_hasPreviewAnchorSnapshot && !_previewAnchorSnapshot.Equals(CurrentAnchor))
             {
-                Debug.LogWarning($"[Guard] Move plan stale (previewV={_previewAnchorVersion} nowV={_playerBridge.AnchorVersion}). Rebuild.", this);
+                Debug.LogWarning($"[Guard] Move plan stale (previewAnchor={_previewAnchorSnapshot} now={CurrentAnchor}). Rebuild.", this);
                 ShowRange();
             }
 
-            _planAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
+            _planAnchorSnapshot = CurrentAnchor;
+            _hasPlanAnchorSnapshot = true;
 
             if (_paths.TryGetValue(hex, out var path) && path != null && path.Count >= 2)
             {
-                yield return RunPathTween_WithTime(path, _planAnchorVersion);
+                yield return RunPathTween_WithTime(path);
             }
             else
             {
@@ -477,11 +470,6 @@ namespace TGD.CombatV2
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
             if (!targetValidator)
                 targetValidator = GetComponentInParent<DefaultTargetValidator>(true);
-
-            TryResolveBridge();
-
-            if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
-                occupancyService = _playerBridge.occupancyService;
 
             _moveSpec = new TargetingSpec
             {
@@ -514,8 +502,8 @@ namespace TGD.CombatV2
             {
                 _paths.Clear();
                 _previewDirty = true;
-                _previewAnchorVersion = -1;
-                _planAnchorVersion = -1;
+                _hasPreviewAnchorSnapshot = false;
+                _hasPlanAnchorSnapshot = false;
                 _showing = false;
             }
         }
@@ -536,11 +524,8 @@ namespace TGD.CombatV2
 
             if (occupancyService != null)
                 _occ = occupancyService.Get();
-            else if (_playerBridge != null && _playerBridge.occupancyService)
-            {
-                occupancyService = _playerBridge.occupancyService;
-                _occ = occupancyService ? occupancyService.Get() : null;
-            }
+            _hasPreviewAnchorSnapshot = false;
+            _hasPlanAnchorSnapshot = false;
 
         }
 
@@ -564,26 +549,13 @@ namespace TGD.CombatV2
             _showing = false;
             _occ = null;
             _previewDirty = true;
-            _previewAnchorVersion = -1;
-            _planAnchorVersion = -1;
+            _hasPreviewAnchorSnapshot = false;
+            _hasPlanAnchorSnapshot = false;
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-        }
-
-        void HandleAnchorChanged(Hex anchor, int version)
-        {
-            _previewDirty = true;
-            _previewAnchorVersion = -1;
-            _planAnchorVersion = -1;
-            ClearPreviewReservations("AnchorChanged");
-            if (_showing)
-            {
-                _painter.Clear();
-                _paths.Clear();
-            }
         }
 
         void Update()
@@ -747,7 +719,8 @@ namespace TGD.CombatV2
                 _paths[kv.Key] = kv.Value;
 
             _previewDirty = false;
-            _previewAnchorVersion = _playerBridge != null ? _playerBridge.AnchorVersion : -1;
+            _previewAnchorSnapshot = startHex;
+            _hasPreviewAnchorSnapshot = true;
 
             return true;
         }
@@ -837,9 +810,9 @@ namespace TGD.CombatV2
 #if UNITY_EDITOR
             var unitPos = unit != null ? unit.Position : Hex.Zero;
             var anchor = CurrentAnchor;
-            var occOk = (_playerBridge != null && _playerBridge.IsReady);
+            var occOk = (ctx != null && ctx.occService != null && _selfActor != null);
             var label = TurnManagerV2.FormatUnitLabel(unit);
-            LogInternal($"[Probe][MoveAim] unit={label} unitPos={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
+            LogInternal($"[Probe][MoveAim] unit={label} unitPos={unitPos} anchor={anchor} occReady={occOk} actor={_selfActor?.GetInstanceID()}");
 #endif
 
             if (occupancyService) _occ = occupancyService.Get();
@@ -881,8 +854,8 @@ namespace TGD.CombatV2
             _painter.Clear();
             _showing = false;
             _previewDirty = true;
-            _previewAnchorVersion = -1;
-            _planAnchorVersion = -1;
+            _hasPreviewAnchorSnapshot = false;
+            _hasPlanAnchorSnapshot = false;
             HexMoveEvents.RaiseRangeHidden();
         }
 
@@ -939,7 +912,7 @@ namespace TGD.CombatV2
         }
 
         // ===== 逐格移动 + 起步一次性转向 + 占位提交 =====
-        IEnumerator RunPathTween_WithTime(List<Hex> path, int plannedAnchorVersion)
+        IEnumerator RunPathTween_WithTime(List<Hex> path)
         {
             Debug.Log($"Ready? L={authoring?.Layout != null} U={OwnerUnit != null} occ={_occ != null} actor={_selfActor != null}");
             if (path == null || path.Count < 2) yield break;
@@ -948,9 +921,9 @@ namespace TGD.CombatV2
 
             try
             {
-                if (_playerBridge != null && plannedAnchorVersion >= 0 && plannedAnchorVersion != _playerBridge.AnchorVersion)
+                if (_hasPlanAnchorSnapshot && !_planAnchorSnapshot.Equals(CurrentAnchor))
                 {
-                    Debug.LogWarning($"[Guard] Anchor changed before execute (planV={plannedAnchorVersion} nowV={_playerBridge.AnchorVersion}). Abort.", this);
+                    Debug.LogWarning($"[Guard] Anchor changed before execute (planAnchor={_planAnchorSnapshot} now={CurrentAnchor}). Abort.", this);
                     ClearPreviewReservations("AnchorChanged");
                     HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.PathBlocked, "Anchor changed.");
                     yield break;
@@ -1140,7 +1113,7 @@ namespace TGD.CombatV2
             finally
             {
                 _isExecuting = false;
-                _planAnchorVersion = -1;
+                _hasPlanAnchorSnapshot = false;
             }
         }
 
@@ -1170,45 +1143,6 @@ namespace TGD.CombatV2
                 && _selfActor != null;
         }
 
-
-        PlayerOccupancyBridge ResolvePlayerBridge()
-            => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
-
-        void TryResolveBridge()
-        {
-            var desired = ResolvePlayerBridge();
-            if (!ReferenceEquals(_playerBridge, desired))
-                _playerBridge = desired;
-
-            if (bridgeOverride != null && !ReferenceEquals(_bridge, bridgeOverride))
-                _bridge = bridgeOverride;
-
-            if (_bridge == null && desired != null)
-                _bridge = desired;
-
-            if (_bridge == null)
-            {
-                var local = GetComponent<PlayerOccupancyBridge>();
-                if (local != null)
-                    _bridge = local;
-            }
-
-            if (_bridge == null)
-            {
-                var parentBridge = GetComponentInParent<PlayerOccupancyBridge>(true);
-                if (parentBridge != null)
-                    _bridge = parentBridge;
-            }
-
-            if (_bridge == null && ctx != null)
-                _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
-
-            if (_bridge == null)
-                _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-
-            if (_playerBridge == null)
-                _playerBridge = _bridge as PlayerOccupancyBridge;
-        }
 
     }
 }
