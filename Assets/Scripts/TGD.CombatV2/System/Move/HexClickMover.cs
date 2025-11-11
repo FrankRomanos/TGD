@@ -26,6 +26,9 @@ namespace TGD.CombatV2
         public DefaultTargetValidator targetValidator;
         public HexOccupancyService occupancyService;
 
+        [SerializeField] UnitRuntimeContext _ctx;
+        UnitGridAdapter _selfActor;
+
         [Header("Bridge (optional)")]
         [HideInInspector]
         public PlayerOccupancyBridge bridgeOverride;   // ★ 新增
@@ -41,17 +44,20 @@ namespace TGD.CombatV2
         public string CooldownKey => ResolveMoveSkillId();
 
         Transform ResolveSelfView()
-            => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
-
-        Hex CurrentAnchor
         {
-            get
-            {
-                var unit = ResolveSelfUnit();
-                return UnitRuntimeBindingUtil.ResolveAnchor(unit, _occ, _bridge);
-            }
-        }
+            // 1) 先用你的通用解析（UnitViewHandle / UnitLocator / 显式 override）
+            var t = UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
+            if (t) return t;
 
+            // 2) 兜底：_selfActor 本身就是 UnitGridAdapter（组件）——直接用它的 transform
+            if (_selfActor is Component comp && comp) return comp.transform;
+
+            return null;
+        }
+        // 替换整个属性
+        Hex CurrentAnchor =>
+            (_selfActor != null) ? _selfActor.Anchor
+            : (OwnerUnit != null ? OwnerUnit.Position : Hex.Zero);
 
         public void AttachTurnManager(TurnManagerV2 tm)
         {
@@ -239,13 +245,12 @@ namespace TGD.CombatV2
 
             RefreshStateForAim();
 
-            _bridge?.EnsurePlacedNow();
             if (occupancyService) _occ = occupancyService.Get();
 
             if (ctx != null && ctx.Entangled) return result;
 
             var unit = OwnerUnit;
-            if (authoring?.Layout == null || unit == null || _bridge == null)
+            if (authoring?.Layout == null || unit == null || _selfActor == null)
                 return result;
             if (occupancyService != null && _occ == null)
                 return result;
@@ -336,33 +341,27 @@ namespace TGD.CombatV2
             var missing = new List<string>();
             if (!authoring) missing.Add(nameof(authoring));
             else if (authoring.Layout == null) missing.Add("authoring.Layout");
-
-            var unit = OwnerUnit;
-            if (unit == null) missing.Add("OwnerUnit");
-
+            if (OwnerUnit == null) missing.Add("OwnerUnit");
             if (occupancyService == null) missing.Add(nameof(occupancyService));
             if (_occ == null) missing.Add("_occ");
-            if (_bridge == null) missing.Add("bridge");
-
+            if (_selfActor == null) missing.Add("_selfActor"); // <- 用 _selfActor 取代 bridge
             if (missing.Count > 0)
                 Debug.LogWarning($"[HexClickMover] Not ready. Missing: {string.Join(", ", missing)}", this);
 #endif
         }
 
 
+
         public bool TryPrecheckAim(out string reason, bool raiseHud = true)
         {
             RefreshStateForAim();
-
-            // 统一拿占位
-            _bridge?.EnsurePlacedNow();
             if (occupancyService)
                 _occ = occupancyService.Get();
 
             var unit = OwnerUnit;
 
             // ✅ 放宽“就绪”条件：不再要求额外测试脚手架
-            if (authoring == null || authoring.Layout == null || unit == null || _bridge == null || _occ == null)
+            if (authoring == null || authoring.Layout == null || unit == null || _selfActor == null || _occ == null)
             {
                 DumpReadiness();
                 if (raiseHud) HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null);
@@ -431,7 +430,6 @@ namespace TGD.CombatV2
             ClearExecReport();
             RefreshStateForAim();
 
-            _bridge?.EnsurePlacedNow();
             if (occupancyService) _occ = occupancyService.Get();
 
             var unit = OwnerUnit;
@@ -466,33 +464,21 @@ namespace TGD.CombatV2
             }
         }
 
-        IGridActor SelfActor
-        {
-            get
-            {
-                var unit = OwnerUnit;
-                return UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-            }
-        }
+        IGridActor SelfActor => _selfActor;
+
 
         void Awake()
         {
             RefreshPainterAndSticky(markPreviewDirty: false);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
-
+            OccControllerReady.Ensure(ctx, this, out _selfActor, placeIfMissing: true);
             if (!occupancyService)
                 occupancyService = GetComponentInParent<HexOccupancyService>(true);
             if (!targetValidator)
                 targetValidator = GetComponentInParent<DefaultTargetValidator>(true);
 
             TryResolveBridge();
-
-#if UNITY_EDITOR
-            var bridges = GetComponentsInParent<PlayerOccupancyBridge>(true);
-            if (bridges != null && bridges.Length > 1)
-                Debug.LogError($"[Guard] Multiple PlayerOccupancyBridge in parents: {bridges.Length}. Keep ONE.", this);
-#endif
 
             if (occupancyService == null && _playerBridge != null && _playerBridge.occupancyService)
                 occupancyService = _playerBridge.occupancyService;
@@ -556,21 +542,16 @@ namespace TGD.CombatV2
                 _occ = occupancyService ? occupancyService.Get() : null;
             }
 
-            _bridge?.EnsurePlacedNow();
         }
 
         protected override void HookEvents(bool bind)
         {
-            if (bind)
-                UpdateBridgeSubscription(ResolvePlayerBridge());
-            else
-                UpdateBridgeSubscription(null);
+
         }
 
         protected override void OnEnable()
         {
             base.OnEnable();
-            TryResolveBridge();
             EnsureBound();
         }
 
@@ -589,7 +570,6 @@ namespace TGD.CombatV2
 
         protected override void OnDestroy()
         {
-            UpdateBridgeSubscription(null);
             base.OnDestroy();
         }
 
@@ -699,11 +679,10 @@ namespace TGD.CombatV2
         {
             result = null;
 
-            _bridge?.EnsurePlacedNow();
             if (occupancyService) _occ = occupancyService.Get();
 
             var unit = OwnerUnit;
-            if (authoring?.Layout == null || unit == null || _bridge == null)
+            if (authoring?.Layout == null || unit == null || _selfActor == null)
                 return false;
             if (occupancyService != null && _occ == null)
                 return false;
@@ -863,10 +842,9 @@ namespace TGD.CombatV2
             LogInternal($"[Probe][MoveAim] unit={label} unitPos={unitPos} anchor={anchor} occReady={occOk} bridge={_playerBridge?.GetInstanceID()}");
 #endif
 
-            _bridge?.EnsurePlacedNow();
             if (occupancyService) _occ = occupancyService.Get();
 
-            if (authoring == null || authoring.Layout == null || unit == null || _occ == null || _bridge == null)
+            if (authoring == null || authoring.Layout == null || unit == null || _occ == null || _selfActor == null)
             { ClearPreviewReservations("NotReady"); HexMoveEvents.RaiseRejected(unit, MoveBlockReason.NotReady, null); return; }
 
             _painter.Clear();
@@ -963,6 +941,7 @@ namespace TGD.CombatV2
         // ===== 逐格移动 + 起步一次性转向 + 占位提交 =====
         IEnumerator RunPathTween_WithTime(List<Hex> path, int plannedAnchorVersion)
         {
+            Debug.Log($"Ready? L={authoring?.Layout != null} U={OwnerUnit != null} occ={_occ != null} actor={_selfActor != null}");
             if (path == null || path.Count < 2) yield break;
 
             _isExecuting = true;
@@ -977,11 +956,10 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                _bridge?.EnsurePlacedNow();
                 if (occupancyService) _occ = occupancyService.Get();
-                if (authoring == null || authoring.Layout == null || OwnerUnit == null || _occ == null || _bridge == null)
+                if (authoring == null || authoring.Layout == null || OwnerUnit == null || _occ == null || _selfActor == null)
                 {
-                    ClearPreviewReservations("NotReady");
+                    ClearPreviewReservations("NotReady(no-actor-or-occ)");
                     yield break;
                 }
 
@@ -1092,11 +1070,13 @@ namespace TGD.CombatV2
                     while (t < 1f)
                     {
                         t += Time.deltaTime / stepDuration;
-                        if (view != null) view.position = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+                        var p = Vector3.Lerp(fromW, toW, Mathf.Clamp01(t));
+
+                        if (view != null) view.position = p;
+                        else if (_selfActor is Component comp && comp) comp.transform.position = p;
+
                         yield return null;
                     }
-
-                    _bridge?.MoveCommit(to, SelfActor != null ? SelfActor.Facing : unit.Facing);
 
                     if (_sticky != null && status != null &&
                         _sticky.TryGetSticky(to, out var stickM, out var stickTurns, out var tag) &&
@@ -1112,16 +1092,28 @@ namespace TGD.CombatV2
                 var tokenForCommit = _previewToken;
                 if (OwnerUnit != null)
                 {
-                    var finalAnchor = CurrentAnchor;
-                    var finalFacing = SelfActor != null ? SelfActor.Facing : OwnerUnit.Facing;
-                    if (_bridge != null)
+                    var finalAnchor = reached[reached.Count - 1];
+                    var finalFacing = (_selfActor != null) ? _selfActor.Facing : OwnerUnit.Facing;
+
+                    var occ = ctx != null ? ctx.occService : null;
+                    if (occ != null)
                     {
-                        bool committed = _bridge.MoveCommit(finalAnchor, finalFacing, tokenForCommit);
+                        bool committed;
+                        OccTxnId txn; OccFailReason reason;
+
+                        if (tokenForCommit.IsValid)
+                            committed = occ.Commit(ctx, tokenForCommit, finalAnchor, finalFacing, out txn, out reason);
+                        else
+                            committed = occ.TryMove(ctx, finalAnchor, finalFacing, out txn, out reason);
+
                         if (!committed && tokenForCommit.IsValid)
                             HexMoveEvents.RaiseRejected(OwnerUnit, MoveBlockReason.PathBlocked, "CommitFailed");
                     }
+
                     UnitRuntimeBindingUtil.SyncUnit(OwnerUnit, finalAnchor, finalFacing);
                 }
+
+
 
                 _previewToken = default;
                 _previewReservedTarget = Hex.Zero;
@@ -1159,45 +1151,25 @@ namespace TGD.CombatV2
         {
             ClearExecReport();
         }
+        // 替换整个 EnsureBound 方法体
         bool EnsureBound()
         {
-            TryResolveBridge();
-            var desiredBridge = ResolvePlayerBridge();
-            if (!ReferenceEquals(_playerBridge, desiredBridge))
-                _playerBridge = desiredBridge;
-
-            UpdateBridgeSubscription(desiredBridge);
-
-            if (desiredBridge != null)
-            {
-                _bridge = desiredBridge;
-            }
-            else if (_bridge == null)
-            {
-                if (ctx != null)
-                    _bridge = ctx.GetComponentInParent<IActorOccupancyBridge>(true);
-
-                if (_bridge == null)
-                    _bridge = GetComponentInParent<IActorOccupancyBridge>(true);
-            }
-
-            if (_playerBridge == null)
-                _playerBridge = _bridge as PlayerOccupancyBridge;
+            // 统一通过 IOcc 解析/放置（必要时首放）
+            OccControllerReady.Ensure(ctx, this, out _selfActor, placeIfMissing: true);
 
             if (occupancyService == null)
-                occupancyService = (_turnManager?.occupancyService) ?? (_playerBridge?.occupancyService);
+                occupancyService = GetComponentInParent<HexOccupancyService>(true);
 
             if (_occ == null && occupancyService != null)
                 _occ = occupancyService.Get();
 
-            var unit = ResolveSelfUnit();
-            var actor = UnitRuntimeBindingUtil.ResolveGridActor(unit, _occ, _bridge);
-
+            var unit = OwnerUnit;
             return authoring?.Layout != null
                 && unit != null
                 && _occ != null
-                && actor != null;
+                && _selfActor != null;
         }
+
 
         PlayerOccupancyBridge ResolvePlayerBridge()
             => UnitRuntimeBindingUtil.ResolvePlayerBridge(this, ctx, bridgeOverride, _playerBridge);
@@ -1238,24 +1210,5 @@ namespace TGD.CombatV2
                 _playerBridge = _bridge as PlayerOccupancyBridge;
         }
 
-        void UpdateBridgeSubscription(PlayerOccupancyBridge desired)
-        {
-            if (_boundPlayerBridge == desired)
-                return;
-
-            if (_boundPlayerBridge != null)
-                _boundPlayerBridge.AnchorChanged -= HandleAnchorChanged;
-
-            _boundPlayerBridge = null;
-
-            if (!isActiveAndEnabled)
-                return;
-
-            if (desired != null)
-            {
-                desired.AnchorChanged += HandleAnchorChanged;
-                _boundPlayerBridge = desired;
-            }
-        }
     }
 }

@@ -439,6 +439,60 @@ namespace TGD.CombatV2
                 }
             }
         }
+        // =======================
+        // Combo & Pending-Attack 还原块（必需）
+        // =======================
+
+        // 本回合已累计的普攻次数（用于连击倍率/能量/动画段位）
+        int _attacksThisTurn = 0;
+
+        // 用于在动画层回调（StrikeFired/AnimationEnded）之间临时挂起一次攻击态
+        struct PendingAttack
+        {
+            public bool active;
+            public bool strikeProcessed;
+            public Unit unit;
+            public Hex target;
+            public int comboIndex;
+        }
+        PendingAttack _pendingAttack;
+
+        // 至少1、最多4段（你之前的规则），基于 _attacksThisTurn 计算当前段位
+        int ResolveComboIndex()
+        {
+            return Mathf.Clamp(Mathf.Max(1, _attacksThisTurn), 1, 4);
+        }
+
+        // 清理一次挂起的攻击态（在动画结束、移动结束、禁用时都会调用）
+        void ClearPendingAttack()
+        {
+            _pendingAttack.active = false;
+            _pendingAttack.strikeProcessed = false;
+            _pendingAttack.unit = null;
+            _pendingAttack.target = default;
+            _pendingAttack.comboIndex = 0;
+        }
+
+        // 触发一次攻击动画：挂起待击打态，并发事件给动画系统
+        void TriggerAttackAnimation(Unit unit, Hex target)
+        {
+            if (unit == null) return;
+
+            int comboIndex = ResolveComboIndex();
+
+            // 先清空旧的待击打态
+            ClearPendingAttack();
+
+            // 挂起本次
+            _pendingAttack.active = true;
+            _pendingAttack.strikeProcessed = false;
+            _pendingAttack.unit = unit;
+            _pendingAttack.target = target;
+            _pendingAttack.comboIndex = comboIndex;
+
+            // 通知动画层（你的动画层会在合适时机 RaiseAttackStrikeFired / RaiseAttackAnimationEnded）
+            AttackEventsV2.RaiseAttackAnimation(unit, comboIndex);
+        }
 
         void DiscardRuleCostOverride(Unit unit, PreDeduct preDeduct)
         {
