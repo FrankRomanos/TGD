@@ -112,7 +112,9 @@ namespace TGD.HexBoard.Path
 
         public static IPassability ForMove(UnitRuntimeContext ctx, IGridActor self, Hex fallbackStart)
         {
-            var occ = ctx?.occService?.Get();
+            HexOccupancy occ = null;
+            if (ctx?.occService is HexOccupancyService service)
+                occ = service.Get();
             return WithStart(new OccServicePassability(ctx, self), occ, self, fallbackStart);
         }
 
