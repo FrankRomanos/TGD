@@ -20,6 +20,26 @@ namespace TGD.HexBoard.Path
         }
     }
 
+    sealed class OccServicePassability : IPassability
+    {
+        readonly UnitRuntimeContext _ctx;
+        readonly Facing4 _face;
+
+        public OccServicePassability(UnitRuntimeContext ctx, IGridActor self)
+        {
+            _ctx = ctx;
+            _face = self != null ? self.Facing : Facing4.PlusQ;
+        }
+
+        public bool IsBlocked(Hex h)
+        {
+            var service = _ctx?.occService;
+            if (service == null)
+                return true;
+            return !service.IsFreeFor(_ctx, h, _face);
+        }
+    }
+
     sealed class StaticTerrainOnlyPassability : IPassability
     {
         readonly HexOccupancy _occ;
@@ -87,11 +107,25 @@ namespace TGD.HexBoard.Path
 
     public static class PassabilityFactory
     {
+        static IPassability WithStart(IPassability inner, HexOccupancy occ, IGridActor self, Hex fallbackStart)
+            => new StartFootprintDecorator(inner, occ, self, fallbackStart);
+
+        public static IPassability ForMove(UnitRuntimeContext ctx, IGridActor self, Hex fallbackStart)
+        {
+            HexOccupancy occ = null;
+            if (ctx?.occService is HexOccupancyService service)
+                occ = service.Get();
+            return WithStart(new OccServicePassability(ctx, self), occ, self, fallbackStart);
+        }
+
         public static IPassability ForMove(HexOccupancy occ, IGridActor self, Hex fallbackStart)
-            => new StartFootprintDecorator(new FormalUnitsBlockPassability(occ), occ, self, fallbackStart);
+            => WithStart(new FormalUnitsBlockPassability(occ), occ, self, fallbackStart);
 
         public static IPassability ForApproach(HexOccupancy occ, IGridActor self, Hex fallbackStart)
             => ForMove(occ, self, fallbackStart);
+
+        public static IPassability ForApproach(UnitRuntimeContext ctx, IGridActor self, Hex fallbackStart)
+            => ForMove(ctx, self, fallbackStart);
 
         public static IPassability StaticTerrainOnly(HexOccupancy occ)
             => new StaticTerrainOnlyPassability(occ);
