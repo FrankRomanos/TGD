@@ -1,5 +1,6 @@
 ﻿using System;
 using TGD.CoreV2;
+using TGD.HexBoard;
 using UnityEngine;
 
 namespace TGD.DataV2
@@ -27,6 +28,10 @@ namespace TGD.DataV2
         [Tooltip("Optional portrait sprite exposed to combat UI layers.")]
         public Sprite avatar;
 
+        [Header("Grid Occupancy")]
+        [Tooltip("Optional footprint shape used when spawning this unit. Null uses factory fallback.")]
+        public FootprintShape footprint;
+
         [Header("Abilities")]
         [Tooltip("Initial ability loadout for this unit.")]
         public AbilitySlot[] abilities = new AbilitySlot[0];
@@ -34,6 +39,7 @@ namespace TGD.DataV2
         [Serializable]
         public struct AbilitySlot
         {
+            [SkillIdReference]
             public string skillId;
             public bool learned;
             [Min(0)]

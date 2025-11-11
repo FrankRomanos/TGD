@@ -3524,13 +3524,16 @@ namespace TGD.CombatV2
             if (options != null && options.Count > 1)
                 options.Sort(CompareChainOptions);
 
+            var skillIndex = ResolveSkillIndex();
             Unit lastOwner = null;
             for (int i = 0; i < options.Count; i++)
             {
                 var option = options[i];
                 bool hasTool = TryResolveAliveTool(option.tool, out var tool);
                 string id = hasTool ? tool.Id : string.Empty;
-                string name = string.IsNullOrEmpty(id) ? "?" : id;
+                string name = ResolveSkillDisplayNameForUi(id, hasTool ? tool : null, skillIndex);
+                if (string.IsNullOrEmpty(name))
+                    name = string.IsNullOrEmpty(id) ? "?" : id;
                 string meta = FormatChainOptionMeta(option);
                 var icon = ResolveChainOptionIcon(hasTool ? tool : null);
 
@@ -5287,6 +5290,20 @@ namespace TGD.CombatV2
                 return soRulebook.skillIndex;
 
             return null;
+        }
+
+        string ResolveSkillDisplayNameForUi(string skillId, IActionToolV2 tool, SkillIndex index = null)
+        {
+            SkillDefinitionV2 fallbackDefinition = null;
+            if (tool is SkillDefinitionActionTool defTool)
+                fallbackDefinition = defTool.Definition;
+
+            index ??= ResolveSkillIndex();
+            var display = SkillDisplayNameUtility.ResolveDisplayName(skillId, index, fallbackDefinition);
+            if (!string.IsNullOrEmpty(display))
+                return display;
+
+            return SkillDisplayNameUtility.NormalizeId(skillId);
         }
 
         static string GetHierarchyPath(GameObject go)

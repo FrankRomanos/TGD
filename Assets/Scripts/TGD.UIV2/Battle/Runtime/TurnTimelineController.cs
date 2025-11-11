@@ -3,8 +3,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using TGD.CombatV2;
-using TGD.HexBoard;
 using TGD.CoreV2;
+using TGD.DataV2;
+using TGD.HexBoard;
 
 namespace TGD.UIV2.Battle
 {
@@ -1134,16 +1135,18 @@ namespace TGD.UIV2.Battle
             if (unit == null || turnManager == null)
                 return string.Empty;
 
-            if (turnManager.TryGetFullRoundInfo(unit, out int roundsRemaining, out int totalRounds, out _))
+            if (turnManager.TryGetFullRoundInfo(unit, out int roundsRemaining, out int totalRounds, out string skillId))
             {
+                string display = SkillDisplayNameUtility.ResolveDisplayName(skillId, SkillIndex.LoadDefault());
+                string prefix = string.IsNullOrEmpty(display) ? "FullRound" : $"FullRound {display}";
                 int rounds = Mathf.Max(0, roundsRemaining);
                 if (rounds > 0)
-                    return $"FullRound:{rounds}";
+                    return $"{prefix} ({rounds})";
 
                 if (totalRounds > 0)
-                    return $"FullRound:{totalRounds}";
+                    return $"{prefix} ({totalRounds})";
 
-                return "FullRound";
+                return prefix;
             }
 
             return string.Empty;

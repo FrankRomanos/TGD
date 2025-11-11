@@ -40,6 +40,7 @@ namespace TGD.LevelV2
         readonly HashSet<string> _usedIds = new();
         bool _battleStarted;
         bool _loggedMissingSkillIndex;
+        bool _triedLoadFallbackFootprint;
 
         struct SharedRefs
         {
@@ -132,6 +133,10 @@ namespace TGD.LevelV2
             RegisterTurnSystems(unit, context, cooldownHub, final.faction, shared.turnManager);
 
             var adapter = EnsureGridAdapter(go, unit);
+            var resolvedFootprint = ResolveFootprint(final.footprint);
+            if (adapter != null)
+                adapter.Footprint = resolvedFootprint;
+
             WireMovementAndAttack(go, context, cooldownHub, unit, ref shared);
             if (!WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, unit.Facing, ref shared))
             {
@@ -225,6 +230,26 @@ namespace TGD.LevelV2
                 return defaultPrefab;
             }
             return null;
+        }
+
+        FootprintShape ResolveFootprint(FootprintShape preferred)
+        {
+            if (preferred != null)
+                return preferred;
+
+            if (defaultFootprint != null)
+                return defaultFootprint;
+
+            if (!_triedLoadFallbackFootprint)
+            {
+                _triedLoadFallbackFootprint = true;
+                const string fallbackResourcePath = "FootPrintShape/FP_Single";
+                defaultFootprint = Resources.Load<FootprintShape>(fallbackResourcePath);
+                if (defaultFootprint == null)
+                    Debug.LogWarning($"[Factory] Missing fallback footprint shape at Resources/{fallbackResourcePath}.", this);
+            }
+
+            return defaultFootprint;
         }
 
         static UnitRuntimeContext EnsureContext(GameObject go)

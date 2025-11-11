@@ -38,6 +38,8 @@ namespace TGD.DataV2
 
         private readonly Dictionary<string, SkillInfo> _map = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<string>> _derivedMap = new(StringComparer.OrdinalIgnoreCase);
+        public const string DefaultResourcePath = "Units/Blueprints/SkillIndex";
+        static SkillIndex _cachedDefault;
 
         public bool Contains(string id) => TryGet(id, out _);
 
@@ -75,10 +77,30 @@ namespace TGD.DataV2
             return Array.Empty<string>();
         }
 
-        private void OnEnable() => Rebuild();
+        private void OnEnable()
+        {
+            Rebuild();
+#if UNITY_EDITOR
+            SetCachedDefaultForEditor(this);
+#endif
+        }
 
 #if UNITY_EDITOR
         private void OnValidate() => Rebuild();
+#endif
+
+        public static SkillIndex LoadDefault()
+        {
+            if (_cachedDefault == null)
+                _cachedDefault = Resources.Load<SkillIndex>(DefaultResourcePath);
+            return _cachedDefault;
+        }
+
+#if UNITY_EDITOR
+        internal static void SetCachedDefaultForEditor(SkillIndex index)
+        {
+            _cachedDefault = index;
+        }
 #endif
 
         private void Rebuild()

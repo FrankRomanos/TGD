@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
+using TGD.HexBoard;
 using UnityEngine;
 
 namespace TGD.DataV2
@@ -17,6 +18,7 @@ namespace TGD.DataV2
         public StatsV2 stats = new StatsV2();
         public List<LearnedAbility> abilities = new List<LearnedAbility>();
         public Sprite avatar;
+        public FootprintShape footprint;
 
         public bool IsFriendly => faction == UnitFaction.Friendly;
         public bool IsEnemy => faction == UnitFaction.Enemy;

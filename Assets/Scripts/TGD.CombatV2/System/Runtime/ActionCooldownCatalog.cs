@@ -15,6 +15,7 @@ namespace TGD.DataV2
         [Serializable]
         public struct Entry
         {
+            [SkillIdReference]
             public string key;     // 比如 "Move" / "Attack" / "ShieldBash" / "Fireball"
             [Min(0)] public int seconds;
         }
@@ -64,8 +65,9 @@ namespace TGD.DataV2
 
             foreach (var e in entries)
             {
-                if (string.IsNullOrWhiteSpace(e.key)) continue;
-                _map[e.key] = Mathf.Max(0, e.seconds);
+                string key = SkillDisplayNameUtility.NormalizeId(e.key);
+                if (string.IsNullOrEmpty(key)) continue;
+                _map[key] = Mathf.Max(0, e.seconds);
             }
         }
 
