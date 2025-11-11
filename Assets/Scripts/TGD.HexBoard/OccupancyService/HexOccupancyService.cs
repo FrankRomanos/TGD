@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
 using UnityEngine;
@@ -211,12 +212,12 @@ namespace TGD.HexBoard
                     break;
                 }
 
-                if (store.TryGetSoftOwner(cell, out var owner) && owner == actor)
+                if (store.TryGetSoftOwner(cell, out var owner) && ReferenceEquals(owner, actor))
                     continue;
 
                 if (!store.TempReserveSoft(cell, actor))
                 {
-                    if (store.TryGetSoftOwner(cell, out owner) && owner == actor)
+                    if (store.TryGetSoftOwner(cell, out owner) && ReferenceEquals(owner, actor))
                         continue;
                     blocked = true;
                     break;
@@ -262,7 +263,7 @@ namespace TGD.HexBoard
 
                 if (!store.TempReserve(cell, actor))
                 {
-                    if (store.TryGetTempOwner(cell, out var owner) && owner == actor)
+                    if (store.TryGetTempOwner(cell, out var owner) && ReferenceEquals(owner, actor))
                         continue;
                     blocked = true;
                     break;
