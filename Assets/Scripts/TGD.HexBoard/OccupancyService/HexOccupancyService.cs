@@ -13,6 +13,10 @@ namespace TGD.HexBoard
         [SerializeField]
         string boardIdOverride;
 
+        [Header("Diagnostics")]
+        [SerializeField]
+        bool diagnosticsLoggingEnabled;
+
         HexOccupancy _occ;
         int _nextTxnId = 1;
         int _storeVersion;
@@ -170,7 +174,8 @@ namespace TGD.HexBoard
 
             txn = NextTxn();
             _storeVersion++;
-            OccDiagnostics.Log(action, txn, actor?.Id ?? "?", from, anchor, OccFailReason.None);
+            if (diagnosticsLoggingEnabled)
+                OccDiagnostics.Log(action, txn, actor?.Id ?? "?", from, anchor, OccFailReason.None);
             return true;
         }
 
@@ -335,7 +340,8 @@ namespace TGD.HexBoard
             store.Remove(actor);
             _storeVersion++;
             txn = NextTxn();
-            OccDiagnostics.Log(OccAction.Remove, txn, actor.Id, from, Hex.Zero, OccFailReason.None);
+            if (diagnosticsLoggingEnabled)
+                OccDiagnostics.Log(OccAction.Remove, txn, actor.Id, from, Hex.Zero, OccFailReason.None);
             CancelAll(ctx, "Remove");
         }
 
@@ -413,7 +419,8 @@ namespace TGD.HexBoard
                 mode = mode
             };
             TrackToken(ctx, token, reservation);
-            OccDiagnostics.LogReserve(token, actor.Id, reserved.Count, mode);
+            if (diagnosticsLoggingEnabled)
+                OccDiagnostics.LogReserve(token, actor.Id, reserved.Count, mode);
             result = OccReserveResult.Ok;
             return true;
         }
@@ -446,7 +453,8 @@ namespace TGD.HexBoard
                 return false;
 
             var ok = TryPlaceInternal(ownerCtx, actor, finalAnchor, facing, OccAction.Commit, out txn, out reason);
-            OccDiagnostics.LogCommit(token, finalAnchor, reason);
+            if (diagnosticsLoggingEnabled)
+                OccDiagnostics.LogCommit(token, finalAnchor, reason);
 
             ReleaseReservation(reservation);
             UntrackToken(token, reservation.context);
@@ -466,7 +474,8 @@ namespace TGD.HexBoard
 
             ReleaseReservation(reservation);
             UntrackToken(token, reservation.context);
-            OccDiagnostics.LogCancel(token, reason);
+            if (diagnosticsLoggingEnabled)
+                OccDiagnostics.LogCancel(token, reason);
             return true;
         }
 
