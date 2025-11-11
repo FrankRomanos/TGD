@@ -1138,7 +1138,7 @@ namespace TGD.UIV2.Battle
             if (turnManager.TryGetFullRoundInfo(unit, out int roundsRemaining, out int totalRounds, out string skillId))
             {
                 string display = SkillDisplayNameUtility.ResolveDisplayName(skillId, SkillIndex.LoadDefault());
-                string prefix = string.IsNullOrEmpty(display) ? "FullRound" : $"FullRound {display}";
+                string prefix = string.IsNullOrEmpty(display) ? "FullRound" : $"{display}";
                 int rounds = Mathf.Max(0, roundsRemaining);
                 if (rounds > 0)
                     return $"{prefix} ({rounds})";
