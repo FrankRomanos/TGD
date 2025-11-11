@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TGD.CombatV2.Integration;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -77,47 +77,7 @@ namespace TGD.CombatV2
             unit.Facing = facing;
         }
 
-        public static PlayerOccupancyBridge ResolvePlayerBridge(Component owner, UnitRuntimeContext ctx, PlayerOccupancyBridge bridgeOverride, PlayerOccupancyBridge current)
-        {
-            if (bridgeOverride != null)
-                return bridgeOverride;
-
-            if (current != null && current)
-                return current;
-
-            if (ctx != null)
-            {
-                var candidate = ctx.GetComponent<PlayerOccupancyBridge>();
-                if (candidate != null)
-                    return candidate;
-
-                candidate = ctx.GetComponentInChildren<PlayerOccupancyBridge>(true);
-                if (candidate != null)
-                    return candidate;
-
-                candidate = ctx.GetComponentInParent<PlayerOccupancyBridge>(true);
-                if (candidate != null)
-                    return candidate;
-            }
-
-            if (owner != null)
-            {
-                var candidate = owner.GetComponent<PlayerOccupancyBridge>();
-                if (candidate != null)
-                    return candidate;
-            }
-
-            if (owner != null)
-            {
-                var candidate = owner.GetComponentInChildren<PlayerOccupancyBridge>(true);
-                if (candidate != null)
-                    return candidate;
-
-                return owner.GetComponentInParent<PlayerOccupancyBridge>(true);
-            }
-
-            return null;
-        }
+      
 
         public static T EnsureToolOnTray<T>(UnitRuntimeContext ctx, string tray = "ActionTools") where T : Component
         {

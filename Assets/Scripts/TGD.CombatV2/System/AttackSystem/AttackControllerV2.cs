@@ -184,7 +184,7 @@ namespace TGD.CombatV2
 
         PendingAttack _pendingAttack;
 
-        Unit ResolveSelfUnit() => OwnerUnit;
+        new Unit ResolveSelfUnit() => OwnerUnit;
 
         Transform ResolveSelfView()
             => UnitRuntimeBindingUtil.ResolveUnitView(this, ctx, viewOverride);
@@ -1983,27 +1983,29 @@ namespace TGD.CombatV2
             AttackEventsV2.RaiseAttackAnimation(unit, comboIndex);
         }
 
+        // AttackControllerV2.cs
         void RefreshOccupancy()
         {
-            if (occupancyService == null)
-            {
-                if (turnManager != null && turnManager.occupancyService != null)
-                {
-                    occupancyService = turnManager.occupancyService;
-                }
-                else if (ctx != null && ctx.occService is HexOccServiceAdapter adapter && adapter.backing != null)
-                {
-                    occupancyService = adapter.backing;
-                }
-                else
-                {
-                    occupancyService = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
-                }
-            }
+            // 1) 优先使用 TurnManager 挂的服务
+            HexOccupancyService svc = (turnManager != null) ? turnManager.occupancyService : null;
 
-            if (occupancyService != null)
-                _occ = occupancyService.Get();
+            // 2) 其余情况下，从自身/父链拿一次
+            if (svc == null)
+                svc = GetComponent<HexOccupancyService>() ?? GetComponentInParent<HexOccupancyService>(true);
+
+            // 3) 兜底：全场景找一次（含未激活对象）
+#if UNITY_2023_1_OR_NEWER
+            if (svc == null)
+                svc = Object.FindFirstObjectByType<HexOccupancyService>(FindObjectsInactive.Include);
+#else
+    if (svc == null)
+        svc = Object.FindObjectOfType<HexOccupancyService>();
+#endif
+
+            occupancyService = svc;
+            _occ = (svc != null) ? svc.Get() : null;
         }
+
 
         bool EnsureBound()
         {

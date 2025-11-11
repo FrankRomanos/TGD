@@ -280,19 +280,36 @@ namespace TGD.LevelV2
 
         static void InjectOccService(UnitRuntimeContext ctx)
         {
-            if (ctx == null)
-                return;
+            if (ctx == null) return;
 
-            var occAdapter = UnityEngine.Object.FindFirstObjectByType<HexOccServiceAdapter>(FindObjectsInactive.Include);
-            if (occAdapter == null)
+            if (ctx.occService != null)
             {
-                Debug.LogError("[Occ] HexOccServiceAdapter not found.");
+                OccDiagnostics.AssertSingleStore(ctx.occService, "Factory.Spawn");
                 return;
             }
 
-            ctx.occService = occAdapter;
+#if UNITY_2023_1_OR_NEWER
+            var all = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+    var all = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>(true);
+#endif
+
+            IOccupancyService found = null;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] is IOccupancyService svc) { found = svc; break; }
+            }
+
+            if (found == null)
+            {
+                Debug.LogError("[Occ] No IOccupancyService found in scene. Make HexOccupancyService implement IOccupancyService.");
+                return;
+            }
+
+            ctx.occService = found;
             OccDiagnostics.AssertSingleStore(ctx.occService, "Factory.Spawn");
         }
+
 
         string ReserveUnitId(string preferred, string fallback)
         {
