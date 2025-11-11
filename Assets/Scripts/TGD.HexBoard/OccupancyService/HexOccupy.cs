@@ -307,5 +307,38 @@ namespace TGD.HexBoard
                     return 0;
             }
         }
+
+        public bool TryGetTempOwner(Hex cell, out IGridActor owner)
+        {
+            if (tempCellToActor.TryGetValue(cell, out var found) && found != null)
+            {
+                owner = found;
+                return true;
+            }
+
+            owner = null;
+            return false;
+        }
+
+        public bool TryGetSoftOwner(Hex cell, out IGridActor owner)
+        {
+            if (softCellToActor.TryGetValue(cell, out var found) && found != null)
+            {
+                owner = found;
+                return true;
+            }
+
+            owner = null;
+            return false;
+        }
+
+        public IEnumerable<IGridActor> EnumerateActors()
+        {
+            foreach (var pair in actorToCells)
+            {
+                if (pair.Key != null)
+                    yield return pair.Key;
+            }
+        }
     }
 }
