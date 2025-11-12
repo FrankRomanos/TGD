@@ -14,6 +14,15 @@ namespace TGD.CombatV2
     [DisallowMultipleComponent]
     public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser
     {
+        // NOTE: This is one of the oldest controllers that survived into CombatV2.
+        // It still acts as the glue between CAMV2 (action authority), TMV2 (time/energy authority)
+        // and the IOcc service. Whenever you feel lost, read the flow top-to-bottom:
+        //  1. Awake wires context/factory dependencies so UnitFactory placement “just works”.
+        //  2. Aim/preview (W1) = BuildPreview/RenderPreview → soft reserve path/tokens.
+        //  3. Confirm (W2) = OnConfirm/RunAttack → report time+energy to TMV2 and drive animation.
+        //  4. Cleanup (W4/W4.5) = ClearTempReservations/TriggerAttackAnimation callbacks.
+        // Refactors should keep these steps explicit – today the logic is verbose because it
+        // mirrors our battle telemetry contracts; comments mark likely seams for future pruning.
         const float ENV_MIN = 0.1f;
         const float ENV_MAX = 5f;
 
@@ -432,6 +441,9 @@ namespace TGD.CombatV2
 
         void Awake()
         {
+            // Awake is the “factory entry point”: anything a UnitFactory wires later should go
+            // through these accessors. We favour caching + OccControllerReady over bridge helpers,
+            // so placement remains authoritative through IOcc.
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
             if (!status) status = GetComponentInParent<MoveRateStatusRuntime>(true);
             if (!turnManager) turnManager = GetComponentInParent<TurnManagerV2>(true);
@@ -705,6 +717,10 @@ namespace TGD.CombatV2
 
         public IEnumerator OnConfirm(Hex hex)
         {
+            // W2 entry point. We already soft-reserved path data in BuildPreview; here we only
+            // validate the cached plan, pay cost (unless assumePrepaid), and then hand execution to
+            // RunAttack. If this ever splits further, keep TMV2 budget checks here so CAMV2 only
+            // receives a binary success/fail result.
             ClearExecReport();
             if (!IsReady)
             {
@@ -901,6 +917,12 @@ namespace TGD.CombatV2
 
         PreviewData BuildPreview(Hex target, bool logInvalid, TargetCheckResult? overrideCheck = null)
         {
+            // W1 preview pipeline. Responsibilities:
+            //  * gather movement/attack costs under current buffs/environment
+            //  * reserve IOcc tokens so other units see this lane as soft-blocked
+            //  * surface rejectReason for UI/telemetry – do not mutate state beyond preview cache
+            // Any refactor should keep the “no side-effects except reservations” rule so hover spam
+            // stays cheap.
             if (!IsReady)
             {
                 ClearApproachReservations("NotReady");
@@ -1081,6 +1103,12 @@ namespace TGD.CombatV2
             int attackSecsCharge,
             int attackEnergyPaid)
         {
+            // W2 confirmed execution. This coroutine owns the whole W2→W3→W4 stretch:
+            //  * promote preview path into executionPath (re-running passability to detect race)
+            //  * drive movement tween + IOcc commit + animation trigger
+            //  * compute refunds + energy deltas for TMV2 report
+            // There is duplication with HexClickMover; future refactor can extract shared helpers
+            // once both files are slimmed down.
             if (preview == null)
                 yield break;
 
@@ -1866,6 +1894,8 @@ namespace TGD.CombatV2
 
         void ReserveApproachFallback(List<Hex> path)
         {
+            // Fallback path when factory hasn’t injected IOcc yet (editor previews, cutscenes).
+            // We mimic soft reservations with legacy OccTempOps so combat logic still blocks cells.
             if (ctx == null)
                 return;
 
@@ -1885,6 +1915,8 @@ namespace TGD.CombatV2
 
         bool TryReserveApproachPath(List<Hex> path, Hex target)
         {
+            // Primary reservation path: request a soft token from IOcc. When the path or target
+            // changes we cancel + reacquire so CAMV2 doesn’t hold stale occupancy claims.
             var occ = ctx != null ? ctx.occService : null;
             if (occ == null)
             {

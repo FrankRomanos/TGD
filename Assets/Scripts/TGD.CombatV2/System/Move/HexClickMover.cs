@@ -16,6 +16,13 @@ namespace TGD.CombatV2
     [DisallowMultipleComponent]
     public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
     {
+        // Legacy note: this mover predates the IOcc pipeline, so it carries a lot of “just in case”
+        // branches. The comments below mark what each stage feeds into CAMV2/TMV2 so you can trim
+        // confidently later. The structure mirrors AttackControllerV2:
+        //  * Awake wires dependencies for UnitFactory and caches board references.
+        //  * Preview (TryRebuildPathCache/PeekPlannedCost) builds soft reservations + HUD hints.
+        //  * Confirm (OnConfirm/RunPathTween_WithTime) consumes that plan and produces exec reports.
+        //  * Cleanup methods clear the soft reservations so IOcc stays authoritative.
         [SerializeField]
         [Tooltip("Action identifier used when registering with CombatActionManagerV2.")]
         string skillId = MoveProfileRules.DefaultSkillId;
@@ -422,6 +429,10 @@ namespace TGD.CombatV2
 
         public IEnumerator OnConfirm(Hex hex)
         {
+            // Confirmation is the only place that transitions from aim (W1) to execution (W2).
+            // Keep validation/budget checks here so CAMV2 doesn’t have to duplicate logic, and make
+            // sure any future refactor still honours the preview snapshot guards – otherwise IOcc
+            // tokens can drift when the unit is displaced between hover and confirm.
             ClearExecReport();
             RefreshStateForAim();
 
@@ -462,6 +473,9 @@ namespace TGD.CombatV2
 
         void Awake()
         {
+            // Awake doubles as the factory wiring point. When UnitFactory instantiates movers it
+            // expects OccControllerReady to “just work” and we resolve optional services lazily so
+            // editor-time prefabs don’t explode.
             RefreshPainterAndSticky(markPreviewDirty: false);
             // ★ 统一解析：优先 ctx.stats，其次向上找
             if (!ctx) ctx = GetComponentInParent<UnitRuntimeContext>(true);
@@ -485,6 +499,10 @@ namespace TGD.CombatV2
 
         void RefreshPainterAndSticky(bool markPreviewDirty)
         {
+            // Handles two optional systems:
+            //  1. HexAreaPainter for hover/aim visuals (safe to skip when not present).
+            //  2. Sticky/environment providers that tweak effective MR. When factory hot-swaps
+            //     sources call RefreshFactoryInjection() to invalidate caches.
             if (tiler != null)
             {
                 _painter?.Clear();
@@ -649,6 +667,9 @@ namespace TGD.CombatV2
 
         bool TryRebuildPathCache(out MovableRangeResult result)
         {
+            // Centralised reachability solver. We recompute the BFS bubble every time the anchor or
+            // MR changes. The dictionary cache allows instant hover feedback, and the method is the
+            // seam we can swap out if we ever move to streaming pathfinders.
             result = null;
 
             if (occupancyService) _occ = occupancyService.Get();
@@ -727,6 +748,8 @@ namespace TGD.CombatV2
 
         void ClearPreviewReservations(string reason)
         {
+            // Mirrors AttackControllerV2.ClearApproachReservations: IOcc token first, then legacy
+            // fallback so tooling/editor previews still work.
             var occ = ctx != null ? ctx.occService : null;
             if (_previewToken.IsValid && occ != null)
                 occ.Cancel(ctx, _previewToken, reason);
