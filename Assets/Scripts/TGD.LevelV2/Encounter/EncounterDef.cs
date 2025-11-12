@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
 using TGD.DataV2;
+using TGD.HexBoard;
 using UnityEngine;
 
 namespace TGD.LevelV2
@@ -31,5 +32,17 @@ namespace TGD.LevelV2
             [Tooltip("Initial facing direction when the unit enters the board.")]
             public Facing4 facing;
         }
+
+        [Serializable]
+        public struct EnvStamp
+        {
+            public HazardType def;
+            public Hex center;
+            public int radius;
+            public bool centerOnly;
+            // Future: stacks, durationTurns...
+        }
+
+        public List<EnvStamp> envStamps = new();
     }
 }
