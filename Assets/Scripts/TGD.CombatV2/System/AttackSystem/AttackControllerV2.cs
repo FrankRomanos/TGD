@@ -1700,15 +1700,14 @@ namespace TGD.CombatV2
                 }
             }
 
-            var candidateSet = new HashSet<Hex>();
-            var candidates = new List<Hex>();
+            var candidateScores = new Dictionary<Hex, HexPathfinding.GoalScore>();
             foreach (var cell in enemyCells)
             {
                 for (int dist = 1; dist <= meleeRange; dist++)
                 {
                     foreach (var candidate in Hex.Ring(cell, dist))
                     {
-                        if (!candidateSet.Add(candidate)) continue;
+                        if (candidateScores.ContainsKey(candidate)) continue;
                         if (authoring?.Layout == null || !authoring.Layout.Contains(candidate)) continue;
                         if (env != null && env.IsPit(candidate)) continue;
                         if (passability != null && passability.IsBlocked(candidate)) continue;
@@ -1719,57 +1718,60 @@ namespace TGD.CombatV2
                         int enemyDist = DistanceToEnemy(candidate, enemyCells);
                         if (enemyDist > meleeRange) continue;
 
-                        candidates.Add(candidate);
+                        int ringDist = Hex.Distance(candidate, target);
+                        candidateScores[candidate] = new HexPathfinding.GoalScore(enemyDist, ringDist);
                     }
                 }
             }
 
-            if (candidates.Count == 0)
+            if (candidateScores.Count == 0)
             {
                 landing = target;
                 return false;
             }
 
             var forcedOpen = new HashSet<Hex> { start };
-            for (int i = 0; i < candidates.Count; i++)
-                forcedOpen.Add(candidates[i]);
+            foreach (var candidate in candidateScores.Keys)
+                forcedOpen.Add(candidate);
 
             var layout = authoring?.Layout;
             System.Func<Hex, bool> inBounds = layout != null ? (System.Func<Hex, bool>)(hex => layout.Contains(hex)) : null;
-            var bfs = HexPathfinding.Run(start, inBounds, cell => !IsBlockedForMove(cell, start, forcedOpen, passability));
-
-            var scratch = new List<Hex>();
-            int bestLen = int.MaxValue;
-            int bestEnemyDist = int.MaxValue;
-            Hex bestLanding = target;
-            List<Hex> bestCandidatePath = null;
-
-            foreach (var candidate in candidates)
+            if (!HexPathfinding.TryFindNearest(
+                    start,
+                    inBounds,
+                    cell => !IsBlockedForMove(cell, start, forcedOpen, passability),
+                    cell => candidateScores.TryGetValue(cell, out var score) ? score : null,
+                    out var nearest))
             {
-                if (!bfs.TryBuildPath(candidate, scratch))
-                    continue;
+                landing = target;
+                bestPath = null;
+                return false;
+            }
 
-                int len = scratch.Count;
-                int enemyDist = DistanceToEnemy(candidate, enemyCells);
-                if (len < bestLen || (len == bestLen && enemyDist < bestEnemyDist))
+            var pathBuffer = new List<Hex>();
+            if (!nearest.TryBuildPath(pathBuffer) || pathBuffer.Count == 0)
+            {
+                landing = target;
+                bestPath = null;
+                return false;
+            }
+
+            for (int i = 0; i < pathBuffer.Count; i++)
+            {
+                var cell = pathBuffer[i];
+                if (DistanceToEnemy(cell, enemyCells) <= meleeRange)
                 {
-                    bestLen = len;
-                    bestEnemyDist = enemyDist;
-                    bestLanding = candidate;
-                    bestCandidatePath = new List<Hex>(scratch);
+                    if (i < pathBuffer.Count - 1)
+                        pathBuffer.RemoveRange(i + 1, pathBuffer.Count - i - 1);
+                    landing = cell;
+                    bestPath = pathBuffer;
+                    return true;
                 }
             }
 
-            if (bestCandidatePath != null)
-            {
-                landing = bestLanding;
-                bestPath = bestCandidatePath;
-                return true;
-            }
-
-            landing = target;
-            bestPath = null;
-            return false;
+            landing = nearest.Goal;
+            bestPath = pathBuffer;
+            return true;
         }
 
         bool TryBuildApproachPath(Hex start, Hex target, IPassability passability, out List<Hex> path)
