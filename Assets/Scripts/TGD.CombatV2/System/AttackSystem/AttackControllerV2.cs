@@ -1280,6 +1280,7 @@ namespace TGD.CombatV2
                     {
                         if (!entangleCancelLogged)
                         {
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, "Break Move!");
                             var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
                             var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
                             CAM.RaiseActionCancelled(cancelCtx, ResolveSkillId(), "Entangled");
