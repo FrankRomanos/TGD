@@ -56,12 +56,33 @@ namespace TGD.HexBoard
 
             if (!cur.Equals(_last))
             {
-                // 进入新格：陷阱触发（可重复，每次进入都打印）
-                if (environment.IsTrap(cur))
-                {
-                    Debug.Log($"[Trap] {unit} stepped on TRAP at {cur} → take damage (test log)");
-                }
+                EmitHazardEnterLogs(environment, unit, cur);
                 _last = cur;
+            }
+        }
+
+        void EmitHazardEnterLogs(HexEnvironmentSystem environment, Unit unit, Hex hex)
+        {
+            var envMap = environment != null ? environment.envMap : null;
+            bool logged = false;
+
+            if (envMap != null)
+            {
+                var effects = envMap.Get(hex);
+                for (int i = 0; i < effects.Count; i++)
+                {
+                    var hazard = effects[i].Hazard;
+                    if (hazard == null)
+                        continue;
+
+                    hazard.EmitEnterLog(unit, hex);
+                    logged = true;
+                }
+            }
+
+            if (!logged && environment != null && environment.IsTrap(hex))
+            {
+                Debug.Log($"[Trap] {unit} stepped on TRAP at {hex} → take damage (legacy log)");
             }
         }
 

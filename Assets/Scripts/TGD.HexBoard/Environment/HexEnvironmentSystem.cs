@@ -11,6 +11,10 @@ namespace TGD.HexBoard
         [Header("Refs")]
         public HexBoardAuthoringLite authoring;
 
+        [Header("Environment Map")]
+        [Tooltip("Scene singleton that stores environment cell effects (auto resolved).")]
+        public EnvMapHost envMap;
+
         [Serializable]
         public struct HazardZone
         {
@@ -23,25 +27,15 @@ namespace TGD.HexBoard
             public Hex Center => new Hex(q, r);
         }
 
-        [Header("Hazards (optional)")]
+        [Header("Legacy Hazards (ignored)")]
+        [Tooltip("Legacy inspector data (ignored). Use Encounter envStamps instead.")]
         public List<HazardZone> hazards = new();
 
         public bool HasHazard(Hex h, HazardKind kind)
-        {
-            if (hazards == null) return false;
-            for (int i = 0; i < hazards.Count; i++)
-            {
-                var z = hazards[i];
-                if (!z.type || z.type.kind != kind) continue;
+            => envMap != null && envMap.HasKind(h, kind);
 
-                bool inRange = z.centerOnly ? h.Equals(z.Center) : Hex.Distance(h, z.Center) <= z.radius;
-                if (inRange) return true;
-            }
-            return false;
-        }
-
-        public bool IsTrap(Hex h) => HasHazard(h, HazardKind.Trap);
-        public bool IsPit(Hex h) => HasHazard(h, HazardKind.Pit);
+        public bool IsTrap(Hex h) => envMap != null && envMap.HasKind(h, HazardKind.Trap);
+        public bool IsPit(Hex h) => envMap != null && envMap.HasKind(h, HazardKind.Pit);
 
         [Header("Default")]
         [Tooltip("全局默认地形速度倍率。1 = 正常速度，0.5 = 减速 50%，1.5 = 加速 50%。")]
@@ -60,12 +54,14 @@ namespace TGD.HexBoard
             public Hex Center => new Hex(q, r);
         }
 
-        [Header("Speed Patches (optional)")]
+        [Header("Legacy Speed Patches (ignored)")]
+        [Tooltip("Legacy inspector data (ignored). Use Encounter envStamps instead.")]
         public List<SpeedPatch> patches = new();
 
         void Reset()
         {
             if (!authoring) authoring = FindFirstObjectByType<HexBoardAuthoringLite>();
+            if (!envMap) envMap = FindFirstObjectByType<EnvMapHost>();
         }
 
         public static HexEnvironmentSystem FindInScene()
@@ -74,15 +70,22 @@ namespace TGD.HexBoard
         public float GetSpeedMult(Hex h)
         {
             float m = Mathf.Clamp(defaultSpeedMult, 0.1f, 5f);
-            if (patches != null)
+
+            if (envMap != null)
             {
-                for (int i = 0; i < patches.Count; i++)
+                var effects = envMap.Get(h);
+                foreach (var effect in effects)
                 {
-                    var p = patches[i];
-                    if (Hex.Distance(h, p.Center) <= p.radius)
-                        m *= Mathf.Clamp(p.mult, 0.1f, 5f);
+                    var hazard = effect.Hazard;
+                    if (hazard == null)
+                        continue;
+
+                    float mult = Mathf.Clamp(hazard.stickyMoveMult, 0.1f, 5f);
+                    if (!Mathf.Approximately(mult, 1f))
+                        m *= mult;
                 }
             }
+
             return Mathf.Clamp(m, 0.1f, 5f);
         }
 
@@ -94,25 +97,6 @@ namespace TGD.HexBoard
             multiplier = 1f;
             durationTurns = 0;
             tag = null;
-
-            if (patches != null)
-            {
-                for (int i = 0; i < patches.Count; i++)
-                {
-                    var p = patches[i];
-                    if (Hex.Distance(at, p.Center) > p.radius) continue;
-
-                    float m = Mathf.Clamp(p.mult, 0.01f, 100f);
-                    int turns = p.stickyTurnsOnEnter;
-                    if (turns <= 0 || Mathf.Approximately(m, 1f))
-                        continue;
-
-                    multiplier = m;
-                    durationTurns = turns;
-                    tag = $"Patch@{p.q},{p.r}";
-                    return true;
-                }
-            }
 
             return false;
         }

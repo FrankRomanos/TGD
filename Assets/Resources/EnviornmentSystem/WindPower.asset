@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: WindPower
   m_EditorClassIdentifier: 
   hazardId: Trap
-  kind: 0
+  kind: 2
   vfxPrefab: {fileID: 0}
   tickTimes: -1
   maxStacks: -1
   stickyMoveMult: 2
   stickyDurationTurns: 2
+  logOnEnter: 1
+  onEnterLogMessage: "[SpeedPatch] {unit} sped up to ×{mult} at {hex}"

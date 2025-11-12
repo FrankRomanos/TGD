@@ -17,3 +17,7 @@ MonoBehaviour:
   vfxPrefab: {fileID: 0}
   tickTimes: -1
   maxStacks: 1
+  stickyMoveMult: 1
+  stickyDurationTurns: 0
+  logOnEnter: 0
+  onEnterLogMessage: "[Pit] {unit} reached {hazard} at {hex}"

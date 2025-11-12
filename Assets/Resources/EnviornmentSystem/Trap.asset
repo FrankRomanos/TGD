@@ -17,3 +17,5 @@ MonoBehaviour:
   vfxPrefab: {fileID: 0}
   tickTimes: -1
   maxStacks: 6
+  logOnEnter: 1
+  onEnterLogMessage: "[Trap] {unit} triggered {hazard} at {hex}"

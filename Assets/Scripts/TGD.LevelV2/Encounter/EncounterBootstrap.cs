@@ -15,12 +15,21 @@ namespace TGD.LevelV2
     {
         static readonly Color FriendlyColor = new Color(0.2f, 0.55f, 1f, 0.85f);
         static readonly Color EnemyColor = new Color(1f, 0.35f, 0.35f, 0.85f);
+        static readonly Color EnvSlowColor = new Color(0.65f, 0.3f, 1f, 0.55f);
+        static readonly Color EnvFastColor = new Color(0.2f, 1f, 0.85f, 0.55f);
+        static readonly Color EnvTrapColor = new Color(1f, 0.25f, 0.25f, 0.65f);
+        static readonly Color EnvPitColor = new Color(0.1f, 0.1f, 0.1f, 0.75f);
+        static readonly Color EnvNeutralColor = new Color(0.65f, 0.75f, 0.85f, 0.45f);
 
         [Header("Data")]
         public EncounterDef encounter;
 
         [Header("Factory")]
         public UnitFactory unitFactory;
+
+        [Header("Environment")]
+        [Tooltip("Environment map host stamped by Encounter envStamps.")]
+        public EnvMapHost envMap;
 
         [Header("Board (optional overrides)")]
         [Tooltip("Explicit occupancy service reference. Left empty to auto-discover the first HexOccupancyService in scene.")]
@@ -30,12 +39,18 @@ namespace TGD.LevelV2
         [Tooltip("Gizmo radius for spawn previews when the bootstrap is selected.")]
         float gizmoRadius = 0.25f;
 
+        [SerializeField]
+        [Tooltip("Cube size for environment gizmos when the bootstrap is selected.")]
+        float environmentGizmoSize = 0.55f;
+
         readonly HashSet<Hex> _validationScratch = new HashSet<Hex>();
 
         void Reset()
         {
             if (unitFactory == null)
                 unitFactory = FindOne<UnitFactory>();
+            if (envMap == null)
+                envMap = FindOne<EnvMapHost>();
             if (occupancyService == null)
                 occupancyService = FindOne<HexOccupancyService>();
         }
@@ -44,6 +59,8 @@ namespace TGD.LevelV2
         {
             if (!Validate())
                 return;
+
+            BootstrapEnvironment();
 
             if (encounter == null || unitFactory == null)
             {
@@ -105,6 +122,15 @@ namespace TGD.LevelV2
                 }
             }
 
+            if (envMap == null)
+            {
+                envMap = FindOne<EnvMapHost>();
+                if (envMap == null)
+                {
+                    Debug.LogWarning("[Encounter] EnvMapHost not assigned; environment stamps will be skipped.", this);
+                }
+            }
+
             if (unitFactory != null && unitFactory.skillIndex != null && unitFactory.actionCooldownCatalog == null)
             {
                 Debug.LogWarning("[Encounter] UnitFactory has SkillIndex but no ActionCooldownCatalog; cooldown data may be stale.", unitFactory);
@@ -150,6 +176,29 @@ namespace TGD.LevelV2
             return ok;
         }
 
+        void BootstrapEnvironment()
+        {
+            if (encounter == null)
+                return;
+
+            if (envMap == null)
+                envMap = FindOne<EnvMapHost>();
+
+            if (envMap == null)
+                return;
+
+            envMap.Clear();
+
+            if (encounter.envStamps == null || encounter.envStamps.Count == 0)
+                return;
+
+            for (int i = 0; i < encounter.envStamps.Count; i++)
+            {
+                var stamp = encounter.envStamps[i];
+                envMap.Stamp(stamp.def, stamp.center, stamp.radius, stamp.centerOnly);
+            }
+        }
+
         void ApplyFacing(Unit unit, Facing4 facing)
         {
             if (unit == null)
@@ -190,11 +239,71 @@ namespace TGD.LevelV2
                 Gizmos.color = ResolveFactionColor(spec.blueprint.faction);
                 Gizmos.DrawSphere(world, gizmoRadius);
             }
+
+            DrawEnvironmentGizmos(layout, boardY);
         }
 
         Color ResolveFactionColor(UnitFaction faction)
         {
             return faction == UnitFaction.Friendly ? FriendlyColor : EnemyColor;
+        }
+
+        void DrawEnvironmentGizmos(HexBoardLayout layout, float boardY)
+        {
+            if (encounter == null || encounter.envStamps == null)
+                return;
+
+            for (int i = 0; i < encounter.envStamps.Count; i++)
+            {
+                var stamp = encounter.envStamps[i];
+                if (stamp.def == null)
+                    continue;
+
+                Color color = ResolveEnvironmentColor(stamp.def);
+                if (color.a <= 0f)
+                    continue;
+
+                foreach (var h in EnumerateStampHexes(stamp))
+                {
+                    Vector3 world = layout != null
+                        ? layout.World(h, boardY)
+                        : new Vector3(h.q, boardY, h.r);
+
+                    Gizmos.color = color;
+                    Gizmos.DrawCube(world, Vector3.one * environmentGizmoSize);
+                }
+            }
+        }
+
+        IEnumerable<Hex> EnumerateStampHexes(EncounterDef.EnvStamp stamp)
+        {
+            if (stamp.centerOnly || stamp.radius <= 0)
+            {
+                yield return stamp.center;
+                yield break;
+            }
+
+            foreach (var h in Hex.Range(stamp.center, Mathf.Max(0, stamp.radius)))
+                yield return h;
+        }
+
+        Color ResolveEnvironmentColor(HazardType type)
+        {
+            if (type == null)
+                return EnvNeutralColor;
+
+            if (type.kind == HazardKind.Trap)
+                return EnvTrapColor;
+            if (type.kind == HazardKind.Pit)
+                return EnvPitColor;
+
+            float mult = type.stickyMoveMult;
+            if (mult > 1f + 0.01f)
+                return EnvFastColor;
+            if (mult < 1f - 0.01f)
+                return EnvSlowColor;
+
+            return EnvNeutralColor;
         }
 
         bool TryResolveBoard(out HexBoardLayout layout, out float boardY)
