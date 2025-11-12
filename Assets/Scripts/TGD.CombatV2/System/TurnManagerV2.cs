@@ -1350,6 +1350,9 @@ namespace TGD.CombatV2
                     status.RefreshProduct();
                 }
 
+                if (environment != null && environment.IsTrap(unit.Position))
+                    HexHazardWatcher.NotifyStationaryHazards(context, unit, unit.Position, environment);
+
                 float product = status?.GetProduct() ?? 1f;
                 float combinedMult = Mathf.Clamp(context.MoveRates.NormalizedMultiplier * product, 0.01f, 100f);
                 float recomputed = StatsMathV2.MR_MultiThenFlat(

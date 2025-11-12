@@ -180,7 +180,8 @@ namespace TGD.CombatV2
         void OnAttackMiss(Unit unit, string message)
         {
             if (!listenAttack || !Matches(unit) || !uiText || !root) return;
-            Show(string.IsNullOrEmpty(message) ? "Attack missed." : message, HudKind.Info);
+            string resolved = string.IsNullOrEmpty(message) ? "Attack missed." : message;
+            Show(resolved, HeuristicByText(resolved));
         }
 
         // ---------- show / effects ----------
