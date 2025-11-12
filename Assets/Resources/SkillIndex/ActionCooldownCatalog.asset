@@ -23,3 +23,5 @@ MonoBehaviour:
     seconds: 18
   - key: Reaction002
     seconds: 24
+  - key: 
+    seconds: 0
