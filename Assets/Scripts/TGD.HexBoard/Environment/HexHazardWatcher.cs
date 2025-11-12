@@ -27,11 +27,16 @@ namespace TGD.HexBoard
 
         Hex _last;
         bool _has;
+        bool _suppressLateUpdateUntilMatch;
+        Hex _pendingLateUpdateHex;
         readonly HashSet<HazardType> _activeEntangleHazards = new();
         readonly List<HazardType> _entangleScratch = new();
         readonly List<HazardType> _entangleToRemove = new();
         IHexEntangleResponder _cachedEntangleResponder;
         Component _cachedEntangleResponderComponent;
+
+        static readonly List<HexHazardWatcher> s_WatcherScratch = new();
+        static readonly HashSet<HexHazardWatcher> s_WatcherUnique = new();
 
         public void Attach(UnitRuntimeContext context, HexEnvironmentSystem environment)
         {
@@ -54,10 +59,17 @@ namespace TGD.HexBoard
             ResetCache();
         }
 
+        void OnDisable()
+        {
+            ResetCache();
+        }
+
         void ResetCache()
         {
             _has = false;
             _last = Hex.Zero;
+            _suppressLateUpdateUntilMatch = false;
+            _pendingLateUpdateHex = Hex.Zero;
             _activeEntangleHazards.Clear();
             _entangleScratch.Clear();
             _entangleToRemove.Clear();
@@ -79,15 +91,108 @@ namespace TGD.HexBoard
                 return;
             }
 
-            if (!cur.Equals(_last))
+            if (_suppressLateUpdateUntilMatch)
             {
-                EmitHazardEnterLogs(environment, unit, cur);
-                ApplyHazardEnterEffects(environment, unit, cur);
-                _last = cur;
+                if (!cur.Equals(_pendingLateUpdateHex))
+                    return;
+
+                _suppressLateUpdateUntilMatch = false;
+            }
+
+            if (!cur.Equals(_last))
+                HandleTraversal(unit, cur, environment, true);
+        }
+
+        public void HandleTraversal(Unit unit, Hex hex, HexEnvironmentSystem environment = null, bool fromLateUpdate = false)
+        {
+            _last = hex;
+            _has = true;
+
+            if (!fromLateUpdate)
+            {
+                _suppressLateUpdateUntilMatch = true;
+                _pendingLateUpdateHex = hex;
+            }
+            else if (_suppressLateUpdateUntilMatch && hex.Equals(_pendingLateUpdateHex))
+            {
+                _suppressLateUpdateUntilMatch = false;
+            }
+
+            unit ??= ResolveUnit();
+            environment ??= ResolveEnvironment();
+            if (environment == null || unit == null)
+                return;
+
+            EmitHazardEnterLogs(environment, unit, hex);
+            ApplyHazardEnterEffects(environment, unit, hex);
+        }
+
+        public void HandleTraversal(Hex hex, HexEnvironmentSystem environment = null)
+        {
+            HandleTraversal(null, hex, environment);
+        }
+
+        public static void NotifyTraversal(UnitRuntimeContext context, Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            if (context == null)
+                return;
+
+            s_WatcherScratch.Clear();
+            s_WatcherUnique.Clear();
+
+            context.GetComponentsInChildren(true, s_WatcherScratch);
+
+            if (s_WatcherScratch.Count == 0)
+                return;
+
+            unit ??= context.boundUnit;
+            try
+            {
+                for (int i = 0; i < s_WatcherScratch.Count; i++)
+                {
+                    var watcher = s_WatcherScratch[i];
+                    if (watcher != null && s_WatcherUnique.Add(watcher))
+                        watcher.HandleTraversal(unit, hex, environment);
+                }
+            }
+            finally
+            {
+                s_WatcherScratch.Clear();
+                s_WatcherUnique.Clear();
             }
         }
 
-        void EmitHazardEnterLogs(HexEnvironmentSystem environment, Unit unit, Hex hex)
+        public static void NotifyStationaryHazards(UnitRuntimeContext context, Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            if (context == null)
+                return;
+
+            s_WatcherScratch.Clear();
+            s_WatcherUnique.Clear();
+
+            context.GetComponentsInChildren(true, s_WatcherScratch);
+
+            if (s_WatcherScratch.Count == 0)
+                return;
+
+            unit ??= context.boundUnit;
+            try
+            {
+                for (int i = 0; i < s_WatcherScratch.Count; i++)
+                {
+                    var watcher = s_WatcherScratch[i];
+                    if (watcher != null && s_WatcherUnique.Add(watcher))
+                        watcher.HandleStationaryHazards(unit, hex, environment);
+                }
+            }
+            finally
+            {
+                s_WatcherScratch.Clear();
+                s_WatcherUnique.Clear();
+            }
+        }
+
+        void EmitHazardEnterLogs(HexEnvironmentSystem environment, Unit unit, Hex hex, bool includeEntangle = true)
         {
             var envMap = environment != null ? environment.envMap : null;
             bool logged = false;
@@ -99,6 +204,9 @@ namespace TGD.HexBoard
                 {
                     var hazard = effects[i].Hazard;
                     if (hazard == null)
+                        continue;
+
+                    if (!includeEntangle && hazard.kind == HazardKind.EntangleTrap)
                         continue;
 
                     hazard.EmitEnterLog(unit, hex);
@@ -159,6 +267,21 @@ namespace TGD.HexBoard
                 if (keepActive)
                     _activeEntangleHazards.Add(hazard);
             }
+        }
+
+        public void HandleStationaryHazards(Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            _last = hex;
+            _has = true;
+            _suppressLateUpdateUntilMatch = false;
+            _pendingLateUpdateHex = hex;
+
+            unit ??= ResolveUnit();
+            environment ??= ResolveEnvironment();
+            if (environment == null || unit == null)
+                return;
+
+            EmitHazardEnterLogs(environment, unit, hex, includeEntangle: false);
         }
 
         bool TryApplyEntangle(HexEnvironmentSystem environment, Unit unit, Hex hex, HazardType hazard)
