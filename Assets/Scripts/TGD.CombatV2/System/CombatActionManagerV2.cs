@@ -3739,8 +3739,7 @@ namespace TGD.CombatV2
             try
             {
                 var rules = ResolveRules();
-                bool phaseStartPlan = basePlan != null
-                    && !string.IsNullOrEmpty(basePlan.kind)
+                bool phaseStartPlan = !string.IsNullOrEmpty(basePlan.kind)
                     && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase);
                 IReadOnlyList<ActionKind> allowedKinds = phaseStartPlan
                     ? rules?.AllowedAtPhaseStartFree()
