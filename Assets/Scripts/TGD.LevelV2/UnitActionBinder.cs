@@ -73,10 +73,20 @@ namespace TGD.LevelV2
 
             string moveSkillId = DetermineMoveSkillId(go, ctx);
             bool hasMove = abilityLookup.ContainsKey(moveSkillId);
+            if (!hasMove && IsBuiltinMove(moveSkillId) && HasMoverComponent(go))
+            {
+                hasMove = true;
+                Debug.LogWarning($"[ActionBinder] Missing learned entry for builtin move '{moveSkillId}'. Forcing enable.", go);
+            }
             ConfigureMovers(go, hasMove);
 
             string attackSkillId = DetermineAttackSkillId(go);
             bool hasAttack = abilityLookup.ContainsKey(attackSkillId);
+            if (!hasAttack && IsBuiltinAttack(attackSkillId) && HasAttackComponent(go))
+            {
+                hasAttack = true;
+                Debug.LogWarning($"[ActionBinder] Missing learned entry for builtin attack '{attackSkillId}'. Forcing enable.", go);
+            }
             ConfigureAttackers(go, hasAttack);
 
             var availabilities = BuildAvailabilities(learnedList, moveSkillId, hasMove, attackSkillId, hasAttack, abilityLookup);
@@ -176,6 +186,18 @@ namespace TGD.LevelV2
                 attack.enabled = hasAttack;
             }
         }
+
+        static bool HasMoverComponent(GameObject go)
+            => go != null && go.GetComponentInChildren<HexClickMover>(true) != null;
+
+        static bool HasAttackComponent(GameObject go)
+            => go != null && go.GetComponentInChildren<AttackControllerV2>(true) != null;
+
+        static bool IsBuiltinMove(string skillId)
+            => string.Equals(NormalizeSkillId(skillId), MoveProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase);
+
+        static bool IsBuiltinAttack(string skillId)
+            => string.Equals(NormalizeSkillId(skillId), AttackProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase);
 
         static void BroadcastToProviders(GameObject go, IReadOnlyList<ActionAvailability> actions)
         {

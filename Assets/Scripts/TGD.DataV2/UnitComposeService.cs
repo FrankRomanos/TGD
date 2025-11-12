@@ -45,10 +45,12 @@ namespace TGD.DataV2
                 {
                     if (!slot.learned)
                         continue;
-                    if (string.IsNullOrWhiteSpace(slot.skillId))
+
+                    var normalizedId = NormalizeSkillId(slot.skillId);
+                    if (string.IsNullOrEmpty(normalizedId))
                         continue;
 
-                    if (skillIndex != null && !skillIndex.Contains(slot.skillId))
+                    if (!IsBuiltinSkill(normalizedId) && skillIndex != null && !skillIndex.Contains(normalizedId))
                     {
                         Debug.LogWarning($"[UnitCompose] SkillId not found in index: {slot.skillId}");
                         continue;
@@ -56,7 +58,7 @@ namespace TGD.DataV2
 
                     var ability = new FinalUnitConfig.LearnedAbility
                     {
-                        skillId = slot.skillId,
+                        skillId = normalizedId,
                         initialCooldownSeconds = Mathf.Max(0, slot.initialCooldownSeconds)
                     };
 
@@ -65,6 +67,20 @@ namespace TGD.DataV2
             }
 
             return config;
+        }
+
+        static string NormalizeSkillId(string skillId)
+        {
+            return string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
+        }
+
+        static bool IsBuiltinSkill(string skillId)
+        {
+            if (string.IsNullOrEmpty(skillId))
+                return false;
+
+            return string.Equals(skillId, MoveProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(skillId, AttackProfileRules.DefaultSkillId, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -94,6 +110,18 @@ namespace TGD.DataV2
                         skillId = "ActionA",
                         learned = true,
                         initialCooldownSeconds = 6
+                    },
+                    new UnitBlueprint.AbilitySlot
+                    {
+                        skillId = AttackProfileRules.DefaultSkillId,
+                        learned = true,
+                        initialCooldownSeconds = 2
+                    },
+                    new UnitBlueprint.AbilitySlot
+                    {
+                        skillId = MoveProfileRules.DefaultSkillId,
+                        learned = true,
+                        initialCooldownSeconds = 0
                     },
                     new UnitBlueprint.AbilitySlot
                     {
@@ -133,11 +161,15 @@ namespace TGD.DataV2
 
                 Assert.AreEqual(5, config.stats.MaxEnergy);
                 Assert.AreEqual(config.stats.MaxEnergy, config.stats.Energy);
-                Assert.AreEqual(2, config.abilities.Count);
+                Assert.AreEqual(4, config.abilities.Count);
                 Assert.AreEqual("ActionA", config.abilities[0].skillId);
                 Assert.AreEqual(6, config.abilities[0].initialCooldownSeconds);
-                Assert.AreEqual("ActionC", config.abilities[1].skillId);
-                Assert.AreEqual(4, config.abilities[1].initialCooldownSeconds);
+                Assert.AreEqual(AttackProfileRules.DefaultSkillId, config.abilities[1].skillId);
+                Assert.AreEqual(2, config.abilities[1].initialCooldownSeconds);
+                Assert.AreEqual(MoveProfileRules.DefaultSkillId, config.abilities[2].skillId);
+                Assert.AreEqual(0, config.abilities[2].initialCooldownSeconds);
+                Assert.AreEqual("ActionC", config.abilities[3].skillId);
+                Assert.AreEqual(4, config.abilities[3].initialCooldownSeconds);
                 Assert.AreEqual(blueprint.footprint, config.footprint);
 
                 Debug.Log("[UnitCompose] Smoke test passed.");
