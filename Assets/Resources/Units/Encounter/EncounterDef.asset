@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ba7efe854cfd2f4fbb352dfe33a084b, type: 3}
+  m_Name: EncounterDef
+  m_EditorClassIdentifier: 
+  spawnSpecs:
+  - blueprint: {fileID: 11400000, guid: b4e6ada238c23f2489dc405e6278bddb, type: 2}
+    anchor:
+      q: 9
+      r: 7
+    facing: 0
+  - blueprint: {fileID: 11400000, guid: 0227e4baf9574704194dfac48f9250cd, type: 2}
+    anchor:
+      q: 9
+      r: 6
+    facing: 0
+  - blueprint: {fileID: 11400000, guid: 1a6e6e1db7e975b498c770c0e73128d9, type: 2}
+    anchor:
+      q: 6
+      r: 6
+    facing: 0
+  - blueprint: {fileID: 11400000, guid: f227bd94bc3d08244b03146dbe7a8a48, type: 2}
+    anchor:
+      q: 5
+      r: 3
+    facing: 0
+  - blueprint: {fileID: 11400000, guid: c74706236eb293842a92427046ba2cf7, type: 2}
+    anchor:
+      q: 12
+      r: 8
+    facing: 1
+  - blueprint: {fileID: 11400000, guid: 1fef44cebca00c44c85fd17e4bf2869b, type: 2}
+    anchor:
+      q: 16
+      r: 4
+    facing: 1

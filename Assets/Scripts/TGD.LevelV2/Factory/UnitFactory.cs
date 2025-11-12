@@ -79,6 +79,9 @@ namespace TGD.LevelV2
         public IEnumerable<Unit> AllUnits => _spawned.Keys;
 
         public Unit Spawn(UnitBlueprint blueprint, UnitFaction faction, Hex spawnHex)
+            => Spawn(blueprint, faction, spawnHex, Facing4.PlusQ);
+
+        public Unit Spawn(UnitBlueprint blueprint, UnitFaction faction, Hex spawnHex, Facing4 facing)
         {
             if (blueprint == null)
             {
@@ -94,11 +97,14 @@ namespace TGD.LevelV2
 
             // 优先使用蓝图上的 prefab，其次 defaultPrefab，最后 Resources 兜底
             var prefab = ResolvePrefab(preferred: blueprint.basePrefab);
-            return SpawnFromFinal(final, spawnHex, prefab);
+            return SpawnFromFinal(final, spawnHex, prefab, facing);
         }
 
 
         public Unit SpawnFromFinal(FinalUnitConfig final, Hex spawnHex, GameObject prefab)
+            => SpawnFromFinal(final, spawnHex, prefab, Facing4.PlusQ);
+
+        public Unit SpawnFromFinal(FinalUnitConfig final, Hex spawnHex, GameObject prefab, Facing4 facing)
         {
             if (final == null)
             {
@@ -124,10 +130,13 @@ namespace TGD.LevelV2
             InitializeCooldowns(cooldownHub, final.abilities);
 
             string unitId = ReserveUnitId(final.unitId, final.displayName);
-            var unit = new Unit(unitId, spawnHex, Facing4.PlusQ)
-            {
-                Position = spawnHex
-            };
+            var unit = context != null && context.boundUnit != null
+                ? context.boundUnit
+                : new Unit(unitId, spawnHex, facing);
+
+            unit.Id = unitId;
+            unit.Position = spawnHex;
+            unit.Facing = facing;
 
             if (context != null && context.boundUnit == null)
                 context.boundUnit = unit;
@@ -148,10 +157,13 @@ namespace TGD.LevelV2
             var adapter = EnsureGridAdapter(go, unit);
             var resolvedFootprint = ResolveFootprint(final.footprint);
             if (adapter != null)
+            {
                 adapter.Footprint = resolvedFootprint;
+                adapter.Facing = facing;
+            }
 
             WireMovementAndAttack(go, context, cooldownHub, unit, ref shared);
-            if (!WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, unit.Facing, ref shared))
+            if (!WireOccupancy(go, context, unit, final.faction, ref adapter, spawnHex, facing, ref shared))
             {
                 _usedIds.Remove(unit.Id);
                 Destroy(go);
@@ -742,6 +754,8 @@ namespace TGD.LevelV2
             var resolvedEnv = shared.environment;
 
             var bound = context != null && context.boundUnit != null ? context.boundUnit : unit;
+            if (bound != null)
+                bound.Facing = facing;
             if (adapter == null)
                 adapter = EnsureGridAdapter(go, bound);
             else if (adapter.Unit == null && bound != null)
