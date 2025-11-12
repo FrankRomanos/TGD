@@ -1315,6 +1315,7 @@ namespace TGD.CombatV2
                     }
 
                     AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
+                    HexHazardWatcher.NotifyTraversal(ctx, unit, to, env);
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]

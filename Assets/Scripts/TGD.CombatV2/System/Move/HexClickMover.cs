@@ -1060,6 +1060,7 @@ namespace TGD.CombatV2
                     }
 
                     HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+                    HexHazardWatcher.NotifyTraversal(ctx, unit, to, env);
 
                     var fromW = hexSpace.HexToWorld(from, y);
                     var toW = hexSpace.HexToWorld(to, y);
