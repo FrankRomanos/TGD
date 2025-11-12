@@ -5,6 +5,12 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
+    /// <summary>
+    /// Concrete IOcc implementation backed by <see cref="HexOccupancy"/>.  This MonoBehaviour
+    /// lives on the battlefield board and is treated as the authoritative source for every
+    /// placement, movement, and reservation.  UnitFactory injects it into UnitRuntimeContext
+    /// so gameplay controllers can drive IOcc without knowing anything about HexBoard internals.
+    /// </summary>
     public sealed class HexOccupancyService : MonoBehaviour, IOccupancyService
     {
         [Header("Board Authoring")]
@@ -33,11 +39,19 @@ namespace TGD.HexBoard
             public OccReserveMode mode;
         }
 
+        /// <summary>
+        /// Guarantees the scene only has a single active occupancy service.  Mixing two stores
+        /// would break the "唯一真相源" contract, so we fail loudly during boot.
+        /// </summary>
         void Awake()
         {
             OccDiagnostics.AssertSingleStore(this, "HexOccupancyService.Awake");
         }
 
+        /// <summary>
+        /// Resets runtime counters and caches when the board is (re)constructed.  Called every
+        /// time <see cref="Get"/> spins up a fresh HexOccupancy instance so diagnostics stay aligned.
+        /// </summary>
         void ResetState()
         {
             _nextTxnId = 1;
@@ -47,6 +61,11 @@ namespace TGD.HexBoard
             _tokensByContext.Clear();
         }
 
+        /// <summary>
+        /// Lazily constructs the backing <see cref="HexOccupancy"/> using the authoring layout.
+        /// The service is designed to survive domain reloads and late binding, so callers always
+        /// ask for the store instead of caching direct references.
+        /// </summary>
         public HexOccupancy Get()
         {
             if (_occ == null && authoring != null && authoring.Layout != null)
@@ -57,11 +76,23 @@ namespace TGD.HexBoard
             return _occ;
         }
 
+        /// <summary>
+        /// Registers a grid actor directly with the underlying store.  Only used by legacy
+        /// bootstrapping paths; gameplay code should flow through <see cref="TryPlace"/>.
+        /// </summary>
         public bool Register(IGridActor actor, Hex anchor, Facing4 facing)
             => Get() != null && actor != null && Get().TryPlace(actor, anchor, facing);
 
+        /// <summary>
+        /// Mirrors <see cref="Register"/> but tears down actors.  Used by editor tools when
+        /// respawning boards.
+        /// </summary>
         public void Unregister(IGridActor actor) { Get()?.Remove(actor); }
 
+        /// <summary>
+        /// Produces a monotonically increasing transaction id for diagnostics.  Wraps around to
+        /// keep ids positive if we churn millions of operations during stress tests.
+        /// </summary>
         OccTxnId NextTxn()
         {
             var id = new OccTxnId(_nextTxnId++);
@@ -70,6 +101,10 @@ namespace TGD.HexBoard
             return id;
         }
 
+        /// <summary>
+        /// Generates the lightweight reservation token identifier.  Tokens intentionally skip 0
+        /// so the struct's <see cref="OccToken.IsValid"/> check stays cheap.
+        /// </summary>
         OccToken NextToken()
         {
             if (_nextTokenId == 0)
@@ -80,6 +115,11 @@ namespace TGD.HexBoard
             return token;
         }
 
+        /// <summary>
+        /// Resolves a runtime context into the <see cref="UnitGridAdapter"/> responsible for
+        /// talking to HexOccupancy.  Factories inject ctx.boundUnit, so we hydrate adapters on
+        /// demand if the factory skipped manual wiring.
+        /// </summary>
         bool TryResolveActor(UnitRuntimeContext ctx, out UnitGridAdapter adapter, out OccFailReason reason)
         {
             adapter = null;
@@ -107,6 +147,10 @@ namespace TGD.HexBoard
             return true;
         }
 
+        /// <summary>
+        /// Records a live reservation so we can later enforce Cancel/Commit semantics even if the
+        /// issuing controller disables.  Tokens are also grouped by context for quick CancelAll.
+        /// </summary>
         void TrackToken(UnitRuntimeContext ctx, OccToken token, in TokenReservation reservation)
         {
             _activeTokens[token] = reservation;
@@ -123,6 +167,10 @@ namespace TGD.HexBoard
                 list.Add(token);
         }
 
+        /// <summary>
+        /// Drops tracking for a token and cleans up the per-context map when the last reservation
+        /// disappears.  Keeps diagnostics noise-free and prevents memory churn in long battles.
+        /// </summary>
         void UntrackToken(OccToken token, UnitRuntimeContext ctx)
         {
             _activeTokens.Remove(token);
@@ -137,15 +185,28 @@ namespace TGD.HexBoard
             }
         }
 
+        /// <summary>
+        /// Centralized guard to avoid empty reservation requests.  Makes error handling consistent
+        /// across soft and hard reservation modes.
+        /// </summary>
         static bool HasCells(IReadOnlyList<Hex> cells)
             => cells != null && cells.Count > 0;
 
+        /// <summary>
+        /// Checks whether the actor already owns cells inside the store.  Used by move/remove
+        /// flows to short-circuit before we attempt a write.
+        /// </summary>
         bool WasPlaced(HexOccupancy store, IGridActor actor)
         {
             var cells = store?.CellsOf(actor);
             return HasCells(cells);
         }
 
+        /// <summary>
+        /// Shared implementation behind place/move/commit.  Handles validation, writes into the
+        /// store, increments version counters, and emits diagnostics.  All public entry points
+        /// funnel through here to keep transactional semantics consistent.
+        /// </summary>
         bool TryPlaceInternal(UnitRuntimeContext ctx, UnitGridAdapter actor, Hex anchor, Facing4 facing, OccAction action, out OccTxnId txn, out OccFailReason reason)
         {
             txn = default;
@@ -179,6 +240,10 @@ namespace TGD.HexBoard
             return true;
         }
 
+        /// <summary>
+        /// Releases whatever temporary cells a token held.  Handles both soft and hard modes so
+        /// commit/cancel call sites do not need to duplicate release logic.
+        /// </summary>
         void ReleaseReservation(TokenReservation reservation)
         {
             if (reservation.actor == null || reservation.cells == null || reservation.cells.Count == 0)
@@ -199,6 +264,11 @@ namespace TGD.HexBoard
             }
         }
 
+        /// <summary>
+        /// Soft reservation flow used by most player previews.  Allows overlaps with the issuing
+        /// actor while still rejecting cells blocked by others.  Newly added cells are tracked so
+        /// we can roll back cleanly on failure.
+        /// </summary>
         bool ReserveSoftPath(HexOccupancy store, UnitGridAdapter actor, IReadOnlyList<Hex> cells, List<Hex> newlyReserved)
         {
             bool anyNew = false;
@@ -242,6 +312,11 @@ namespace TGD.HexBoard
             return anyNew;
         }
 
+        /// <summary>
+        /// Hard reservation flow that optionally locks every step along the path.  Used by
+        /// formation control, scripted sequences, and enemy rush logic where we must not be
+        /// interrupted.  Similar rollback semantics to <see cref="ReserveSoftPath"/>.
+        /// </summary>
         bool ReserveHardPath(HexOccupancy store, UnitGridAdapter actor, IReadOnlyList<Hex> cells, bool pathHard, List<Hex> newlyReserved)
         {
             bool anyNew = false;
@@ -288,6 +363,7 @@ namespace TGD.HexBoard
             return anyNew;
         }
 
+        /// <inheritdoc />
         public bool TryPlace(UnitRuntimeContext ctx, Hex anchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
         {
             txn = default;
@@ -299,6 +375,7 @@ namespace TGD.HexBoard
             return TryPlaceInternal(ctx, actor, anchor, facing, OccAction.Place, out txn, out reason);
         }
 
+        /// <inheritdoc />
         public bool TryMove(UnitRuntimeContext ctx, Hex anchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
         {
             txn = default;
@@ -323,6 +400,7 @@ namespace TGD.HexBoard
             return TryPlaceInternal(ctx, actor, anchor, facing, OccAction.Move, out txn, out reason);
         }
 
+        /// <inheritdoc />
         public void Remove(UnitRuntimeContext ctx, out OccTxnId txn)
         {
             txn = default;
@@ -345,6 +423,7 @@ namespace TGD.HexBoard
             CancelAll(ctx, "Remove");
         }
 
+        /// <inheritdoc />
         public bool ReservePath(UnitRuntimeContext ctx, IReadOnlyList<Hex> cells, out OccToken token, out OccReserveResult result, OccReserveMode mode = OccReserveMode.SoftPath)
         {
             token = default;
@@ -425,6 +504,7 @@ namespace TGD.HexBoard
             return true;
         }
 
+        /// <inheritdoc />
         public bool Commit(UnitRuntimeContext ctx, OccToken token, Hex finalAnchor, Facing4 facing, out OccTxnId txn, out OccFailReason reason)
         {
             txn = default;
@@ -461,6 +541,7 @@ namespace TGD.HexBoard
             return ok;
         }
 
+        /// <inheritdoc />
         public bool Cancel(UnitRuntimeContext ctx, OccToken token, string reason = null)
         {
             if (!token.IsValid)
@@ -479,6 +560,7 @@ namespace TGD.HexBoard
             return true;
         }
 
+        /// <inheritdoc />
         public int CancelAll(UnitRuntimeContext ctx, string reason = null)
         {
             if (ctx == null)
@@ -497,6 +579,7 @@ namespace TGD.HexBoard
             return count;
         }
 
+        /// <inheritdoc />
         public bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing)
         {
             if (!TryResolveActor(ctx, out var actor, out _))
@@ -509,6 +592,7 @@ namespace TGD.HexBoard
             return store.CanPlaceIgnoringTemp(actor, anchor, facing, actor);
         }
 
+        /// <inheritdoc />
         public bool TryGetActorInfo(Hex anchor, out OccActorInfo info)
         {
             info = null;
@@ -524,6 +608,7 @@ namespace TGD.HexBoard
             return true;
         }
 
+        /// <inheritdoc />
         public OccSnapshot[] DumpAll()
         {
             var store = Get();
@@ -541,8 +626,13 @@ namespace TGD.HexBoard
             return list.ToArray();
         }
 
+        /// <inheritdoc />
         public int StoreVersion => _storeVersion;
 
+        /// <summary>
+        /// Human-readable identifier for diagnostics and replay dumps.  Prefers explicit overrides,
+        /// then the authoring asset name, and finally falls back to the active scene.
+        /// </summary>
         public string BoardId
         {
             get
