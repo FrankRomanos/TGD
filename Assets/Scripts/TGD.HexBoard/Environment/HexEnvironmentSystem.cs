@@ -34,7 +34,8 @@ namespace TGD.HexBoard
         public bool HasHazard(Hex h, HazardKind kind)
             => envMap != null && envMap.HasKind(h, kind);
 
-        public bool IsTrap(Hex h) => envMap != null && envMap.HasKind(h, HazardKind.Trap);
+        public bool IsTrap(Hex h)
+            => envMap != null && (envMap.HasKind(h, HazardKind.Trap) || envMap.HasKind(h, HazardKind.EntangleTrap));
         public bool IsPit(Hex h) => envMap != null && envMap.HasKind(h, HazardKind.Pit);
 
         [Header("Default")]
@@ -97,6 +98,97 @@ namespace TGD.HexBoard
             multiplier = 1f;
             durationTurns = 0;
             tag = null;
+
+            if (envMap == null)
+                return false;
+
+            var effects = envMap.Get(at);
+            if (effects == null || effects.Count == 0)
+                return false;
+
+            HazardType selected = null;
+            float selectedMult = 1f;
+            int selectedTurns = 0;
+            string selectedTag = null;
+
+            for (int i = 0; i < effects.Count; i++)
+            {
+                var hazard = effects[i].Hazard;
+                if (hazard == null)
+                    continue;
+
+                int configuredTurns = hazard.stickyDurationTurns;
+                if (configuredTurns == 0)
+                    continue;
+
+                float configuredMult = Mathf.Clamp(hazard.stickyMoveMult, 0.1f, 5f);
+                if (Mathf.Approximately(configuredMult, 1f))
+                    continue;
+
+                int normalizedTurns;
+                if (configuredTurns < 0)
+                {
+                    normalizedTurns = -1;
+                }
+                else
+                {
+                    normalizedTurns = Mathf.Max(1, configuredTurns);
+                }
+                string candidateTag = BuildStickyTag(hazard, at);
+
+                if (selected == null || ShouldPreferSticky(configuredMult, normalizedTurns, hazard.kind, selectedMult, selectedTurns, selected.kind))
+                {
+                    selected = hazard;
+                    selectedMult = configuredMult;
+                    selectedTurns = normalizedTurns;
+                    selectedTag = candidateTag;
+                }
+            }
+
+            if (selected == null)
+                return false;
+
+            multiplier = selectedMult;
+            durationTurns = selectedTurns;
+            tag = selectedTag;
+            return true;
+        }
+
+        static string BuildStickyTag(HazardType hazard, Hex at)
+        {
+            if (hazard == null)
+                return $"Patch@{at.q},{at.r}";
+
+            string prefix = !string.IsNullOrEmpty(hazard.hazardId)
+                ? hazard.hazardId
+                : (!string.IsNullOrEmpty(hazard.name) ? hazard.name : hazard.kind.ToString());
+
+            return $"Hazard@{prefix}@{at.q},{at.r}";
+        }
+
+        static bool ShouldPreferSticky(float candidateMult, int candidateTurns, HazardKind candidateKind,
+            float currentMult, int currentTurns, HazardKind currentKind)
+        {
+            float candidateDelta = Mathf.Abs(candidateMult - 1f);
+            float currentDelta = Mathf.Abs(currentMult - 1f);
+
+            if (candidateDelta > currentDelta + 1e-4f)
+                return true;
+            if (candidateDelta + 1e-4f < currentDelta)
+                return false;
+
+            if (candidateTurns < 0 && currentTurns >= 0)
+                return true;
+            if (candidateTurns >= 0 && currentTurns < 0)
+                return false;
+
+            if (candidateKind != currentKind)
+            {
+                if (candidateKind == HazardKind.SpeedPatch)
+                    return true;
+                if (currentKind == HazardKind.SpeedPatch)
+                    return false;
+            }
 
             return false;
         }

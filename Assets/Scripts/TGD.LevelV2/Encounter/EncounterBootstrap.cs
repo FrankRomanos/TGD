@@ -18,6 +18,7 @@ namespace TGD.LevelV2
         static readonly Color EnvSlowColor = new Color(0.65f, 0.3f, 1f, 0.55f);
         static readonly Color EnvFastColor = new Color(0.2f, 1f, 0.85f, 0.55f);
         static readonly Color EnvTrapColor = new Color(1f, 0.25f, 0.25f, 0.65f);
+        static readonly Color EnvEntangleTrapColor = new Color(0.1f, 0.45f, 0.15f, 0.7f);
         static readonly Color EnvPitColor = new Color(0.1f, 0.1f, 0.1f, 0.75f);
         static readonly Color EnvNeutralColor = new Color(0.65f, 0.75f, 0.85f, 0.45f);
 
@@ -292,6 +293,8 @@ namespace TGD.LevelV2
             if (type == null)
                 return EnvNeutralColor;
 
+            if (type.kind == HazardKind.EntangleTrap)
+                return EnvEntangleTrapColor;
             if (type.kind == HazardKind.Trap)
                 return EnvTrapColor;
             if (type.kind == HazardKind.Pit)

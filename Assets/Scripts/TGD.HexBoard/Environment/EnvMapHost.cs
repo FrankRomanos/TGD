@@ -11,6 +11,7 @@ namespace TGD.HexBoard
         static readonly IReadOnlyList<CellEffect> EmptyEffects = Array.Empty<CellEffect>();
 
         readonly Dictionary<Hex, List<CellEffect>> _map = new();
+        readonly List<Hex> _scratchHexes = new();
 
         public void Clear()
         {
@@ -33,6 +34,62 @@ namespace TGD.HexBoard
 
             foreach (var h in Hex.Range(center, clampedRadius))
                 StampCell(h, def);
+        }
+
+        public bool Remove(Hex h, HazardType def)
+        {
+            if (def == null)
+                return false;
+
+            if (!_map.TryGetValue(h, out var list) || list == null)
+                return false;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Hazard == def)
+                {
+                    list.RemoveAt(i);
+                    if (list.Count == 0)
+                        _map.Remove(h);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public int RemoveAll(HazardType def)
+        {
+            if (def == null)
+                return 0;
+
+            int removed = 0;
+            _scratchHexes.Clear();
+
+            foreach (var kvp in _map)
+            {
+                var list = kvp.Value;
+                if (list == null || list.Count == 0)
+                    continue;
+
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    if (list[i].Hazard == def)
+                    {
+                        list.RemoveAt(i);
+                        removed++;
+                    }
+                }
+
+                if (list.Count == 0)
+                    _scratchHexes.Add(kvp.Key);
+            }
+
+            for (int i = 0; i < _scratchHexes.Count; i++)
+                _map.Remove(_scratchHexes[i]);
+
+            _scratchHexes.Clear();
+            return removed;
         }
 
         public bool HasKind(Hex h, HazardKind kind)
@@ -78,5 +135,6 @@ namespace TGD.HexBoard
             public HazardType Hazard => hazard;
             public HazardKind Kind => hazard != null ? hazard.kind : default;
         }
+
     }
 }
