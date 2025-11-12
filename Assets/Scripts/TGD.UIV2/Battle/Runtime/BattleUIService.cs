@@ -1,8 +1,11 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections.Generic;
 using TGD.AudioV2;
 using TGD.CombatV2;
 using TGD.CoreV2;
+using TGD.HexBoard;
+using TGD.UIV2;
 
 namespace TGD.UIV2.Battle
 {
@@ -23,6 +26,7 @@ namespace TGD.UIV2.Battle
         bool _subscriptionsActive;
         bool _turnManagerSubscribed;
         bool _combatManagerSubscribed;
+        bool _actionHudSubscribed;
         bool _turnLogSubscribed;
         readonly HashSet<string> _playerLabels = new();
         readonly HashSet<string> _enemyLabels = new();
@@ -59,6 +63,9 @@ namespace TGD.UIV2.Battle
             if (turnHud == null)
                 turnHud = AutoFind<TurnHudController>();
 
+            if (actionHudMessageListener == null)
+                actionHudMessageListener = AutoFind<ActionHudMessageListenerTMP>();
+
         }
 
         void OnEnable()
@@ -81,6 +88,8 @@ namespace TGD.UIV2.Battle
                 turnHud = AutoFind<TurnHudController>();
             if (turnBanner == null)
                 turnBanner = AutoFind<TurnBannerController>();
+            if (actionHudMessageListener == null)
+                actionHudMessageListener = AutoFind<ActionHudMessageListenerTMP>();
 
             // --- 初始化每个UI控制器并把 manager 注入
             if (timeline != null)
@@ -148,6 +157,8 @@ namespace TGD.UIV2.Battle
                 turnHud.Shutdown();
             if (turnBanner != null)
                 turnBanner.ForceHideImmediate();
+            if (actionHudMessageListener != null)
+                actionHudMessageListener.HideImmediate();
         }
 
 
@@ -188,7 +199,16 @@ namespace TGD.UIV2.Battle
                 _combatManagerSubscribed = true;
             }
 
-            _subscriptionsActive = _turnManagerSubscribed || _combatManagerSubscribed;
+            if (actionHudMessageListener != null && !_actionHudSubscribed)
+            {
+                HexMoveEvents.MoveRejected += HandleMoveRejected;
+                HexMoveEvents.TimeRefunded += HandleMoveRefunded;
+                AttackEventsV2.AttackRejected += HandleAttackRejected;
+                AttackEventsV2.AttackMiss += HandleAttackMiss;
+                _actionHudSubscribed = true;
+            }
+
+            _subscriptionsActive = _turnManagerSubscribed || _combatManagerSubscribed || _actionHudSubscribed;
         }
 
         void Unsubscribe()
@@ -213,7 +233,16 @@ namespace TGD.UIV2.Battle
                 _combatManagerSubscribed = false;
             }
 
-            _subscriptionsActive = false;
+            if (_actionHudSubscribed)
+            {
+                HexMoveEvents.MoveRejected -= HandleMoveRejected;
+                HexMoveEvents.TimeRefunded -= HandleMoveRefunded;
+                AttackEventsV2.AttackRejected -= HandleAttackRejected;
+                AttackEventsV2.AttackMiss -= HandleAttackMiss;
+                _actionHudSubscribed = false;
+            }
+
+            _subscriptionsActive = _turnManagerSubscribed || _combatManagerSubscribed || _actionHudSubscribed;
         }
 
         void DispatchInitialState()
@@ -269,6 +298,135 @@ namespace TGD.UIV2.Battle
 
             if (turnHud != null)
                 turnHud.HandleTurnEnded(unit);
+        }
+
+        void HandleMoveRefunded(Unit unit, int seconds)
+        {
+            if (!ShouldDisplayActionHud(unit))
+                return;
+
+            ShowActionHud($"+{seconds}s refunded", ActionHudMessageListenerTMP.HudKind.Time);
+        }
+
+        void HandleMoveRejected(Unit unit, MoveBlockReason reason, string message)
+        {
+            if (!ShouldDisplayActionHud(unit))
+                return;
+
+            string resolved = string.IsNullOrEmpty(message)
+                ? ResolveMoveRejectionMessage(reason)
+                : message;
+
+            var kind = MapKindForMove(reason, resolved);
+            ShowActionHud(resolved, kind);
+        }
+
+        void HandleAttackRejected(Unit unit, AttackRejectReasonV2 reason, string message)
+        {
+            if (!ShouldDisplayActionHud(unit))
+                return;
+
+            string resolved = string.IsNullOrEmpty(message)
+                ? ResolveAttackRejectionMessage(reason)
+                : message;
+
+            var kind = MapKindForAttack(reason, resolved);
+            ShowActionHud(resolved, kind);
+        }
+
+        void HandleAttackMiss(Unit unit, string message)
+        {
+            if (!ShouldDisplayActionHud(unit))
+                return;
+
+            string resolved = string.IsNullOrEmpty(message) ? "Attack missed." : message;
+            ShowActionHud(resolved, HudKindByText(resolved));
+        }
+
+        bool ShouldDisplayActionHud(Unit unit)
+        {
+            if (actionHudMessageListener == null || unit == null)
+                return false;
+
+            if (turnManager == null)
+                return true;
+
+            return turnManager.IsPlayerUnit(unit);
+        }
+
+        void ShowActionHud(string message, ActionHudMessageListenerTMP.HudKind kind)
+        {
+            if (actionHudMessageListener == null || string.IsNullOrEmpty(message))
+                return;
+
+            actionHudMessageListener.ShowMessage(message, kind);
+        }
+
+        string ResolveMoveRejectionMessage(MoveBlockReason reason)
+        {
+            return reason switch
+            {
+                MoveBlockReason.Entangled => "I can't move!",
+                MoveBlockReason.NoSteps => "Not now!",
+                MoveBlockReason.OnCooldown => "Move is on cooldown.",
+                MoveBlockReason.NotEnoughResource => "Not enough energy.",
+                MoveBlockReason.PathBlocked => "That path is blocked.",
+                MoveBlockReason.NoBudget => "No More Time",
+                _ => "Can't move."
+            };
+        }
+
+        string ResolveAttackRejectionMessage(AttackRejectReasonV2 reason)
+        {
+            return reason switch
+            {
+                AttackRejectReasonV2.NotReady => "Attack not ready.",
+                AttackRejectReasonV2.Busy => "Already attacking.",
+                AttackRejectReasonV2.OnCooldown => "Attack is on cooldown.",
+                AttackRejectReasonV2.NotEnoughResource => "Not enough energy.",
+                AttackRejectReasonV2.NoPath => "Can't reach that target.",
+                AttackRejectReasonV2.CantMove => "Can't move to attack.",
+                _ => "Attack unavailable."
+            };
+        }
+
+        ActionHudMessageListenerTMP.HudKind MapKindForMove(MoveBlockReason reason, string message)
+        {
+            return reason switch
+            {
+                MoveBlockReason.NotEnoughResource => ActionHudMessageListenerTMP.HudKind.Energy,
+                MoveBlockReason.NoBudget => ActionHudMessageListenerTMP.HudKind.Time,
+                MoveBlockReason.Entangled => ActionHudMessageListenerTMP.HudKind.Snare,
+                _ => HudKindByText(message)
+            };
+        }
+
+        ActionHudMessageListenerTMP.HudKind MapKindForAttack(AttackRejectReasonV2 reason, string message)
+        {
+            return reason switch
+            {
+                AttackRejectReasonV2.NotEnoughResource => ActionHudMessageListenerTMP.HudKind.Energy,
+                AttackRejectReasonV2.OnCooldown => ActionHudMessageListenerTMP.HudKind.Info,
+                AttackRejectReasonV2.NoPath => ActionHudMessageListenerTMP.HudKind.Info,
+                AttackRejectReasonV2.CantMove => ActionHudMessageListenerTMP.HudKind.Info,
+                _ => HudKindByText(message)
+            };
+        }
+
+        ActionHudMessageListenerTMP.HudKind HudKindByText(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return ActionHudMessageListenerTMP.HudKind.Info;
+
+            if (message.IndexOf("energy", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ActionHudMessageListenerTMP.HudKind.Energy;
+            if (message.IndexOf("time", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ActionHudMessageListenerTMP.HudKind.Time;
+            if (message.IndexOf("entangle", StringComparison.OrdinalIgnoreCase) >= 0
+             || message.IndexOf("can't move", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ActionHudMessageListenerTMP.HudKind.Snare;
+
+            return ActionHudMessageListenerTMP.HudKind.Info;
         }
 
         void HandleTurnOrderChanged(bool isPlayerSide)
