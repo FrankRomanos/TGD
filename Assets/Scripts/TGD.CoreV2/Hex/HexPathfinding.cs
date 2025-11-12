@@ -26,7 +26,16 @@ namespace TGD.CoreV2
             public Hex Start => _start;
 
             public bool TryGetDistance(Hex cell, out int distance)
-                => _distances != null && _distances.TryGetValue(cell, out distance);
+            {
+                if (_distances != null && _distances.TryGetValue(cell, out var stored))
+                {
+                    distance = stored;
+                    return true;
+                }
+
+                distance = default;
+                return false;
+            }
 
             public bool TryBuildPath(Hex goal, List<Hex> buffer)
             {
