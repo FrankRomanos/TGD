@@ -718,6 +718,8 @@ namespace TGD.CombatV2
             };
         }
 
+        // Bootstrap all pre-wired tools. In factory mode this is where we stitch newly spawned
+        // unit tools back into TMV2 (turn manager) and cursor services before the first turn runs.
         void Awake()
         {
             for (int i = tools.Count - 1; i >= 0; i--)
@@ -947,6 +949,9 @@ namespace TGD.CombatV2
                 turnManager.UnregisterPhaseStartGate(HandlePhaseStartGate);
         }
 
+        // Main entry point for hooking into TMV2 lifecycle events. When running under the factory
+        // pipeline we also claim the phase gate responsibilities so CAMV2 remains the single
+        // authority on W1→W4 transitions.
         void OnEnable()
         {
             if (!Application.isPlaying)
@@ -976,6 +981,8 @@ namespace TGD.CombatV2
             }
         }
 
+        // Mirror OnEnable tear-down to avoid double subscriptions when scenes hot-reload or the
+        // factory swaps managers mid-play. Active unit focus is cleared so new spawns can rebind.
         void OnDisable()
         {
             if (!Application.isPlaying)
@@ -1066,6 +1073,8 @@ namespace TGD.CombatV2
             _auditedGlobalTools = true;
         }
 
+        // Factory hook: TMV2 drives the active unit selection and we mirror it locally so every
+        // action tool knows which UnitRuntimeContext to bind against for this turn.
         void HandleFactoryTurnStarted(Unit unit)
         {
             if (!useFactoryMode)
@@ -1074,6 +1083,8 @@ namespace TGD.CombatV2
             SetActiveUnit(unit);
         }
 
+        // Factory hook: drop ownership as soon as TMV2 signals turn end to prevent late callbacks
+        // from mutating the wrong context when the factory schedules the next unit.
         void HandleFactoryTurnEnded(Unit unit)
         {
             if (!useFactoryMode)
@@ -1083,6 +1094,8 @@ namespace TGD.CombatV2
                 SetActiveUnit(null);
         }
 
+        // Factory-only: updates the active unit/context reference, rebinds tools, and recenters the
+        // camera so designers just need to spawn via UnitFactory and CAMV2 will drive the UI.
         public void SetActiveUnit(Unit unit)
         {
             if (!useFactoryMode)
@@ -1098,6 +1111,8 @@ namespace TGD.CombatV2
             FocusCameraOn(unit);
         }
 
+        // Re-evaluate every registered tool against the provided context. Ensures that freshly
+        // spawned units (or context swaps) only have the actions they have learned enabled.
         public void RebindToolsFor(UnitRuntimeContext context)
         {
             if (!useFactoryMode)
@@ -1172,6 +1187,8 @@ namespace TGD.CombatV2
             return false;
         }
 
+        // Central gate used by UI/input layers to know if player commands are accepted. Factory
+        // integration makes sure we only return true while TMV2 grants priority to this unit.
         public bool PlayerCanActNow()
         {
             if (!useFactoryMode)
@@ -1192,6 +1209,8 @@ namespace TGD.CombatV2
             return true;
         }
 
+        // Lightweight helper so the factory spawn flow can immediately orient the pick camera to
+        // the currently acting unit without bespoke cutscene logic.
         public void FocusCameraOn(Unit unit)
         {
             if (!useFactoryMode)
@@ -1210,6 +1229,8 @@ namespace TGD.CombatV2
                 cam.transform.rotation = Quaternion.LookRotation(delta.normalized, Vector3.up);
         }
 
+        // Sync point with TMV2: caches the active unit, aborts stale tools, and clears pending
+        // auto-end requests. This is effectively CAMV2's transition into W1 for the new actor.
         void OnTurnStarted(Unit unit)
         {
             _currentUnit = unit;
