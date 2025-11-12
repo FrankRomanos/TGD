@@ -37,3 +37,9 @@ MonoBehaviour:
   - definition: {fileID: 11400000, guid: ecf54a441b724131aa060245aa09b797, type: 2}
     displayName: Move
     icon: {fileID: 0}
+  - definition: {fileID: 11400000, guid: b38ae3c6289162b488c5525301a18768, type: 2}
+    displayName: "\u706B\u5708"
+    icon: {fileID: 0}
+  - definition: {fileID: 11400000, guid: c5d4befed902872478a561d6594d23ff, type: 2}
+    displayName: "\u6807\u51C6\u6280\u80FD"
+    icon: {fileID: 0}
