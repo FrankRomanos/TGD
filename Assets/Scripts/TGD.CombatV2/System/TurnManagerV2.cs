@@ -363,6 +363,9 @@ namespace TGD.CombatV2
             return true;
         }
 
+        // Entry point used by CAMV2 and the factory pipeline to bring both rosters online and
+        // start the master battle coroutine. This is the only place that resets side lists and
+        // guarantees each Unit has a runtime before the phase loop is entered.
         public void StartBattle(List<Unit> players, List<Unit> enemies)
         {
             _playerUnits.Clear();
@@ -534,6 +537,9 @@ namespace TGD.CombatV2
             RaiseUnitRuntimeChanged(runtime.Unit);
         }
 
+        // Core round-robin loop: alternates player and enemy phases forever until an external
+        // system stops the coroutine. Each phase is responsible for its own begin/end logging and
+        // per-unit turn sequencing.
         IEnumerator BattleLoop()
         {
             while (true)
@@ -544,6 +550,8 @@ namespace TGD.CombatV2
         }
 
 
+        // Executes external phase gates (cinematics, tutorials, cut-ins) before any units are
+        // allowed to move. Gates are awaited sequentially to keep TMV2 authoritative on pacing.
         IEnumerator RunPhaseStartGates(bool isPlayer)
         {
             if (_phaseStartGates.Count == 0)
@@ -570,6 +578,9 @@ namespace TGD.CombatV2
             }
         }
 
+        // Drives a full Player/Enemy phase: broadcast begin events, enforce the 1s phase banner
+        // delay, iterate the active roster, and finally process side-wide cooldown/regen at the
+        // end. This is the high-level rhythm CAMV2 depends on for W1→W4 timing.
         IEnumerator RunPhase(List<Unit> units, bool isPlayer)
         {
             _phaseIndex += 1;
@@ -635,6 +646,9 @@ namespace TGD.CombatV2
                 OnEnemySideEnd();
         }
 
+        // Called when a unit becomes active. Sets up bookkeeping, emits authoritative logs, and
+        // triggers turn-start gates so CAMV2 can queue the opening action (W1). Any full-round
+        // automation is resolved before normal player interaction begins.
         void BeginTurn(TurnRuntimeV2 runtime)
         {
             if (runtime == null)
@@ -660,6 +674,8 @@ namespace TGD.CombatV2
             bool skipTurn = HandleFullRoundAtTurnBegin(runtime);
             if (!skipTurn)
             {
+                // Kick off asynchronous gates (UI, battle rig, factory hooks) while we remain the
+                // sole owner of the timing state.
                 StartCoroutine(RunTurnStartSequence(runtime, _currentPhaseIndex));
                 if (!runtime.IsPlayer)
                     StartCoroutine(AutoFinishEnemyTurn(runtime));
@@ -765,6 +781,8 @@ namespace TGD.CombatV2
             return true;
         }
 
+        // Waits for all registered turn-start gates (BattleUIService, CAMV2 factory sync, etc.) to
+        // complete before we consider the unit to have reached Idle. Keeps W1 entry serialized.
         IEnumerator RunTurnStartSequence(TurnRuntimeV2 runtime, int phaseIndex)
         {
             if (runtime == null)
@@ -857,6 +875,8 @@ namespace TGD.CombatV2
             EndTurn(unit);
         }
 
+        // Enemy turns auto-complete once AI actions have reached idle and the post-delay expires.
+        // This keeps PvE flow responsive even when no explicit EndTurn request is issued.
         IEnumerator AutoFinishEnemyTurn(TurnRuntimeV2 runtime)
         {
             if (runtime == null || runtime.Unit == null)
@@ -1191,6 +1211,8 @@ namespace TGD.CombatV2
             }
         }
 
+        // Player phase entry point: notify UI, broadcast the generic callback, and refresh unit
+        // state snapshots so factory-spawned agents have up-to-date stats before CAMV2 queries.
         void OnPlayerPhaseBegin()
         {
             PlayerPhaseStarted?.Invoke();
@@ -1198,6 +1220,8 @@ namespace TGD.CombatV2
             RefreshPhaseBeginUnits(true);
         }
 
+        // Enemy phase entry point mirrors the player flow so automated turns see the same
+        // bookkeeping hooks and PhaseBegan signal.
         void OnEnemyPhaseBegin()
         {
             EnemyPhaseStarted?.Invoke();
@@ -1205,6 +1229,8 @@ namespace TGD.CombatV2
             RefreshPhaseBeginUnits(false);
         }
 
+        // Player side wrap-up: commit cooldown ticks, reset budgets, and emit the canonical logs
+        // TMV2 analytics depend on. Any factory-created temp attack reservations are also cleared.
         void OnPlayerSideEnd()
         {
             string phaseLabel = FormatPhaseLabel(true);
@@ -1216,6 +1242,8 @@ namespace TGD.CombatV2
             SideEnded?.Invoke(true);
         }
 
+        // Enemy side wrap-up mirrors the player side to keep cooldown/regen cadence symmetrical
+        // regardless of who took the last action.
         void OnEnemySideEnd()
         {
             string phaseLabel = FormatPhaseLabel(false);
@@ -1235,6 +1263,8 @@ namespace TGD.CombatV2
             Debug.Log($"[Occ] TempClear {reason} count={count}", this);
         }
 
+        // Rebuilds the remaining time budget for every unit on the specified side. This is the
+        // single place that converts BaseTime/Speed into the next round's actionable seconds.
         void ResetSideBudgets(bool isPlayerSide)
         {
             foreach (var pair in _runtimeByUnit)
@@ -1253,6 +1283,8 @@ namespace TGD.CombatV2
             }
         }
 
+        // Emits guardrails for degenerate budgets (e.g. speed <= 0) so downstream systems can
+        // react. Also clears any previous "time depleted" flags once a character regains base time.
         void HandleTurnTimeFloor(TurnRuntimeV2 runtime, int baseSeconds)
         {
             if (runtime == null || runtime.Unit == null)
