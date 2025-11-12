@@ -590,6 +590,10 @@ namespace TGD.CombatV2
             _bonusTurn.cap = Mathf.Max(0, capSeconds);
             _bonusTurn.remaining = Mathf.Max(0, capSeconds);
             _bonusTurn.sourceId = sourceId;
+
+            if (useFactoryMode)
+                SetActiveUnit(unit);
+
             SetChainFocus(unit);
             NotifyBonusTurnStateChanged();
         }
@@ -599,9 +603,15 @@ namespace TGD.CombatV2
             if (!IsBonusTurnFor(unit))
                 return;
 
+            Unit nextActive = turnManager != null ? turnManager.ActiveUnit : null;
+
             _bonusTurn.Reset();
             NotifyBonusTurnStateChanged();
-            SetChainFocus(turnManager != null ? turnManager.ActiveUnit : null);
+
+            if (useFactoryMode)
+                SetActiveUnit(nextActive);
+
+            SetChainFocus(nextActive);
         }
 
         void SetChainFocus(Unit unit)
@@ -1093,26 +1103,73 @@ namespace TGD.CombatV2
             if (!useFactoryMode)
                 return;
 
-            HashSet<string> learned = null;
-            if (context != null && context.LearnedActions != null)
-                learned = new HashSet<string>(context.LearnedActions, StringComparer.OrdinalIgnoreCase);
-
             foreach (var pair in _toolsById)
             {
-                bool enabled = learned != null && learned.Contains(pair.Key);
                 var list = pair.Value;
                 if (list == null)
                     continue;
 
-                foreach (var tool in list)
+                for (int i = 0; i < list.Count; i++)
                 {
-                    if (tool is IBindContext binder)
-                        binder.BindContext(context, turnManager);
+                    var tool = list[i];
+                    if (tool == null)
+                        continue;
+
+                    var ownerCtx = ResolveToolContext(tool);
+                    if (ownerCtx == null)
+                        ownerCtx = context;
+
+                    if (ownerCtx != null && tool is IBindContext binder)
+                        binder.BindContext(ownerCtx, turnManager);
 
                     if (tool is MonoBehaviour behaviour && behaviour != null)
+                    {
+                        bool enabled = ownerCtx != null && IsActionLearned(ownerCtx, pair.Key);
                         behaviour.enabled = enabled;
+                    }
                 }
             }
+        }
+
+        UnitRuntimeContext ResolveToolContext(IActionToolV2 tool)
+        {
+            if (tool is Component component && !Dead(component))
+            {
+                var ctx = component.GetComponentInParent<UnitRuntimeContext>(true);
+                if (ctx != null)
+                    return ctx;
+            }
+
+            if (tool is TGD.CoreV2.IToolOwner owner && owner.Ctx != null)
+                return owner.Ctx;
+
+            return null;
+        }
+
+        bool IsActionLearned(UnitRuntimeContext context, string skillId)
+        {
+            if (context == null)
+                return false;
+
+            var learned = context.LearnedActions;
+            if (learned == null || learned.Count == 0)
+                return false;
+
+            string normalized = NormalizeSkillId(skillId);
+            if (string.IsNullOrEmpty(normalized))
+                return false;
+
+            for (int i = 0; i < learned.Count; i++)
+            {
+                string entry = NormalizeSkillId(learned[i]);
+                if (string.IsNullOrEmpty(entry))
+                    continue;
+
+                if (string.Equals(entry, normalized, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         public bool PlayerCanActNow()
@@ -1484,6 +1541,7 @@ namespace TGD.CombatV2
             bool prevPending = _pendingEndTurn;
             var prevPendingUnit = _pendingEndTurnUnit;
             int prevPlanDepth = _bonusPlanDepth;
+            var prevActiveUnit = useFactoryMode ? _activeUnit : null;
 
             _pendingEndTurn = false;
             _pendingEndTurnUnit = null;
@@ -1541,6 +1599,8 @@ namespace TGD.CombatV2
                 _pendingEndTurn = prevPending;
                 _pendingEndTurnUnit = prevPendingUnit;
                 _bonusPlanDepth = prevPlanDepth;
+                if (useFactoryMode)
+                    SetActiveUnit(prevActiveUnit);
                 bool hadBonus = _bonusTurn.active;
                 _bonusTurn.Reset();
                 if (hadBonus)
@@ -1591,6 +1651,13 @@ namespace TGD.CombatV2
 
         Unit ResolveUnit(IActionToolV2 tool)
         {
+            if (tool is Component component && !Dead(component))
+            {
+                var ctx = component.GetComponentInParent<UnitRuntimeContext>(true);
+                if (ctx != null)
+                    return ctx.boundUnit;
+            }
+
             if (tool is TGD.CoreV2.IToolOwner own && own.Ctx != null)
                 return own.Ctx.boundUnit;
 
@@ -3685,7 +3752,11 @@ namespace TGD.CombatV2
             try
             {
                 var rules = ResolveRules();
-                IReadOnlyList<ActionKind> allowedKinds = rules?.AllowedChainFirstLayer(baseKind, isEnemyPhase);
+                bool phaseStartPlan = !string.IsNullOrEmpty(basePlan.kind)
+                    && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase);
+                IReadOnlyList<ActionKind> allowedKinds = phaseStartPlan
+                    ? rules?.AllowedAtPhaseStartFree()
+                    : rules?.AllowedChainFirstLayer(baseKind, isEnemyPhase);
                 bool cancelledBase = false;
                 int depth = 0;
                 bool keepLooping = allowedKinds != null && allowedKinds.Count > 0;
