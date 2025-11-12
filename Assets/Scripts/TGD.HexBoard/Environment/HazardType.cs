@@ -1,9 +1,10 @@
 // File: TGD.HexBoard/Environment/HazardType.cs
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    public enum HazardKind { Trap, Pit }
+    public enum HazardKind { Trap, Pit, SpeedPatch }
 
     [CreateAssetMenu(menuName = "TGD/HexBoard/Hazard Type")]
     public class HazardType : ScriptableObject
@@ -15,22 +16,55 @@ namespace TGD.HexBoard
         public GameObject vfxPrefab;
 
         [Header("Tick (per turn)")]
-        [Tooltip("Ã¿»ØºÏ×î¶à´¥·¢¼¸´Î£»-1 ±íÊ¾ÎŞÏŞ´Î")]
+        [Tooltip("Ã¿Øºà´¥Î£-1 Ê¾Ş´")]
         public int tickTimes = -1;
 
-        [Tooltip("¿Éµş²ãÉÏÏŞ£»-1 ±íÊ¾ÎŞÏŞ²ã")]
+        [Tooltip("ÉµŞ£-1 Ê¾Ş²")]
         public int maxStacks = -1;
 
-        // ====== Trap ³£¼ûĞ§¹û£¨ÏÈÓÃğ¤ĞÔ¼õËÙ£»ÉËº¦ºóĞø½ÓÈë£©======
+        // ====== Trap Ğ§Ô¼Ù£Ëºë£©======
         [Header("Trap Effects (optional)")]
-        [Tooltip("½øÈë Trap Ê±¸½×ÅµÄÒÆËÙ±¶ÂÊ£¨<1=¼õËÙ£¬>1=¼ÓËÙ£»Ò»°ãÏİÚåÓÃ <1£©")]
+        [Tooltip(" Trap Ê±ÅµÙ±Ê£<1=Ù£>1=Ù£Ò» <1")]
         [Range(0.1f, 3f)] public float stickyMoveMult = 1f;
 
-        [Tooltip("¸½×Å³ÖĞø»ØºÏÊı£»<=0 ±íÊ¾²»¸½×Å")]
+        [Tooltip("Å³Øº<=0 Ê¾")]
         public int stickyDurationTurns = 0;
 
-        // Ô¤Áô£º½øÈëÉËº¦¡¢Ã¿»ØºÏÉËº¦µÈ
+        // Ô¤ËºÃ¿ØºËº
         // public int onEnterDamage = 0;
         // public int perTurnDamage = 0;
+
+        [Header("Debug Hooks")]
+        [Tooltip("When true, stepping onto this hazard prints a debug log message (prototype hook).")]
+        public bool logOnEnter = true;
+
+        [Tooltip("Optional custom debug log when a unit steps on this hazard. Supports {unit}, {hazard}, {hex}, {mult}.")]
+        [TextArea]
+        public string onEnterLogMessage;
+
+        public void EmitEnterLog(Unit unit, Hex hex)
+        {
+            if (!logOnEnter)
+                return;
+
+            string hazardLabel = !string.IsNullOrEmpty(hazardId) ? hazardId : name;
+            string unitLabel = unit != null
+                ? (!string.IsNullOrEmpty(unit.Id) ? unit.Id : unit.ToString())
+                : "<null unit>";
+            string hexLabel = hex.ToString();
+            string multiplierLabel = stickyMoveMult.ToString("0.###");
+
+            string message = string.IsNullOrEmpty(onEnterLogMessage)
+                ? "[Hazard] {unit} triggered {hazard} at {hex} (Ã—{mult})"
+                : onEnterLogMessage;
+
+            message = message
+                .Replace("{unit}", unitLabel)
+                .Replace("{hazard}", hazardLabel)
+                .Replace("{hex}", hexLabel)
+                .Replace("{mult}", multiplierLabel);
+
+            Debug.Log(message, this);
+        }
     }
 }
