@@ -1,11 +1,21 @@
-﻿// File: TGD.HexBoard/HexHazardWatcher.cs
+// File: TGD.HexBoard/HexHazardWatcher.cs
 using System.Collections.Generic;
-using TGD.CombatV2;
 using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.HexBoard
 {
+    public interface IHexEntangleResponder
+    {
+        bool TryApplyEntangle(
+            UnitRuntimeContext context,
+            Unit unit,
+            Hex hex,
+            HazardType hazard,
+            string tag,
+            int turns);
+    }
+
     /// 监听单位格位变化：踩陷阱打印；落穴阻挡在预览阶段由 ClickMover 的 Block + env.IsPit 负责
     [DisallowMultipleComponent]
     public sealed class HexHazardWatcher : MonoBehaviour
@@ -14,32 +24,29 @@ namespace TGD.HexBoard
         public UnitRuntimeContext ctx;
         [HideInInspector]
         public HexEnvironmentSystem env;
-        [HideInInspector]
-        public MoveRateStatusRuntime status;
 
         Hex _last;
         bool _has;
         readonly HashSet<HazardType> _activeEntangleHazards = new();
         readonly List<HazardType> _entangleScratch = new();
         readonly List<HazardType> _entangleToRemove = new();
+        IHexEntangleResponder _cachedEntangleResponder;
+        Component _cachedEntangleResponderComponent;
 
-        public void Attach(UnitRuntimeContext context, HexEnvironmentSystem environment, MoveRateStatusRuntime moveStatus = null)
+        public void Attach(UnitRuntimeContext context, HexEnvironmentSystem environment)
         {
             ctx = context != null ? context : ResolveContext();
             env = environment != null ? environment : ResolveEnvironment();
-            status = moveStatus != null ? moveStatus : ResolveStatus();
             ResetCache();
         }
 
         public void RefreshFactoryInjection(
             UnitRuntimeContext context = null,
-            HexEnvironmentSystem environment = null,
-            MoveRateStatusRuntime moveStatus = null)
+            HexEnvironmentSystem environment = null)
         {
             Attach(
                 context != null ? context : ctx,
-                environment != null ? environment : env,
-                moveStatus != null ? moveStatus : status);
+                environment != null ? environment : env);
         }
 
         void OnEnable()
@@ -54,6 +61,7 @@ namespace TGD.HexBoard
             _activeEntangleHazards.Clear();
             _entangleScratch.Clear();
             _entangleToRemove.Clear();
+            ClearEntangleResponderCache();
         }
 
         void LateUpdate()
@@ -159,21 +167,20 @@ namespace TGD.HexBoard
                 return false;
 
             var context = ResolveContext();
-            var moveStatus = ResolveStatus();
 
             bool applied = false;
             int turns = Mathf.Max(1, hazard.entangleDurationTurns);
             string tag = BuildEntangleTag(hazard, hex);
 
-            if (moveStatus != null)
-            {
-                applied = moveStatus.ApplyEntangle(tag, turns, hazard?.name);
-            }
-            else if (context != null && !context.MoveRates.IsEntangled)
+            var responder = ResolveEntangleResponder();
+            if (responder != null)
+                applied = responder.TryApplyEntangle(context, unit, hex, hazard, tag, turns);
+
+            if (!applied && context != null && !context.MoveRates.IsEntangled)
             {
                 context.MoveRates.SetEntangled(true);
                 applied = true;
-                Debug.LogWarning($"[Snare] Applied entangle via fallback (missing MoveRateStatusRuntime) at {hex}", this);
+                Debug.LogWarning($"[Snare] Applied entangle via fallback (missing entangle responder) at {hex}", this);
             }
 
             if (!applied)
@@ -198,6 +205,58 @@ namespace TGD.HexBoard
                 : (!string.IsNullOrEmpty(hazard.name) ? hazard.name : hazard.kind.ToString());
 
             return $"Entangle@{prefix}@{at.q},{at.r}";
+        }
+
+        void ClearEntangleResponderCache()
+        {
+            _cachedEntangleResponder = null;
+            _cachedEntangleResponderComponent = null;
+        }
+
+        IHexEntangleResponder ResolveEntangleResponder()
+        {
+            if (_cachedEntangleResponderComponent != null)
+            {
+                if (_cachedEntangleResponderComponent)
+                    return _cachedEntangleResponder;
+
+                ClearEntangleResponderCache();
+            }
+
+            var context = ResolveContext();
+            if (context != null)
+            {
+                if (TryCacheResponder(context.GetComponent<IHexEntangleResponder>()))
+                    return _cachedEntangleResponder;
+                if (TryCacheResponder(context.GetComponentInParent<IHexEntangleResponder>(true)))
+                    return _cachedEntangleResponder;
+                if (TryCacheResponder(context.GetComponentInChildren<IHexEntangleResponder>(true)))
+                    return _cachedEntangleResponder;
+            }
+
+            if (TryCacheResponder(GetComponent<IHexEntangleResponder>()))
+                return _cachedEntangleResponder;
+            if (TryCacheResponder(GetComponentInParent<IHexEntangleResponder>(true)))
+                return _cachedEntangleResponder;
+            if (TryCacheResponder(GetComponentInChildren<IHexEntangleResponder>(true)))
+                return _cachedEntangleResponder;
+
+            return null;
+        }
+
+        bool TryCacheResponder(IHexEntangleResponder responder)
+        {
+            if (responder == null)
+                return false;
+
+            if (responder is Component component)
+            {
+                _cachedEntangleResponder = responder;
+                _cachedEntangleResponderComponent = component;
+                return true;
+            }
+
+            return false;
         }
 
         Unit ResolveUnit()
@@ -231,25 +290,6 @@ namespace TGD.HexBoard
                   ?? GetComponentInParent<HexEnvironmentSystem>(true)
                   ?? HexEnvironmentSystem.FindInScene();
             return env;
-        }
-
-        MoveRateStatusRuntime ResolveStatus()
-        {
-            if (status != null)
-                return status;
-
-            status = GetComponent<MoveRateStatusRuntime>()
-                     ?? GetComponentInParent<MoveRateStatusRuntime>(true)
-                     ?? GetComponentInChildren<MoveRateStatusRuntime>(true);
-
-            if (status == null && ctx != null)
-            {
-                status = ctx.GetComponent<MoveRateStatusRuntime>()
-                         ?? ctx.GetComponentInParent<MoveRateStatusRuntime>(true)
-                         ?? ctx.GetComponentInChildren<MoveRateStatusRuntime>(true);
-            }
-
-            return status;
         }
     }
 }

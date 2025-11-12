@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using TGD.CoreV2;
+using TGD.HexBoard;
 
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class MoveRateStatusRuntime : MonoBehaviour, IBindContext
+    public sealed class MoveRateStatusRuntime : MonoBehaviour, IBindContext, IHexEntangleResponder
     {
         [System.Serializable]
         public sealed class Entry
@@ -188,6 +189,18 @@ namespace TGD.CombatV2
             Debug.Log($"[Snare] Apply U={unitLabel} tag={resolvedTag} turns={FormatTurns(normalizedTurns)}", this);
 
             return true;
+        }
+
+        bool IHexEntangleResponder.TryApplyEntangle(
+            UnitRuntimeContext context,
+            Unit unit,
+            Hex hex,
+            HazardType hazard,
+            string tag,
+            int turns)
+        {
+            string source = hazard != null ? (!string.IsNullOrEmpty(hazard.name) ? hazard.name : hazard.hazardId) : null;
+            return ApplyEntangle(tag, turns, source);
         }
 
         void ApplyOrRefreshInternal(string tag, float mult, int turns, bool exclusive, string source)
