@@ -35,7 +35,9 @@ namespace TGD.HexBoard
             => envMap != null && envMap.HasKind(h, kind);
 
         public bool IsTrap(Hex h)
-            => envMap != null && (envMap.HasKind(h, HazardKind.Trap) || envMap.HasKind(h, HazardKind.EntangleTrap));
+            => envMap != null && envMap.HasKind(h, HazardKind.Trap);
+        public bool IsEntangleTrap(Hex h)
+            => envMap != null && envMap.HasKind(h, HazardKind.EntangleTrap);
         public bool IsPit(Hex h) => envMap != null && envMap.HasKind(h, HazardKind.Pit);
 
         [Header("Default")]

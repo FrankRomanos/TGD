@@ -77,6 +77,6 @@ MonoBehaviour:
   - def: {fileID: 11400000, guid: b9ddbe31ab70df743ae8c979030e0aa7, type: 2}
     center:
       q: 10
-      r: 1
+      r: 11
     radius: 1
     centerOnly: 0

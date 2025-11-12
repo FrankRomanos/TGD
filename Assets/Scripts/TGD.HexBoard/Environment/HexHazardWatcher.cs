@@ -33,6 +33,9 @@ namespace TGD.HexBoard
         IHexEntangleResponder _cachedEntangleResponder;
         Component _cachedEntangleResponderComponent;
 
+        static readonly List<HexHazardWatcher> s_WatcherScratch = new();
+        static readonly HashSet<HexHazardWatcher> s_WatcherUnique = new();
+
         public void Attach(UnitRuntimeContext context, HexEnvironmentSystem environment)
         {
             ctx = context != null ? context : ResolveContext();
@@ -50,6 +53,11 @@ namespace TGD.HexBoard
         }
 
         void OnEnable()
+        {
+            ResetCache();
+        }
+
+        void OnDisable()
         {
             ResetCache();
         }
@@ -80,10 +88,55 @@ namespace TGD.HexBoard
             }
 
             if (!cur.Equals(_last))
+                HandleTraversal(unit, cur, environment);
+        }
+
+        public void HandleTraversal(Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            _last = hex;
+            _has = true;
+
+            unit ??= ResolveUnit();
+            environment ??= ResolveEnvironment();
+            if (environment == null || unit == null)
+                return;
+
+            EmitHazardEnterLogs(environment, unit, hex);
+            ApplyHazardEnterEffects(environment, unit, hex);
+        }
+
+        public void HandleTraversal(Hex hex, HexEnvironmentSystem environment = null)
+        {
+            HandleTraversal(null, hex, environment);
+        }
+
+        public static void NotifyTraversal(UnitRuntimeContext context, Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            if (context == null)
+                return;
+
+            s_WatcherScratch.Clear();
+            s_WatcherUnique.Clear();
+
+            context.GetComponentsInChildren(true, s_WatcherScratch);
+
+            if (s_WatcherScratch.Count == 0)
+                return;
+
+            unit ??= context.boundUnit;
+            try
             {
-                EmitHazardEnterLogs(environment, unit, cur);
-                ApplyHazardEnterEffects(environment, unit, cur);
-                _last = cur;
+                for (int i = 0; i < s_WatcherScratch.Count; i++)
+                {
+                    var watcher = s_WatcherScratch[i];
+                    if (watcher != null && s_WatcherUnique.Add(watcher))
+                        watcher.HandleTraversal(unit, hex, environment);
+                }
+            }
+            finally
+            {
+                s_WatcherScratch.Clear();
+                s_WatcherUnique.Clear();
             }
         }
 

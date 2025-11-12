@@ -1028,13 +1028,20 @@ namespace TGD.CombatV2
                 string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
                 bool truncatedByBudget = (reached.Count < path.Count);
                 bool stoppedByExternal = false;
+                bool entangleCancelLogged = false;
 
                 for (int i = 1; i < reached.Count; i++)
                 {
                     if (ctx != null && ctx.Entangled)
                     {
-                        HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, "Break Move!");
+                        if (!entangleCancelLogged)
+                        {
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, "Break Move!");
+                            CAM.RaiseActionCancelled(ctx, ResolveMoveSkillId(), "Entangled");
+                            entangleCancelLogged = true;
+                        }
                         stoppedByExternal = true;
+                        break;
                     }
 
                     var from = reached[i - 1];
@@ -1053,6 +1060,7 @@ namespace TGD.CombatV2
                     }
 
                     HexMoveEvents.RaiseMoveStep(unit, from, to, i, reached.Count - 1);
+                    HexHazardWatcher.NotifyTraversal(ctx, unit, to, env);
 
                     var fromW = hexSpace.HexToWorld(from, y);
                     var toW = hexSpace.HexToWorld(to, y);
