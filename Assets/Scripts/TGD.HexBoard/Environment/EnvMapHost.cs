@@ -35,6 +35,28 @@ namespace TGD.HexBoard
                 StampCell(h, def);
         }
 
+        public bool Remove(Hex h, HazardType def)
+        {
+            if (def == null)
+                return false;
+
+            if (!_map.TryGetValue(h, out var list) || list == null)
+                return false;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Hazard == def)
+                {
+                    list.RemoveAt(i);
+                    if (list.Count == 0)
+                        _map.Remove(h);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool HasKind(Hex h, HazardKind kind)
         {
             if (_map.TryGetValue(h, out var list))

@@ -292,7 +292,7 @@ namespace TGD.LevelV2
             if (type == null)
                 return EnvNeutralColor;
 
-            if (type.kind == HazardKind.Trap)
+            if (type.kind == HazardKind.Trap || type.kind == HazardKind.EntangleTrap)
                 return EnvTrapColor;
             if (type.kind == HazardKind.Pit)
                 return EnvPitColor;

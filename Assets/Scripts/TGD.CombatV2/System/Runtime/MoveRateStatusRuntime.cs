@@ -18,12 +18,22 @@ namespace TGD.CombatV2
             public bool exclusive = true;
         }
 
+        [System.Serializable]
+        public sealed class EntangleEntry
+        {
+            public string tag;
+            public int remainingTurns = 1;
+            public string source;
+        }
+
         public bool debugLog = false;
         [SerializeField] UnitRuntimeContext ctx;
         [SerializeField] TurnManagerV2 turnManager;
 
         readonly List<Entry> _entries = new();
         readonly Dictionary<string, Entry> _entriesByTag = new();
+        readonly List<EntangleEntry> _entangleEntries = new();
+        readonly Dictionary<string, EntangleEntry> _entangleByTag = new();
 
         float _product = 1f;
         TurnManagerV2 _subscribedManager;
@@ -130,7 +140,15 @@ namespace TGD.CombatV2
             if (string.IsNullOrEmpty(tag))
                 return false;
             if (!_entriesByTag.TryGetValue(tag, out var entry) || entry == null)
+            {
+                if (_entangleByTag.TryGetValue(tag, out var entangle) && entangle != null)
+                {
+                    if (entangle.remainingTurns < 0)
+                        return true;
+                    return entangle.remainingTurns > 0;
+                }
                 return false;
+            }
             if (entry.remainingTurns < 0)
                 return true;
             return entry.remainingTurns > 0;
@@ -141,6 +159,36 @@ namespace TGD.CombatV2
 
         public void ApplyStickyMultiplier(float multiplier, int turns, string source = null)
             => ApplyOrRefreshExclusive("Untyped", multiplier, turns, source);
+
+        public bool ApplyEntangle(string tag, int turns, string source = null)
+        {
+            string resolvedTag = string.IsNullOrEmpty(tag) ? "Entangle" : tag;
+            int normalizedTurns = turns < 0 ? -1 : Mathf.Max(1, turns);
+
+            if (_entangleByTag.ContainsKey(resolvedTag))
+                return false;
+
+            if (ctx != null && ctx.MoveRates.IsEntangled)
+                return false;
+
+            var entry = new EntangleEntry
+            {
+                tag = resolvedTag,
+                remainingTurns = normalizedTurns,
+                source = source,
+            };
+
+            _entangleEntries.Add(entry);
+            _entangleByTag[resolvedTag] = entry;
+
+            if (ctx != null)
+                ctx.MoveRates.SetEntangled(true);
+
+            var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
+            Debug.Log($"[Snare] Apply U={unitLabel} tag={resolvedTag} turns={FormatTurns(normalizedTurns)}", this);
+
+            return true;
+        }
 
         void ApplyOrRefreshInternal(string tag, float mult, int turns, bool exclusive, string source)
         {
@@ -262,18 +310,64 @@ namespace TGD.CombatV2
 
         public void TickAll(int deltaTurns)
         {
-            if (deltaTurns == 0 || _entries.Count == 0)
+            if (deltaTurns == 0)
                 return;
 
             bool changed = false;
             var unitLabel = TurnManagerV2.FormatUnitLabel(OwnerUnit);
-            for (int i = _entries.Count - 1; i >= 0; i--)
+
+            if (_entries.Count > 0)
             {
-                var entry = _entries[i];
+                for (int i = _entries.Count - 1; i >= 0; i--)
+                {
+                    var entry = _entries[i];
+                    if (entry == null)
+                    {
+                        _entries.RemoveAt(i);
+                        changed = true;
+                        continue;
+                    }
+
+                    if (entry.remainingTurns < 0)
+                        continue;
+
+                    entry.remainingTurns += deltaTurns;
+
+                    if (entry.remainingTurns > 0)
+                    {
+                        Debug.Log($"[Sticky] Tick U={unitLabel} tag={entry.tag} -> remain={entry.remainingTurns}", this);
+                    }
+                    else
+                    {
+                        Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
+                        _entriesByTag.Remove(entry.tag);
+                        _entries.RemoveAt(i);
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                    RecomputeProduct();
+            }
+
+            TickEntangle(deltaTurns, unitLabel);
+        }
+        public void TickOneTurn()
+        {
+            TickAll(-1);
+        }
+
+        void TickEntangle(int deltaTurns, string unitLabel)
+        {
+            if (_entangleEntries.Count == 0)
+                return;
+
+            for (int i = _entangleEntries.Count - 1; i >= 0; i--)
+            {
+                var entry = _entangleEntries[i];
                 if (entry == null)
                 {
-                    _entries.RemoveAt(i);
-                    changed = true;
+                    _entangleEntries.RemoveAt(i);
                     continue;
                 }
 
@@ -284,23 +378,21 @@ namespace TGD.CombatV2
 
                 if (entry.remainingTurns > 0)
                 {
-                    Debug.Log($"[Sticky] Tick U={unitLabel} tag={entry.tag} -> remain={entry.remainingTurns}", this);
+                    Debug.Log($"[Snare] Tick U={unitLabel} tag={entry.tag} -> remain={entry.remainingTurns}", this);
                 }
                 else
                 {
-                    Debug.Log($"[Sticky] Expire U={unitLabel} tag={entry.tag}", this);
-                    _entriesByTag.Remove(entry.tag);
-                    _entries.RemoveAt(i);
-                    changed = true;
+                    Debug.Log($"[Snare] Expire U={unitLabel} tag={entry.tag}", this);
+                    _entangleByTag.Remove(entry.tag);
+                    _entangleEntries.RemoveAt(i);
                 }
             }
 
-            if (changed)
-                RecomputeProduct();
-        }
-        public void TickOneTurn()
-        {
-            TickAll(-1);
+            if (_entangleEntries.Count == 0 && ctx != null && ctx.MoveRates.IsEntangled)
+            {
+                ctx.MoveRates.SetEntangled(false);
+                Debug.Log($"[Snare] Clear U={unitLabel}", this);
+            }
         }
 
         bool RecomputeProduct()
@@ -338,7 +430,11 @@ namespace TGD.CombatV2
         {
             _entries.Clear();
             _entriesByTag.Clear();
+            _entangleEntries.Clear();
+            _entangleByTag.Clear();
             _product = 1f;
+            if (ctx != null && ctx.MoveRates.IsEntangled)
+                ctx.MoveRates.SetEntangled(false);
         }
 
         public bool RefreshProduct()
@@ -359,12 +455,20 @@ namespace TGD.CombatV2
                     continue;
                 buffer.Add(new EntrySnapshot(entry.tag, entry.remainingTurns));
             }
+            foreach (var entangle in _entangleEntries)
+            {
+                if (entangle == null)
+                    continue;
+                if (entangle.remainingTurns == 0)
+                    continue;
+                buffer.Add(new EntrySnapshot(entangle.tag, entangle.remainingTurns));
+            }
         }
         public string ActiveTagsCsv
         {
             get
             {
-                if (_entries.Count == 0)
+                if (_entries.Count == 0 && _entangleEntries.Count == 0)
                     return "none";
 
                 var sb = new StringBuilder();
@@ -382,6 +486,22 @@ namespace TGD.CombatV2
                     sb.Append(entry.tag);
                     sb.Append(':');
                     sb.Append(entry.remainingTurns < 0 ? "inf" : entry.remainingTurns.ToString());
+                    any = true;
+                }
+
+                foreach (var entangle in _entangleEntries)
+                {
+                    if (entangle == null)
+                        continue;
+                    if (entangle.remainingTurns == 0)
+                        continue;
+
+                    if (any)
+                        sb.Append(',');
+
+                    sb.Append(entangle.tag);
+                    sb.Append(':');
+                    sb.Append(entangle.remainingTurns < 0 ? "inf" : entangle.remainingTurns.ToString());
                     any = true;
                 }
 

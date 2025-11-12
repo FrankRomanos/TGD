@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace TGD.HexBoard
 {
-    public enum HazardKind { Trap, Pit, SpeedPatch }
+    public enum HazardKind { Trap, Pit, SpeedPatch, EntangleTrap }
 
     [CreateAssetMenu(menuName = "TGD/HexBoard/Hazard Type")]
     public class HazardType : ScriptableObject
@@ -29,6 +29,13 @@ namespace TGD.HexBoard
 
         [Tooltip("ųغ<=0 ʾ")]
         public int stickyDurationTurns = 0;
+
+        [Header("Entangle Trap (optional)")]
+        [Tooltip("单位踏入时施加缠绕的持续回合数（至少 1 回合）。")]
+        [Min(1)] public int entangleDurationTurns = 1;
+
+        [Tooltip("缠绕触发后是否摧毁该陷阱（从地形移除）。")]
+        public bool destroyAfterEntangleTrigger = false;
 
         // Ԥ˺ÿغ˺
         // public int onEnterDamage = 0;
