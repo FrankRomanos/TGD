@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TGD.CoreV2;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -27,6 +27,12 @@ namespace TGD.HexBoard
         [SerializeField] float gizmoRadius = 0.18f;
         [SerializeField] Color gizmoHitColor = new Color(0.2f, 0.8f, 1f, 0.8f);
         [SerializeField] Color gizmoSnapColor = new Color(1f, 0.85f, 0.3f, 0.9f);
+        public bool hoverShowQrOnly = true;      // ← 只显示 (q,r)
+        public bool hoverShowWorld = false;      // ← 是否附带世界坐标
+        public float hoverLabelYOffset = 0.0f;   // 标签抬高一点更清楚
+        [Header("Hover Gizmo")]
+        public float hoverLabelOffsetRight = 0.6f;  // 往右偏多少
+        public float hoverLabelOffsetUp = 0.8f;  // 往上偏多少
 
         public static HexSpace Instance
         {
@@ -150,16 +156,12 @@ namespace TGD.HexBoard
 #if UNITY_EDITOR
         void OnDrawGizmosSelected()
         {
-            if (!gizmoEnabled)
-                return;
+            if (!gizmoEnabled) return;
             var layout = Layout;
-            if (layout == null)
-                return;
+            if (layout == null) return;
 
-            if (!TryGetMouseRay(out var ray))
-                return;
-            if (!TryProjectToBoard(layout, ray, out var hit))
-                return;
+            if (!TryGetMouseRay(out var ray)) return;
+            if (!TryProjectToBoard(layout, ray, out var hit)) return;
 
             var hex = layout.HexAt(hit);
             var snapped = layout.World(hex, DefaultY);
@@ -169,46 +171,47 @@ namespace TGD.HexBoard
             Gizmos.color = gizmoSnapColor;
             Gizmos.DrawSphere(snapped, gizmoRadius * 0.6f);
 
-            Handles.color = gizmoSnapColor;
-            Handles.Label(snapped, $"{hex} @ {snapped:F2}");
-        }
+            // ---- 只显示 q,r；可选是否附带 world ----
+            string label = hoverShowQrOnly
+                ? $"({hex.q},{hex.r})" + (hoverShowWorld ? $"  @ {snapped:F2}" : "")
+                : $"{hex}" + (hoverShowWorld ? $"  @ {snapped:F2}" : "");
+            // —— 按相机方向把标签挪远一些（缩放自适应）——
+            var sv = SceneView.currentDrawingSceneView ?? SceneView.lastActiveSceneView;
+            var cam = sv != null ? sv.camera : (Camera.current ?? Camera.main);
+            Vector3 labelPos = snapped;
+            if (cam != null)
+            {
+                float s = HandleUtility.GetHandleSize(snapped); // 跟随 Scene 缩放
+                labelPos += cam.transform.right * (hoverLabelOffsetRight * s)
+                          + cam.transform.up * (hoverLabelOffsetUp * s);
+            }
 
+            Handles.color = gizmoSnapColor;
+            Handles.Label(snapped + Vector3.up * hoverLabelYOffset, label);
+        }
+        // ✅ 改成用 HandleUtility，保证“鼠标指哪就哪”
         bool TryGetMouseRay(out Ray ray)
         {
-#if UNITY_EDITOR
-            // 1) 如果 SceneView 正被鼠标悬停，则优先使用它的相机与鼠标
-            var over = EditorWindow.mouseOverWindow as SceneView;
-            if (over != null && over.camera != null)
+            // 在 Scene 视图内：最稳妥的方案
+            if (Event.current != null)
             {
-                // SceneView 的 Event 坐标是“GUI 像素坐标”，需要倒置 Y
-                var cam = over.camera;
-                var evt = Event.current;
-                Vector2 mp = (evt != null)
-                    ? evt.mousePosition
-                    : new Vector2(cam.pixelWidth * 0.5f, cam.pixelHeight * 0.5f);
-                mp.y = cam.pixelHeight - mp.y;
-                ray = cam.ScreenPointToRay(mp);
+                ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
                 return true;
             }
 
-            // 2) 若拿不到 SceneView 射线，再根据当前上下文选 Game/Current 相机
-            var camFallback = Camera.current ?? Camera.main;
-            if (camFallback != null)
+            // 兜底：用当前绘制的 SceneView 相机，或主相机（Game 视图）
+            var sv = SceneView.currentDrawingSceneView ?? SceneView.lastActiveSceneView;
+            var cam = sv != null ? sv.camera : (Camera.current ?? Camera.main);
+            if (cam != null)
             {
-                ray = camFallback.ScreenPointToRay(Input.mousePosition);
+                ray = cam.ScreenPointToRay(Input.mousePosition);
                 return true;
             }
-#else
-    var cam = Camera.main ?? Camera.current;
-    if (cam != null)
-    {
-        ray = cam.ScreenPointToRay(Input.mousePosition);
-        return true;
-    }
-#endif
+
             ray = default;
             return false;
         }
+
 
         bool TryProjectToBoard(HexBoardLayout layout, Ray ray, out Vector3 hit)
         {
