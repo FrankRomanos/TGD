@@ -188,7 +188,7 @@ namespace TGD.HexBoard
 
             if (hazard.destroyAfterEntangleTrigger && environment != null && environment.envMap != null)
             {
-                environment.envMap.Remove(hex, hazard);
+                environment.envMap.RemoveAll(hazard);
                 return false;
             }
 

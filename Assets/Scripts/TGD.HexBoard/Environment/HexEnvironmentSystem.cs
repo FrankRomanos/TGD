@@ -118,6 +118,9 @@ namespace TGD.HexBoard
                     continue;
 
                 int configuredTurns = hazard.stickyDurationTurns;
+                if (configuredTurns == 0)
+                    continue;
+
                 float configuredMult = Mathf.Clamp(hazard.stickyMoveMult, 0.1f, 5f);
                 if (Mathf.Approximately(configuredMult, 1f))
                     continue;
