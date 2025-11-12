@@ -31,12 +31,12 @@ namespace TGD.UIV2.Battle
         readonly HashSet<string> _playerLabels = new();
         readonly HashSet<string> _enemyLabels = new();
 
-        static T AutoFind<T>() where T : Object
+        static T AutoFind<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER
-            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
+            return UnityEngine.Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
 #else
-            return Object.FindObjectOfType<T>();
+            return UnityEngine.Object.FindObjectOfType<T>();
 #endif
         }
 
