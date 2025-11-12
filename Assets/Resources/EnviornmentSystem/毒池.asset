@@ -10,16 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 07f84f4f98df9a840a6845abcc8d5cfc, type: 3}
-  m_Name: WindPower
+  m_Name: "\u6BD2\u6C60"
   m_EditorClassIdentifier: 
-  hazardId: WindPower
+  hazardId: Trap
   kind: 2
   vfxPrefab: {fileID: 0}
   tickTimes: -1
   maxStacks: -1
-  stickyMoveMult: 2
-  stickyDurationTurns: 1
+  stickyMoveMult: 0.6
+  stickyDurationTurns: 4
   logOnEnter: 1
-  onEnterLogMessage: '
-
-'
+  onEnterLogMessage: "\u6BD2\u6DB2\u8150\u8680\u4E86\u6211\uFF01"

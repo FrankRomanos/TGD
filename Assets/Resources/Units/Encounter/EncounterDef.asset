@@ -43,3 +43,34 @@ MonoBehaviour:
       q: 16
       r: 4
     facing: 1
+  envStamps:
+  - def: {fileID: 11400000, guid: 1d610e8961092c745bc05369578f95ef, type: 2}
+    center:
+      q: 3
+      r: 6
+    radius: 1
+    centerOnly: 0
+  - def: {fileID: 11400000, guid: 09831020c84c65b4b8ddc729d021ffda, type: 2}
+    center:
+      q: 5
+      r: 13
+    radius: 2
+    centerOnly: 0
+  - def: {fileID: 11400000, guid: 46bacc231e4a814499ee7b1cb2279236, type: 2}
+    center:
+      q: 15
+      r: 12
+    radius: 1
+    centerOnly: 0
+  - def: {fileID: 11400000, guid: e72ca43e292ed2d4a842422c2000f579, type: 2}
+    center:
+      q: 17
+      r: 7
+    radius: 1
+    centerOnly: 0
+  - def: {fileID: 11400000, guid: b641b7949332a734b84f1402f8a6ab98, type: 2}
+    center:
+      q: 14
+      r: 3
+    radius: 1
+    centerOnly: 0
