@@ -31,12 +31,6 @@ MonoBehaviour:
   - definition: {fileID: 11400000, guid: 2a44624ef4ed456fb0eedc47415fc1cb, type: 2}
     displayName: "\u6D3E\u751F1"
     icon: {fileID: 0}
-  - definition: {fileID: 11400000, guid: 02943c61c4c5480fabafd254acf2443c, type: 2}
-    displayName: Attack
-    icon: {fileID: 0}
-  - definition: {fileID: 11400000, guid: ecf54a441b724131aa060245aa09b797, type: 2}
-    displayName: Move
-    icon: {fileID: 0}
   - definition: {fileID: 11400000, guid: b38ae3c6289162b488c5525301a18768, type: 2}
     displayName: "\u706B\u5708"
     icon: {fileID: 0}

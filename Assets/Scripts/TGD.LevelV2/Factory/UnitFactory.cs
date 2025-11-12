@@ -929,8 +929,8 @@ namespace TGD.LevelV2
 
         static readonly HashSet<string> BuiltinSkillIds = new(StringComparer.OrdinalIgnoreCase)
         {
-            "Move",
-            "Attack"
+            MoveProfileRules.DefaultSkillId,
+            AttackProfileRules.DefaultSkillId
         };
 
         static void ApplyAbilityLoadout(
