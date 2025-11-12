@@ -1,5 +1,6 @@
 // File: TGD.HexBoard/HexHazardWatcher.cs
 using System.Collections.Generic;
+using TGD.CombatV2;
 using TGD.CoreV2;
 using UnityEngine;
 
@@ -51,6 +52,15 @@ namespace TGD.HexBoard
 
         void OnEnable()
         {
+            HexMoveEvents.MoveStep += HandleMoveStep;
+            AttackEventsV2.AttackMoveStep += HandleAttackMoveStep;
+            ResetCache();
+        }
+
+        void OnDisable()
+        {
+            HexMoveEvents.MoveStep -= HandleMoveStep;
+            AttackEventsV2.AttackMoveStep -= HandleAttackMoveStep;
             ResetCache();
         }
 
@@ -80,11 +90,48 @@ namespace TGD.HexBoard
             }
 
             if (!cur.Equals(_last))
-            {
-                EmitHazardEnterLogs(environment, unit, cur);
-                ApplyHazardEnterEffects(environment, unit, cur);
-                _last = cur;
-            }
+                ProcessHazardEnter(unit, cur, environment);
+        }
+
+        void HandleMoveStep(Unit unit, Hex from, Hex to, int stepIndex, int stepCount)
+        {
+            if (!IsWatching(unit))
+                return;
+
+            ProcessHazardEnter(unit, to);
+        }
+
+        void HandleAttackMoveStep(Unit unit, Hex from, Hex to, int stepIndex, int stepCount)
+        {
+            if (!IsWatching(unit))
+                return;
+
+            ProcessHazardEnter(unit, to);
+        }
+
+        bool IsWatching(Unit unit)
+        {
+            if (unit == null)
+                return false;
+
+            var self = ResolveUnit();
+            if (self == null)
+                return false;
+
+            return ReferenceEquals(self, unit);
+        }
+
+        void ProcessHazardEnter(Unit unit, Hex hex, HexEnvironmentSystem environment = null)
+        {
+            _last = hex;
+            _has = true;
+
+            environment ??= ResolveEnvironment();
+            if (environment == null || unit == null)
+                return;
+
+            EmitHazardEnterLogs(environment, unit, hex);
+            ApplyHazardEnterEffects(environment, unit, hex);
         }
 
         void EmitHazardEnterLogs(HexEnvironmentSystem environment, Unit unit, Hex hex)

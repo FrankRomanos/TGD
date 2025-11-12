@@ -1272,11 +1272,25 @@ namespace TGD.CombatV2
                 bool stoppedByExternal = false;
                 bool attackRolledBack = false;
                 Hex lastPosition = startAnchor;
+                bool entangleCancelLogged = false;
 
                 for (int i = 1; i < reached.Count; i++)
                 {
                     if (ctx != null && ctx.Entangled)
                     {
+                        if (!entangleCancelLogged)
+                        {
+                            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+                            var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
+                            CAM.RaiseActionCancelled(cancelCtx, ResolveSkillId(), "Entangled");
+                            if (attackPlanned && !attackRolledBack)
+                            {
+                                attackRolledBack = true;
+                                _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                                AttackEventsV2.RaiseMiss(unit, "Attack cancelled (entangled).");
+                            }
+                            entangleCancelLogged = true;
+                        }
                         stoppedByExternal = true;
                         break;
                     }
