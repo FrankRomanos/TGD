@@ -1272,11 +1272,26 @@ namespace TGD.CombatV2
                 bool stoppedByExternal = false;
                 bool attackRolledBack = false;
                 Hex lastPosition = startAnchor;
+                bool entangleCancelLogged = false;
 
                 for (int i = 1; i < reached.Count; i++)
                 {
                     if (ctx != null && ctx.Entangled)
                     {
+                        if (!entangleCancelLogged)
+                        {
+                            HexMoveEvents.RaiseRejected(unit, MoveBlockReason.Entangled, "Break Move!");
+                            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+                            var cancelCtx = ctx != null ? ctx : (tm != null && unit != null ? tm.GetContext(unit) : null);
+                            CAM.RaiseActionCancelled(cancelCtx, ResolveSkillId(), "Entangled");
+                            if (attackPlanned && !attackRolledBack)
+                            {
+                                attackRolledBack = true;
+                                _attacksThisTurn = Mathf.Max(0, _attacksThisTurn - 1);
+                                AttackEventsV2.RaiseMiss(unit, "Attack cancelled (entangled).");
+                            }
+                            entangleCancelLogged = true;
+                        }
                         stoppedByExternal = true;
                         break;
                     }
@@ -1301,6 +1316,7 @@ namespace TGD.CombatV2
                     }
 
                     AttackEventsV2.RaiseAttackMoveStep(unit, from, to, i, reached.Count - 1);
+                    HexHazardWatcher.NotifyTraversal(ctx, unit, to, env);
 
                     float effMR = (stepRates != null && (i - 1) < stepRates.Count)
                         ? stepRates[i - 1]
