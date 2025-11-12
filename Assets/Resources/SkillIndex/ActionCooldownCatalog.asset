@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   entries:
   - key: DerivedAttack
-    seconds: 0
+    seconds: 24
   - key: DerivedDerived
     seconds: 12
   - key: Free001
@@ -23,5 +23,7 @@ MonoBehaviour:
     seconds: 18
   - key: Reaction002
     seconds: 24
-  - key: 
-    seconds: 0
+  - key: EnemyTest
+    seconds: 24
+  - key: StandardTest
+    seconds: 12

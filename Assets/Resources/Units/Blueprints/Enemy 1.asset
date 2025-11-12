@@ -47,8 +47,8 @@ MonoBehaviour:
     MaxHP: 100
     HP: 100
     MaxEnergy: 100
-    Energy: 0
-    EnergyRegenPer2s: 0
+    Energy: 200
+    EnergyRegenPer2s: 200
     Strength: 0
     Agility: 0
     PrimaryAttr: 0
@@ -67,4 +67,11 @@ MonoBehaviour:
     ShredAddPct: 0
   basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
   avatar: {fileID: 21300000, guid: 8b62ba852e763fc46b1d3f93684972a1, type: 3}
-  abilities: []
+  footprint: {fileID: 0}
+  abilities:
+  - skillId: StandardTest
+    learned: 1
+    initialCooldownSeconds: 0
+  - skillId: 
+    learned: 0
+    initialCooldownSeconds: 0

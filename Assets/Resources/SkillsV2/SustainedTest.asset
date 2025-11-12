@@ -25,5 +25,7 @@ MonoBehaviour:
   cooldownKey: EnemyTest
   derivedFromSkillId: 
   fullRoundRounds: 1
-  confirmLogs: []
-  resolveLogs: []
+  confirmLogs:
+  - 
+  resolveLogs:
+  - Fire!!!!!
