@@ -1027,8 +1027,7 @@ namespace TGD.CombatV2
                     return preview;
                 }
 
-                path = ShortestPath(start, target, cell => IsBlockedForMove(cell, start, target, passability));
-                if (path == null)
+                if (!TryBuildApproachPath(start, target, passability, out path))
                 {
                     ClearApproachReservations("NoPath");
                     preview.valid = false;
@@ -1150,9 +1149,8 @@ namespace TGD.CombatV2
                     yield break;
                 }
 
-                executionPath = ShortestPath(startAnchor, preview.targetHex,
-                    cell => IsBlockedForMove(cell, startAnchor, preview.targetHex, passability));
-                if (executionPath == null || executionPath.Count == 0)
+                if (!TryBuildApproachPath(startAnchor, preview.targetHex, passability, out executionPath) ||
+                    executionPath == null || executionPath.Count == 0)
                 {
                     HandleApproachAbort();
                     yield break;
@@ -1661,13 +1659,13 @@ namespace TGD.CombatV2
             return tm.IsEnemyUnit(candidate);
         }
 
-        bool IsBlockedForMove(Hex cell, Hex start, Hex landing, IPassability passability = null)
+        bool IsBlockedForMove(Hex cell, Hex start, HashSet<Hex> forcedOpen, IPassability passability = null)
         {
             if (authoring?.Layout == null) return true;
             if (!authoring.Layout.Contains(cell)) return true;
             if (env != null && env.IsPit(cell)) return true;
+            if (forcedOpen != null && forcedOpen.Contains(cell)) return false;
             if (cell.Equals(start)) return false;
-            if (cell.Equals(landing)) return false;
             if (_tempReservedThisAction.Contains(cell)) return true;
             if (passability != null && passability.IsBlocked(cell)) return true;
             if (_occ == null)
@@ -1702,49 +1700,92 @@ namespace TGD.CombatV2
                 }
             }
 
-            var candidates = new HashSet<Hex>();
-            int bestEnemyDist = int.MaxValue;
-            int bestLen = int.MaxValue;
-            Hex bestLanding = target;
+            var candidateScores = new Dictionary<Hex, HexPathfinding.GoalScore>();
             foreach (var cell in enemyCells)
             {
                 for (int dist = 1; dist <= meleeRange; dist++)
                 {
                     foreach (var candidate in Hex.Ring(cell, dist))
                     {
-                        if (!candidates.Add(candidate)) continue;
-                        if (!authoring.Layout.Contains(candidate)) continue;
+                        if (candidateScores.ContainsKey(candidate)) continue;
+                        if (authoring?.Layout == null || !authoring.Layout.Contains(candidate)) continue;
                         if (env != null && env.IsPit(candidate)) continue;
                         if (passability != null && passability.IsBlocked(candidate)) continue;
-                        if (passability == null && _occ != null && SelfActor != null && !_occ.CanPlaceIgnoringTemp(SelfActor, candidate, SelfActor.Facing, ignore: SelfActor)) continue;
-
-                        var path = ShortestPath(start, candidate, c => IsBlockedForMove(c, start, candidate, passability));
-                        if (path == null) continue;
+                        if (passability == null && _occ != null && SelfActor != null &&
+                            !_occ.CanPlaceIgnoringTemp(SelfActor, candidate, SelfActor.Facing, ignore: SelfActor))
+                            continue;
 
                         int enemyDist = DistanceToEnemy(candidate, enemyCells);
                         if (enemyDist > meleeRange) continue;
 
-                        int len = path.Count;
-                        if (enemyDist < bestEnemyDist || (enemyDist == bestEnemyDist && len < bestLen))
-                        {
-                            bestEnemyDist = enemyDist;
-                            bestLen = len;
-                            bestPath = path;
-                            bestLanding = candidate;
-                        }
+                        int ringDist = Hex.Distance(candidate, target);
+                        candidateScores[candidate] = new HexPathfinding.GoalScore(enemyDist, ringDist);
                     }
                 }
             }
 
-            if (bestPath != null)
+            if (candidateScores.Count == 0)
             {
-                landing = bestLanding;
-                return true;
+                landing = target;
+                return false;
             }
 
-            landing = target;
-            bestPath = null;
-            return false;
+            var forcedOpen = new HashSet<Hex> { start };
+            foreach (var candidate in candidateScores.Keys)
+                forcedOpen.Add(candidate);
+
+            var layout = authoring?.Layout;
+            System.Func<Hex, bool> inBounds = layout != null ? (System.Func<Hex, bool>)(hex => layout.Contains(hex)) : null;
+            if (!HexPathfinding.TryFindNearest(
+                    start,
+                    inBounds,
+                    cell => !IsBlockedForMove(cell, start, forcedOpen, passability),
+                    cell => candidateScores.TryGetValue(cell, out var score) ? score : null,
+                    out var nearest))
+            {
+                landing = target;
+                bestPath = null;
+                return false;
+            }
+
+            var pathBuffer = new List<Hex>();
+            if (!nearest.TryBuildPath(pathBuffer) || pathBuffer.Count == 0)
+            {
+                landing = target;
+                bestPath = null;
+                return false;
+            }
+
+            for (int i = 0; i < pathBuffer.Count; i++)
+            {
+                var cell = pathBuffer[i];
+                if (DistanceToEnemy(cell, enemyCells) <= meleeRange)
+                {
+                    if (i < pathBuffer.Count - 1)
+                        pathBuffer.RemoveRange(i + 1, pathBuffer.Count - i - 1);
+                    landing = cell;
+                    bestPath = pathBuffer;
+                    return true;
+                }
+            }
+
+            landing = nearest.Goal;
+            bestPath = pathBuffer;
+            return true;
+        }
+
+        bool TryBuildApproachPath(Hex start, Hex target, IPassability passability, out List<Hex> path)
+        {
+            path = null;
+            var forcedOpen = new HashSet<Hex> { start, target };
+            var layout = authoring?.Layout;
+            System.Func<Hex, bool> inBounds = layout != null ? (System.Func<Hex, bool>)(hex => layout.Contains(hex)) : null;
+            var bfs = HexPathfinding.Run(start, inBounds, cell => !IsBlockedForMove(cell, start, forcedOpen, passability));
+            var buffer = new List<Hex>();
+            if (!bfs.TryBuildPath(target, buffer))
+                return false;
+            path = buffer;
+            return true;
         }
 
         static int DistanceToEnemy(Hex candidate, IReadOnlyList<Hex> enemyCells)
@@ -1775,49 +1816,6 @@ namespace TGD.CombatV2
                 return cells;
 
             return new[] { target };
-        }
-
-        static readonly Hex[] Neigh =
-        {
-            new Hex(+1, 0),
-            new Hex(+1, -1),
-            new Hex(0, -1),
-            new Hex(-1, 0),
-            new Hex(-1, +1),
-            new Hex(0, +1)
-        };
-
-        List<Hex> ShortestPath(Hex start, Hex goal, System.Func<Hex, bool> isBlocked)
-        {
-            var came = new Dictionary<Hex, Hex>();
-            var q = new Queue<Hex>();
-            q.Enqueue(start);
-            came[start] = start;
-
-            while (q.Count > 0)
-            {
-                var cur = q.Dequeue();
-                if (cur.Equals(goal)) break;
-                for (int i = 0; i < Neigh.Length; i++)
-                {
-                    var nb = new Hex(cur.q + Neigh[i].q, cur.r + Neigh[i].r);
-                    if (came.ContainsKey(nb)) continue;
-                    if (isBlocked != null && isBlocked(nb)) continue;
-                    came[nb] = cur;
-                    q.Enqueue(nb);
-                }
-            }
-
-            if (!came.ContainsKey(goal)) return null;
-            var path = new List<Hex> { goal };
-            var c = goal;
-            while (!c.Equals(start))
-            {
-                c = came[c];
-                path.Add(c);
-            }
-            path.Reverse();
-            return path;
         }
 
         void OnAttackStrikeFired(Unit unit, int comboIndex)
