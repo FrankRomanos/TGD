@@ -67,13 +67,8 @@ MonoBehaviour:
     ShredAddPct: 0
   basePrefab: {fileID: 7556338074851262492, guid: 23af31beb198d5049bd9533c0221ebce, type: 3}
   avatar: {fileID: 21300000, guid: 3f96bf270cdfe06499c4fc76314f3646, type: 3}
+  footprint: {fileID: 0}
   abilities:
   - skillId: Reaction001
-    learned: 1
-    initialCooldownSeconds: 0
-  - skillId: Attack
-    learned: 1
-    initialCooldownSeconds: 0
-  - skillId: Move
     learned: 1
     initialCooldownSeconds: 0
