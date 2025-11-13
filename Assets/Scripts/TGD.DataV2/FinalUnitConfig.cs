@@ -19,6 +19,8 @@ namespace TGD.DataV2
         public List<LearnedAbility> abilities = new List<LearnedAbility>();
         public Sprite avatar;
         public FootprintShape footprint;
+        public string professionId;
+        public string specializationId;
 
         public bool IsFriendly => faction == UnitFaction.Friendly;
         public bool IsEnemy => faction == UnitFaction.Enemy;

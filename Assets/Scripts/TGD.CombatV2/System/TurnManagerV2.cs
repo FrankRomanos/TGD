@@ -1399,7 +1399,10 @@ namespace TGD.CombatV2
                     TickCooldownsForUnit(runtime, phaseLabel);
                 TickBuffsForUnit(unit, phaseLabel);
                 if (runtime != null)
+                {
                     ApplyEnergyRegen(runtime, phaseLabel);
+                    TriggerResourceEndTurn(runtime, phaseLabel);
+                }
             }
 
             void ProcessAll(IEnumerable<Unit> units, bool? isPlayerHint)
@@ -1510,6 +1513,17 @@ namespace TGD.CombatV2
             }
 
             Debug.Log($"[Res]   Regen  T{_currentPhaseIndex}({phaseLabel}) U={unitLabel} +{regen.gain} -> {regen.current}/{regen.max} (EndTurnRegen)", this);
+            RaiseUnitRuntimeChanged(runtime?.Unit);
+        }
+
+        void TriggerResourceEndTurn(TurnRuntimeV2 runtime, string phaseLabel)
+        {
+            var context = runtime?.Context;
+            var hub = context != null ? context.resourceHub : null;
+            if (hub == null)
+                return;
+
+            hub.OnOwnerEndTurn();
             RaiseUnitRuntimeChanged(runtime?.Unit);
         }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -141,7 +141,11 @@ namespace TGD.CoreV2.Resource
                     continue;
 
                 var id = pair.Key;
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
                 var current = Get(id);
+                Debug.Log($"clear {id}！", this);
                 if (current == 0)
                     continue;
 
@@ -150,11 +154,35 @@ namespace TGD.CoreV2.Resource
             }
         }
 
-        [ContextMenu("Test Gain TestResource")]
+#if UNITY_EDITOR
+        [ContextMenu("Test Gain Bound Resources")]
         void EditorTestGain()
         {
-            Gain("TestResource", 1);
+            // 1) 如果还没初始化，但有默认配置，先初始化一下（方便在 Prefab 上测试）
+            if (_values.Count == 0 && _defaultSlots.Count > 0)
+            {
+                InitializeFromDefault();
+            }
+
+            if (_values.Count == 0)
+            {
+                Debug.LogWarning($"[Resource] ({name}) No configured resources to test.", this);
+                return;
+            }
+
+            // 2) 拍快照，避免遍历时修改 Dictionary
+            var ids = new List<string>(_values.Keys);
+
+            foreach (var id in ids)
+            {
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
+                Gain(id, 1);
+            }
         }
+#endif
+
 
         SlotSpec NormalizeSpec(SlotSpec spec)
         {
@@ -173,5 +201,12 @@ namespace TGD.CoreV2.Resource
 
             Changed?.Invoke(new ResourceChangeEvent(id, before, after));
         }
+
+#if UNITY_EDITOR
+        public IEnumerable<string> DebugEnumerateIds()
+        {
+            return _values.Keys;
+        }
+#endif
     }
 }
