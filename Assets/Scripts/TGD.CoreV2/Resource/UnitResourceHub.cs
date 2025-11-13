@@ -173,5 +173,12 @@ namespace TGD.CoreV2.Resource
 
             Changed?.Invoke(new ResourceChangeEvent(id, before, after));
         }
+
+#if UNITY_EDITOR
+        public IEnumerable<string> DebugEnumerateIds()
+        {
+            return _values.Keys;
+        }
+#endif
     }
 }

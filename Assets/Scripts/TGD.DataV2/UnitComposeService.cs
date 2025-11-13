@@ -28,7 +28,9 @@ namespace TGD.DataV2
                 faction = blueprint.faction,
                 stats = new StatsV2(),
                 avatar = blueprint.avatar,
-                footprint = blueprint.footprint
+                footprint = blueprint.footprint,
+                professionId = NormalizeClassId(blueprint.classSpec.professionId),
+                specializationId = NormalizeClassId(blueprint.classSpec.specializationId)
             };
 
             var sourceStats = blueprint.baseStats ?? new StatsV2();
@@ -69,6 +71,11 @@ namespace TGD.DataV2
             return config;
         }
 
+        static string NormalizeClassId(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
         static string NormalizeSkillId(string skillId)
         {
             return string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
@@ -100,6 +107,8 @@ namespace TGD.DataV2
                 var blueprint = ScriptableObject.CreateInstance<UnitBlueprint>();
                 blueprint.unitId = "TestUnit";
                 blueprint.displayName = "Test Unit";
+                blueprint.classSpec.professionId = "Knight";
+                blueprint.classSpec.specializationId = "CL001";
                 blueprint.baseStats.MaxEnergy = 5;
                 blueprint.baseStats.Energy = 12;
                 blueprint.footprint = ScriptableObject.CreateInstance<FootprintShape>();
@@ -171,6 +180,8 @@ namespace TGD.DataV2
                 Assert.AreEqual("ActionC", config.abilities[3].skillId);
                 Assert.AreEqual(4, config.abilities[3].initialCooldownSeconds);
                 Assert.AreEqual(blueprint.footprint, config.footprint);
+                Assert.AreEqual("Knight", config.professionId);
+                Assert.AreEqual("CL001", config.specializationId);
 
                 Debug.Log("[UnitCompose] Smoke test passed.");
 

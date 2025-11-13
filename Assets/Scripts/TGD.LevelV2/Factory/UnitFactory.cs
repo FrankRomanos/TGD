@@ -6,6 +6,7 @@ using TGD.CombatV2.AI;
 using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 using TGD.DataV2;
+using TGD.CoreV2.Resource;
 using TGD.HexBoard;
 using UnityEngine;
 
@@ -124,10 +125,12 @@ namespace TGD.LevelV2
             var go = Instantiate(prefab, parent);
 
             var context = EnsureContext(go);
+            var resourceHub = EnsureResourceHub(go, context);
             InjectOccService(context);
             var cooldownHub = EnsureCooldownHub(go, context);
             ApplyStats(context, final.stats);
             InitializeCooldowns(cooldownHub, final.abilities);
+            InitializeResourceHub(resourceHub);
 
             string unitId = ReserveUnitId(final.unitId, final.displayName);
             var unit = context != null && context.boundUnit != null
@@ -298,6 +301,21 @@ namespace TGD.LevelV2
             return hub;
         }
 
+        static UnitResourceHub EnsureResourceHub(GameObject go, UnitRuntimeContext context)
+        {
+            if (go == null)
+                return null;
+
+            var hub = go.GetComponentInChildren<UnitResourceHub>(true);
+            if (hub == null)
+                hub = go.AddComponent<UnitResourceHub>();
+
+            if (context != null)
+                context.resourceHub = hub;
+
+            return hub;
+        }
+
         static void ApplyStats(UnitRuntimeContext context, StatsV2 source)
         {
             if (context == null)
@@ -327,6 +345,29 @@ namespace TGD.LevelV2
                     continue;
                 hub.secStore.StartSeconds(ability.skillId.Trim(), Mathf.Max(0, ability.initialCooldownSeconds));
             }
+        }
+
+        static void InitializeResourceHub(UnitResourceHub hub)
+        {
+            if (hub == null)
+                return;
+
+            hub.InitializeFromDefault();
+
+#if UNITY_EDITOR
+            var ids = hub.DebugEnumerateIds();
+            if (ids != null)
+            {
+                foreach (var id in ids)
+                {
+                    if (string.IsNullOrEmpty(id))
+                        continue;
+                    int val = hub.Get(id);
+                    int cap = hub.Cap(id);
+                    Debug.Log($"[Spawn] {hub.name} Resource {id}: {val}/{cap}", hub);
+                }
+            }
+#endif
         }
 
         static void InjectOccService(UnitRuntimeContext ctx)
