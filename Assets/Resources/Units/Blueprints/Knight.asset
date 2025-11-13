@@ -15,6 +15,9 @@ MonoBehaviour:
   unitId: Knight001
   displayName: Knight
   faction: 0
+  classSpec:
+    professionId: Knight
+    specializationId: CL001
   baseStats:
     Level: 1
     Attack: 10

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -158,20 +158,31 @@ namespace TGD.CoreV2.Resource
         [ContextMenu("Test Gain Bound Resources")]
         void EditorTestGain()
         {
-            bool any = false;
-            foreach (var id in DebugEnumerateIds())
+            // 1) 如果还没初始化，但有默认配置，先初始化一下（方便在 Prefab 上测试）
+            if (_values.Count == 0 && _defaultSlots.Count > 0)
+            {
+                InitializeFromDefault();
+            }
+
+            if (_values.Count == 0)
+            {
+                Debug.LogWarning($"[Resource] ({name}) No configured resources to test.", this);
+                return;
+            }
+
+            // 2) 拍快照，避免遍历时修改 Dictionary
+            var ids = new List<string>(_values.Keys);
+
+            foreach (var id in ids)
             {
                 if (string.IsNullOrEmpty(id))
                     continue;
 
                 Gain(id, 1);
-                any = true;
             }
-
-            if (!any)
-                Debug.LogWarning("[Resource] No configured resources to test.", this);
         }
 #endif
+
 
         SlotSpec NormalizeSpec(SlotSpec spec)
         {
