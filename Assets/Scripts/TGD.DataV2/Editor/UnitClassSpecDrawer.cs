@@ -1,5 +1,7 @@
 #if UNITY_EDITOR
 using System;
+using TGD.CoreV2;
+using TGD.DataV2;
 using UnityEditor;
 using UnityEngine;
 
@@ -41,58 +43,58 @@ namespace TGD.DataV2.Editor
                 "Knight",
                 new[]
                 {
-                    new SpecializationOption("CL001", "CL001 · Knight1 王宫骑士"),
-                    new SpecializationOption("CL002", "CL002 · Knight2 白骑士"),
-                    new SpecializationOption("CL003", "CL003 · Knight3 流浪骑士")
+                    new SpecializationOption("CL001", "CL001 · Knight I · Royal Knight"),
+                    new SpecializationOption("CL002", "CL002 · Knight II · White Knight"),
+                    new SpecializationOption("CL003", "CL003 · Knight III · Wandering Knight")
                 }),
             new ProfessionOption(
                 "Samurai",
                 "Samurai",
                 new[]
                 {
-                    new SpecializationOption("CL011", "CL011 · Samurai1 武士"),
-                    new SpecializationOption("CL012", "CL012 · Samurai2 师范"),
-                    new SpecializationOption("CL013", "CL013 · Samurai3 剑圣")
+                    new SpecializationOption("CL011", "CL011 · Samurai I · Frontline Warrior"),
+                    new SpecializationOption("CL012", "CL012 · Samurai II · Sensei"),
+                    new SpecializationOption("CL013", "CL013 · Samurai III · Sword Saint")
                 }),
             new ProfessionOption(
                 "Warrior",
                 "Warrior",
                 new[]
                 {
-                    new SpecializationOption("CL021", "CL021 · Warrior1 狂战士"),
-                    new SpecializationOption("CL022", "CL022 · Warrior2 佣兵")
+                    new SpecializationOption("CL021", "CL021 · Warrior I · Berserker"),
+                    new SpecializationOption("CL022", "CL022 · Warrior II · Mercenary")
                 }),
             new ProfessionOption(
                 "Pirate",
                 "Pirate",
                 new[]
                 {
-                    new SpecializationOption("CL031", "CL031 · Pirate1 赌棍"),
-                    new SpecializationOption("CL032", "CL032 · Pirate2 决斗家")
+                    new SpecializationOption("CL031", "CL031 · Pirate I · Gambler"),
+                    new SpecializationOption("CL032", "CL032 · Pirate II · Duelist")
                 }),
             new ProfessionOption(
                 "Alchemist",
                 "Alchemist",
                 new[]
                 {
-                    new SpecializationOption("CL041", "CL041 · Alchemist1 处刑人"),
-                    new SpecializationOption("CL042", "CL042 · Alchemist2 化学家")
+                    new SpecializationOption("CL041", "CL041 · Alchemist I · Executioner"),
+                    new SpecializationOption("CL042", "CL042 · Alchemist II · Chemist")
                 }),
             new ProfessionOption(
                 "Master",
                 "Master",
                 new[]
                 {
-                    new SpecializationOption("CL051", "CL051 · Master1 武术家"),
-                    new SpecializationOption("CL052", "CL052 · Master2 白神"),
-                    new SpecializationOption("CL053", "CL053 · Master3 气功师")
+                    new SpecializationOption("CL051", "CL051 · Master I · Martial Artist"),
+                    new SpecializationOption("CL052", "CL052 · Master II · White Sage"),
+                    new SpecializationOption("CL053", "CL053 · Master III · Chi Adept")
                 }),
             new ProfessionOption(
                 "Artist",
                 "Artist",
                 new[]
                 {
-                    new SpecializationOption("CL071", "CL071 · Artist1 宫廷画师")
+                    new SpecializationOption("CL071", "CL071 · Artist I · Court Painter")
                 })
         };
 
@@ -108,6 +110,7 @@ namespace TGD.DataV2.Editor
 
             var professionProp = property.FindPropertyRelative("professionId");
             var specializationProp = property.FindPropertyRelative("specializationId");
+            bool isFriendly = IsFriendlyFaction(property);
 
             EditorGUI.BeginProperty(position, label, property);
 
@@ -119,11 +122,24 @@ namespace TGD.DataV2.Editor
 
             EditorGUI.indentLevel++;
 
-            var professionRect = new Rect(position.x, labelRect.y + lineHeight + spacing, position.width, lineHeight);
-            DrawProfessionPopup(professionRect, professionProp, specializationProp);
+            if (!isFriendly)
+            {
+                var messageRect = new Rect(position.x, labelRect.y + lineHeight + spacing, position.width, lineHeight);
+                EditorGUI.LabelField(messageRect, EditorGUIUtility.TrTempContent("Available only for Friendly faction units."));
 
-            var specializationRect = new Rect(position.x, professionRect.y + lineHeight + spacing, position.width, lineHeight);
-            DrawSpecializationPopup(specializationRect, professionProp, specializationProp);
+                if (professionProp != null)
+                    professionProp.stringValue = string.Empty;
+                if (specializationProp != null)
+                    specializationProp.stringValue = string.Empty;
+            }
+            else
+            {
+                var professionRect = new Rect(position.x, labelRect.y + lineHeight + spacing, position.width, lineHeight);
+                DrawProfessionPopup(professionRect, professionProp, specializationProp);
+
+                var specializationRect = new Rect(position.x, professionRect.y + lineHeight + spacing, position.width, lineHeight);
+                DrawSpecializationPopup(specializationRect, professionProp, specializationProp);
+            }
 
             EditorGUI.indentLevel--;
             EditorGUI.EndProperty();
@@ -133,7 +149,9 @@ namespace TGD.DataV2.Editor
         {
             float lineHeight = EditorGUIUtility.singleLineHeight;
             float spacing = EditorGUIUtility.standardVerticalSpacing;
-            return lineHeight * 3f + spacing * 2f;
+            return IsFriendlyFaction(property)
+                ? lineHeight * 3f + spacing * 2f
+                : lineHeight * 2f + spacing;
         }
 
         void DrawProfessionPopup(Rect rect, SerializedProperty professionProp, SerializedProperty specializationProp)
@@ -157,7 +175,7 @@ namespace TGD.DataV2.Editor
                 }
             }
 
-            int newIndex = EditorGUI.Popup(rect, new GUIContent("Profession"), currentIndex, display);
+            int newIndex = EditorGUI.Popup(rect, "Profession", currentIndex, display);
             if (newIndex == currentIndex)
                 return;
 
@@ -196,7 +214,7 @@ namespace TGD.DataV2.Editor
 
             using (new EditorGUI.DisabledScope(options.Length == 0))
             {
-                int newIndex = EditorGUI.Popup(rect, new GUIContent("Specialization"), currentIndex, display);
+                int newIndex = EditorGUI.Popup(rect, "Specialization", currentIndex, display);
                 if (newIndex != currentIndex && specializationProp != null)
                 {
                     specializationProp.stringValue = newIndex <= 0 ? string.Empty : options[newIndex - 1].Id;
@@ -225,6 +243,14 @@ namespace TGD.DataV2.Editor
             }
 
             return Array.Empty<SpecializationOption>();
+        }
+
+        static bool IsFriendlyFaction(SerializedProperty property)
+        {
+            if (property?.serializedObject?.targetObject is UnitBlueprint blueprint)
+                return blueprint.faction == UnitFaction.Friendly;
+
+            return false;
         }
     }
 }
