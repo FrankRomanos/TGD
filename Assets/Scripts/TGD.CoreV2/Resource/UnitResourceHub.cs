@@ -141,7 +141,11 @@ namespace TGD.CoreV2.Resource
                     continue;
 
                 var id = pair.Key;
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
                 var current = Get(id);
+                Debug.Log($"clear {id}！", this);
                 if (current == 0)
                     continue;
 
@@ -150,11 +154,24 @@ namespace TGD.CoreV2.Resource
             }
         }
 
-        [ContextMenu("Test Gain TestResource")]
+#if UNITY_EDITOR
+        [ContextMenu("Test Gain Bound Resources")]
         void EditorTestGain()
         {
-            Gain("TestResource", 1);
+            bool any = false;
+            foreach (var id in DebugEnumerateIds())
+            {
+                if (string.IsNullOrEmpty(id))
+                    continue;
+
+                Gain(id, 1);
+                any = true;
+            }
+
+            if (!any)
+                Debug.LogWarning("[Resource] No configured resources to test.", this);
         }
+#endif
 
         SlotSpec NormalizeSpec(SlotSpec spec)
         {

@@ -1523,8 +1523,6 @@ namespace TGD.CombatV2
             if (hub == null)
                 return;
 
-            string unitLabel = FormatUnitLabel(runtime.Unit);
-            Debug.Log($"[Res]   OwnerEnd T{_currentPhaseIndex}({phaseLabel}) U={unitLabel}", this);
             hub.OnOwnerEndTurn();
             RaiseUnitRuntimeChanged(runtime?.Unit);
         }
