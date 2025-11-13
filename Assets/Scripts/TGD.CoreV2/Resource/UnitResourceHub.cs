@@ -22,6 +22,7 @@ namespace TGD.CoreV2.Resource
 
         readonly Dictionary<string, SlotSpec> _slotConfig = new Dictionary<string, SlotSpec>(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, int> _values = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, int> _currentCaps = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public event Action<ResourceChangeEvent> Changed;
 
@@ -29,6 +30,7 @@ namespace TGD.CoreV2.Resource
         {
             _slotConfig.Clear();
             _values.Clear();
+            _currentCaps.Clear();
 
             if (specs == null)
                 return;
@@ -42,6 +44,7 @@ namespace TGD.CoreV2.Resource
                 _slotConfig[normalized.resourceId] = normalized;
 
                 var startValue = normalized.startValue;
+                _currentCaps[normalized.resourceId] = normalized.cap;
                 _values[normalized.resourceId] = startValue;
                 RaiseChanged(normalized.resourceId, 0, startValue, force: true);
             }
@@ -65,7 +68,7 @@ namespace TGD.CoreV2.Resource
             if (string.IsNullOrEmpty(id))
                 return 0;
 
-            return _slotConfig.TryGetValue(id, out var spec) ? spec.cap : 0;
+            return _currentCaps.TryGetValue(id, out var cap) ? cap : 0;
         }
 
         public bool TrySpend(string id, int amount)
@@ -91,16 +94,43 @@ namespace TGD.CoreV2.Resource
             if (string.IsNullOrEmpty(id) || amount == 0)
                 return;
 
-            if (!_slotConfig.TryGetValue(id, out var spec))
+            if (!_slotConfig.ContainsKey(id))
                 return;
 
             var current = Get(id);
-            var after = Mathf.Clamp(current + amount, 0, spec.cap);
+            var after = Mathf.Clamp(current + amount, 0, Cap(id));
             if (after == current)
                 return;
 
             _values[id] = after;
             RaiseChanged(id, current, after);
+        }
+
+        public void SetCap(string id, int newCap, bool clampCurrent = true)
+        {
+            if (string.IsNullOrEmpty(id))
+                return;
+
+            if (!_slotConfig.ContainsKey(id))
+                return;
+
+            var normalizedCap = Mathf.Max(0, newCap);
+            var hadCap = _currentCaps.TryGetValue(id, out var previousCap);
+            if (hadCap && previousCap == normalizedCap)
+                return;
+
+            _currentCaps[id] = normalizedCap;
+
+            if (!clampCurrent)
+                return;
+
+            var current = Get(id);
+            var clamped = Mathf.Clamp(current, 0, normalizedCap);
+            if (clamped == current)
+                return;
+
+            _values[id] = clamped;
+            RaiseChanged(id, current, clamped);
         }
 
         public void OnOwnerEndTurn()
