@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2.Resource;
 using TGD.CoreV2.Rules;
 
 namespace TGD.CoreV2
@@ -14,6 +15,8 @@ namespace TGD.CoreV2
         [Tooltip("该单位的所有战斗数值（序列化容器）")]
         public StatsV2 stats = new StatsV2();
         public CooldownHubV2 cooldownHub;
+        [Tooltip("该单位的副资源池（连击/怒气等）")]
+        public UnitResourceHub resourceHub;
 
         // ========= Services (Injected) =========
         [Header("Services (Injected)")]
@@ -123,6 +126,8 @@ namespace TGD.CoreV2
                 return _ruleLedger;
             }
         }
+
+        public IResourcePool Resources => resourceHub;
 
         // ========= 便捷只读访问（统一入口；外部系统只读这些） =========
         // —— 移动 —— 
