@@ -29,6 +29,8 @@ namespace TGD.DataV2
     [CreateAssetMenu(menuName = "TGD/Skills/SkillDefinitionV2", fileName = "SkillDefinitionV2")]
     public sealed class SkillDefinitionV2 : ScriptableObject
     {
+        private static readonly string[] s_defaultTags = { "None" };
+
         [SerializeField]
         [Tooltip("Unique identifier consumed by CAM / TMV2 / cooldown systems.")]
         private string id = string.Empty;
@@ -90,6 +92,10 @@ namespace TGD.DataV2
         [Tooltip("Optional log lines printed during W4/resolve stage.")]
         private string[] resolveLogs = Array.Empty<string>();
 
+        [SerializeField]
+        [Tooltip("Gameplay tags consumed by mastery systems. Use 'None' when unspecified.")]
+        private string[] tags = new[] { "None" };
+
         public string Id => Normalize(id);
         public SkillKind Kind => kind;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName.Trim();
@@ -113,6 +119,7 @@ namespace TGD.DataV2
         public int FullRoundRounds => Mathf.Max(1, fullRoundRounds);
         public IReadOnlyList<string> ConfirmLogs => confirmLogs ?? Array.Empty<string>();
         public IReadOnlyList<string> ResolveLogs => resolveLogs ?? Array.Empty<string>();
+        public IReadOnlyList<string> Tags => tags != null && tags.Length > 0 ? tags : s_defaultTags;
 
         public bool IsActive => kind == SkillKind.Active;
         public bool IsPassive => kind == SkillKind.Passive;
@@ -138,6 +145,29 @@ namespace TGD.DataV2
             return value.Trim();
         }
 
+        private static string[] NormalizeTags(IEnumerable<string> source)
+        {
+            if (source == null)
+                return new[] { "None" };
+
+            var list = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in source)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+
+                var normalized = entry.Trim();
+                if (seen.Add(normalized))
+                    list.Add(normalized);
+            }
+
+            if (list.Count == 0)
+                list.Add("None");
+
+            return list.ToArray();
+        }
+
 #if UNITY_EDITOR
         private void OnValidate()
         {
@@ -158,6 +188,7 @@ namespace TGD.DataV2
                 confirmLogs = Array.Empty<string>();
             if (resolveLogs == null)
                 resolveLogs = Array.Empty<string>();
+            tags = NormalizeTags(tags);
         }
 
         public void EditorInitialize(
@@ -175,7 +206,8 @@ namespace TGD.DataV2
             string derivedFromSkillId = null,
             int fullRoundRounds = 1,
             IEnumerable<string> confirmLogs = null,
-            IEnumerable<string> resolveLogs = null)
+            IEnumerable<string> resolveLogs = null,
+            IEnumerable<string> tags = null)
         {
             this.id = Normalize(id);
             this.kind = kind;
@@ -204,6 +236,7 @@ namespace TGD.DataV2
             this.fullRoundRounds = Mathf.Max(1, fullRoundRounds);
             this.confirmLogs = confirmLogs != null ? new List<string>(confirmLogs).ToArray() : Array.Empty<string>();
             this.resolveLogs = resolveLogs != null ? new List<string>(resolveLogs).ToArray() : Array.Empty<string>();
+            this.tags = NormalizeTags(tags);
         }
 #endif
     }
