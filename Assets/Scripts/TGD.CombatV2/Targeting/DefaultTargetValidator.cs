@@ -247,6 +247,31 @@ namespace TGD.CombatV2.Targeting
                     }
                     reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
                     return false;
+                case CastShape.Line:
+                    if (resolvedRange <= 0)
+                    {
+                        reason = $"[Probe] SelectionOutOfRange(range={resolvedRange})";
+                        return false;
+                    }
+                    var segment = HexLineShape.GetTerminalSegment(origin, actor.Facing, resolvedRange);
+                    if (segment == null || segment.Count == 0)
+                    {
+                        reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
+                        return false;
+                    }
+                    foreach (var cell in segment)
+                    {
+                        if (!cell.Equals(target))
+                            continue;
+                        if (layout != null && !layout.Contains(cell))
+                        {
+                            reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
+                            return false;
+                        }
+                        return true;
+                    }
+                    reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
+                    return false;
                 default:
                 {
                     int dist = Hex.Distance(origin, target);

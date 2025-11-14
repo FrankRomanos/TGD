@@ -19,7 +19,8 @@ namespace TGD.CoreV2
         SingleCell = 0,
         Circle = 1,
         Cone60 = 2,
-        Cone120 = 3
+        Cone120 = 3,
+        Line = 4
     }
 
     [System.Serializable]
