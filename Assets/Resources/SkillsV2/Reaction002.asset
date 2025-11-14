@@ -25,7 +25,7 @@ MonoBehaviour:
     selectionMode: 0
     rangeType: 1
     rangeValue: 3
-    shape: 3
+    shape: 4
   legacyMaxRangeHexes: -1
   cooldownKey: Reaction002
   derivedFromSkillId: 
