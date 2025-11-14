@@ -111,6 +111,7 @@ namespace TGD.CombatV2
         int _actionTokenSequence;
         int _currentActionToken;
         bool _auditedGlobalTools;
+        int _lastAimCancelFrame = -1;
 
         bool IsInputSuppressed => _inputSuppressionDepth > 0;
         bool IsAnyChainWindowActive => _chainWindowDepth > 0;
@@ -124,6 +125,16 @@ namespace TGD.CombatV2
         {
             if (_inputSuppressionDepth > 0)
                 _inputSuppressionDepth--;
+        }
+
+        void MarkAimCancelledThisFrame()
+        {
+            _lastAimCancelFrame = Time.frameCount;
+        }
+
+        bool WasAimCancelledThisFrame()
+        {
+            return _lastAimCancelFrame == Time.frameCount;
         }
 
         struct PlannedCost
@@ -1910,9 +1921,10 @@ namespace TGD.CombatV2
                 if (!target.HasValue)
                 {
                     ActionPhaseLogger.Log(unit, kind, "W2_PrecheckOk");
-                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", "(reason=targetInvalid)");
-                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", "(reason=targetInvalid)");
-                    NotifyConfirmAbort(tool, unit, "targetInvalid");
+                    string noTargetReason = TargetInvalidReason.EmptyNotAllowed.ToString();
+                    ActionPhaseLogger.Log(unit, kind, "W2_PreDeductCheckFail", $"(reason={noTargetReason})");
+                    ActionPhaseLogger.Log(unit, kind, "W2_ConfirmAbort", $"(reason={noTargetReason})");
+                    NotifyConfirmAbort(tool, unit, noTargetReason);
                     CleanupAfterAbort(tool, false);
                     yield break;
                 }
@@ -2046,7 +2058,7 @@ namespace TGD.CombatV2
 
                 string failReason = null;
                 if (!cost.valid)
-                    failReason = "targetInvalid";
+                    failReason = ResolveTargetInvalidReason(tool, unit, actionPlan.target);
                 else
                     failReason = EvaluateBudgetFailure(unit, cost.TotalSeconds, cost.TotalEnergy, budget, resources);
 
@@ -2866,6 +2878,29 @@ namespace TGD.CombatV2
             }
 
             return new PlannedCost { valid = targetValid };
+        }
+
+        string ResolveTargetInvalidReason(IActionToolV2 tool, Unit owner, Hex target)
+        {
+            if (tool is ChainActionBase chainTool)
+            {
+                Unit actor = owner;
+                if (actor == null)
+                    actor = ResolveUnit(chainTool);
+                if (actor == null && _activeUnit != null)
+                    actor = _activeUnit;
+                if (actor == null && _currentUnit != null)
+                    actor = _currentUnit;
+
+                if (actor != null)
+                {
+                    var check = chainTool.ValidateTarget(actor, target);
+                    if (!check.ok)
+                        return check.reason.ToString();
+                }
+            }
+
+            return TargetInvalidReason.Unknown.ToString();
         }
 
         bool ShouldOpenChainWindow(IActionToolV2 tool, Unit unit)
@@ -4133,7 +4168,7 @@ namespace TGD.CombatV2
                             }
                         }
 
-                        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                        if ((Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) && !WasAimCancelledThisFrame())
                         {
                             string cancelSuffix = null;
                             if (ownerMode && activeOwner != null)
@@ -4470,7 +4505,7 @@ namespace TGD.CombatV2
                         }
                     }
 
-                    if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                    if ((Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) && !WasAimCancelledThisFrame())
                     {
                         Log("[Chain] DerivedPromptAbort(cancel)");
                         resolved = true;
@@ -4611,8 +4646,10 @@ namespace TGD.CombatV2
                             }
                             else
                             {
-                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={check.reason})");
-                                ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                var invalidReason = check.reason;
+                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", $"(reason={invalidReason})");
+                                MarkAimCancelledThisFrame();
                                 cursor?.Clear();
                                 if (TryResolveAliveTool(tool, out tool))
                                     tool.OnExitAim();
@@ -4634,6 +4671,7 @@ namespace TGD.CombatV2
                     {
                         cursor?.Clear();
                         ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel");
+                        MarkAimCancelledThisFrame();
                         if (TryResolveAliveTool(tool, out tool))
                             tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
@@ -4834,17 +4872,19 @@ namespace TGD.CombatV2
                             }
                             else
                             {
+                                var invalidReason = check.reason;
                                 if (owner != null)
                                 {
-                                    ActionPhaseLogger.Log(owner, toolId, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
-                                    ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                    ActionPhaseLogger.Log(owner, toolId, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                    ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", $"(reason={invalidReason})");
                                 }
                                 else
                                 {
-                                    ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
-                                    ActionPhaseLogger.Log(baseUnit, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                    ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                    ActionPhaseLogger.Log(baseUnit, toolId, "W1_AimCancel", $"(reason={invalidReason})");
                                 }
 
+                                MarkAimCancelledThisFrame();
                                 cursor?.Clear();
                                 if (TryResolveAliveTool(tool, out tool))
                                     tool.OnExitAim();
@@ -4866,6 +4906,7 @@ namespace TGD.CombatV2
                     {
                         cursor?.Clear();
                         ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel");
+                        MarkAimCancelledThisFrame();
                         if (TryResolveAliveTool(tool, out tool))
                             tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });

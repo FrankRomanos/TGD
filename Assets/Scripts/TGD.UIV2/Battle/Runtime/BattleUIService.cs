@@ -649,11 +649,12 @@ namespace TGD.UIV2.Battle
             if (string.IsNullOrEmpty(label))
                 return;
 
+            var parsedReason = ParseTargetInvalidReason(ExtractToken(message, "reason"));
             bool confirmAbortInvalid = message.IndexOf("W2_ConfirmAbort", StringComparison.Ordinal) >= 0
-                && message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) >= 0;
+                && parsedReason != TargetInvalidReason.Unknown;
             bool targetInvalid = message.IndexOf("TargetInvalid", StringComparison.Ordinal) >= 0;
             bool aimCancelInvalid = message.IndexOf("W1_AimCancel", StringComparison.Ordinal) >= 0
-                && message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) >= 0;
+                && parsedReason != TargetInvalidReason.Unknown;
 
             if (!confirmAbortInvalid && !targetInvalid && !aimCancelInvalid)
                 return;
@@ -674,7 +675,7 @@ namespace TGD.UIV2.Battle
 
             if (aimCancelInvalid)
             {
-                ShowTargetInvalidHud(message);
+                ShowTargetInvalidHud(message, parsedReason);
                 return;
             }
 
@@ -683,7 +684,7 @@ namespace TGD.UIV2.Battle
                 if (IsMoveOrAttackTool(unit, stageToolId))
                     return;
 
-                ShowTargetInvalidHud(message);
+                ShowTargetInvalidHud(message, parsedReason);
                 return;
             }
 
@@ -696,13 +697,17 @@ namespace TGD.UIV2.Battle
             if (stageIsMoveOrAttack && string.Equals(actualToolId, stageToolId, StringComparison.Ordinal))
                 return;
 
-            ShowTargetInvalidHud(message);
+            ShowTargetInvalidHud(message, parsedReason);
         }
 
-        void ShowTargetInvalidHud(string message)
+        void ShowTargetInvalidHud(string message, TargetInvalidReason reasonHint = TargetInvalidReason.Unknown)
         {
-            string reasonToken = ExtractToken(message, "reason");
-            var reason = ParseTargetInvalidReason(reasonToken);
+            var reason = reasonHint;
+            if (reason == TargetInvalidReason.Unknown)
+            {
+                string fallbackToken = ExtractToken(message, "reason");
+                reason = ParseTargetInvalidReason(fallbackToken);
+            }
             string hudMessage = ResolveTargetInvalidMessage(reason);
             var kind = MapKindForTargetInvalid(reason, hudMessage);
             ShowActionHud(hudMessage, kind);
