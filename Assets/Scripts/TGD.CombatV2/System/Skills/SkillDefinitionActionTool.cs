@@ -102,8 +102,9 @@ namespace TGD.CombatV2
             skillId = definition.Id;
             icon = definition.Icon;
             targetRule = definition.TargetRule;
-            maxRangeHexes = definition.MaxRangeHexes;
-            selection = definition.Selection;
+            var profile = definition.Selection.WithDefaults();
+            maxRangeHexes = profile.ResolveRange(ctx, -1);
+            selection = profile;
 
             var cost = EvaluateCosts();
             timeCostSeconds = cost.seconds;

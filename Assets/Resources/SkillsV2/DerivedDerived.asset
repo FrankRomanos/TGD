@@ -21,7 +21,6 @@ MonoBehaviour:
   costAuthority: 0
   timeCostSeconds: 1
   energyCost: 10
-  maxRangeHexes: -1
   cooldownKey: DerivedDerived
   derivedFromSkillId: DerivedAttack
   fullRoundRounds: 1

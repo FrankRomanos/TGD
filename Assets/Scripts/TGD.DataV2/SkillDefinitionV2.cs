@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using TGD.CoreV2;
 
 namespace TGD.DataV2
@@ -53,10 +54,6 @@ namespace TGD.DataV2
         private ActionKind actionKind = ActionKind.Standard;
 
         [SerializeField]
-        [Tooltip("Legal target rule resolved by DefaultTargetValidator.")]
-        private TargetRule targetRule = TargetRule.AnyClick;
-
-        [SerializeField]
         [Tooltip("Source of truth for time/energy costs. Attack & Move defer to their profiles.")]
         private SkillCostAuthority costAuthority = SkillCostAuthority.Definition;
 
@@ -68,13 +65,18 @@ namespace TGD.DataV2
         [Tooltip("Energy cost resolved at confirm (W2).")]
         private int energyCost = 0;
 
+        [Header("Selection")]
         [SerializeField]
-        [Tooltip("Maximum targeting distance in hexes. -1 for unlimited.")]
-        private int maxRangeHexes = -1;
+        [Tooltip("Legal target rule resolved by DefaultTargetValidator.")]
+        private TargetRule targetRule = TargetRule.AnyClick;
 
         [SerializeField]
         [Tooltip("Selection profile controlling range mode and highlight shape.")]
         private TargetSelectionProfile selection = TargetSelectionProfile.Default;
+
+        [SerializeField, HideInInspector]
+        [FormerlySerializedAs("maxRangeHexes")]
+        private int legacyMaxRangeHexes = -1;
 
         [SerializeField]
         [Tooltip("Cooldown catalog key. Empty defaults to Id.")]
@@ -109,15 +111,7 @@ namespace TGD.DataV2
         public SkillCostAuthority CostAuthority => costAuthority;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
-        public int MaxRangeHexes
-        {
-            get
-            {
-                if (selection.rangeType == CastRangeType.Fixed && selection.rangeValue >= 0)
-                    return Mathf.Max(-1, selection.rangeValue);
-                return Mathf.Max(-1, maxRangeHexes);
-            }
-        }
+        public int MaxRangeHexes => selection.WithDefaults().ResolveRange(null, -1);
         public TargetSelectionProfile Selection => selection;
         public string CooldownKey
         {
@@ -186,7 +180,6 @@ namespace TGD.DataV2
         {
             id = Normalize(id);
             displayName = string.IsNullOrWhiteSpace(displayName) ? id : displayName.Trim();
-            maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
             fullRoundRounds = Mathf.Max(1, fullRoundRounds);
             cooldownKey = Normalize(cooldownKey);
             if (kind == SkillKind.Active && string.IsNullOrEmpty(cooldownKey))
@@ -203,15 +196,22 @@ namespace TGD.DataV2
                 resolveLogs = Array.Empty<string>();
             tags = NormalizeTags(tags);
             selection = selection.WithDefaults();
+            if (legacyMaxRangeHexes >= 0 && selection.rangeType == CastRangeType.Infinite)
+            {
+                selection.rangeType = CastRangeType.Fixed;
+                selection.rangeValue = Mathf.Max(0, legacyMaxRangeHexes);
+            }
+
             if (selection.rangeType == CastRangeType.Fixed)
             {
                 selection.rangeValue = Mathf.Max(0, selection.rangeValue);
-                maxRangeHexes = Mathf.Max(-1, selection.rangeValue);
             }
-            else
+            else if (selection.rangeType == CastRangeType.ByStat && selection.rangeValue < 0)
             {
-                maxRangeHexes = -1;
+                selection.rangeValue = 0;
             }
+
+            legacyMaxRangeHexes = -1;
         }
 
         public void EditorInitialize(
@@ -224,7 +224,6 @@ namespace TGD.DataV2
             int energyCost = 0,
             string displayName = null,
             Sprite icon = null,
-            int maxRangeHexes = -1,
             string cooldownKey = null,
             string derivedFromSkillId = null,
             int fullRoundRounds = 1,
@@ -253,7 +252,6 @@ namespace TGD.DataV2
             }
             this.displayName = string.IsNullOrWhiteSpace(displayName) ? this.id : displayName.Trim();
             this.icon = icon;
-            this.maxRangeHexes = Mathf.Max(-1, maxRangeHexes);
             this.cooldownKey = Normalize(cooldownKey);
             if (this.kind == SkillKind.Active && string.IsNullOrEmpty(this.cooldownKey))
                 this.cooldownKey = this.id;
@@ -270,9 +268,14 @@ namespace TGD.DataV2
             selection.rangeValue = Mathf.Max(0, castRangeValue);
             selection.shape = castShape;
             if (selection.rangeType == CastRangeType.Fixed)
-                this.maxRangeHexes = Mathf.Max(-1, selection.rangeValue);
-            else
-                this.maxRangeHexes = -1;
+            {
+                selection.rangeValue = Mathf.Max(0, selection.rangeValue);
+            }
+            else if (selection.rangeType == CastRangeType.ByStat && selection.rangeValue < 0)
+            {
+                selection.rangeValue = 0;
+            }
+            legacyMaxRangeHexes = -1;
         }
 #endif
     }
