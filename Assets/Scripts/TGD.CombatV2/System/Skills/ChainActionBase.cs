@@ -104,7 +104,7 @@ namespace TGD.CombatV2
 
             RenderSelectionArea(hex, check);
 
-            if (check.ok && check.hit != HitKind.Ally)
+            if (check.ok)
                 AttackEventsV2.RaiseAimShown(unit, new[] { hex });
             else
                 AttackEventsV2.RaiseAimShown(unit, System.Array.Empty<Hex>());
@@ -272,7 +272,7 @@ namespace TGD.CombatV2
                     var check = checkOverride ?? (validator != null
                         ? validator.Check(unit, hover.Value, spec)
                         : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly });
-                    bool allowed = check.ok && check.hit != HitKind.Ally;
+                    bool allowed = check.ok;
                     cursor.ShowSingle(hover.Value, allowed ? hoverValidColor : hoverInvalidColor);
                 }
                 else
@@ -302,7 +302,7 @@ namespace TGD.CombatV2
                     var check = checkOverride ?? (validator != null
                         ? validator.Check(unit, hover.Value, spec)
                         : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly });
-                    hoverAllowed = check.ok && check.hit != HitKind.Ally;
+                    hoverAllowed = check.ok;
                 }
 
                 cursor.ShowArea(

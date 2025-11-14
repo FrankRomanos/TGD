@@ -14,7 +14,7 @@ namespace TGD.CombatV2
     /// 点击移动（占位版）：BFS 可达 + 一次性转向 + 逐格 Tween + HexOccupancy 碰撞
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext
+    public sealed class HexClickMover : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser
     {
         // Legacy note: this mover predates the IOcc pipeline, so it carries a lot of “just in case”
         // branches. The comments below mark what each stage feeds into CAMV2/TMV2 so you can trim
@@ -67,6 +67,11 @@ namespace TGD.CombatV2
             _turnManager = tm;
         }
 
+        public void SetCursorHighlighter(IHexHighlighter highlighter)
+        {
+            _cursor = highlighter != null ? new TargetSelectionCursor(highlighter) : null;
+        }
+
         public override void BindContext(UnitRuntimeContext context, TurnManagerV2 tm)
         {
             base.BindContext(context, tm);
@@ -97,6 +102,8 @@ namespace TGD.CombatV2
 
         [Header("Visuals")]
         public Color rangeColor = new(0.2f, 0.8f, 1f, 0.85f);
+        public Color hoverValidColor = new(1f, 0.9f, 0.2f, 0.85f);
+        public Color hoverInvalidColor = new(1f, 0.3f, 0.3f, 0.7f);
         public Color invalidColor = new(1f, 0.3f, 0.3f, 0.7f);
 
         [Header("Environment (optional)")]
@@ -193,6 +200,8 @@ namespace TGD.CombatV2
         Hex _previewReservedTarget;
         bool _previewFallbackActive;
         HexAreaPainter _painter;
+        TargetSelectionCursor _cursor;
+        TargetSelectionCursor Cursor => _cursor;
 
         TargetingSpec _moveSpec;
 
@@ -417,6 +426,7 @@ namespace TGD.CombatV2
                 return;
             _isAiming = true;
             _isExecuting = false;
+            Cursor?.Clear();
             ShowRange();
         }
         public void OnExitAim()
@@ -425,7 +435,28 @@ namespace TGD.CombatV2
             ClearPreviewReservations("ExitAim");
             HideRange();
         }
-        public void OnHover(Hex hex) { /* 可选：做 hover 高亮 */ }
+        public void OnHover(Hex hex)
+        {
+            if (!_isAiming)
+                return;
+
+            var unit = OwnerUnit;
+            if (unit == null)
+            {
+                Cursor?.Clear();
+                return;
+            }
+
+            var preview = PeekPlannedCost(hex);
+            if (Cursor == null)
+                return;
+
+            bool reachable = false;
+            if (preview.valid && _paths.TryGetValue(hex, out var path) && path != null && path.Count >= 2)
+                reachable = true;
+
+            Cursor.ShowSingle(hex, reachable ? hoverValidColor : hoverInvalidColor);
+        }
 
         public IEnumerator OnConfirm(Hex hex)
         {
@@ -886,6 +917,7 @@ namespace TGD.CombatV2
             _previewDirty = true;
             _hasPreviewAnchorSnapshot = false;
             _hasPlanAnchorSnapshot = false;
+            Cursor?.Clear();
             HexMoveEvents.RaiseRangeHidden();
         }
 
