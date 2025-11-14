@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
 
@@ -8,7 +8,7 @@ namespace TGD.CombatV2
     {
         Unknown = 0,
         Skill = 1,
-        BasicAttack = 2,
+        Attack = 2,
         Move = 3
     }
 
