@@ -1934,7 +1934,7 @@ namespace TGD.CombatV2
                 {
                     kind = kind,
                     target = target.Value,
-                    cost = BuildPlannedCost(tool, target.Value),
+                    cost = BuildPlannedCost(tool, unit, target.Value),
                     chainDepth = _chainDepth
                 };
 
@@ -2801,8 +2801,32 @@ namespace TGD.CombatV2
         }
 
 
-        PlannedCost BuildPlannedCost(IActionToolV2 tool, Hex target)
+        PlannedCost BuildPlannedCost(IActionToolV2 tool, Unit owner, Hex target)
         {
+            bool TargetAllowed()
+            {
+                if (tool is ChainActionBase chainTool)
+                {
+                    Unit actor = owner;
+                    if (actor == null)
+                        actor = ResolveUnit(chainTool);
+                    if (actor == null && _activeUnit != null)
+                        actor = _activeUnit;
+                    if (actor == null && _currentUnit != null)
+                        actor = _currentUnit;
+
+                    if (actor != null)
+                    {
+                        var check = chainTool.ValidateTarget(actor, target);
+                        return check.ok;
+                    }
+                }
+
+                return true;
+            }
+
+            bool targetValid = TargetAllowed();
+
             if (tool is IActionCostPreviewV2 preview && preview.TryPeekCost(out var previewSecs, out var previewEnergy))
             {
                 return new PlannedCost
@@ -2811,7 +2835,7 @@ namespace TGD.CombatV2
                     moveEnergy = Mathf.Max(0, previewEnergy),
                     atkSecs = 0,
                     atkEnergy = 0,
-                    valid = true
+                    valid = targetValid
                 };
             }
 
@@ -2824,7 +2848,7 @@ namespace TGD.CombatV2
                     atkSecs = 0,
                     moveEnergy = Mathf.Max(0, planned.moveEnergy),
                     atkEnergy = 0,
-                    valid = planned.valid
+                    valid = planned.valid && targetValid
                 };
             }
 
@@ -2837,11 +2861,11 @@ namespace TGD.CombatV2
                     atkSecs = Mathf.Max(0, planned.atkSecs),
                     moveEnergy = Mathf.Max(0, planned.moveEnergy),
                     atkEnergy = Mathf.Max(0, planned.atkEnergy),
-                    valid = planned.valid
+                    valid = planned.valid && targetValid
                 };
             }
 
-            return new PlannedCost { valid = true };
+            return new PlannedCost { valid = targetValid };
         }
 
         bool ShouldOpenChainWindow(IActionToolV2 tool, Unit unit)
