@@ -342,15 +342,27 @@ namespace TGD.UIV2.Battle
             ShowActionHud(resolved, HudKindByText(resolved));
         }
 
-        bool ShouldDisplayActionHud(Unit unit)
+        bool ShouldDisplayActionHud(Unit unit, string label = null)
         {
-            if (actionHudMessageListener == null || unit == null)
+            if (actionHudMessageListener == null)
                 return false;
 
             if (turnManager == null)
                 return true;
 
-            return turnManager.IsPlayerUnit(unit);
+            if (unit != null)
+                return turnManager.IsPlayerUnit(unit);
+
+            if (string.IsNullOrEmpty(label))
+                return false;
+
+            if (_playerLabels.Contains(label))
+                return true;
+
+            if (_enemyLabels.Contains(label))
+                return false;
+
+            return label.IndexOf("(Player)", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         void ShowActionHud(string message, ActionHudMessageListenerTMP.HudKind kind)
@@ -510,15 +522,73 @@ namespace TGD.UIV2.Battle
 
         void HandleTurnLogMessage(string condition, string stackTrace, LogType type)
         {
-            if (turnBanner == null || type == LogType.Exception || string.IsNullOrEmpty(condition))
+            if (type == LogType.Exception || string.IsNullOrEmpty(condition))
                 return;
 
-            if (!condition.StartsWith("[Turn]"))
+            if (condition.StartsWith("[Action]", StringComparison.Ordinal))
+            {
+                HandleActionLogMessage(condition);
+                return;
+            }
+
+            if (turnBanner == null)
+                return;
+
+            if (!condition.StartsWith("[Turn]", StringComparison.Ordinal))
                 return;
 
             TurnBannerTone tone = ResolveTone(condition);
             string display = FormatDisplayMessage(condition);
             turnBanner.EnqueueMessage(display, tone);
+        }
+
+        void HandleActionLogMessage(string message)
+        {
+            const string prefix = "[Action] ";
+            if (!message.StartsWith(prefix, StringComparison.Ordinal))
+                return;
+
+            int labelStart = prefix.Length;
+            int labelEnd = message.IndexOf(" [", labelStart, StringComparison.Ordinal);
+            if (labelEnd <= labelStart)
+                return;
+
+            string label = message.Substring(labelStart, labelEnd - labelStart);
+            if (string.IsNullOrEmpty(label))
+                return;
+
+            if (message.IndexOf("W2_ConfirmAbort", StringComparison.Ordinal) < 0
+             || message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) < 0)
+                return;
+
+            int toolStart = message.IndexOf('[', labelEnd + 1, StringComparison.Ordinal);
+            int toolEnd = toolStart >= 0 ? message.IndexOf(']', toolStart + 1) : -1;
+            if (toolStart < 0 || toolEnd <= toolStart)
+                return;
+
+            string toolId = message.Substring(toolStart + 1, toolEnd - toolStart - 1);
+
+            var unit = ResolveUnitByLabel(label);
+            if (unit != null)
+                RegisterUnit(unit);
+
+            var context = turnManager != null && unit != null ? turnManager.GetContext(unit) : null;
+            if (context != null)
+            {
+                string moveSkillId = context.MoveSkillId;
+                if (!string.IsNullOrEmpty(moveSkillId)
+                 && string.Equals(toolId, moveSkillId, StringComparison.Ordinal))
+                    return;
+            }
+
+            if (string.Equals(toolId, AttackProfileRules.DefaultSkillId, StringComparison.Ordinal))
+                return;
+
+            if (!ShouldDisplayActionHud(unit, label))
+                return;
+
+            const string hudMessage = "Invalid target.";
+            ShowActionHud(hudMessage, ActionHudMessageListenerTMP.HudKind.Info);
         }
 
         TurnBannerTone ResolveTone(string message)

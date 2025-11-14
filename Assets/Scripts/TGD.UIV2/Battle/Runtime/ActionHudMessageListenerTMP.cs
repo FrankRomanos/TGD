@@ -40,10 +40,14 @@ namespace TGD.UIV2
         public HudGradient gradientTime = HudGradient.TimeDefault();
         public HudGradient gradientSnare = HudGradient.SnareDefault();
 
+        public bool IsVisible => _isVisible;
+        public string CurrentMessage { get; private set; } = string.Empty;
+
         CanvasGroup _canvasGroup;
         Coroutine _co;
         Vector2 _baseAnchoredPosition;
         Vector3 _baseScale = Vector3.one;
+        bool _isVisible;
 
         void Reset()
         {
@@ -74,6 +78,8 @@ namespace TGD.UIV2
 
             ResetTransforms();
             SetVisible(false);
+            _isVisible = false;
+            CurrentMessage = string.Empty;
         }
 
         /// <summary>
@@ -89,6 +95,8 @@ namespace TGD.UIV2
 
             ResetTransforms();
             SetVisible(false, true);
+            _isVisible = false;
+            CurrentMessage = string.Empty;
         }
 
         /// <summary>
@@ -104,6 +112,7 @@ namespace TGD.UIV2
 
             ApplyGradient(kind);                 // 强制写入渐变
             uiText.text = text;
+            CurrentMessage = text ?? string.Empty;
 
             if (_co != null)
                 StopCoroutine(_co);
@@ -225,6 +234,9 @@ namespace TGD.UIV2
                 _canvasGroup.alpha = 1f;
 
             root.gameObject.SetActive(visible);
+            _isVisible = visible;
+            if (!visible)
+                CurrentMessage = string.Empty;
         }
 
         // ---------- gradient helper ----------
