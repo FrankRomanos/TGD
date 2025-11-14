@@ -4548,6 +4548,12 @@ namespace TGD.CombatV2
 
             string toolId = tool.Id;
 
+            var owner = option.owner;
+            if (owner == null)
+                owner = ResolveUnit(tool);
+
+            var aimLogger = owner ?? unit;
+
             if (!TryResolveAliveTool(tool, out tool))
             {
                 onComplete?.Invoke(default);
@@ -4555,7 +4561,7 @@ namespace TGD.CombatV2
             }
 
             EnterAimForTool(tool);
-            ActionPhaseLogger.Log(unit, toolId, "W1_AimBegin");
+            ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimBegin");
 
             if (tool is ChainActionBase chainTool)
             {
@@ -4570,7 +4576,7 @@ namespace TGD.CombatV2
                     if (_pendingEndTurn)
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(unit, toolId, "W1_AimCancel", "(reason=EndTurn)");
+                        ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", "(reason=EndTurn)");
                         if (TryResolveAliveTool(tool, out tool))
                             tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
@@ -4592,7 +4598,7 @@ namespace TGD.CombatV2
                             chainTool.OnHover(hover.Value);
                             lastHover = hover.Value;
                         }
-                        var check = chainTool.ValidateTarget(unit, hover.Value);
+                        var check = chainTool.ValidateTarget(owner ?? unit, hover.Value);
 
                         if (Input.GetMouseButtonDown(0))
                         {
@@ -4606,6 +4612,12 @@ namespace TGD.CombatV2
                             else
                             {
                                 ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={check.reason})");
+                                ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                cursor?.Clear();
+                                if (TryResolveAliveTool(tool, out tool))
+                                    tool.OnExitAim();
+                                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                                yield break;
                             }
                         }
                     }
@@ -4621,7 +4633,7 @@ namespace TGD.CombatV2
                     if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
                     {
                         cursor?.Clear();
-                        ActionPhaseLogger.Log(unit, toolId, "W1_AimCancel");
+                        ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel");
                         if (TryResolveAliveTool(tool, out tool))
                             tool.OnExitAim();
                         onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
@@ -4651,8 +4663,8 @@ namespace TGD.CombatV2
             tool.OnExitAim();
             ChainCursor?.Clear();
 
-            ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmStart");
-            ActionPhaseLogger.Log(unit, toolId, "W2_PrecheckOk");
+            ActionPhaseLogger.Log(aimLogger, toolId, "W2_ConfirmStart");
+            ActionPhaseLogger.Log(aimLogger, toolId, "W2_PrecheckOk");
 
             if (!targetChosen)
             {
@@ -4670,8 +4682,8 @@ namespace TGD.CombatV2
 
                 if (fail != null)
                 {
-                    ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckFail", $"(reason={fail})");
-                    ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmAbort", $"(reason={fail})");
+                    ActionPhaseLogger.Log(aimLogger, toolId, "W2_PreDeductCheckFail", $"(reason={fail})");
+                    ActionPhaseLogger.Log(aimLogger, toolId, "W2_ConfirmAbort", $"(reason={fail})");
                     onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                     yield break;
                 }
@@ -4680,13 +4692,13 @@ namespace TGD.CombatV2
 
             if (failReason != null)
             {
-                ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckFail", $"(reason={failReason})");
-                ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmAbort", $"(reason={failReason})");
+                ActionPhaseLogger.Log(aimLogger, toolId, "W2_PreDeductCheckFail", $"(reason={failReason})");
+                ActionPhaseLogger.Log(aimLogger, toolId, "W2_ConfirmAbort", $"(reason={failReason})");
                 onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
                 yield break;
             }
 
-            ActionPhaseLogger.Log(unit, toolId, "W2_PreDeductCheckOk");
+            ActionPhaseLogger.Log(aimLogger, toolId, "W2_PreDeductCheckOk");
             TryStartCooldownIfAny(tool, unit, cooldowns, 1);
 
             int timeBefore = budget != null ? budget.Remaining : 0;
