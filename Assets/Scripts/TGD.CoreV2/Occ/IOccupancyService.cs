@@ -12,9 +12,9 @@ namespace TGD.CoreV2
         public string ActorId;
         public Hex Anchor;
         public Facing4 Facing;
-        public string FootprintKey; // Diagnostics only; not for gameplay logic.
+        public string HitShapeKey; // Diagnostics only; not for gameplay logic.
         public OccActorInfo(string id, Hex a, Facing4 f, string key)
-        { ActorId = id; Anchor = a; Facing = f; FootprintKey = key; }
+        { ActorId = id; Anchor = a; Facing = f; HitShapeKey = key; }
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ namespace TGD.CoreV2
         /// <summary>
         /// Lightweight read path for “can I stand there?” checks.  Uses the same
         /// adapter decoding logic to ensure factories and controllers stay in sync
-        /// with the authoritative footprint rules.
+        /// with the authoritative hit shape rules.
         /// </summary>
         bool IsFreeFor(UnitRuntimeContext ctx, Hex anchor, Facing4 facing);
 

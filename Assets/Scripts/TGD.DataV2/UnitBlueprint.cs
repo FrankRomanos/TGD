@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using TGD.CoreV2;
 using TGD.HexBoard;
 using UnityEngine;
@@ -32,9 +32,9 @@ namespace TGD.DataV2
         [Tooltip("Optional portrait sprite exposed to combat UI layers.")]
         public Sprite avatar;
 
-        [Header("Grid Occupancy")]
-        [Tooltip("Optional footprint shape used when spawning this unit. Null uses factory fallback.")]
-        public FootprintShape footprint;
+        [Header("Hit Shape")]
+        [Tooltip("Optional hit shape used when spawning this unit. Null uses factory fallback.")]
+        public HitShape hitShape;
 
         [Header("Abilities")]
         [Tooltip("Initial ability loadout for this unit.")]

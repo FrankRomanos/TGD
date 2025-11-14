@@ -57,12 +57,12 @@ namespace TGD.HexBoard.Path
         }
     }
 
-    sealed class StartFootprintDecorator : IPassability
+    sealed class StartCellDecorator : IPassability
     {
         readonly IPassability _inner;
         readonly HashSet<Hex> _selfCells = new();
 
-        public StartFootprintDecorator(IPassability inner, HexOccupancy occ, IGridActor self, Hex fallbackStart)
+        public StartCellDecorator(IPassability inner, HexOccupancy occ, IGridActor self, Hex fallbackStart)
         {
             _inner = inner;
             if (self == null)
@@ -75,25 +75,13 @@ namespace TGD.HexBoard.Path
                 {
                     foreach (var cell in cells)
                         _selfCells.Add(cell);
-                    return;
                 }
             }
 
-            var anchors = new HashSet<Hex>();
-            anchors.Add(fallbackStart);
-            anchors.Add(self.Anchor);
-
-            foreach (var anchor in anchors)
+            if (_selfCells.Count == 0)
             {
-                if (self.Footprint != null)
-                {
-                    foreach (var cell in HexFootprint.Expand(anchor, self.Facing, self.Footprint))
-                        _selfCells.Add(cell);
-                }
-                else
-                {
-                    _selfCells.Add(anchor);
-                }
+                _selfCells.Add(fallbackStart);
+                _selfCells.Add(self.Anchor);
             }
         }
 
@@ -108,7 +96,7 @@ namespace TGD.HexBoard.Path
     public static class PassabilityFactory
     {
         static IPassability WithStart(IPassability inner, HexOccupancy occ, IGridActor self, Hex fallbackStart)
-            => new StartFootprintDecorator(inner, occ, self, fallbackStart);
+            => new StartCellDecorator(inner, occ, self, fallbackStart);
 
         public static IPassability ForMove(UnitRuntimeContext ctx, IGridActor self, Hex fallbackStart)
         {

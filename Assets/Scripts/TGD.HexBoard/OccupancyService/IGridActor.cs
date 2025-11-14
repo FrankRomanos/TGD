@@ -1,12 +1,12 @@
 using TGD.CoreV2;
 namespace TGD.HexBoard
 {
-    /// °ÑÈÎºÎ¡°µ¥Î»¡±ÊÊÅäµ½¸ñ×Ó²ãĞèÒªµÄ×îĞ¡ĞÅÏ¢
+    /// ÎºÎ¡Î»äµ½Ó²ÒªĞ¡Ï¢
     public interface IGridActor
     {
         string Id { get; }
-        Hex Anchor { get; set; }   // Õ¼Î»Ãªµã£¨ÕûÊı¸ñ£©
-        Facing4 Facing { get; set; }   // ½ö ¡ÀQ / ¡ÀR
-        FootprintShape Footprint { get; } // ¹æÔòÕ¼Î»£¨SO£©
+        Hex Anchor { get; set; }   // Õ¼Î»Ãªã£¨
+        Facing4 Facing { get; set; }   //  Q / R
+        HitShape HitShape { get; } // å‘½ä¸­åŒºåŸŸå®šä¹‰
     }
 }

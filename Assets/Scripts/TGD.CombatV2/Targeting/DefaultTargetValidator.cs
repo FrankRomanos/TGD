@@ -120,16 +120,24 @@ namespace TGD.CombatV2.Targeting
                 if (environment != null && environment.IsPit(hex))
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] GroundPit");
             }
-            _occ.TryGetActor(hex, out var actorAt);
-            var unitAt = ResolveUnit(actorAt);
-            bool isEmpty = actorAt == null;
+            _occ.TryFindCoveringActor(hex, out var coveringActor, out var coveringIsAnchor);
+            var unitAt = ResolveUnit(coveringActor);
+            bool hasCoverage = coveringActor != null;
+            bool isAnchorCell = hasCoverage && coveringIsAnchor;
+            bool isProxyCell = hasCoverage && !coveringIsAnchor;
+            bool isEmpty = !isAnchorCell;
 
-            HitKind hit = ClassifyHit(actor, actorAt, unitAt);
+            HitKind hit = ClassifyHit(actor, unitAt, hasCoverage && unitAt == null);
 
             bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
             bool allowEnemy = (spec.occupant & TargetOccupantMask.Enemy) != 0;
             bool allowAlly = (spec.occupant & TargetOccupantMask.Ally) != 0;
             bool allowSelfMask = (spec.occupant & TargetOccupantMask.Self) != 0;
+
+            Unit ResolveHitUnit(HitKind kind)
+            {
+                return (kind == HitKind.Enemy || kind == HitKind.Self || kind == HitKind.Ally) ? unitAt : null;
+            }
 
             TargetCheckResult Reject(TargetInvalidReason reason, string why)
             {
@@ -137,7 +145,7 @@ namespace TGD.CombatV2.Targeting
                 {
                     ok = false,
                     reason = reason,
-                    hitUnit = unitAt,
+                    hitUnit = ResolveHitUnit(hit),
                     hit = hit,
                     plan = PlanKind.None
                 };
@@ -147,6 +155,10 @@ namespace TGD.CombatV2.Targeting
 
                 return rej;
             }
+
+            bool proxyEnemyCell = hit == HitKind.Enemy && isProxyCell;
+            if (proxyEnemyCell && allowEmpty && !allowEnemy)
+                hit = HitKind.None;
 
             if (hit == HitKind.Self && !(spec.allowSelf || allowSelfMask))
                 return Reject(TargetInvalidReason.Self, "[Probe] SelfNotAllowed");
@@ -187,7 +199,7 @@ namespace TGD.CombatV2.Targeting
             {
                 ok = ok,
                 reason = ok ? TargetInvalidReason.None : TargetInvalidReason.Unknown,
-                hitUnit = unitAt,
+                hitUnit = ResolveHitUnit(hit),
                 hit = hit,
                 plan = plan
             };
@@ -308,11 +320,8 @@ namespace TGD.CombatV2.Targeting
             return null;
         }
 
-        HitKind ClassifyHit(Unit self, IGridActor actorAt, Unit unitAt)
+        HitKind ClassifyHit(Unit self, Unit unitAt, bool fallbackEnemy)
         {
-            if (actorAt == null)
-                return HitKind.None;
-
             if (unitAt != null)
             {
                 if (self != null && ReferenceEquals(unitAt, self))
@@ -328,8 +337,7 @@ namespace TGD.CombatV2.Targeting
                 return HitKind.Enemy;
             }
 
-            // 未能映射到 Unit：临时视作敌人，等待完整链路
-            return HitKind.Enemy;
+            return fallbackEnemy ? HitKind.Enemy : HitKind.None;
         }
 
         PlanKind ResolvePlan(HitKind hit)

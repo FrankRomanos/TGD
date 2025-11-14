@@ -21,7 +21,7 @@ namespace TGD.LevelV2
         [SerializeField]
         HexOccupancyService occupancyService;
         [SerializeField]
-        FootprintShape defaultFootprint;
+        HitShape defaultHitShape;
         public Transform unitRoot;
 
         [Header("Prefab Source")]
@@ -45,7 +45,7 @@ namespace TGD.LevelV2
         bool _battleStarted;
         bool _loggedMissingSkillIndex;
         bool _loggedMissingCooldownCatalog;
-        bool _triedLoadFallbackFootprint;
+        bool _triedLoadFallbackHitShape;
 
         struct SharedRefs
         {
@@ -158,10 +158,10 @@ namespace TGD.LevelV2
             RegisterTurnSystems(unit, context, cooldownHub, final.faction, shared.turnManager);
 
             var adapter = EnsureGridAdapter(go, unit);
-            var resolvedFootprint = ResolveFootprint(final.footprint);
+            var resolvedHitShape = ResolveHitShape(final.hitShape);
             if (adapter != null)
             {
-                adapter.Footprint = resolvedFootprint;
+                adapter.HitShape = resolvedHitShape;
                 adapter.Facing = facing;
             }
 
@@ -261,24 +261,24 @@ namespace TGD.LevelV2
             return null;
         }
 
-        FootprintShape ResolveFootprint(FootprintShape preferred)
+        HitShape ResolveHitShape(HitShape preferred)
         {
             if (preferred != null)
                 return preferred;
 
-            if (defaultFootprint != null)
-                return defaultFootprint;
+            if (defaultHitShape != null)
+                return defaultHitShape;
 
-            if (!_triedLoadFallbackFootprint)
+            if (!_triedLoadFallbackHitShape)
             {
-                _triedLoadFallbackFootprint = true;
-                const string fallbackResourcePath = "FootPrintShape/FP_Single";
-                defaultFootprint = Resources.Load<FootprintShape>(fallbackResourcePath);
-                if (defaultFootprint == null)
-                    Debug.LogWarning($"[Factory] Missing fallback footprint shape at Resources/{fallbackResourcePath}.", this);
+                _triedLoadFallbackHitShape = true;
+                const string fallbackResourcePath = "HitShape/HitShape_Single";
+                defaultHitShape = Resources.Load<HitShape>(fallbackResourcePath);
+                if (defaultHitShape == null)
+                    Debug.LogWarning($"[Factory] Missing fallback hit shape asset at Resources/{fallbackResourcePath}.", this);
             }
 
-            return defaultFootprint;
+            return defaultHitShape;
         }
 
         static UnitRuntimeContext EnsureContext(GameObject go)

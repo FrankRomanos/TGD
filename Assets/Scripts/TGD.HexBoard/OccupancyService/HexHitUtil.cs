@@ -6,13 +6,11 @@ namespace TGD.HexBoard
 {
     public static class HexHitUtil
     {
-        // 命中：footprint 与 hitCells 交集非空
+        // 命中：单位 anchor 在 hitCells 集合中
         public static bool Hit(IGridActor actor, HashSet<Hex> hitCells)
         {
             if (actor == null || hitCells == null) return false;
-            foreach (var c in HexFootprint.Expand(actor.Anchor, actor.Facing, actor.Footprint))
-                if (hitCells.Contains(c)) return true;
-            return false;
+            return hitCells.Contains(actor.Anchor);
         }
 
         // 线段加粗（A->B，宽度=T）

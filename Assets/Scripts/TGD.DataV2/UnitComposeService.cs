@@ -28,7 +28,7 @@ namespace TGD.DataV2
                 faction = blueprint.faction,
                 stats = new StatsV2(),
                 avatar = blueprint.avatar,
-                footprint = blueprint.footprint,
+                hitShape = blueprint.hitShape,
                 professionId = NormalizeClassId(blueprint.classSpec.professionId),
                 specializationId = NormalizeClassId(blueprint.classSpec.specializationId)
             };
@@ -111,7 +111,7 @@ namespace TGD.DataV2
                 blueprint.classSpec.specializationId = "CL001";
                 blueprint.baseStats.MaxEnergy = 5;
                 blueprint.baseStats.Energy = 12;
-                blueprint.footprint = ScriptableObject.CreateInstance<FootprintShape>();
+                blueprint.hitShape = ScriptableObject.CreateInstance<HitShape>();
                 blueprint.abilities = new[]
                 {
                     new UnitBlueprint.AbilitySlot
@@ -179,13 +179,13 @@ namespace TGD.DataV2
                 Assert.AreEqual(0, config.abilities[2].initialCooldownSeconds);
                 Assert.AreEqual("ActionC", config.abilities[3].skillId);
                 Assert.AreEqual(4, config.abilities[3].initialCooldownSeconds);
-                Assert.AreEqual(blueprint.footprint, config.footprint);
+                Assert.AreEqual(blueprint.hitShape, config.hitShape);
                 Assert.AreEqual("Knight", config.professionId);
                 Assert.AreEqual("CL001", config.specializationId);
 
                 Debug.Log("[UnitCompose] Smoke test passed.");
 
-                ScriptableObject.DestroyImmediate(blueprint.footprint);
+                ScriptableObject.DestroyImmediate(blueprint.hitShape);
                 ScriptableObject.DestroyImmediate(blueprint);
                 ScriptableObject.DestroyImmediate(catalog);
                 ScriptableObject.DestroyImmediate(skillA);

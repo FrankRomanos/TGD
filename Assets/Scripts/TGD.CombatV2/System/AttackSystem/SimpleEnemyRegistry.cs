@@ -15,7 +15,7 @@ namespace TGD.CombatV2
             public string id = "Enemy";
             public Hex position = Hex.Zero;
             public Facing4 facing = Facing4.PlusQ;
-            public FootprintShape footprint;
+            public HitShape hitShape;
         }
 
         public HexOccupancyService occupancyService;
@@ -96,12 +96,12 @@ namespace TGD.CombatV2
         sealed class EnemyActor : IGridActor
         {
             readonly EnemyEntry _entry;
-            readonly FootprintShape _footprint;
+            readonly HitShape _hitShape;
 
             public EnemyActor(EnemyEntry entry)
             {
                 _entry = entry;
-                _footprint = entry.footprint != null ? entry.footprint : CreateSingle();
+                _hitShape = entry.hitShape != null ? entry.hitShape : CreateSingle();
                 Anchor = entry.position;
                 Facing = entry.facing;
             }
@@ -109,12 +109,12 @@ namespace TGD.CombatV2
             public string Id => string.IsNullOrEmpty(_entry?.id) ? "Enemy" : _entry.id;
             public Hex Anchor { get; set; }
             public Facing4 Facing { get; set; }
-            public FootprintShape Footprint => _footprint;
+            public HitShape HitShape => _hitShape;
 
-            static FootprintShape CreateSingle()
+            static HitShape CreateSingle()
             {
-                var shape = ScriptableObject.CreateInstance<FootprintShape>();
-                shape.name = "EnemyFootprint_Single_Runtime";
+                var shape = ScriptableObject.CreateInstance<HitShape>();
+                shape.name = "EnemyHitShape_Single_Runtime";
                 shape.offsets = new() { new L2(0, 0) };
                 return shape;
             }
