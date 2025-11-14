@@ -104,6 +104,11 @@ namespace TGD.UIV2
         /// </summary>
         public void ShowMessage(string text, HudKind kind)
         {
+            // Always reset any existing animation so the next show starts from a
+            // clean slate. This guarantees only one coroutine drives the HUD at
+            // any moment.
+            HideImmediate();
+
             if (!uiText || !root)
                 return;
 
