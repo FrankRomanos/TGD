@@ -1,4 +1,4 @@
-/* Overlay background */
+﻿/* Overlay background */
 .overlay {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
@@ -127,10 +127,6 @@
     text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
-.prompt-label:empty {
-    display: none;
-    margin-left: 0;
-}
 
 .context-label {
     margin-left: 8px;
@@ -144,9 +140,6 @@
     text-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
 }
 
-.context-label:empty {
-    display: none;
-}
 
 .divider {
     margin-top: 6px;
