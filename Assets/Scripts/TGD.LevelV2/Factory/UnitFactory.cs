@@ -699,16 +699,6 @@ namespace TGD.LevelV2
                 listener.mover = listener.GetComponent<HexClickMover>() ?? listener.GetComponentInParent<HexClickMover>(true);
             }
 
-            var autoDrivers = go.GetComponentsInChildren<TestEnemyAutoActionDriver>(true);
-            foreach (var driver in autoDrivers)
-            {
-                if (driver == null)
-                    continue;
-
-                driver.actionManager = resolvedCam;
-                driver.turnManager = resolvedTurnManager;
-            }
-
             foreach (var status in statuses)
             {
                 if (status == null)
