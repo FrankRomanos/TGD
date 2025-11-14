@@ -120,6 +120,11 @@ namespace TGD.CombatV2.Targeting
                 if (environment != null && environment.IsPit(hex))
                     return RejectEarly(TargetInvalidReason.Blocked, "[Probe] GroundPit");
             }
+            bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
+            bool allowEnemy = (spec.occupant & TargetOccupantMask.Enemy) != 0;
+            bool allowAlly = (spec.occupant & TargetOccupantMask.Ally) != 0;
+            bool allowSelfMask = (spec.occupant & TargetOccupantMask.Self) != 0;
+
             _occ.TryFindCoveringActor(hex, out var coveringActor, out var coveringIsAnchor);
             var unitAt = ResolveUnit(coveringActor);
             bool hasCoverage = coveringActor != null;
@@ -127,12 +132,7 @@ namespace TGD.CombatV2.Targeting
             bool isProxyCell = hasCoverage && !coveringIsAnchor;
             bool isEmpty = !isAnchorCell;
 
-            HitKind hit = ClassifyHit(actor, unitAt, hasCoverage && unitAt == null);
-
-            bool allowEmpty = (spec.occupant & TargetOccupantMask.Empty) != 0;
-            bool allowEnemy = (spec.occupant & TargetOccupantMask.Enemy) != 0;
-            bool allowAlly = (spec.occupant & TargetOccupantMask.Ally) != 0;
-            bool allowSelfMask = (spec.occupant & TargetOccupantMask.Self) != 0;
+            HitKind hit = ClassifyHit(actor, unitAt, hasCoverage && unitAt == null, allowEnemy, allowAlly);
 
             Unit ResolveHitUnit(HitKind kind)
             {
@@ -320,25 +320,33 @@ namespace TGD.CombatV2.Targeting
             return null;
         }
 
-        HitKind ClassifyHit(Unit self, Unit unitAt, bool fallbackEnemy)
-        {
-            if (unitAt != null)
+            HitKind ClassifyHit(Unit self, Unit unitAt, bool fallbackEnemy, bool allowEnemy, bool allowAlly)
             {
-                if (self != null && ReferenceEquals(unitAt, self))
-                    return HitKind.Self;
+                if (unitAt != null)
+                {
+                    if (self != null && ReferenceEquals(unitAt, self))
+                        return HitKind.Self;
 
-                if (IsEnemy(self, unitAt))
-                    return HitKind.Enemy;
+                    if (IsEnemy(self, unitAt))
+                        return HitKind.Enemy;
 
-                if (IsAlly(self, unitAt))
-                    return HitKind.Ally;
+                    if (IsAlly(self, unitAt))
+                        return HitKind.Ally;
 
-                // 未知阵营：暂时视作敌方，避免卡死
-                return HitKind.Enemy;
+                    if (allowAlly && !allowEnemy)
+                        return HitKind.Ally;
+
+                    if (allowEnemy && !allowAlly)
+                        return HitKind.Enemy;
+
+                    if (allowEnemy && allowAlly)
+                        return fallbackEnemy ? HitKind.Enemy : HitKind.Ally;
+
+                    return fallbackEnemy ? HitKind.Enemy : HitKind.None;
+                }
+
+                return fallbackEnemy ? HitKind.Enemy : HitKind.None;
             }
-
-            return fallbackEnemy ? HitKind.Enemy : HitKind.None;
-        }
 
         PlanKind ResolvePlan(HitKind hit)
         {
@@ -351,7 +359,7 @@ namespace TGD.CombatV2.Targeting
                 case HitKind.Self:
                     return PlanKind.AttackOnly;
                 case HitKind.Ally:
-                    return PlanKind.None;
+                    return PlanKind.MoveOnly;
                 default:
                     return PlanKind.None;
             }
