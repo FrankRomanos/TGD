@@ -20,7 +20,7 @@ MonoBehaviour:
   costAuthority: 0
   timeCostSeconds: 2
   energyCost: 40
-  targetRule: 5
+  targetRule: 2
   selection:
     selectionMode: 0
     rangeType: 1
