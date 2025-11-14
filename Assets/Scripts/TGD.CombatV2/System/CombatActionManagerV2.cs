@@ -4517,16 +4517,12 @@ namespace TGD.CombatV2
             bool targetChosen = true;
 
             string toolId = tool.Id;
-            var owner = option.owner;
 
             if (!TryResolveAliveTool(tool, out tool))
             {
                 onComplete?.Invoke(default);
                 yield break;
             }
-
-            if (owner == null)
-                owner = ResolveUnit(tool);
 
             EnterAimForTool(tool);
             ActionPhaseLogger.Log(unit, toolId, "W1_AimBegin");
@@ -4624,21 +4620,6 @@ namespace TGD.CombatV2
 
             tool.OnExitAim();
             ChainCursor?.Clear();
-
-            if (tool is ChainActionBase confirmChainTool)
-            {
-                var confirmOwner = owner != null ? owner : unit;
-                if (confirmOwner == null)
-                    confirmOwner = ResolveUnit(tool) ?? unit;
-
-                var confirmCheck = confirmChainTool.ValidateTarget(confirmOwner, selectedTarget);
-                if (!confirmCheck.ok)
-                {
-                    ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmAbort", $"(reason=TargetInvalid:{confirmCheck.reason})");
-                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                    yield break;
-                }
-            }
 
             ActionPhaseLogger.Log(unit, toolId, "W2_ConfirmStart");
             ActionPhaseLogger.Log(unit, toolId, "W2_PrecheckOk");
@@ -4855,21 +4836,6 @@ namespace TGD.CombatV2
 
             tool.OnExitAim();
             ChainCursor?.Clear();
-
-            if (tool is ChainActionBase confirmChainTool)
-            {
-                var confirmOwner = owner != null ? owner : baseUnit;
-                if (confirmOwner == null)
-                    confirmOwner = ResolveUnit(tool) ?? baseUnit;
-
-                var confirmCheck = confirmChainTool.ValidateTarget(confirmOwner, selectedTarget);
-                if (!confirmCheck.ok)
-                {
-                    ActionPhaseLogger.Log(owner, tool.Id, "W2_ConfirmAbort", $"(reason=TargetInvalid:{confirmCheck.reason})");
-                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                    yield break;
-                }
-            }
 
             ActionPhaseLogger.Log(owner, tool.Id, "W2_ConfirmStart");
             ActionPhaseLogger.Log(owner, tool.Id, "W2_PrecheckOk");
