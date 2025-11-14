@@ -603,8 +603,7 @@ namespace TGD.HexBoard
             if (!store.TryGetActor(anchor, out var actor) || actor == null)
                 return false;
 
-            string key = actor.Footprint != null ? actor.Footprint.name : null;
-            info = new OccActorInfo(actor.Id, actor.Anchor, actor.Facing, key);
+            info = new OccActorInfo(actor.Id, actor.Anchor, actor.Facing, null);
             return true;
         }
 
@@ -620,8 +619,7 @@ namespace TGD.HexBoard
             {
                 if (actor == null)
                     continue;
-                string key = actor.Footprint != null ? actor.Footprint.name : null;
-                list.Add(new OccSnapshot(BoardId, actor.Id, actor.Anchor, actor.Facing, key, _storeVersion));
+                list.Add(new OccSnapshot(BoardId, actor.Id, actor.Anchor, actor.Facing, null, _storeVersion));
             }
             return list.ToArray();
         }

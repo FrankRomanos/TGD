@@ -11,7 +11,7 @@ namespace TGD.HexBoard
         Unit unit;
 
         [SerializeField]
-        FootprintShape footprint;
+        HitShape hitShape;
 
         Hex _fallbackAnchor = Hex.Zero;
         Facing4 _fallbackFacing = Facing4.PlusQ;
@@ -24,10 +24,10 @@ namespace TGD.HexBoard
             set => unit = value;
         }
 
-        public FootprintShape Footprint
+        public HitShape HitShape
         {
-            get => footprint;
-            set => footprint = value;
+            get => hitShape;
+            set => hitShape = value;
         }
 
         public Hex Anchor

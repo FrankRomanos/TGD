@@ -1,4 +1,3 @@
-﻿
 namespace TGD.CoreV2
 {
     public struct OccTxnId
@@ -18,12 +17,12 @@ namespace TGD.CoreV2
         public string ActorId;
         public Hex Anchor;
         public Facing4 Facing;
-        public string FootprintKey;
+        public string HitShapeKey;
         public int StoreVersion;
 
         public OccSnapshot(string boardId, string actorId, Hex anchor, Facing4 facing, string key, int ver)
         {
-            BoardId = boardId; ActorId = actorId; Anchor = anchor; Facing = facing; FootprintKey = key; StoreVersion = ver;
+            BoardId = boardId; ActorId = actorId; Anchor = anchor; Facing = facing; HitShapeKey = key; StoreVersion = ver;
         }
     }
 }

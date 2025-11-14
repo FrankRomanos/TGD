@@ -72,15 +72,10 @@ namespace TGD.HexBoard
 
         bool CanPlaceInternal(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore, bool includeTemp)
         {
-            if (a?.Footprint == null)
-                return Layout.Contains(anchor) && !IsBlockedInternal(anchor, ignore, includeTemp);
+            if (!Layout.Contains(anchor))
+                return false;
 
-            foreach (var c in HexFootprint.Expand(anchor, facing, a.Footprint))
-            {
-                if (!Layout.Contains(c)) return false;
-                if (IsBlockedInternal(c, ignore, includeTemp)) return false;
-            }
-            return true;
+            return !IsBlockedInternal(anchor, ignore, includeTemp);
         }
 
         public bool CanPlace(IGridActor a, Hex anchor, Facing4 facing, IGridActor ignore = null)
@@ -94,12 +89,8 @@ namespace TGD.HexBoard
             if (!CanPlace(a, anchor, facing, a)) return false;
             Remove(a);
 
-            var cells = new List<Hex>();
-            foreach (var c in HexFootprint.Expand(anchor, facing, a.Footprint))
-            {
-                cellToActor[c] = a;
-                cells.Add(c);
-            }
+            var cells = new List<Hex> { anchor };
+            cellToActor[anchor] = a;
             actorToCells[a] = cells;
 
             a.Anchor = anchor;
@@ -339,6 +330,47 @@ namespace TGD.HexBoard
                 if (pair.Key != null)
                     yield return pair.Key;
             }
+        }
+
+        public bool TryFindCoveringActor(Hex cell, out IGridActor actor, out bool isAnchorCell)
+        {
+            if (TryGetActor(cell, out var anchorActor) && anchorActor != null)
+            {
+                actor = anchorActor;
+                isAnchorCell = true;
+                return true;
+            }
+
+            foreach (var candidate in EnumerateActors())
+            {
+                if (candidate == null)
+                    continue;
+
+                if (candidate.Anchor.Equals(cell))
+                {
+                    actor = candidate;
+                    isAnchorCell = true;
+                    return true;
+                }
+
+                var shape = candidate.HitShape;
+                if (shape == null)
+                    continue;
+
+                foreach (var covered in HexHitShape.Expand(candidate.Anchor, candidate.Facing, shape))
+                {
+                    if (!covered.Equals(cell))
+                        continue;
+
+                    actor = candidate;
+                    isAnchorCell = covered.Equals(candidate.Anchor);
+                    return true;
+                }
+            }
+
+            actor = null;
+            isAnchorCell = false;
+            return false;
         }
     }
 }

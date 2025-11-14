@@ -1808,15 +1808,20 @@ namespace TGD.CombatV2
             if (_occ == null)
                 return new[] { target };
 
-            var enemy = _occ.Get(target);
+            if (!_occ.TryFindCoveringActor(target, out var enemy, out _))
+                return new[] { target };
+
             if (enemy == null || enemy == SelfActor)
                 return new[] { target };
 
-            var cells = _occ.CellsOf(enemy);
-            if (cells != null && cells.Count > 0)
-                return cells;
+            var unique = new HashSet<Hex>();
+            foreach (var cell in HexHitShape.Expand(enemy.Anchor, enemy.Facing, enemy.HitShape))
+                unique.Add(cell);
 
-            return new[] { target };
+            if (unique.Count == 0)
+                unique.Add(enemy.Anchor);
+
+            return new List<Hex>(unique);
         }
 
         void OnAttackStrikeFired(Unit unit, int comboIndex)

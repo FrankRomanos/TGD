@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using TGD.CoreV2;
 using TGD.HexBoard;
@@ -18,7 +18,7 @@ namespace TGD.DataV2
         public StatsV2 stats = new StatsV2();
         public List<LearnedAbility> abilities = new List<LearnedAbility>();
         public Sprite avatar;
-        public FootprintShape footprint;
+        public HitShape hitShape;
         public string professionId;
         public string specializationId;
 
