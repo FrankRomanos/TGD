@@ -4823,6 +4823,12 @@ namespace TGD.CombatV2
                             else
                             {
                                 ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
+                                ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                cursor?.Clear();
+                                if (TryResolveAliveTool(tool, out tool))
+                                    tool.OnExitAim();
+                                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                                yield break;
                             }
                         }
                     }

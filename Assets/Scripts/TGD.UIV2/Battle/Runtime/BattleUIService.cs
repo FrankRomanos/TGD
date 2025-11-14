@@ -680,7 +680,12 @@ namespace TGD.UIV2.Battle
             }
 
             string actualToolId = ExtractToken(message, "id") ?? stageToolId;
-            if (IsMoveOrAttackTool(unit, actualToolId) || IsMoveOrAttackTool(unit, stageToolId))
+            bool actualIsMoveOrAttack = IsMoveOrAttackTool(unit, actualToolId);
+            if (actualIsMoveOrAttack)
+                return;
+
+            bool stageIsMoveOrAttack = IsMoveOrAttackTool(unit, stageToolId);
+            if (stageIsMoveOrAttack && string.Equals(actualToolId, stageToolId, StringComparison.Ordinal))
                 return;
 
             string reasonToken = ExtractToken(message, "reason");
