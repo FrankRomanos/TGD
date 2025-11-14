@@ -102,6 +102,11 @@ namespace TGD.DataV2
         [Tooltip("Gameplay tags consumed by mastery systems. Use 'None' when unspecified.")]
         private string[] tags = new[] { "None" };
 
+        [Header("Hit")]
+        [SerializeField]
+        [Tooltip("Default impact profile used when resolving skill hits.")]
+        private ImpactProfile defaultImpact = ImpactProfile.Default;
+
         public string Id => Normalize(id);
         public SkillKind Kind => kind;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName.Trim();
@@ -127,6 +132,7 @@ namespace TGD.DataV2
         public IReadOnlyList<string> ConfirmLogs => confirmLogs ?? Array.Empty<string>();
         public IReadOnlyList<string> ResolveLogs => resolveLogs ?? Array.Empty<string>();
         public IReadOnlyList<string> Tags => tags != null && tags.Length > 0 ? tags : s_defaultTags;
+        public ImpactProfile DefaultImpact => SanitizeImpact(defaultImpact);
 
         public bool IsActive => kind == SkillKind.Active;
         public bool IsPassive => kind == SkillKind.Passive;
@@ -196,6 +202,7 @@ namespace TGD.DataV2
                 resolveLogs = Array.Empty<string>();
             tags = NormalizeTags(tags);
             selection = selection.WithDefaults();
+            defaultImpact = SanitizeImpact(defaultImpact);
             if (legacyMaxRangeHexes >= 0 && selection.rangeType == CastRangeType.Infinite)
             {
                 selection.rangeType = CastRangeType.Fixed;
@@ -267,6 +274,7 @@ namespace TGD.DataV2
             selection.rangeType = castRangeType;
             selection.rangeValue = Mathf.Max(0, castRangeValue);
             selection.shape = castShape;
+            defaultImpact = ImpactProfile.Default;
             if (selection.rangeType == CastRangeType.Fixed)
             {
                 selection.rangeValue = Mathf.Max(0, selection.rangeValue);
@@ -278,5 +286,15 @@ namespace TGD.DataV2
             legacyMaxRangeHexes = -1;
         }
 #endif
+
+        static ImpactProfile SanitizeImpact(ImpactProfile profile)
+        {
+            profile = profile.WithDefaults();
+            if (profile.anchor == ImpactAnchor.TargetCell && profile.shape != ImpactShape.Circle && profile.shape != ImpactShape.Single)
+                profile.shape = ImpactShape.Circle;
+            if (profile.shape != ImpactShape.Single)
+                profile.radius = Mathf.Max(0, profile.radius);
+            return profile;
+        }
     }
 }

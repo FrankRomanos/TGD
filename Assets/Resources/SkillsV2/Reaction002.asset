@@ -24,7 +24,7 @@ MonoBehaviour:
   selection:
     selectionMode: 0
     rangeType: 1
-    rangeValue: 3
+    rangeValue: 4
     shape: 4
   legacyMaxRangeHexes: -1
   cooldownKey: Reaction002
@@ -36,3 +36,10 @@ MonoBehaviour:
   - "\u65E0\u654C\uFF01"
   tags:
   - None
+  defaultImpact:
+    anchor: 0
+    shape: 4
+    radius: 4
+    teamFilter: 3
+    countMode: 0
+    maxTargets: 0

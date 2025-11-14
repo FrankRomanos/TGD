@@ -40,8 +40,8 @@ MonoBehaviour:
     facing: 1
   - blueprint: {fileID: 11400000, guid: 1fef44cebca00c44c85fd17e4bf2869b, type: 2}
     anchor:
-      q: 16
-      r: 4
+      q: 14
+      r: 6
     facing: 1
   envStamps:
   - def: {fileID: 11400000, guid: 1d610e8961092c745bc05369578f95ef, type: 2}

@@ -36,3 +36,10 @@ MonoBehaviour:
   - "\u6D3E\u751F1"
   tags:
   - None
+  defaultImpact:
+    anchor: 0
+    shape: 0
+    radius: 0
+    teamFilter: 3
+    countMode: 0
+    maxTargets: 0

@@ -12,7 +12,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser
+    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser, IImpactProfileSource
     {
         // NOTE: This is one of the oldest controllers that survived into CombatV2.
         // It still acts as the glue between CAMV2 (action authority), TMV2 (time/energy authority)
@@ -83,6 +83,17 @@ namespace TGD.CombatV2
         public bool debugLog = true;
         public bool suppressInternalLogs = false;
 
+        [Header("Hit")]
+        public ImpactProfile impactProfile = new ImpactProfile
+        {
+            anchor = ImpactAnchor.TargetUnitCell,
+            shape = ImpactShape.Single,
+            radius = 0,
+            teamFilter = ImpactTeamFilter.Enemies,
+            countMode = ImpactCountMode.FirstN,
+            maxTargets = 1
+        };
+
         TargetSelectionCursor _cursor;
         TargetSelectionCursor Cursor => _cursor;
         public string CooldownKey => ResolveSkillId();
@@ -92,6 +103,11 @@ namespace TGD.CombatV2
             if (string.IsNullOrEmpty(skillId))
                 return AttackProfileRules.DefaultSkillId;
             return skillId.Trim();
+        }
+
+        ImpactProfile IImpactProfileSource.GetImpactProfile()
+        {
+            return impactProfile.WithDefaults();
         }
         public void SetCursorHighlighter(IHexHighlighter highlighter)
         {
@@ -857,6 +873,11 @@ namespace TGD.CombatV2
             if (targetValidator == null || _attackSpec == null || unit == null)
                 return new TargetCheckResult { ok = false, reason = TargetInvalidReason.Unknown, hit = HitKind.None, plan = PlanKind.None };
             return targetValidator.Check(unit, hex, _attackSpec);
+        }
+
+        public TargetCheckResult PeekTargetCheck(Hex hex)
+        {
+            return ValidateAttackTarget(ResolveSelfUnit(), hex);
         }
 
         void RaiseTargetRejected(Unit unit, TargetInvalidReason reason)
