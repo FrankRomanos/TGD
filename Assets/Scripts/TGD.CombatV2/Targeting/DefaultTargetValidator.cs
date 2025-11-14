@@ -327,22 +327,25 @@ namespace TGD.CombatV2.Targeting
                     if (self != null && ReferenceEquals(unitAt, self))
                         return HitKind.Self;
 
-                    if (IsEnemy(self, unitAt))
+                    bool isEnemy = IsEnemy(self, unitAt);
+                    bool isAlly = IsAlly(self, unitAt);
+
+                    if (isEnemy)
                         return HitKind.Enemy;
 
-                    if (IsAlly(self, unitAt))
+                    if (isAlly)
                         return HitKind.Ally;
-
-                    if (allowAlly && !allowEnemy)
-                        return HitKind.Ally;
-
-                    if (allowEnemy && !allowAlly)
-                        return HitKind.Enemy;
 
                     if (allowEnemy && allowAlly)
                         return fallbackEnemy ? HitKind.Enemy : HitKind.Ally;
 
-                    return fallbackEnemy ? HitKind.Enemy : HitKind.None;
+                    if (allowEnemy)
+                        return fallbackEnemy ? HitKind.Enemy : HitKind.None;
+
+                    if (allowAlly)
+                        return HitKind.None;
+
+                    return HitKind.None;
                 }
 
                 return fallbackEnemy ? HitKind.Enemy : HitKind.None;
