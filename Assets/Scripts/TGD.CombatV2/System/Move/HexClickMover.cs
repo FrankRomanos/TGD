@@ -938,6 +938,13 @@ namespace TGD.CombatV2
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
             unit ??= OwnerUnit;
+            if (!string.IsNullOrEmpty(reason)
+             && System.Enum.TryParse(reason, true, out TargetInvalidReason targetReason))
+            {
+                var mappedByTarget = MapMoveReject(targetReason);
+                HexMoveEvents.RaiseRejected(unit, mappedByTarget.reason, mappedByTarget.message);
+                return;
+            }
             (MoveBlockReason mapped, string message) = reason switch
             {
                 "lackTime" => (MoveBlockReason.NoBudget, "No More Time"),

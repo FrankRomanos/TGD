@@ -532,6 +532,7 @@ namespace TGD.UIV2.Battle
                 _pendingSelection = -1;
                 if (_noneToggle != null)
                     _noneToggle.SetValueWithoutNotify(false);
+                RefreshSelectionVisuals();
                 return true;
             }
 
@@ -546,6 +547,7 @@ namespace TGD.UIV2.Battle
                 _skipRequested = false;
                 if (_noneToggle != null)
                     _noneToggle.SetValueWithoutNotify(false);
+                RefreshSelectionVisuals();
                 return true;
             }
 

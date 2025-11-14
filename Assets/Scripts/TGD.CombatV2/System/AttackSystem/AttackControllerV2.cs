@@ -870,6 +870,13 @@ namespace TGD.CombatV2
         internal void HandleConfirmAbort(Unit unit, string reason)
         {
             unit ??= ResolveSelfUnit();
+            if (!string.IsNullOrEmpty(reason)
+             && System.Enum.TryParse(reason, true, out TargetInvalidReason targetReason))
+            {
+                var mapped = MapAttackReject(targetReason);
+                RaiseRejected(unit, mapped.reason, mapped.message);
+                return;
+            }
             switch (reason)
             {
                 case "targetInvalid":
