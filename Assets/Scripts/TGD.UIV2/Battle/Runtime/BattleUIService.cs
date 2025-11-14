@@ -677,11 +677,7 @@ namespace TGD.UIV2.Battle
                 if (IsMoveOrAttackTool(unit, stageToolId))
                     return;
 
-                string reasonToken = ExtractToken(message, "reason");
-                var reason = ParseTargetInvalidReason(reasonToken);
-                string hudMessage = ResolveTargetInvalidMessage(reason);
-                var kind = MapKindForTargetInvalid(reason, hudMessage);
-                ShowActionHud(hudMessage, kind);
+                ShowTargetInvalidHud(message);
                 return;
             }
 
@@ -703,6 +699,11 @@ namespace TGD.UIV2.Battle
             if (stageIsMoveOrAttack && string.Equals(actualToolId, stageToolId, StringComparison.Ordinal))
                 return;
 
+            ShowTargetInvalidHud(message);
+        }
+
+        void ShowTargetInvalidHud(string message)
+        {
             string reasonToken = ExtractToken(message, "reason");
             var reason = ParseTargetInvalidReason(reasonToken);
             string hudMessage = ResolveTargetInvalidMessage(reason);
