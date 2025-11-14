@@ -11,7 +11,7 @@ namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
     [AddComponentMenu("TGD/CombatV2/Skill Definition Action Tool")]
-    public sealed class SkillDefinitionActionTool : ChainActionBase, IActionResolveEffect, IFullRoundActionTool, IActionCostPreviewV2, ICooldownKeyProvider
+    public sealed class SkillDefinitionActionTool : ChainActionBase, IActionResolveEffect, IFullRoundActionTool, IActionCostPreviewV2, ICooldownKeyProvider, IImpactProfileSource
     {
         [SerializeField]
         [Tooltip("Skill definition driving this action's configuration.")]
@@ -24,6 +24,8 @@ namespace TGD.CombatV2
         int _preparedSeconds;
 
         public SkillDefinitionV2 Definition => definition;
+
+        public IReadOnlyList<string> DefinitionTags => definition != null ? definition.Tags : Array.Empty<string>();
 
         public override ActionKind Kind => definition != null ? definition.ActionKind : ActionKind.Standard;
 
@@ -82,6 +84,13 @@ namespace TGD.CombatV2
 
                 return base.CooldownId;
             }
+        }
+
+        public ImpactProfile GetImpactProfile()
+        {
+            if (definition != null)
+                return definition.DefaultImpact;
+            return ImpactProfile.Default;
         }
 
         void ApplyDefinition()

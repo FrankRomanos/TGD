@@ -328,6 +328,14 @@ namespace TGD.CombatV2
             public bool AttackExecuted => attackExecuted;
         }
 
+        struct ImpactResolutionData
+        {
+            public IReadOnlyList<UnitRuntimeContext> targets;
+            public ActionCoreKind coreKind;
+            public string actionId;
+            public IReadOnlyList<string> tags;
+        }
+
         readonly Stack<PreDeduct> _planStack = new();
         readonly List<ChainOption> _chainBuffer = new();
         struct ChainOptionDebug
@@ -346,6 +354,7 @@ namespace TGD.CombatV2
         readonly Dictionary<string, string> _chainPromptLast = new(StringComparer.Ordinal);
         readonly List<ChainOption> _derivedBuffer = new();
         readonly List<ChainPopupOptionData> _chainPopupOptionBuffer = new();
+        readonly List<string> _hitLogBuffer = new();
         Unit _currentChainFocus;
         IChainPopupUI _chainPopupUi;
         MonoBehaviour _chainPopupUiComponent;
@@ -2250,6 +2259,8 @@ namespace TGD.CombatV2
 
                 LogExecSummary(unit, plan.kind, report);
 
+                TryHandleHitResolution(tool, unit, plan, report);
+
                 ActionPhaseLogger.Log(unit, plan.kind, "W3_ExecuteEnd");
 
                 yield return StartCoroutine(Resolve(tool, unit, plan, exec, report, budget, resources));
@@ -2560,6 +2571,140 @@ namespace TGD.CombatV2
             }
 
             return report;
+        }
+
+        void TryHandleHitResolution(IActionToolV2 tool, Unit unit, ActionPlan plan, ExecReportData report)
+        {
+            if (tool == null || unit == null || turnManager == null)
+                return;
+            if (!report.valid)
+                return;
+            if (tool is AttackControllerV2 && !report.AttackExecuted)
+                return;
+            if (tool is not IImpactProfileSource)
+                return;
+
+            var actorContext = turnManager.GetContext(unit);
+            if (actorContext == null)
+                return;
+
+            if (!TryBuildImpactResolution(tool, unit, plan.target, actorContext, plan.kind, out var resolution))
+                return;
+
+            LogHit(resolution.actionId, resolution.targets);
+
+            var tags = resolution.tags ?? Array.Empty<string>();
+            var targets = resolution.targets ?? Array.Empty<UnitRuntimeContext>();
+            var actionId = string.IsNullOrEmpty(resolution.actionId) ? plan.kind ?? string.Empty : resolution.actionId;
+            var context = new ActionContextV2(actorContext, targets, resolution.coreKind, actionId, tool.Kind, tags);
+            CombatActionEvents.RaiseResolved(context);
+        }
+
+        bool TryBuildImpactResolution(
+            IActionToolV2 tool,
+            Unit unit,
+            Hex target,
+            UnitRuntimeContext actorContext,
+            string fallbackActionId,
+            out ImpactResolutionData resolution)
+        {
+            resolution = default;
+            if (tool is not IImpactProfileSource impactSource)
+                return false;
+
+            var profile = impactSource.GetImpactProfile().WithDefaults();
+            var occupancyService = turnManager.occupancyService;
+            var occupancy = occupancyService != null ? occupancyService.Get() : null;
+            HexBoardLayout layout = null;
+            if (occupancyService != null && occupancyService.authoring != null)
+                layout = occupancyService.authoring.Layout;
+            if (layout == null && occupancy != null)
+                layout = occupancy.Layout;
+
+            var clickedContext = ResolveClickedContext(tool, unit, target);
+            var targets = HitResolver.Resolve(profile, actorContext, target, clickedContext, occupancy, layout, turnManager);
+
+            resolution.targets = targets;
+            resolution.coreKind = ResolveActionCoreKind(tool);
+            resolution.actionId = !string.IsNullOrEmpty(tool.Id) ? tool.Id : (fallbackActionId ?? string.Empty);
+            resolution.tags = ResolveActionTags(tool);
+            return true;
+        }
+
+        UnitRuntimeContext ResolveClickedContext(IActionToolV2 tool, Unit unit, Hex target)
+        {
+            if (turnManager == null)
+                return null;
+
+            Unit clickedUnit = null;
+            if (tool is SkillDefinitionActionTool skillTool)
+            {
+                var check = skillTool.ValidateTarget(unit, target);
+                clickedUnit = check.hitUnit;
+            }
+            else if (tool is ChainActionBase chainTool)
+            {
+                var check = chainTool.ValidateTarget(unit, target);
+                clickedUnit = check.hitUnit;
+            }
+            else if (tool is AttackControllerV2 attackTool)
+            {
+                var check = attackTool.PeekTargetCheck(target);
+                clickedUnit = check.hitUnit;
+            }
+
+            if (clickedUnit == null)
+                return null;
+
+            return turnManager.GetContext(clickedUnit);
+        }
+
+        ActionCoreKind ResolveActionCoreKind(IActionToolV2 tool)
+        {
+            if (tool is SkillDefinitionActionTool)
+                return ActionCoreKind.Skill;
+            if (tool is AttackControllerV2)
+                return ActionCoreKind.Attack;
+            if (tool is HexClickMover)
+                return ActionCoreKind.Move;
+            return ActionCoreKind.Unknown;
+        }
+
+        IReadOnlyList<string> ResolveActionTags(IActionToolV2 tool)
+        {
+            if (tool is SkillDefinitionActionTool skillTool)
+                return skillTool.DefinitionTags ?? Array.Empty<string>();
+            return Array.Empty<string>();
+        }
+
+        void LogHit(string actionId, IReadOnlyList<UnitRuntimeContext> targets)
+        {
+            string resolvedId = string.IsNullOrEmpty(actionId) ? "?" : actionId;
+            int count = targets?.Count ?? 0;
+
+            _hitLogBuffer.Clear();
+            if (targets != null)
+            {
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    var target = targets[i];
+                    string label = "?";
+                    if (target != null)
+                    {
+                        if (target.boundUnit != null && !string.IsNullOrEmpty(target.boundUnit.Id))
+                            label = target.boundUnit.Id;
+                        else if (!string.IsNullOrEmpty(target.name))
+                            label = target.name;
+                    }
+                    _hitLogBuffer.Add(label);
+                }
+            }
+
+            string detail = _hitLogBuffer.Count > 0 ? $": {string.Join(", ", _hitLogBuffer)}" : string.Empty;
+            string message = $"[Hit] {resolvedId} hit {count} targets{detail}";
+            if (string.IsNullOrEmpty(detail))
+                message += ".";
+            ActionPhaseLogger.Log(message);
         }
 
         void LogExecSummary(Unit unit, string kind, ExecReportData report)
