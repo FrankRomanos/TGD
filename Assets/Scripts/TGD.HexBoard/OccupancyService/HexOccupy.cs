@@ -1,6 +1,7 @@
 // File: TGD.HexBoard/HexOccupancy.cs
 using System.Collections.Generic;
 using TGD.CoreV2;
+using UnityEngine;
 
 
 namespace TGD.HexBoard
@@ -341,6 +342,9 @@ namespace TGD.HexBoard
                 return true;
             }
 
+            IGridActor best = null;
+            int bestDistance = int.MaxValue;
+
             foreach (var candidate in EnumerateActors())
             {
                 if (candidate == null)
@@ -362,10 +366,24 @@ namespace TGD.HexBoard
                     if (!covered.Equals(cell))
                         continue;
 
-                    actor = candidate;
-                    isAnchorCell = covered.Equals(candidate.Anchor);
-                    return true;
+                    int dist = Hex.Distance(candidate.Anchor, cell);
+                    if (dist < bestDistance)
+                    {
+                        best = candidate;
+                        bestDistance = dist;
+                    }
+                    else if (dist == bestDistance && best != null && Random.value < 0.5f)
+                    {
+                        best = candidate;
+                    }
                 }
+            }
+
+            if (best != null)
+            {
+                actor = best;
+                isAnchorCell = false;
+                return true;
             }
 
             actor = null;
