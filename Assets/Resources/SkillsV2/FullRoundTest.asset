@@ -21,7 +21,6 @@ MonoBehaviour:
   costAuthority: 0
   timeCostSeconds: 0
   energyCost: 0
-  maxRangeHexes: -1
   cooldownKey: FullRoundTest
   derivedFromSkillId: 
   fullRoundRounds: 1

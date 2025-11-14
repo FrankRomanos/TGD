@@ -17,13 +17,20 @@ MonoBehaviour:
   displayName: DerivedDerived
   icon: {fileID: 21300000, guid: d5d321593879d84439406e96436c5151, type: 3}
   actionKind: 2
-  targetRule: 5
   costAuthority: 0
   timeCostSeconds: 1
   energyCost: 10
-  maxRangeHexes: -1
+  targetRule: 2
+  selection:
+    selectionMode: 0
+    rangeType: 1
+    rangeValue: 2
+    shape: 1
+  legacyMaxRangeHexes: -1
   cooldownKey: DerivedDerived
   derivedFromSkillId: DerivedAttack
   fullRoundRounds: 1
   confirmLogs: []
   resolveLogs: []
+  tags:
+  - None

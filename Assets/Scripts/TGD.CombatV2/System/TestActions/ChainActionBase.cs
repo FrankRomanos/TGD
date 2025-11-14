@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Pool;
 using TGD.CoreV2;
 using TGD.CombatV2.Targeting;
 using TGD.HexBoard;
@@ -13,10 +14,12 @@ namespace TGD.CombatV2
         [Header("Targeting")]
         public TargetRule targetRule = TargetRule.AnyClick;
         public int maxRangeHexes = -1;
+        public TargetSelectionProfile selection = TargetSelectionProfile.Default;
         public DefaultTargetValidator targetValidator;
         public HexBoardTiler tiler;
         public Color hoverValidColor = new(1f, 0.9f, 0.2f, 0.85f);
         public Color hoverInvalidColor = new(1f, 0.3f, 0.3f, 0.7f);
+        public Color rangeColor = new(0.2f, 0.8f, 1f, 0.85f);
 
         [Header("Config")]
         public string skillId = "ChainTest";
@@ -74,7 +77,7 @@ namespace TGD.CombatV2
                 return;
 
             _spec = GetTargetingSpec();
-            Cursor?.Clear();
+            RenderSelectionArea(null);
             _lastTarget = null;
             AttackEventsV2.RaiseAimShown(OwnerUnit, System.Array.Empty<Hex>());
         }
@@ -92,20 +95,17 @@ namespace TGD.CombatV2
             if (!Application.isPlaying || Dead(this) || !isActiveAndEnabled)
                 return;
 
-            var cursor = Cursor;
-            if (cursor == null)
-                return;
-
             var validator = ResolveValidator();
             var spec = _spec ?? GetTargetingSpec();
             var unit = OwnerUnit;
-            var check = validator != null ? validator.Check(unit, hex, spec) : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly };
+            var check = validator != null
+                ? validator.Check(unit, hex, spec)
+                : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly };
 
-            var color = check.ok && check.hit != HitKind.Ally ? hoverValidColor : hoverInvalidColor;
-            cursor.ShowSingle(hex, color);
+            RenderSelectionArea(hex, check);
 
             if (check.ok && check.hit != HitKind.Ally)
-            AttackEventsV2.RaiseAimShown(unit, new[] { hex });
+                AttackEventsV2.RaiseAimShown(unit, new[] { hex });
             else
                 AttackEventsV2.RaiseAimShown(unit, System.Array.Empty<Hex>());
         }
@@ -148,7 +148,12 @@ namespace TGD.CombatV2
 
         public virtual TargetingSpec GetTargetingSpec()
         {
-            return TargetingPresets.For(targetRule, maxRangeHexes);
+            var profile = selection.WithDefaults();
+            int resolvedRange = profile.ResolveRange(ctx, maxRangeHexes);
+            var spec = TargetingPresets.For(targetRule, resolvedRange);
+            spec.selection = profile;
+            spec.maxRangeHexes = resolvedRange;
+            return spec;
         }
 
         public virtual TargetCheckResult ValidateTarget(Unit unit, Hex hex)
@@ -241,6 +246,80 @@ namespace TGD.CombatV2
             if (resolved)
                 tiler = resolved;
             return tiler;
+        }
+
+        void RenderSelectionArea(Hex? hover, TargetCheckResult? checkOverride = null)
+        {
+            var cursor = Cursor;
+            if (cursor == null)
+                return;
+
+            var spec = _spec ?? GetTargetingSpec();
+            var unit = OwnerUnit;
+            if (spec == null || unit == null)
+            {
+                cursor.Clear();
+                return;
+            }
+
+            var profile = spec.selection.WithDefaults();
+            var validator = ResolveValidator();
+
+            if (profile.shape == CastShape.SingleCell)
+            {
+                if (hover.HasValue)
+                {
+                    var check = checkOverride ?? (validator != null
+                        ? validator.Check(unit, hover.Value, spec)
+                        : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly });
+                    bool allowed = check.ok && check.hit != HitKind.Ally;
+                    cursor.ShowSingle(hover.Value, allowed ? hoverValidColor : hoverInvalidColor);
+                }
+                else
+                {
+                    cursor.Clear();
+                }
+                return;
+            }
+
+            var valid = ListPool<Hex>.Get();
+            var invalid = ListPool<Hex>.Get();
+            try
+            {
+                TargetSelectionAreaBuilder.Build(
+                    ctx,
+                    unit,
+                    hover,
+                    spec,
+                    validator,
+                    tiler != null ? tiler.authoring : null,
+                    valid,
+                    invalid);
+
+                bool hoverAllowed = false;
+                if (hover.HasValue)
+                {
+                    var check = checkOverride ?? (validator != null
+                        ? validator.Check(unit, hover.Value, spec)
+                        : new TargetCheckResult { ok = true, hit = HitKind.None, plan = PlanKind.MoveOnly });
+                    hoverAllowed = check.ok && check.hit != HitKind.Ally;
+                }
+
+                cursor.ShowArea(
+                    valid,
+                    invalid,
+                    hover,
+                    hoverAllowed,
+                    rangeColor,
+                    hoverInvalidColor,
+                    hoverValidColor,
+                    hoverInvalidColor);
+            }
+            finally
+            {
+                ListPool<Hex>.Release(valid);
+                ListPool<Hex>.Release(invalid);
+            }
         }
     }
 }

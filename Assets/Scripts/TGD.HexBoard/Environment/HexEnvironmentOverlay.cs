@@ -52,11 +52,11 @@ namespace TGD.HexBoard
             }
 
             _painter.Clear();
-            if (slow.Count > 0) _painter.Paint(slow, slowColor);
-            if (fast.Count > 0) _painter.Paint(fast, fastColor);
-            if (pits.Count > 0) _painter.Paint(pits, pitColor);
-            if (entangleTraps.Count > 0) _painter.Paint(entangleTraps, entangleTrapColor);
-            if (traps.Count > 0) _painter.Paint(traps, trapColor);
+            if (slow.Count > 0) _painter.Paint(slow, slowColor, HexTileTintPriority.Environment);
+            if (fast.Count > 0) _painter.Paint(fast, fastColor, HexTileTintPriority.Environment);
+            if (pits.Count > 0) _painter.Paint(pits, pitColor, HexTileTintPriority.Environment);
+            if (entangleTraps.Count > 0) _painter.Paint(entangleTraps, entangleTrapColor, HexTileTintPriority.Environment);
+            if (traps.Count > 0) _painter.Paint(traps, trapColor, HexTileTintPriority.Environment);
         }
 
         void Update() { if (repaintEveryFrame) Repaint(); }

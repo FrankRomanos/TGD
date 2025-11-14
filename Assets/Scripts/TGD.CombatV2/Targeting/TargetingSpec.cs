@@ -1,4 +1,5 @@
 using System;
+using TGD.CoreV2;
 using UnityEngine;
 
 namespace TGD.CombatV2.Targeting
@@ -41,9 +42,12 @@ namespace TGD.CombatV2.Targeting
         [Header("Optional")]
         public int maxRangeHexes = -1;
 
+        [Header("Selection")]
+        public TargetSelectionProfile selection = TargetSelectionProfile.Default;
+
         public override string ToString()
         {
-            return $"[Spec] occ={occupant} terr={terrain} allowSelf={allowSelf} reqOcc={requireOccupied} reqEmpty={requireEmpty} range={maxRangeHexes}";
+            return $"[Spec] occ={occupant} terr={terrain} allowSelf={allowSelf} reqOcc={requireOccupied} reqEmpty={requireEmpty} range={maxRangeHexes} shape={selection.shape} rangeType={selection.rangeType}";
         }
     }
 }

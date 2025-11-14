@@ -6,6 +6,17 @@ namespace TGD.CombatV2.Targeting
     {
         public static TargetingSpec For(TargetRule rule, int maxRange = -1)
         {
+            TargetSelectionProfile ResolveSelection(int range)
+            {
+                var profile = TargetSelectionProfile.Default;
+                if (range >= 0)
+                {
+                    profile.rangeType = CastRangeType.Fixed;
+                    profile.rangeValue = range;
+                }
+                return profile;
+            }
+
             switch (rule)
             {
                 case TargetRule.GroundOnly:
@@ -16,7 +27,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = false,
                         requireEmpty = true,
                         requireOccupied = false,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.EnemyOnly:
                     return new TargetingSpec
@@ -26,7 +38,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = false,
                         requireEmpty = false,
                         requireOccupied = true,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.AllyOnly:
                     return new TargetingSpec
@@ -36,7 +49,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = false,
                         requireEmpty = false,
                         requireOccupied = true,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.SelfOnly:
                     return new TargetingSpec
@@ -46,7 +60,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = true,
                         requireEmpty = false,
                         requireOccupied = false,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.EnemyOrGround:
                     return new TargetingSpec
@@ -56,7 +71,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = false,
                         requireEmpty = false,
                         requireOccupied = false,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.AllyOrGround:
                     return new TargetingSpec
@@ -66,7 +82,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = false,
                         requireEmpty = false,
                         requireOccupied = false,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.AnyUnit:
                     return new TargetingSpec
@@ -76,7 +93,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = true,
                         requireEmpty = false,
                         requireOccupied = true,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
                 case TargetRule.AnyClick:
                 default:
@@ -87,7 +105,8 @@ namespace TGD.CombatV2.Targeting
                         allowSelf = true,
                         requireEmpty = false,
                         requireOccupied = false,
-                        maxRangeHexes = maxRange
+                        maxRangeHexes = maxRange,
+                        selection = ResolveSelection(maxRange)
                     };
             }
         }

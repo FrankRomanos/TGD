@@ -492,7 +492,14 @@ namespace TGD.CombatV2
                 allowSelf = false,
                 requireOccupied = false,
                 requireEmpty = true,
-                maxRangeHexes = -1
+                maxRangeHexes = -1,
+                selection = new TargetSelectionProfile
+                {
+                    selectionMode = TargetSelectionMode.Single,
+                    rangeType = CastRangeType.ByStat,
+                    rangeValue = 0,
+                    shape = CastShape.Circle
+                }
             };
             EnsureBound();
         }
@@ -863,8 +870,8 @@ namespace TGD.CombatV2
                 return;
             }
 
-            _painter.Paint(result.Paths.Keys, rangeColor);
-            if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor);
+            _painter.Paint(result.Paths.Keys, rangeColor, HexTileTintPriority.TargetSelection);
+            if (showBlockedAsRed) _painter.Paint(result.Blocked, invalidColor, HexTileTintPriority.TargetSelection + 1);
 
             HexMoveEvents.RaiseRangeShown(unit, result.Paths.Keys);
             _showing = true;

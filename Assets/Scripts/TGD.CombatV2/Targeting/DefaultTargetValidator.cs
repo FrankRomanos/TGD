@@ -166,14 +166,18 @@ namespace TGD.CombatV2.Targeting
             if (spec.requireEmpty && (hit != HitKind.None))
                 return Reject(TargetInvalidReason.Blocked, "[Probe] RequireEmpty");
 
-            if (spec.maxRangeHexes >= 0 && actor != null)
+            if (actor != null)
             {
                 var anchor = actor.Position;
                 if (_occ.TryGetAnchor(actor, out var anchorHex))
                     anchor = anchorHex;
-                int dist = Hex.Distance(anchor, hex);
-                if (dist > spec.maxRangeHexes)
-                    return Reject(TargetInvalidReason.OutOfRange, $"[Probe] OutOfRange({dist}>{spec.maxRangeHexes})");
+                var layout = occupancyService != null && occupancyService.authoring != null
+                    ? occupancyService.authoring.Layout
+                    : null;
+                if (!IsWithinSelectionRange(actor, anchor, hex, spec, layout, out var rangeWhy))
+                {
+                    return Reject(TargetInvalidReason.OutOfRange, rangeWhy ?? "[Probe] SelectionOutOfRange");
+                }
             }
 
             var plan = ResolvePlan(hit);
@@ -192,6 +196,66 @@ namespace TGD.CombatV2.Targeting
                 Debug.Log($"[Probe] {spec} @ {hex} → {res}", this);
 
             return res;
+        }
+
+        bool IsWithinSelectionRange(Unit actor, Hex origin, Hex target, TargetingSpec spec, HexBoardLayout layout, out string reason)
+        {
+            reason = null;
+            if (actor == null || spec == null)
+                return true;
+
+            var profile = spec.selection.WithDefaults();
+            var context = turnManager != null ? turnManager.GetContext(actor) : null;
+            int resolvedRange = profile.ResolveRange(context, spec.maxRangeHexes);
+            if (resolvedRange < 0)
+                return true;
+
+            switch (profile.shape)
+            {
+                case CastShape.SingleCell:
+                case CastShape.Circle:
+                {
+                    int dist = Hex.Distance(origin, target);
+                    if (dist <= resolvedRange)
+                        return true;
+                    reason = $"[Probe] SelectionOutOfRange(dist={dist}, range={resolvedRange})";
+                    return false;
+                }
+                case CastShape.Cone60:
+                    if (resolvedRange <= 0)
+                    {
+                        reason = $"[Probe] SelectionOutOfRange(range={resolvedRange})";
+                        return false;
+                    }
+                    foreach (var cell in HexAreaUtil.Sector60Right(origin, actor.Facing, resolvedRange, layout, true))
+                    {
+                        if (cell.Equals(target))
+                            return true;
+                    }
+                    reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
+                    return false;
+                case CastShape.Cone120:
+                    if (resolvedRange <= 0)
+                    {
+                        reason = $"[Probe] SelectionOutOfRange(range={resolvedRange})";
+                        return false;
+                    }
+                    foreach (var cell in HexAreaUtil.Sector120Game(origin, actor.Facing, resolvedRange, layout, true))
+                    {
+                        if (cell.Equals(target))
+                            return true;
+                    }
+                    reason = $"[Probe] SelectionOutOfRange(shape={profile.shape}, range={resolvedRange})";
+                    return false;
+                default:
+                {
+                    int dist = Hex.Distance(origin, target);
+                    if (dist <= resolvedRange)
+                        return true;
+                    reason = $"[Probe] SelectionOutOfRange(dist={dist}, range={resolvedRange})";
+                    return false;
+                }
+            }
         }
         static bool AllowsGroundSelection(TargetingSpec spec)
         {

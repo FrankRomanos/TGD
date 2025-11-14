@@ -6,44 +6,50 @@ namespace TGD.HexBoard
 {
     public sealed class HexAreaPainter : IHexHighlighter
     {
-         struct TintedRenderer
-        {
-            public Renderer Renderer;
-            public bool HadBlock;
-            public MaterialPropertyBlock OriginalBlock;
-        }
         readonly HexBoardTiler tiler;
-        readonly List<(GameObject go, Color old)> tinted = new();
+        readonly HashSet<Renderer> _tinted = new();
 
-        public HexAreaPainter(HexBoardTiler tiler) { this.tiler = tiler; }
-
-
-        public void Paint(IEnumerable<Hex> cells, Color color)
+        public HexAreaPainter(HexBoardTiler tiler)
         {
+            this.tiler = tiler;
+        }
 
-            if (tiler == null || cells == null) return;
+        public void Paint(IEnumerable<Hex> cells, Color color, int priority = 0)
+        {
+            if (tiler == null || cells == null)
+                return;
+
             foreach (var h in cells)
-                if (tiler.TryGetTile(h, out var go) && go) { var old = Color.white; Set(go, color); tinted.Add((go, old)); }
+            {
+                if (!tiler.TryGetTile(h, out var go) || !go)
+                    continue;
 
+                var renderers = go.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < renderers.Length; i++)
+                {
+                    var renderer = renderers[i];
+                    if (!renderer)
+                        continue;
+
+                    _tinted.Add(renderer);
+                    HexTileTintRegistry.Apply(renderer, this, color, priority);
+                }
+            }
         }
 
         public void Clear()
         {
-            foreach (var (go, old) in tinted) if (go) Set(go, Color.white);
-            tinted.Clear();
-        }
+            if (_tinted.Count == 0)
+                return;
 
-        static void Set(GameObject go, Color c)
-        {
-            var rends = go.GetComponentsInChildren<Renderer>(true);
-            foreach (var r in rends)
+            foreach (var renderer in _tinted)
             {
-                var mpb = new MaterialPropertyBlock();
-                r.GetPropertyBlock(mpb);
-                mpb.SetColor("_BaseColor", c);
-                mpb.SetColor("_Color", c);
-                r.SetPropertyBlock(mpb);
+                if (!renderer)
+                    continue;
+                HexTileTintRegistry.Remove(renderer, this);
             }
+
+            _tinted.Clear();
         }
     }
 }
