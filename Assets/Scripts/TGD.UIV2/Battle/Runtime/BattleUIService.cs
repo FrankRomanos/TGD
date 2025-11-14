@@ -652,8 +652,10 @@ namespace TGD.UIV2.Battle
             bool confirmAbortInvalid = message.IndexOf("W2_ConfirmAbort", StringComparison.Ordinal) >= 0
                 && message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) >= 0;
             bool targetInvalid = message.IndexOf("TargetInvalid", StringComparison.Ordinal) >= 0;
+            bool aimCancelInvalid = message.IndexOf("W1_AimCancel", StringComparison.Ordinal) >= 0
+                && message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) >= 0;
 
-            if (!confirmAbortInvalid && !targetInvalid)
+            if (!confirmAbortInvalid && !targetInvalid && !aimCancelInvalid)
                 return;
 
             int toolStart = message.IndexOf('[', labelEnd + 1);
@@ -669,6 +671,19 @@ namespace TGD.UIV2.Battle
 
             if (!ShouldDisplayActionHud(unit, label))
                 return;
+
+            if (aimCancelInvalid)
+            {
+                if (IsMoveOrAttackTool(unit, stageToolId))
+                    return;
+
+                string reasonToken = ExtractToken(message, "reason");
+                var reason = ParseTargetInvalidReason(reasonToken);
+                string hudMessage = ResolveTargetInvalidMessage(reason);
+                var kind = MapKindForTargetInvalid(reason, hudMessage);
+                ShowActionHud(hudMessage, kind);
+                return;
+            }
 
             if (confirmAbortInvalid)
             {
