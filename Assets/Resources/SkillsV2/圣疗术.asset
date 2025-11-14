@@ -34,3 +34,10 @@ MonoBehaviour:
   resolveLogs: []
   tags:
   - None
+  defaultImpact:
+    anchor: 1
+    shape: 1
+    radius: 2
+    teamFilter: 1
+    countMode: 0
+    maxTargets: 0

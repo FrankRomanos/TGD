@@ -35,3 +35,10 @@ MonoBehaviour:
   - "\u540E\u8DF3\uFF01"
   tags:
   - None
+  defaultImpact:
+    anchor: 0
+    shape: 2
+    radius: 3
+    teamFilter: 3
+    countMode: 0
+    maxTargets: 0
