@@ -98,5 +98,37 @@ namespace TGD.CoreV2
                 return EmptySegment;
             return segments[segments.Count - 1] ?? EmptySegment;
         }
+
+        /// <summary>
+        /// Attempts to resolve the segment index (k) that contains the target hex when selecting a line.
+        /// </summary>
+        public static bool TryGetSegmentIndex(Hex origin, Facing4 direction, int segmentCount, Hex target, out int segmentIndex)
+        {
+            segmentIndex = 0;
+            if (segmentCount <= 0)
+                return false;
+
+            var segments = BuildIdealLineSegments(origin, direction, segmentCount);
+            if (segments.Count == 0)
+                return false;
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                var segment = segments[i];
+                if (segment == null || segment.Count == 0)
+                    continue;
+
+                for (int j = 0; j < segment.Count; j++)
+                {
+                    if (!segment[j].Equals(target))
+                        continue;
+
+                    segmentIndex = i + 1; // segments are 1-indexed in the design doc
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }
