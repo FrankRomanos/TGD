@@ -561,7 +561,7 @@ namespace TGD.UIV2.Battle
              || message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) < 0)
                 return;
 
-            int toolStart = message.IndexOf('[', labelEnd + 1, StringComparison.Ordinal);
+            int toolStart = message.IndexOf('[', labelEnd + 1);
             int toolEnd = toolStart >= 0 ? message.IndexOf(']', toolStart + 1) : -1;
             if (toolStart < 0 || toolEnd <= toolStart)
                 return;
