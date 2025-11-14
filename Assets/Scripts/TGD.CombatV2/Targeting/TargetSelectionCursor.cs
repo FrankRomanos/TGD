@@ -6,7 +6,7 @@ using TGD.HexBoard;
 namespace TGD.CombatV2.Targeting
 {
     /// <summary>
-    /// Shared helper for temporary target previews (yellow = valid, red = invalid).
+    /// Shared helper for temporary target previews (range = blue, hover = yellow/red).
     /// </summary>
     public sealed class TargetSelectionCursor
     {
@@ -64,16 +64,11 @@ namespace TGD.CombatV2.Targeting
                 _last.AddRange(valid);
             if (invalid != null)
                 _last.AddRange(invalid);
-            if (hover.HasValue)
-                _last.Add(hover.Value);
 
             _highlighter.Clear();
 
-            if (valid != null && valid.Count > 0)
-                _highlighter.Paint(valid, rangeColor, BasePriority);
-
-            if (invalid != null && invalid.Count > 0)
-                _highlighter.Paint(invalid, invalidColor, BasePriority);
+            if (_last.Count > 0)
+                _highlighter.Paint(_last, rangeColor, BasePriority);
 
             if (hover.HasValue)
             {
@@ -81,6 +76,10 @@ namespace TGD.CombatV2.Targeting
                 _singleBuffer.Add(hover.Value);
                 var hoverColor = hoverValid ? hoverValidColor : hoverInvalidColor;
                 _highlighter.Paint(_singleBuffer, hoverColor, BasePriority + 1);
+
+                // Track hover in the cache so Clear() removes it next frame.
+                if (!_last.Contains(hover.Value))
+                    _last.Add(hover.Value);
             }
         }
 
