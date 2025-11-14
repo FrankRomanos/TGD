@@ -4822,8 +4822,17 @@ namespace TGD.CombatV2
                             }
                             else
                             {
-                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
-                                ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                if (owner != null)
+                                {
+                                    ActionPhaseLogger.Log(owner, toolId, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
+                                    ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                }
+                                else
+                                {
+                                    ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={check.reason})");
+                                    ActionPhaseLogger.Log(baseUnit, toolId, "W1_AimCancel", "(reason=targetInvalid)");
+                                }
+
                                 cursor?.Clear();
                                 if (TryResolveAliveTool(tool, out tool))
                                     tool.OnExitAim();

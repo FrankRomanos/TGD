@@ -674,8 +674,14 @@ namespace TGD.UIV2.Battle
 
             if (aimCancelInvalid)
             {
-                if (IsMoveOrAttackTool(unit, stageToolId))
-                    return;
+                if (actionHudMessageListener != null && actionHudMessageListener.IsVisible)
+                {
+                    string reasonToken = ExtractToken(message, "reason");
+                    var reason = ParseTargetInvalidReason(reasonToken);
+                    string hudMessage = ResolveTargetInvalidMessage(reason);
+                    if (string.Equals(actionHudMessageListener.CurrentMessage, hudMessage, StringComparison.Ordinal))
+                        return;
+                }
 
                 ShowTargetInvalidHud(message);
                 return;
