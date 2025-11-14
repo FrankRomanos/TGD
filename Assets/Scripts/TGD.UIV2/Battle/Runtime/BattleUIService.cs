@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using TGD.AudioV2;
 using TGD.CombatV2;
+using TGD.CombatV2.Targeting;
 using TGD.CoreV2;
 
 
@@ -440,6 +441,97 @@ namespace TGD.UIV2.Battle
             return ActionHudMessageListenerTMP.HudKind.Info;
         }
 
+        ActionHudMessageListenerTMP.HudKind MapKindForTargetInvalid(TargetInvalidReason reason, string message)
+        {
+            return reason switch
+            {
+                TargetInvalidReason.OutOfRange => ActionHudMessageListenerTMP.HudKind.Info,
+                TargetInvalidReason.Blocked => ActionHudMessageListenerTMP.HudKind.Info,
+                TargetInvalidReason.EmptyNotAllowed => ActionHudMessageListenerTMP.HudKind.Info,
+                TargetInvalidReason.Friendly => ActionHudMessageListenerTMP.HudKind.Info,
+                TargetInvalidReason.EnemyNotAllowed => ActionHudMessageListenerTMP.HudKind.Info,
+                TargetInvalidReason.Self => ActionHudMessageListenerTMP.HudKind.Info,
+                _ => HudKindByText(message)
+            };
+        }
+
+        TargetInvalidReason ParseTargetInvalidReason(string reasonToken)
+        {
+            if (string.IsNullOrEmpty(reasonToken))
+                return TargetInvalidReason.Unknown;
+
+            if (Enum.TryParse(reasonToken, true, out TargetInvalidReason reason))
+                return reason;
+
+            return TargetInvalidReason.Unknown;
+        }
+
+        string ResolveTargetInvalidMessage(TargetInvalidReason reason)
+        {
+            return reason switch
+            {
+                TargetInvalidReason.Self => "Can't target myself.",
+                TargetInvalidReason.Friendly => "Can't target an ally.",
+                TargetInvalidReason.EnemyNotAllowed => "Can't target that enemy.",
+                TargetInvalidReason.EmptyNotAllowed => "Requires a target.",
+                TargetInvalidReason.Blocked => "Target is blocked.",
+                TargetInvalidReason.OutOfRange => "Target out of range.",
+                _ => "Invalid target."
+            };
+        }
+
+        bool IsMoveOrAttackTool(Unit unit, string toolId)
+        {
+            if (string.IsNullOrEmpty(toolId))
+                return false;
+
+            if (string.Equals(toolId, AttackProfileRules.DefaultSkillId, StringComparison.Ordinal))
+                return true;
+
+            if (turnManager != null && unit != null)
+            {
+                var context = turnManager.GetContext(unit);
+                if (context != null)
+                {
+                    string moveSkillId = context.MoveSkillId;
+                    if (!string.IsNullOrEmpty(moveSkillId)
+                     && string.Equals(toolId, moveSkillId, StringComparison.Ordinal))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        string ExtractToken(string source, string key)
+        {
+            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(key))
+                return null;
+
+            string token = key + "=";
+            int start = source.IndexOf(token, StringComparison.Ordinal);
+            if (start < 0)
+                return null;
+
+            start += token.Length;
+            if (start >= source.Length)
+                return null;
+
+            int end = start;
+            while (end < source.Length)
+            {
+                char c = source[end];
+                if (c == ',' || c == ')' || char.IsWhiteSpace(c))
+                    break;
+                end++;
+            }
+
+            if (end <= start)
+                return null;
+
+            return source.Substring(start, end - start);
+        }
+
         void HandleTurnOrderChanged(bool isPlayerSide)
         {
             if (timeline != null)
@@ -557,8 +649,11 @@ namespace TGD.UIV2.Battle
             if (string.IsNullOrEmpty(label))
                 return;
 
-            if (message.IndexOf("W2_ConfirmAbort", StringComparison.Ordinal) < 0
-             || message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) < 0)
+            bool confirmAbortInvalid = message.IndexOf("W2_ConfirmAbort", StringComparison.Ordinal) >= 0
+                && message.IndexOf("(reason=targetInvalid)", StringComparison.Ordinal) >= 0;
+            bool targetInvalid = message.IndexOf("TargetInvalid", StringComparison.Ordinal) >= 0;
+
+            if (!confirmAbortInvalid && !targetInvalid)
                 return;
 
             int toolStart = message.IndexOf('[', labelEnd + 1);
@@ -566,29 +661,33 @@ namespace TGD.UIV2.Battle
             if (toolStart < 0 || toolEnd <= toolStart)
                 return;
 
-            string toolId = message.Substring(toolStart + 1, toolEnd - toolStart - 1);
+            string stageToolId = message.Substring(toolStart + 1, toolEnd - toolStart - 1);
 
             var unit = ResolveUnitByLabel(label);
             if (unit != null)
                 RegisterUnit(unit);
 
-            var context = turnManager != null && unit != null ? turnManager.GetContext(unit) : null;
-            if (context != null)
-            {
-                string moveSkillId = context.MoveSkillId;
-                if (!string.IsNullOrEmpty(moveSkillId)
-                 && string.Equals(toolId, moveSkillId, StringComparison.Ordinal))
-                    return;
-            }
-
-            if (string.Equals(toolId, AttackProfileRules.DefaultSkillId, StringComparison.Ordinal))
-                return;
-
             if (!ShouldDisplayActionHud(unit, label))
                 return;
 
-            const string hudMessage = "Invalid target.";
-            ShowActionHud(hudMessage, ActionHudMessageListenerTMP.HudKind.Info);
+            if (confirmAbortInvalid)
+            {
+                if (IsMoveOrAttackTool(unit, stageToolId))
+                    return;
+
+                ShowActionHud("Invalid target.", ActionHudMessageListenerTMP.HudKind.Info);
+                return;
+            }
+
+            string actualToolId = ExtractToken(message, "id") ?? stageToolId;
+            if (IsMoveOrAttackTool(unit, actualToolId) || IsMoveOrAttackTool(unit, stageToolId))
+                return;
+
+            string reasonToken = ExtractToken(message, "reason");
+            var reason = ParseTargetInvalidReason(reasonToken);
+            string hudMessage = ResolveTargetInvalidMessage(reason);
+            var kind = MapKindForTargetInvalid(reason, hudMessage);
+            ShowActionHud(hudMessage, kind);
         }
 
         TurnBannerTone ResolveTone(string message)

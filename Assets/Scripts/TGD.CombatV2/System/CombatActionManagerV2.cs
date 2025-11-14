@@ -4158,20 +4158,23 @@ namespace TGD.CombatV2
                             break;
                         }
 
-                        for (int i = 0; i < ownerOptions.Count; i++)
+                        if (!popupOpened)
                         {
-                            var option = ownerOptions[i];
-                            if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
-                                continue;
+                            for (int i = 0; i < ownerOptions.Count; i++)
+                            {
+                                var option = ownerOptions[i];
+                                if (option.key == KeyCode.None || !Input.GetKeyDown(option.key))
+                                    continue;
 
-                            selectionHandled = false;
-                            yield return HandleSelection(option);
+                                selectionHandled = false;
+                                yield return HandleSelection(option);
 
-                            if (!stageActive)
-                                break;
+                                if (!stageActive)
+                                    break;
 
-                            if (selectionHandled)
-                                break;
+                                if (selectionHandled)
+                                    break;
+                            }
                         }
 
                         if (!stageActive)
@@ -4475,27 +4478,30 @@ namespace TGD.CombatV2
                     }
 
                     bool handled = false;
-                    for (int i = 0; i < options.Count; i++)
+                    if (!popupOpened)
                     {
-                        var option = options[i];
-                        if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                        for (int i = 0; i < options.Count; i++)
                         {
-                            handled = true;
-                            var optionId = TryResolveAliveTool(option.tool, out var optTool) ? optTool.Id : "?";
-                            Log($"[Derived] Select(id={optionId}, kind={option.kind})");
-                            ChainQueueOutcome outcome = default;
-                            yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
+                            var option = options[i];
+                            if (option.key != KeyCode.None && Input.GetKeyDown(option.key))
+                            {
+                                handled = true;
+                                var optionId = TryResolveAliveTool(option.tool, out var optTool) ? optTool.Id : "?";
+                                Log($"[Derived] Select(id={optionId}, kind={option.kind})");
+                                ChainQueueOutcome outcome = default;
+                                yield return TryQueueDerivedSelection(option, unit, basePlan.kind, budget, resources, derivedQueue, result => outcome = result);
 
-                            if (outcome.cancel)
-                            {
-                                Log("[Chain] DerivedPromptAbort(cancel)");
-                                resolved = true;
+                                if (outcome.cancel)
+                                {
+                                    Log("[Chain] DerivedPromptAbort(cancel)");
+                                    resolved = true;
+                                }
+                                else if (outcome.queued)
+                                {
+                                    resolved = true;
+                                }
+                                break;
                             }
-                            else if (outcome.queued)
-                            {
-                                resolved = true;
-                            }
-                            break;
                         }
                     }
 
