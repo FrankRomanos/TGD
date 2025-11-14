@@ -95,6 +95,7 @@ namespace TGD.CombatV2
                 targetRule = fallbackTargetRule;
                 maxRangeHexes = -1;
                 cooldownSeconds = 0;
+                selection = TargetSelectionProfile.Default;
                 return;
             }
 
@@ -102,6 +103,7 @@ namespace TGD.CombatV2
             icon = definition.Icon;
             targetRule = definition.TargetRule;
             maxRangeHexes = definition.MaxRangeHexes;
+            selection = definition.Selection;
 
             var cost = EvaluateCosts();
             timeCostSeconds = cost.seconds;

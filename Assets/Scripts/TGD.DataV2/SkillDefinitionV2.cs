@@ -73,6 +73,10 @@ namespace TGD.DataV2
         private int maxRangeHexes = -1;
 
         [SerializeField]
+        [Tooltip("Selection profile controlling range mode and highlight shape.")]
+        private TargetSelectionProfile selection = TargetSelectionProfile.Default;
+
+        [SerializeField]
         [Tooltip("Cooldown catalog key. Empty defaults to Id.")]
         private string cooldownKey = string.Empty;
 
@@ -105,7 +109,16 @@ namespace TGD.DataV2
         public SkillCostAuthority CostAuthority => costAuthority;
         public int TimeCostSeconds => Mathf.Max(0, timeCostSeconds);
         public int EnergyCost => Mathf.Max(0, energyCost);
-        public int MaxRangeHexes => Mathf.Max(-1, maxRangeHexes);
+        public int MaxRangeHexes
+        {
+            get
+            {
+                if (selection.rangeType == CastRangeType.Fixed && selection.rangeValue >= 0)
+                    return Mathf.Max(-1, selection.rangeValue);
+                return Mathf.Max(-1, maxRangeHexes);
+            }
+        }
+        public TargetSelectionProfile Selection => selection;
         public string CooldownKey
         {
             get
@@ -189,6 +202,16 @@ namespace TGD.DataV2
             if (resolveLogs == null)
                 resolveLogs = Array.Empty<string>();
             tags = NormalizeTags(tags);
+            selection = selection.WithDefaults();
+            if (selection.rangeType == CastRangeType.Fixed)
+            {
+                selection.rangeValue = Mathf.Max(0, selection.rangeValue);
+                maxRangeHexes = Mathf.Max(-1, selection.rangeValue);
+            }
+            else
+            {
+                maxRangeHexes = -1;
+            }
         }
 
         public void EditorInitialize(
@@ -207,7 +230,11 @@ namespace TGD.DataV2
             int fullRoundRounds = 1,
             IEnumerable<string> confirmLogs = null,
             IEnumerable<string> resolveLogs = null,
-            IEnumerable<string> tags = null)
+            IEnumerable<string> tags = null,
+            TargetSelectionMode selectionMode = TargetSelectionMode.Single,
+            CastRangeType castRangeType = CastRangeType.Infinite,
+            int castRangeValue = 0,
+            CastShape castShape = CastShape.SingleCell)
         {
             this.id = Normalize(id);
             this.kind = kind;
@@ -237,6 +264,15 @@ namespace TGD.DataV2
             this.confirmLogs = confirmLogs != null ? new List<string>(confirmLogs).ToArray() : Array.Empty<string>();
             this.resolveLogs = resolveLogs != null ? new List<string>(resolveLogs).ToArray() : Array.Empty<string>();
             this.tags = NormalizeTags(tags);
+            selection = TargetSelectionProfile.Default;
+            selection.selectionMode = selectionMode;
+            selection.rangeType = castRangeType;
+            selection.rangeValue = Mathf.Max(0, castRangeValue);
+            selection.shape = castShape;
+            if (selection.rangeType == CastRangeType.Fixed)
+                this.maxRangeHexes = Mathf.Max(-1, selection.rangeValue);
+            else
+                this.maxRangeHexes = -1;
         }
 #endif
     }

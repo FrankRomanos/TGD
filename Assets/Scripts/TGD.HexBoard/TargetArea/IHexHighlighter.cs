@@ -10,7 +10,7 @@ namespace TGD.HexBoard
     /// </summary>
     public interface IHexHighlighter
     {
-        void Paint(IEnumerable<Hex> cells, Color color);
+        void Paint(IEnumerable<Hex> cells, Color color, int priority = 0);
         void Clear();
     }
 }

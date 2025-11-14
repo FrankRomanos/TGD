@@ -465,7 +465,8 @@ namespace TGD.CombatV2
                 allowSelf = false,
                 requireOccupied = false,
                 requireEmpty = false,
-                maxRangeHexes = -1
+                maxRangeHexes = -1,
+                selection = TargetSelectionProfile.Default
             };
             EnsureBound();
         }
