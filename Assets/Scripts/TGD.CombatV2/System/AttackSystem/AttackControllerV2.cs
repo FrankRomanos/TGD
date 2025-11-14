@@ -12,7 +12,7 @@ using UnityEngine;
 namespace TGD.CombatV2
 {
     [DisallowMultipleComponent]
-    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser
+    public sealed class AttackControllerV2 : ActionToolBase, IActionToolV2, IActionExecReportV2, ICooldownKeyProvider, IBindContext, ICursorUser, IImpactProfileSource
     {
         // NOTE: This is one of the oldest controllers that survived into CombatV2.
         // It still acts as the glue between CAMV2 (action authority), TMV2 (time/energy authority)
