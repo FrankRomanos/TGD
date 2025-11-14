@@ -27,3 +27,5 @@ MonoBehaviour:
     seconds: 24
   - key: StandardTest
     seconds: 12
+  - key: Heal
+    seconds: 12

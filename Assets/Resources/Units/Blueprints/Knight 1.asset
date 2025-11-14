@@ -87,3 +87,6 @@ MonoBehaviour:
   - skillId: DerivedDerived
     learned: 1
     initialCooldownSeconds: 0
+  - skillId: Heal
+    learned: 1
+    initialCooldownSeconds: 0
