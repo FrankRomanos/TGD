@@ -75,25 +75,13 @@ namespace TGD.HexBoard.Path
                 {
                     foreach (var cell in cells)
                         _selfCells.Add(cell);
-                    return;
                 }
             }
 
-            var anchors = new HashSet<Hex>();
-            anchors.Add(fallbackStart);
-            anchors.Add(self.Anchor);
-
-            foreach (var anchor in anchors)
+            if (_selfCells.Count == 0)
             {
-                if (self.Footprint != null)
-                {
-                    foreach (var cell in HexFootprint.Expand(anchor, self.Facing, self.Footprint))
-                        _selfCells.Add(cell);
-                }
-                else
-                {
-                    _selfCells.Add(anchor);
-                }
+                _selfCells.Add(fallbackStart);
+                _selfCells.Add(self.Anchor);
             }
         }
 
