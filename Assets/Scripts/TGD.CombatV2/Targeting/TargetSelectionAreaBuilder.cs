@@ -109,6 +109,18 @@ namespace TGD.CombatV2.Targeting
                         yield return cell;
                     break;
                 }
+                case CastShape.Line:
+                {
+                    if (range <= 0)
+                        yield break;
+                    foreach (var cell in HexLineShape.EnumerateIdealLine(origin, facing, range))
+                    {
+                        if (layout != null && !layout.Contains(cell))
+                            continue;
+                        yield return cell;
+                    }
+                    break;
+                }
             }
         }
     }
