@@ -112,6 +112,7 @@ namespace TGD.DataV2
                 blueprint.baseStats.MaxEnergy = 5;
                 blueprint.baseStats.Energy = 12;
                 blueprint.hitShape = ScriptableObject.CreateInstance<HitShape>();
+                blueprint.hitShape.radius = 1;
                 blueprint.abilities = new[]
                 {
                     new UnitBlueprint.AbilitySlot

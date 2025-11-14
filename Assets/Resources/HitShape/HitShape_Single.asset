@@ -12,6 +12,4 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: HitShape_Single
   m_EditorClassIdentifier: TGD.HexBoard:TGD.HexBoard:HitShape
-  offsets:
-  - fwd: 0
-    left: 0
+  radius: 0
