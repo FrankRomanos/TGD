@@ -13,8 +13,8 @@ namespace TGD.CoreV2
             dst.Stamina = init.Stamina;
             dst.Armor = init.Armor;
 
-            // —— 时间&移动 —— 
-            dst.Speed = init.Speed;
+            // —— 时间&移动 ——
+            dst.SpeedRating = init.SpeedRating;
             dst.MoveRate = init.MoveRate;
 
             if (dst.MoveProfile == null)

@@ -1,5 +1,7 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.Serialization;
+using TGD.CoreV2.Rules;
 
 namespace TGD.CoreV2
 {
@@ -15,7 +17,8 @@ namespace TGD.CoreV2
         public int Armor;
 
         // —— 时间 & 移动 ——
-        public int Speed;                  // +秒/回合
+        [FormerlySerializedAs("Speed")]
+        public int SpeedRating;            // 蓝图/装备提供的速度点数
         [Min(MoveRateRules.DefaultMinInt)]
         public int MoveRate = MoveRateRules.DefaultMinInt;           // 格/秒（底座）
         [Tooltip("Minimum allowed move rate for this unit (after all runtime modifiers).")]
@@ -76,8 +79,12 @@ namespace TGD.CoreV2
         public float ThreatAddPct = 0f;
         public float ShredAddPct = 0f;
 
-        // —— 派生 —— 
-        public int TurnTime => StatsMathV2.TurnTime(Speed);
+        // —— 派生 ——
+        public float SpeedSecondsFloat => SpeedRules.MapRatingToSeconds(Mathf.Max(0, SpeedRating));
+        public int SpeedSecondsInt => SpeedRules.MapRatingToSecondsInt(Mathf.Max(0, SpeedRating));
+        public int Speed => SpeedSecondsInt;      // 兼容旧字段（整数秒）
+        public int TurnTime => StatsMathV2.TurnTime(SpeedSecondsInt);
+        public float TurnTimeFloat => StatsMathV2.BaseTurnSeconds + SpeedSecondsFloat;
 
         public void Clamp()
         {
