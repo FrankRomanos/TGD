@@ -3710,47 +3710,14 @@ namespace TGD.CombatV2
 
         ChainPopupWindowData BuildChainPopupWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
         {
-            string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
             string prompt = BuildChainWindowPrompt(unit, basePlan, baseKind, isEnemyPhase);
-            return new ChainPopupWindowData(header, prompt, isEnemyPhase);
+            return new ChainPopupWindowData(string.Empty, prompt, isEnemyPhase);
         }
 
         ChainPopupWindowData BuildDerivedPopupWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, bool isEnemyPhase)
         {
-            string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
             string prompt = BuildChainWindowPrompt(unit, basePlan, ActionKind.Derived, isEnemyPhase);
-            return new ChainPopupWindowData(header, prompt, isEnemyPhase);
-        }
-
-        string BuildChainWindowHeader(Unit unit, ActionPlan basePlan, bool isEnemyPhase)
-        {
-            if (!string.IsNullOrEmpty(basePlan.kind)
-                && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase))
-            {
-                return BuildPhaseStartHeader(unit, isEnemyPhase);
-            }
-
-            if (!string.IsNullOrEmpty(basePlan.kind))
-            {
-                string unitLabel = TurnManagerV2.FormatUnitLabel(unit);
-                if (!string.IsNullOrEmpty(unitLabel) && unitLabel != "?")
-                    return $"{basePlan.kind} ({unitLabel})";
-                return basePlan.kind;
-            }
-
-            return "Chain";
-        }
-
-        string BuildPhaseStartHeader(Unit unit, bool isEnemyPhase)
-        {
-            if (turnManager == null)
-                return "Begin";
-
-            int phaseIndex = Mathf.Max(1, turnManager.CurrentPhaseIndex);
-            string ownerTag = BuildChainOwnerTag(unit, isEnemyPhase);
-            if (!string.IsNullOrEmpty(ownerTag))
-                return $"Begin T{phaseIndex}({ownerTag})";
-            return $"Begin T{phaseIndex}";
+            return new ChainPopupWindowData(string.Empty, prompt, isEnemyPhase);
         }
 
         string BuildChainOwnerTag(Unit unit, bool isEnemyPhase)
