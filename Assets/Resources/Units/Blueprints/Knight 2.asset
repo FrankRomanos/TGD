@@ -15,12 +15,15 @@ MonoBehaviour:
   unitId: Knight003
   displayName: Knight003
   faction: 0
+  classSpec:
+    professionId: 
+    specializationId: 
   baseStats:
     Level: 1
     Attack: 10
     Stamina: 0
     Armor: 0
-    Speed: 4
+    SpeedRating: 30
     MoveRate: 6
     MoveRateMin: 1
     MoveRateMax: 14
@@ -48,7 +51,7 @@ MonoBehaviour:
     HP: 100
     MaxEnergy: 200
     Energy: 200
-    EnergyRegenPer2s: 0
+    EnergyRegenPer2s: 10
     Strength: 0
     Agility: 0
     PrimaryAttr: 0
