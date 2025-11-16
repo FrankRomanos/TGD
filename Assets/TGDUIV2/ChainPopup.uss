@@ -166,12 +166,15 @@
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.16);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 52px 90px rgba(92, 28, 46, 0.24);
+    scrollbar-visibility: hidden;
 }
 
 .list > .unity-content-container {
     flex-direction: column;
     gap: 12px;
-    padding-right: 4px;
+    padding-right: 0;
+    width: 100%;
+    align-items: center;
 }
 
 .list .unity-vertical-scroller,
@@ -218,33 +221,12 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-.list .unity-scroller {
-    width: 16px;
-    min-width: 16px;
-    margin-left: 10px;
-    margin-right: 4px;
-    background-color: rgba(18, 6, 12, 0.7);
-    border-radius: 999px;
-    border-width: 0px;
-    padding: 4px;
-    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.6);
-}
-
+.list .unity-scroller,
 .list .unity-scroller__low-button,
-.list .unity-scroller__high-button {
-    display: none;
-}
-
-.list .unity-scroller__slider {
-    border-radius: inherit;
-    background-color: rgba(64, 22, 38, 0.9);
-    border-width: 1px;
-    border-color: rgba(244, 211, 147, 0.18);
-    padding: 2px;
-}
-
+.list .unity-scroller__high-button,
+.list .unity-scroller__slider,
 .list .unity-scroller__slider .unity-slider {
-    border-radius: inherit;
+    display: none;
 }
 
 .row {
@@ -330,6 +312,9 @@
     transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 34px 48px rgba(120, 36, 54, 0.2);
+    width: 100%;
+    max-width: 560px;
+    align-self: center;
 }
 
 .option-root.group-start {

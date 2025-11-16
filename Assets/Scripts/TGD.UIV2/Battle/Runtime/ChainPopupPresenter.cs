@@ -290,7 +290,13 @@ namespace TGD.UIV2.Battle
                 _windowWrap.style.display = DisplayStyle.Flex;
 
             if (_phaseLabel != null)
-                _phaseLabel.text = window.Header ?? string.Empty;
+            {
+                string headerText = window.Header ?? string.Empty;
+                _phaseLabel.text = headerText;
+                _phaseLabel.style.display = string.IsNullOrEmpty(headerText)
+                    ? DisplayStyle.None
+                    : DisplayStyle.Flex;
+            }
             if (_promptLabel != null)
                 _promptLabel.text = window.Prompt ?? string.Empty;
             if (_contextLabel != null)
