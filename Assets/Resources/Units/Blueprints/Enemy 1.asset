@@ -23,7 +23,7 @@ MonoBehaviour:
     Attack: 100
     Stamina: 0
     Armor: 100
-    Speed: 0
+    SpeedRating: 0
     MoveRate: 4
     MoveRateMin: 1
     MoveRateMax: 14
@@ -68,7 +68,7 @@ MonoBehaviour:
     DamageReducePct: 0
     ThreatAddPct: 0
     ShredAddPct: 0
-  basePrefab: {fileID: 8530135937824054253, guid: 32c502ff536b7294b9fcc2b66199b10b, type: 3}
+  basePrefab: {fileID: 8530135937824054253, guid: 14ccb1f71f08a854aac16e45f2069a64, type: 3}
   avatar: {fileID: 21300000, guid: 8b62ba852e763fc46b1d3f93684972a1, type: 3}
   hitShape: {fileID: 11400000, guid: 2414c0534f18e3245bd76295ed1d5ceb, type: 2}
   abilities:
