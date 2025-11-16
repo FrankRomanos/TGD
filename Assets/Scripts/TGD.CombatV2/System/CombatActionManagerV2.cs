@@ -35,6 +35,7 @@ namespace TGD.CombatV2
         public bool useFactoryMode = false;
 
         public event Action<Unit> ChainFocusChanged;
+        public event Action<Unit, bool> ChainAimStateChanged;
 
         [SerializeField]
         [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
@@ -356,6 +357,8 @@ namespace TGD.CombatV2
         readonly List<ChainPopupOptionData> _chainPopupOptionBuffer = new();
         readonly List<string> _hitLogBuffer = new();
         Unit _currentChainFocus;
+        Unit _currentChainAimUnit;
+        bool _chainAimActive;
         IChainPopupUI _chainPopupUi;
         MonoBehaviour _chainPopupUiComponent;
 
@@ -634,6 +637,9 @@ namespace TGD.CombatV2
             SetChainFocus(nextActive);
         }
 
+        public Unit CurrentChainAimUnit => _currentChainAimUnit;
+        public bool IsChainAimActive => _chainAimActive;
+
         void SetChainFocus(Unit unit)
         {
             if (_currentChainFocus == unit)
@@ -643,6 +649,30 @@ namespace TGD.CombatV2
             if (popup != null)
                 popup.SetAnchor(ResolveChainAnchor(unit));
             ChainFocusChanged?.Invoke(unit);
+        }
+
+        void BeginChainAim(Unit unit)
+        {
+            if (unit == null)
+                return;
+
+            _currentChainAimUnit = unit;
+            if (_chainAimActive)
+                return;
+
+            _chainAimActive = true;
+            ChainAimStateChanged?.Invoke(unit, true);
+        }
+
+        void EndChainAim(Unit unit)
+        {
+            if (!_chainAimActive)
+                return;
+
+            var endedUnit = _currentChainAimUnit ?? unit;
+            _currentChainAimUnit = null;
+            _chainAimActive = false;
+            ChainAimStateChanged?.Invoke(endedUnit, false);
         }
 
         TargetSelectionCursor ChainCursor
@@ -4714,90 +4744,111 @@ namespace TGD.CombatV2
                 yield break;
             }
 
+            var popup = ChainPopupUI;
+            bool aimHidden = false;
             EnterAimForTool(tool);
             ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimBegin");
 
             if (tool is ChainActionBase chainTool)
             {
+                if (popup != null)
+                {
+                    popup.HideForAim();
+                    aimHidden = true;
+                }
+
                 bool awaitingSelection = true;
                 targetChosen = false;
                 var cursor = ChainCursor;
                 cursor?.Clear();
                 Hex? lastHover = null;
 
-                while (awaitingSelection)
+                try
                 {
-                    if (_pendingEndTurn)
+                    BeginChainAim(owner);
+                    while (awaitingSelection)
                     {
-                        cursor?.Clear();
-                        ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", "(reason=EndTurn)");
-                        if (TryResolveAliveTool(tool, out tool))
-                            tool.OnExitAim();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    if (!TryResolveAliveTool(tool, out tool))
-                    {
-                        cursor?.Clear();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    var hover = PickHexUnderMouse();
-                    if (hover.HasValue)
-                    {
-                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
+                        if (_pendingEndTurn)
                         {
-                            chainTool.OnHover(hover.Value);
-                            lastHover = hover.Value;
+                            cursor?.Clear();
+                            ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", "(reason=EndTurn)");
+                            if (TryResolveAliveTool(tool, out tool))
+                                tool.OnExitAim();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
                         }
-                        var check = chainTool.ValidateTarget(owner ?? unit, hover.Value);
 
-                        if (Input.GetMouseButtonDown(0))
+                        if (!TryResolveAliveTool(tool, out tool))
                         {
-                            if (check.ok)
+                            cursor?.Clear();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
+                        }
+
+                        var hover = PickHexUnderMouse();
+                        if (hover.HasValue)
+                        {
+                            if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
                             {
-                                selectedTarget = hover.Value;
-                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetOk", $"(id={toolId}, hex={hover.Value})");
-                                targetChosen = true;
-                                awaitingSelection = false;
+                                chainTool.OnHover(hover.Value);
+                                lastHover = hover.Value;
                             }
-                            else
+                            var check = chainTool.ValidateTarget(owner ?? unit, hover.Value);
+
+                            if (Input.GetMouseButtonDown(0))
                             {
-                                var invalidReason = check.reason;
-                                ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={invalidReason})");
-                                ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", $"(reason={invalidReason})");
-                                MarkAimCancelledThisFrame();
-                                cursor?.Clear();
-                                if (TryResolveAliveTool(tool, out tool))
-                                    tool.OnExitAim();
-                                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                                yield break;
+                                if (check.ok)
+                                {
+                                    selectedTarget = hover.Value;
+                                    ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetOk", $"(id={toolId}, hex={hover.Value})");
+                                    targetChosen = true;
+                                    awaitingSelection = false;
+                                }
+                                else
+                                {
+                                    var invalidReason = check.reason;
+                                    ActionPhaseLogger.Log(unit, baseId, "W4.5 TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                    ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel", $"(reason={invalidReason})");
+                                    MarkAimCancelledThisFrame();
+                                    cursor?.Clear();
+                                    if (TryResolveAliveTool(tool, out tool))
+                                        tool.OnExitAim();
+                                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                                    yield break;
+                                }
                             }
                         }
+                        else
+                        {
+                            cursor?.Clear();
+                            lastHover = null;
+                        }
+
+                        if (!awaitingSelection)
+                            break;
+
+                        if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+                        {
+                            cursor?.Clear();
+                            ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel");
+                            MarkAimCancelledThisFrame();
+                            if (TryResolveAliveTool(tool, out tool))
+                                tool.OnExitAim();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
+                        }
+
+                        yield return null;
                     }
-                    else
+                }
+                finally
+                {
+                    EndChainAim(owner);
+                    if (aimHidden && popup != null)
                     {
-                        cursor?.Clear();
-                        lastHover = null;
+                        popup.RestoreAfterAim();
+                        aimHidden = false;
                     }
-
-                    if (!awaitingSelection)
-                        break;
-
-                    if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
-                    {
-                        cursor?.Clear();
-                        ActionPhaseLogger.Log(aimLogger, toolId, "W1_AimCancel");
-                        MarkAimCancelledThisFrame();
-                        if (TryResolveAliveTool(tool, out tool))
-                            tool.OnExitAim();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    yield return null;
                 }
 
                 cursor?.Clear();
@@ -4940,99 +4991,120 @@ namespace TGD.CombatV2
                 yield break;
             }
 
+            var popup = ChainPopupUI;
+            bool aimHidden = false;
             EnterAimForTool(tool);
             ActionPhaseLogger.Log(owner, toolId, "W1_AimBegin");
 
             if (tool is ChainActionBase chainTool)
             {
+                if (popup != null)
+                {
+                    popup.HideForAim();
+                    aimHidden = true;
+                }
+
                 bool awaitingSelection = true;
                 targetChosen = false;
                 var cursor = ChainCursor;
                 cursor?.Clear();
                 Hex? lastHover = null;
 
-                while (awaitingSelection)
+                try
                 {
-                    if (_pendingEndTurn)
+                    BeginChainAim(owner);
+                    while (awaitingSelection)
                     {
-                        cursor?.Clear();
-                        ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=EndTurn)");
-                        if (TryResolveAliveTool(tool, out tool))
-                            tool.OnExitAim();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    if (!TryResolveAliveTool(tool, out tool))
-                    {
-                        cursor?.Clear();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    var hover = PickHexUnderMouse();
-                    if (hover.HasValue)
-                    {
-                        if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
+                        if (_pendingEndTurn)
                         {
-                            chainTool.OnHover(hover.Value);
-                            lastHover = hover.Value;
+                            cursor?.Clear();
+                            ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", "(reason=EndTurn)");
+                            if (TryResolveAliveTool(tool, out tool))
+                                tool.OnExitAim();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
                         }
-                        var check = chainTool.ValidateTarget(owner, hover.Value);
 
-                        if (Input.GetMouseButtonDown(0))
+                        if (!TryResolveAliveTool(tool, out tool))
                         {
-                            if (check.ok)
+                            cursor?.Clear();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
+                        }
+
+                        var hover = PickHexUnderMouse();
+                        if (hover.HasValue)
+                        {
+                            if (!lastHover.HasValue || !lastHover.Value.Equals(hover.Value))
                             {
-                                selectedTarget = hover.Value;
-                                ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetOk", $"(id={toolId}, hex={hover.Value})");
-                                targetChosen = true;
-                                awaitingSelection = false;
+                                chainTool.OnHover(hover.Value);
+                                lastHover = hover.Value;
                             }
-                            else
+                            var check = chainTool.ValidateTarget(owner, hover.Value);
+
+                            if (Input.GetMouseButtonDown(0))
                             {
-                                var invalidReason = check.reason;
-                                if (owner != null)
+                                if (check.ok)
                                 {
-                                    ActionPhaseLogger.Log(owner, toolId, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
-                                    ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", $"(reason={invalidReason})");
+                                    selectedTarget = hover.Value;
+                                    ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetOk", $"(id={toolId}, hex={hover.Value})");
+                                    targetChosen = true;
+                                    awaitingSelection = false;
                                 }
                                 else
                                 {
-                                    ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
-                                    ActionPhaseLogger.Log(baseUnit, toolId, "W1_AimCancel", $"(reason={invalidReason})");
-                                }
+                                    var invalidReason = check.reason;
+                                    if (owner != null)
+                                    {
+                                        ActionPhaseLogger.Log(owner, toolId, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                        ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel", $"(reason={invalidReason})");
+                                    }
+                                    else
+                                    {
+                                        ActionPhaseLogger.Log(baseUnit, baseKind, $"{stageLabel} TargetInvalid", $"(id={toolId}, reason={invalidReason})");
+                                        ActionPhaseLogger.Log(baseUnit, toolId, "W1_AimCancel", $"(reason={invalidReason})");
+                                    }
 
-                                MarkAimCancelledThisFrame();
-                                cursor?.Clear();
-                                if (TryResolveAliveTool(tool, out tool))
-                                    tool.OnExitAim();
-                                onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                                yield break;
+                                    MarkAimCancelledThisFrame();
+                                    cursor?.Clear();
+                                    if (TryResolveAliveTool(tool, out tool))
+                                        tool.OnExitAim();
+                                    onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                                    yield break;
+                                }
                             }
                         }
+                        else
+                        {
+                            cursor?.Clear();
+                            lastHover = null;
+                        }
+
+                        if (!awaitingSelection)
+                            break;
+
+                        if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+                        {
+                            cursor?.Clear();
+                            ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel");
+                            MarkAimCancelledThisFrame();
+                            if (TryResolveAliveTool(tool, out tool))
+                                tool.OnExitAim();
+                            onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
+                            yield break;
+                        }
+
+                        yield return null;
                     }
-                    else
+                }
+                finally
+                {
+                    EndChainAim(owner);
+                    if (aimHidden && popup != null)
                     {
-                        cursor?.Clear();
-                        lastHover = null;
+                        popup.RestoreAfterAim();
+                        aimHidden = false;
                     }
-
-                    if (!awaitingSelection)
-                        break;
-
-                    if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
-                    {
-                        cursor?.Clear();
-                        ActionPhaseLogger.Log(owner, toolId, "W1_AimCancel");
-                        MarkAimCancelledThisFrame();
-                        if (TryResolveAliveTool(tool, out tool))
-                            tool.OnExitAim();
-                        onComplete?.Invoke(new ChainQueueOutcome { queued = false, cancel = false, tool = null });
-                        yield break;
-                    }
-
-                    yield return null;
                 }
 
                 cursor?.Clear();

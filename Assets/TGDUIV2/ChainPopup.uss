@@ -32,30 +32,26 @@
     background-repeat: no-repeat;
 
     border-radius: inherit;
-    opacity: 0.9;
+    opacity: 1;
     pointer-events: none;
 }
 .window-frame {
     position: absolute;
 
     /* 让金框撑满整块弹窗 */
-    left: -2px;
-    right: -2px;
-    top: -2px;
-    bottom: -2px;
+    left: -4px;
+    right: -4px;
+    top: -4px;
+    bottom: -4px;
 
-    /* 你的金色花边框图 */
-    background-image: url("project://database/Assets/TGDUIV2/Skin/tgd_chain_frame.png");
+    border-radius: 34px;
+    border-width: 3px;
+    border-style: solid;
+    border-color: rgba(255, 227, 173, 0.95);
+    background-color: rgba(0, 0, 0, 0);
+    box-shadow: 0 0 26px rgba(255, 223, 164, 0.45), inset 0 0 12px rgba(255, 255, 255, 0.35);
 
-    /* 关键点：我们不用 cover / contain，用100%填充父矩形 */
-    background-size: 100% 100%;
-    background-position: center;
-    background-repeat: no-repeat;
-
-    /* 圆角保持跟窗口一致 */
-    border-radius: 28px;
-
-    opacity: 0.94;
+    opacity: 1;
 
     /* 这一层只是视觉，别挡点击/滚动 */
     pointer-events: none;
@@ -162,7 +158,7 @@
     padding-top: 10px;
     padding-bottom: 14px;
     border-radius: 20px;
-    background-color: rgba(28, 10, 22, 0.82);
+    background-color: rgba(28, 10, 22, 1);
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.16);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 52px 90px rgba(92, 28, 46, 0.24);
@@ -308,7 +304,7 @@
     border-radius: 14px;
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.18);
-    background-color: rgba(34, 12, 26, 0.9);
+    background-color: rgba(34, 12, 26, 1);
     transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 34px 48px rgba(120, 36, 54, 0.2);
@@ -323,13 +319,13 @@
 
 .option-root:hover {
     border-color: rgba(244, 214, 155, 0.6);
-    background-color: rgba(55, 20, 36, 0.95);
+    background-color: rgba(55, 20, 36, 1);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 40px 56px rgba(162, 58, 82, 0.26), 0 12px 22px rgba(0, 0, 0, 0.32);
 }
 
 .option-root.selected {
     border-color: rgba(244, 214, 155, 0.6);
-    background-color: rgba(55, 20, 36, 0.95);
+    background-color: rgba(55, 20, 36, 1);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 40px 56px rgba(162, 58, 82, 0.26), 0 12px 22px rgba(0, 0, 0, 0.32);
 }
 
@@ -343,7 +339,7 @@
     width: 44px;
     height: 44px;
     border-radius: 14px;
-    background-color: rgba(20, 9, 13, 0.75);
+    background-color: rgba(20, 9, 13, 1);
     border-width: 1px;
     border-color: rgba(244, 211, 147, 0.24);
     overflow: hidden;
@@ -416,7 +412,7 @@
     border-radius: 12px;
     border-width: 2px;
     border-color: rgba(209, 172, 91, 0.82);
-    background-color: rgba(22, 10, 18, 0.65);
+    background-color: rgba(22, 10, 18, 1);
     justify-content: center;
     align-items: center;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
@@ -445,7 +441,7 @@
     padding-bottom: 10px;
     border-top-width: 1px;
     border-top-color: rgba(244, 211, 147, 0.18);
-    background-color: rgba(24, 8, 18, 0.72);
+    background-color: rgba(24, 8, 18, 1);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -466,7 +462,7 @@
     margin-right: 4px;
     margin-top: -2px;
     margin-bottom: 2px;
-    background-color: rgba(26, 10, 18, 0.5);
+    background-color: rgba(26, 10, 18, 1);
     transition-property: background-color, border-color, box-shadow;
     transition-duration: 0.16s;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);

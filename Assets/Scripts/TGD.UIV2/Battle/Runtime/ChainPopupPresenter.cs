@@ -12,6 +12,7 @@ namespace TGD.UIV2.Battle
         [SerializeField] PanelSettings panelSettings;
         [SerializeField] VisualTreeAsset popupAsset;
         [SerializeField] VisualTreeAsset optionAsset;
+        [SerializeField, Min(0f)] float selectionConfirmDelay = 0.25f;
         TurnManagerV2 _turnManager;
         CombatActionManagerV2 _combatManager;
         bool _isInitialized;
@@ -54,6 +55,8 @@ namespace TGD.UIV2.Battle
         bool _listPrepared;
         bool _scaleInitialized;
         float _documentScale = 1f;
+        float _selectionDelayTimer;
+        bool _hiddenForAim;
 
         public void Initialize(TurnManagerV2 turnManager, CombatActionManagerV2 combatManager)
         {
@@ -216,6 +219,8 @@ namespace TGD.UIV2.Battle
             }
             _visible = false;
             _windowActive = false;
+            _hiddenForAim = false;
+            _selectionDelayTimer = 0f;
             ChainPopupState.NotifyVisibility(false);
         }
 
@@ -264,6 +269,7 @@ namespace TGD.UIV2.Battle
         void OnValidate()
         {
             defaultScale = Mathf.Max(1f, defaultScale);
+            selectionConfirmDelay = Mathf.Max(0f, selectionConfirmDelay);
 
             if (!Application.isPlaying)
             {
@@ -310,6 +316,8 @@ namespace TGD.UIV2.Battle
 
             _pendingSelection = -1;
             _skipRequested = false;
+            _hiddenForAim = false;
+            _selectionDelayTimer = 0f;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
 
@@ -331,6 +339,8 @@ namespace TGD.UIV2.Battle
             _visible = false;
             _pendingSelection = -1;
             _skipRequested = false;
+            _hiddenForAim = false;
+            _selectionDelayTimer = 0f;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
             if (_overlay != null)
@@ -534,10 +544,17 @@ namespace TGD.UIV2.Battle
         {
             if (_pendingSelection >= 0)
             {
+                if (IsSelectionDelayActive)
+                {
+                    index = -1;
+                    return false;
+                }
+
                 index = _pendingSelection;
                 _pendingSelection = -1;
                 if (_noneToggle != null)
                     _noneToggle.SetValueWithoutNotify(false);
+                ResetSelectionDelay();
                 RefreshSelectionVisuals();
                 return true;
             }
@@ -550,9 +567,13 @@ namespace TGD.UIV2.Battle
         {
             if (_skipRequested)
             {
+                if (IsSelectionDelayActive)
+                    return false;
+
                 _skipRequested = false;
                 if (_noneToggle != null)
                     _noneToggle.SetValueWithoutNotify(false);
+                ResetSelectionDelay();
                 RefreshSelectionVisuals();
                 return true;
             }
@@ -565,7 +586,7 @@ namespace TGD.UIV2.Battle
             if (!_isInitialized)
                 return;
 
-            if (_visible)
+            if (_visible && !_hiddenForAim)
                 UpdateAnchorPosition();
         }
 
@@ -579,6 +600,7 @@ namespace TGD.UIV2.Battle
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
 
+            BeginSelectionDelay();
             RefreshSelectionVisuals();
         }
 
@@ -592,15 +614,27 @@ namespace TGD.UIV2.Battle
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(true);
 
+            BeginSelectionDelay();
             RefreshSelectionVisuals();
         }
 
         void LateUpdate()
         {
-            if (!_visible || _overlay == null)
+            if (!_visible || _overlay == null || _hiddenForAim)
                 return;
 
             UpdateAnchorPosition();
+        }
+
+        void Update()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            if (_selectionDelayTimer > 0f)
+            {
+                _selectionDelayTimer = Mathf.Max(0f, _selectionDelayTimer - Time.unscaledDeltaTime);
+            }
         }
 
         void UpdateAnchorPosition()
@@ -664,6 +698,53 @@ namespace TGD.UIV2.Battle
                 bool isSelected = _pendingSelection == i;
                 entry.root.EnableInClassList("selected", isSelected);
             }
+        }
+
+        void BeginSelectionDelay()
+        {
+            if (selectionConfirmDelay <= 0f)
+            {
+                _selectionDelayTimer = 0f;
+                return;
+            }
+
+            _selectionDelayTimer = selectionConfirmDelay;
+        }
+
+        void ResetSelectionDelay()
+        {
+            _selectionDelayTimer = 0f;
+        }
+
+        bool IsSelectionDelayActive => _selectionDelayTimer > 0f;
+
+        public void HideForAim()
+        {
+            if (!_windowActive || _hiddenForAim)
+                return;
+
+            _hiddenForAim = true;
+            if (_overlay != null)
+                _overlay.style.display = DisplayStyle.None;
+            if (_windowWrap != null)
+                _windowWrap.style.display = DisplayStyle.None;
+
+            ChainPopupState.NotifyVisibility(false);
+        }
+
+        public void RestoreAfterAim()
+        {
+            if (!_windowActive || !_hiddenForAim)
+                return;
+
+            _hiddenForAim = false;
+            if (_overlay != null)
+                _overlay.style.display = DisplayStyle.Flex;
+            if (_windowWrap != null)
+                _windowWrap.style.display = DisplayStyle.Flex;
+
+            UpdateAnchorPosition();
+            ChainPopupState.NotifyVisibility(true);
         }
 
         void OnDestroy()

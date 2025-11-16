@@ -73,5 +73,7 @@ namespace TGD.CombatV2
         bool TryConsumeSelection(out int index);
         bool TryConsumeSkip();
         void SetAnchor(Transform anchor);
+        void HideForAim();
+        void RestoreAfterAim();
     }
 }
