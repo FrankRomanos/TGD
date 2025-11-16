@@ -45,6 +45,7 @@ namespace TGD.DebugV2
         int _timeChargesRemaining;
         int _energyChargesRemaining;
         bool _pendingEditorApply = false;
+        bool _awaitingContext;
         struct PendingVoucherUsage
         {
             public string skillId;
@@ -66,6 +67,7 @@ namespace TGD.DebugV2
             RemoveModifiers();
             TeardownListeners();
             _pendingVoucherUsage.Clear();
+            _awaitingContext = false;
         }
 
         // 2) OnValidate 不再直接 Apply/Destroy，改为延迟重建（避免 DestroyImmediate 报错）
@@ -88,11 +90,28 @@ namespace TGD.DebugV2
         // 3) Apply 前清理 Missing（编辑器专用），然后配置监听器
         void Apply()
         {
-            _ctx = FindContext();          // ✅ 三向查找
-            RemoveModifiers();             // 只移除规则，不要在这里先把监听器全砍掉
+            Apply(null);
+        }
+
+        void Apply(UnitRuntimeContext forcedContext)
+        {
+            var previousCtx = _ctx;
+            RemoveModifiers(previousCtx);             // 只移除规则，不要在这里先把监听器全砍掉
             ResetCharges();
 
-            if (_ctx == null) return;
+            _ctx = forcedContext != null ? forcedContext : FindContext();          // ✅ 三向查找
+
+            if (_ctx == null)
+            {
+                _awaitingContext = true;
+                TeardownListeners();
+                return;
+            }
+
+            _awaitingContext = false;
+
+            if (previousCtx != _ctx)
+                TeardownListeners();
 
 #if UNITY_EDITOR
             UnityEditor.GameObjectUtility.RemoveMonoBehavioursWithMissingScript(_ctx.gameObject);
@@ -136,13 +155,14 @@ namespace TGD.DebugV2
         }
 
 
-        void RemoveModifiers()
+        void RemoveModifiers(UnitRuntimeContext contextOverride = null)
         {
             if (_activeModifiers.Count == 0)
                 return;
-            if (_ctx != null)
+            var ctx = contextOverride ?? _ctx;
+            if (ctx != null)
             {
-                var set = _ctx.Rules;
+                var set = ctx.Rules;
                 if (set != null)
                 {
                     for (int i = 0; i < _activeModifiers.Count; i++)
@@ -161,6 +181,18 @@ namespace TGD.DebugV2
             _pendingVoucherUsage.Clear();
             _timeChargesRemaining = firstCostFreeTime ? NormalizeCharges(firstCostCharges) : 0;
             _energyChargesRemaining = firstCostFreeEnergy ? NormalizeCharges(firstCostCharges) : 0;
+        }
+
+        void Update()
+        {
+            if (!_awaitingContext)
+                return;
+            if (!isActiveAndEnabled)
+                return;
+            var ctx = FindContext();
+            if (ctx == null)
+                return;
+            Apply(ctx);
         }
 
         static int NormalizeCharges(int charges)

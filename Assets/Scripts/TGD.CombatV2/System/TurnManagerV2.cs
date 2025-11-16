@@ -971,8 +971,8 @@ namespace TGD.CombatV2
                 return (0, 0, 0);
             }
 
-            int turnTime = runtime.TurnTime;
-            float chunks = Mathf.Max(0, turnTime) / 2f;
+            float turnSeconds = stats.TurnTimeFloat;
+            float chunks = Mathf.Max(0f, turnSeconds / 2f);
             int gain = Mathf.FloorToInt(chunks * Mathf.Max(0, stats.EnergyRegenPer2s));
             int max = Mathf.Max(0, stats.MaxEnergy);
             int before = stats.Energy;
