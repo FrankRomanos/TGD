@@ -170,7 +170,10 @@ namespace TGD.LevelV2
             _hasFocusTarget = false;
 
             if (_boundActionManager != null)
+            {
                 _boundActionManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
+                _boundActionManager.ChainFocusChanged -= OnChainFocusChanged;
+            }
             _boundActionManager = null;
             _activeBonusUnit = null;
         }
@@ -290,14 +293,19 @@ namespace TGD.LevelV2
                 return;
 
             if (_boundActionManager != null)
+            {
                 _boundActionManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
+                _boundActionManager.ChainFocusChanged -= OnChainFocusChanged;
+            }
 
             _boundActionManager = candidate;
 
             if (_boundActionManager != null)
             {
                 _boundActionManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
+                _boundActionManager.ChainFocusChanged += OnChainFocusChanged;
                 SyncBonusTurnFocus();
+                SyncChainFocus();
             }
             else
             {
@@ -316,6 +324,40 @@ namespace TGD.LevelV2
         void OnBonusTurnStateChanged()
         {
             SyncBonusTurnFocus();
+        }
+
+        void SyncChainFocus()
+        {
+            if (_boundActionManager == null)
+                return;
+
+            OnChainFocusChanged(_boundActionManager.CurrentChainFocus);
+        }
+
+        void OnChainFocusChanged(Unit unit)
+        {
+            if (!ShouldAutoFocusChainOwner(unit))
+                return;
+
+            FocusOnUnit(unit, false);
+        }
+
+        bool ShouldAutoFocusChainOwner(Unit unit)
+        {
+            if (unit == null)
+                return false;
+
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null)
+                return false;
+
+            if (!tm.IsPlayerUnit(unit))
+                return false;
+
+            if (tm.IsPlayerPhase)
+                return false;
+
+            return true;
         }
 
         void SyncBonusTurnFocus()
