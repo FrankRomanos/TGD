@@ -76,6 +76,9 @@ namespace TGD.LevelV2
         Vector3 _desiredFocusWorld;
         bool _hasDesiredFocusWorld;
         string _pendingFocusUnitId;
+        Unit _lastFriendlyFocusUnit;
+        bool _chainAimActive;
+        Unit _chainAimOwner;
 
         [SerializeField] bool applyDefaultsOnStart = true;
         [SerializeField] bool alignYawToRAxis = true;   // 让 R 轴竖直（FlatTop 下即 yaw=0）
@@ -173,9 +176,12 @@ namespace TGD.LevelV2
             {
                 _boundActionManager.BonusTurnStateChanged -= OnBonusTurnStateChanged;
                 _boundActionManager.ChainFocusChanged -= OnChainFocusChanged;
+                _boundActionManager.ChainAimStateChanged -= OnChainAimStateChanged;
             }
             _boundActionManager = null;
             _activeBonusUnit = null;
+            _chainAimActive = false;
+            _chainAimOwner = null;
         }
 
         void Update()
@@ -304,6 +310,7 @@ namespace TGD.LevelV2
             {
                 _boundActionManager.BonusTurnStateChanged += OnBonusTurnStateChanged;
                 _boundActionManager.ChainFocusChanged += OnChainFocusChanged;
+                _boundActionManager.ChainAimStateChanged += OnChainAimStateChanged;
                 SyncBonusTurnFocus();
                 SyncChainFocus();
             }
@@ -342,9 +349,30 @@ namespace TGD.LevelV2
             FocusOnUnit(unit, false);
         }
 
+        void OnChainAimStateChanged(Unit unit, bool aiming)
+        {
+            if (aiming)
+            {
+                _chainAimActive = true;
+                _chainAimOwner = unit;
+                if (ShouldAutoFocusChainOwner(unit))
+                    FocusOnUnit(unit, false);
+                return;
+            }
+
+            if (unit != null && unit != _chainAimOwner)
+                return;
+
+            _chainAimActive = false;
+            _chainAimOwner = null;
+        }
+
         bool ShouldAutoFocusChainOwner(Unit unit)
         {
             if (unit == null)
+                return false;
+
+            if (!_chainAimActive)
                 return false;
 
             var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
@@ -383,10 +411,23 @@ namespace TGD.LevelV2
 
         void RefocusActiveUnit(bool resetHeight)
         {
-            var unit = GetCurrentActiveUnit();
+            var unit = GetCurrentFriendlyUnit();
+            if (unit == null)
+                unit = _lastFriendlyFocusUnit;
             if (unit == null)
                 return;
             FocusOnUnit(unit, resetHeight);
+        }
+
+        Unit GetCurrentFriendlyUnit()
+        {
+            if (_activeBonusUnit != null && IsPlayerUnit(_activeBonusUnit))
+                return _activeBonusUnit;
+            if (_boundTurnManager != null && _boundTurnManager.ActiveUnit != null && IsPlayerUnit(_boundTurnManager.ActiveUnit))
+                return _boundTurnManager.ActiveUnit;
+            if (_currentTurnUnit != null && IsPlayerUnit(_currentTurnUnit))
+                return _currentTurnUnit;
+            return null;
         }
 
         Unit GetCurrentActiveUnit()
@@ -396,6 +437,16 @@ namespace TGD.LevelV2
             if (_boundTurnManager != null && _boundTurnManager.ActiveUnit != null)
                 return _boundTurnManager.ActiveUnit;
             return _currentTurnUnit;
+        }
+
+        bool IsPlayerUnit(Unit unit)
+        {
+            if (unit == null)
+                return false;
+            var tm = _boundTurnManager != null ? _boundTurnManager : turnManager;
+            if (tm == null)
+                return false;
+            return tm.IsPlayerUnit(unit);
         }
 
         void FocusOnUnit(Unit unit, bool resetHeight)
@@ -417,6 +468,8 @@ namespace TGD.LevelV2
 
             _pendingFocusUnitId = null;
             SetFocusTarget(world);
+            if (IsPlayerUnit(unit))
+                _lastFriendlyFocusUnit = unit;
         }
 
         void TryResolvePendingFocus()

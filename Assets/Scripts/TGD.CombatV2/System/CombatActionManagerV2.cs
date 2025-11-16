@@ -35,6 +35,7 @@ namespace TGD.CombatV2
         public bool useFactoryMode = false;
 
         public event Action<Unit> ChainFocusChanged;
+        public event Action<Unit, bool> ChainAimStateChanged;
 
         [SerializeField]
         [Tooltip("Only one CAM should register phase/turn gates in a scene.")]
@@ -356,6 +357,8 @@ namespace TGD.CombatV2
         readonly List<ChainPopupOptionData> _chainPopupOptionBuffer = new();
         readonly List<string> _hitLogBuffer = new();
         Unit _currentChainFocus;
+        Unit _currentChainAimUnit;
+        bool _chainAimActive;
         IChainPopupUI _chainPopupUi;
         MonoBehaviour _chainPopupUiComponent;
 
@@ -634,6 +637,9 @@ namespace TGD.CombatV2
             SetChainFocus(nextActive);
         }
 
+        public Unit CurrentChainAimUnit => _currentChainAimUnit;
+        public bool IsChainAimActive => _chainAimActive;
+
         void SetChainFocus(Unit unit)
         {
             if (_currentChainFocus == unit)
@@ -643,6 +649,30 @@ namespace TGD.CombatV2
             if (popup != null)
                 popup.SetAnchor(ResolveChainAnchor(unit));
             ChainFocusChanged?.Invoke(unit);
+        }
+
+        void BeginChainAim(Unit unit)
+        {
+            if (unit == null)
+                return;
+
+            _currentChainAimUnit = unit;
+            if (_chainAimActive)
+                return;
+
+            _chainAimActive = true;
+            ChainAimStateChanged?.Invoke(unit, true);
+        }
+
+        void EndChainAim(Unit unit)
+        {
+            if (!_chainAimActive)
+                return;
+
+            var endedUnit = _currentChainAimUnit ?? unit;
+            _currentChainAimUnit = null;
+            _chainAimActive = false;
+            ChainAimStateChanged?.Invoke(endedUnit, false);
         }
 
         TargetSelectionCursor ChainCursor
@@ -4735,6 +4765,7 @@ namespace TGD.CombatV2
 
                 try
                 {
+                    BeginChainAim(owner);
                     while (awaitingSelection)
                     {
                         if (_pendingEndTurn)
@@ -4812,6 +4843,7 @@ namespace TGD.CombatV2
                 }
                 finally
                 {
+                    EndChainAim(owner);
                     if (aimHidden && popup != null)
                     {
                         popup.RestoreAfterAim();
@@ -4980,6 +5012,7 @@ namespace TGD.CombatV2
 
                 try
                 {
+                    BeginChainAim(owner);
                     while (awaitingSelection)
                     {
                         if (_pendingEndTurn)
@@ -5066,6 +5099,7 @@ namespace TGD.CombatV2
                 }
                 finally
                 {
+                    EndChainAim(owner);
                     if (aimHidden && popup != null)
                     {
                         popup.RestoreAfterAim();
