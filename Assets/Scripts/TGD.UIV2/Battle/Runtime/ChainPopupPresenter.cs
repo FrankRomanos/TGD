@@ -48,6 +48,7 @@ namespace TGD.UIV2.Battle
         public event System.Action ChainPopupOpened;
 
         int _pendingSelection = -1;
+        int _activeSelection = -1;
         bool _skipRequested;
         bool _windowActive;
         bool _visible;
@@ -309,6 +310,7 @@ namespace TGD.UIV2.Battle
             }
 
             _pendingSelection = -1;
+            _activeSelection = -1;
             _skipRequested = false;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
@@ -330,6 +332,7 @@ namespace TGD.UIV2.Battle
             _windowActive = false;
             _visible = false;
             _pendingSelection = -1;
+            _activeSelection = -1;
             _skipRequested = false;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
@@ -355,6 +358,11 @@ namespace TGD.UIV2.Battle
 
             CopyOptions(stage.Options);
             EnsureEntryCount(_stageOptions.Count);
+
+            if (_pendingSelection >= _stageOptions.Count)
+                _pendingSelection = -1;
+            if (_activeSelection >= _stageOptions.Count)
+                _activeSelection = -1;
 
             for (int i = 0; i < _stageOptions.Count; i++)
             {
@@ -575,6 +583,7 @@ namespace TGD.UIV2.Battle
                 return;
 
             _pendingSelection = index;
+            _activeSelection = index;
             _skipRequested = false;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(false);
@@ -589,6 +598,7 @@ namespace TGD.UIV2.Battle
 
             _skipRequested = true;
             _pendingSelection = -1;
+            _activeSelection = -1;
             if (_noneToggle != null)
                 _noneToggle.SetValueWithoutNotify(true);
 
@@ -661,7 +671,7 @@ namespace TGD.UIV2.Battle
                 if (entry.root == null)
                     continue;
 
-                bool isSelected = _pendingSelection == i;
+                bool isSelected = _pendingSelection == i || _activeSelection == i;
                 entry.root.EnableInClassList("selected", isSelected);
             }
         }
