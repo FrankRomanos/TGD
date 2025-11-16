@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TGD.CoreV2.Rules;
 
 namespace TGD.CoreV2
 {
@@ -33,12 +34,7 @@ namespace TGD.CoreV2
 
         public static float ArmorDR(float armor, float threshold = 200f, float cap = 0.80f, float k2 = 160f)
         {
-            if (armor <= 0f) return 0f;
-            if (armor <= threshold) return Mathf.Clamp01(armor * 0.0015f);
-            float drAtT = Mathf.Clamp01(threshold * 0.0015f);
-            float rest = 1f - drAtT;
-            float inc = 1f - Mathf.Exp(-(armor - threshold) / Mathf.Max(1f, k2));
-            return Mathf.Clamp(drAtT + rest * inc, 0f, cap);
+            return ArmorRules.CalcPhysicalDR(armor);
         }
 
 
