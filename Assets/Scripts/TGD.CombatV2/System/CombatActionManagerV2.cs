@@ -3342,8 +3342,6 @@ namespace TGD.CombatV2
                         if (Reject("cooldown", secs, energy)) continue;
 
                     var key = ResolveChainKey(resolvedTool.Id);
-                    if (key == KeyCode.None)
-                        if (Reject("noKey", secs, energy)) continue;
 
                     _chainBuffer.Add(new ChainOption
                     {
