@@ -13,6 +13,11 @@ namespace TGD.CoreV2.Rules
         public const float DefaultBaseTurnSeconds = 6f;
 
         /// <summary>
+        /// Authoring precision multiplier (designs enter rating * 10 to gain 0.1 resolution).
+        /// </summary>
+        public const float DefaultRatingPrecision = 10f;
+
+        /// <summary>
         /// Expected upper bound of total rating that can be stacked from gear/blueprints.
         /// </summary>
         public const float DefaultRatingMax = 12f;
@@ -38,6 +43,16 @@ namespace TGD.CoreV2.Rules
             float clamped = Mathf.Min(rating, DefaultRatingMax);
             float ratio = clamped / Mathf.Max(1f, DefaultRatingMax);
             return DefaultSecondsMaxFromRating * Mathf.Pow(ratio, DefaultCurveExponent);
+        }
+
+        /// <summary>
+        /// Converts the serialized blueprint value (scaled by <see cref="DefaultRatingPrecision"/>) back to curve units.
+        /// </summary>
+        public static float DecodeBlueprintRating(int serializedValue)
+        {
+            if (serializedValue <= 0)
+                return 0f;
+            return serializedValue / DefaultRatingPrecision;
         }
 
         /// <summary>

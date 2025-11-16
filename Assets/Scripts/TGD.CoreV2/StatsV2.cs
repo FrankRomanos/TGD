@@ -18,7 +18,8 @@ namespace TGD.CoreV2
 
         // —— 时间 & 移动 ——
         [FormerlySerializedAs("Speed")]
-        public int SpeedRating;            // 蓝图/装备提供的速度点数
+        [Tooltip("速度点数（序列化时 *10，便于设计 0.1 精度）")]
+        public int SpeedRating;            // 蓝图/装备提供的速度点数 *10
         [Min(MoveRateRules.DefaultMinInt)]
         public int MoveRate = MoveRateRules.DefaultMinInt;           // 格/秒（底座）
         [Tooltip("Minimum allowed move rate for this unit (after all runtime modifiers).")]
@@ -80,8 +81,9 @@ namespace TGD.CoreV2
         public float ShredAddPct = 0f;
 
         // —— 派生 ——
-        public float SpeedSecondsFloat => SpeedRules.MapRatingToSeconds(Mathf.Max(0, SpeedRating));
-        public int SpeedSecondsInt => SpeedRules.MapRatingToSecondsInt(Mathf.Max(0, SpeedRating));
+        float SpeedRatingCurveInput => SpeedRules.DecodeBlueprintRating(Mathf.Max(0, SpeedRating));
+        public float SpeedSecondsFloat => SpeedRules.MapRatingToSeconds(SpeedRatingCurveInput);
+        public int SpeedSecondsInt => SpeedRules.MapRatingToSecondsInt(SpeedRatingCurveInput);
         public int Speed => SpeedSecondsInt;      // 兼容旧字段（整数秒）
         public int TurnTime => StatsMathV2.TurnTime(SpeedSecondsInt);
         public float TurnTimeFloat => StatsMathV2.BaseTurnSeconds + SpeedSecondsFloat;
