@@ -3676,27 +3676,9 @@ namespace TGD.CombatV2
         {
             var parts = new List<string>(3);
 
-            switch (option.kind)
-            {
-                case ActionKind.Reaction:
-                    parts.Add("Reaction");
-                    break;
-                case ActionKind.Free:
-                    parts.Add("Free");
-                    break;
-                case ActionKind.Derived:
-                    parts.Add("Derived");
-                    break;
-                case ActionKind.FullRound:
-                    parts.Add("Full Round");
-                    break;
-                case ActionKind.Sustained:
-                    parts.Add("Sustained");
-                    break;
-                default:
-                    parts.Add(option.kind.ToString());
-                    break;
-            }
+            string kindLabel = FormatActionKindLabel(option.kind);
+            if (!string.IsNullOrEmpty(kindLabel))
+                parts.Add(kindLabel);
 
             if (option.secs > 0)
                 parts.Add($"{option.secs}s");
@@ -3707,17 +3689,38 @@ namespace TGD.CombatV2
             return parts.Count > 0 ? string.Join(" · ", parts) : string.Empty;
         }
 
+        static string FormatActionKindLabel(ActionKind kind)
+        {
+            switch (kind)
+            {
+                case ActionKind.Standard:
+                    return "Standard";
+                case ActionKind.Reaction:
+                    return "Reaction";
+                case ActionKind.Free:
+                    return "Free";
+                case ActionKind.Derived:
+                    return "Derived";
+                case ActionKind.FullRound:
+                    return "Full Round";
+                case ActionKind.Sustained:
+                    return "Sustained";
+                default:
+                    return kind.ToString();
+            }
+        }
+
         ChainPopupWindowData BuildChainPopupWindow(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
         {
             string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
-            string prompt = BuildChainWindowPrompt(basePlan, baseKind, isEnemyPhase);
+            string prompt = BuildChainWindowPrompt(unit, basePlan, baseKind, isEnemyPhase);
             return new ChainPopupWindowData(header, prompt, isEnemyPhase);
         }
 
         ChainPopupWindowData BuildDerivedPopupWindow(Unit unit, IActionToolV2 baseTool, ActionPlan basePlan, bool isEnemyPhase)
         {
             string header = BuildChainWindowHeader(unit, basePlan, isEnemyPhase);
-            string prompt = BuildChainWindowPrompt(basePlan, ActionKind.Derived, isEnemyPhase);
+            string prompt = BuildChainWindowPrompt(unit, basePlan, ActionKind.Derived, isEnemyPhase);
             return new ChainPopupWindowData(header, prompt, isEnemyPhase);
         }
 
@@ -3775,7 +3778,7 @@ namespace TGD.CombatV2
             return $"E{order + 1}";
         }
 
-        string BuildChainWindowPrompt(ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
+        string BuildChainWindowPrompt(Unit unit, ActionPlan basePlan, ActionKind baseKind, bool isEnemyPhase)
         {
             if (!string.IsNullOrEmpty(basePlan.kind)
                 && basePlan.kind.StartsWith("PhaseStart", StringComparison.OrdinalIgnoreCase))
@@ -3783,13 +3786,19 @@ namespace TGD.CombatV2
                 return "Use Free Action?";
             }
 
-            return baseKind switch
-            {
-                ActionKind.Reaction => "Select Reaction",
-                ActionKind.Free => "Select Free Action",
-                ActionKind.Derived => "Select Derived Action",
-                _ => "Select Chain Action"
-            };
+            string ownerLabel = unit != null ? TurnManagerV2.FormatUnitLabel(unit) : string.Empty;
+            if (string.IsNullOrEmpty(ownerLabel) || ownerLabel == "?")
+                ownerLabel = BuildChainOwnerTag(unit, isEnemyPhase);
+
+            string skillLabel = ResolveSkillDisplayNameForUi(basePlan.kind, null, ResolveSkillIndex());
+            if (string.IsNullOrEmpty(skillLabel))
+                skillLabel = string.IsNullOrEmpty(basePlan.kind) ? "Action" : basePlan.kind;
+
+            string actionKindLabel = FormatActionKindLabel(baseKind);
+            if (!string.IsNullOrEmpty(ownerLabel))
+                return $"{ownerLabel} use {skillLabel} ({actionKindLabel})";
+
+            return $"{skillLabel} ({actionKindLabel})";
         }
 
         void UpdateChainPopupStage(IChainPopupUI popup, Unit baseUnit, string baseKind, string label, List<ChainOption> options, bool showSkip)
